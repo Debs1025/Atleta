@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Atleta",
+    "slug": "atleta",
+    "version": "0.1.0",
+    "android": {
+      "package": "com.anonymous.atleta"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}
