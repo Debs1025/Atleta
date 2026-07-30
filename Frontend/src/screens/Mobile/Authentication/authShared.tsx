@@ -1,3 +1,4 @@
+import { useRef, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,24 +13,27 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { type DocumentPickerAsset } from "expo-document-picker";
 import { useController, type Control, type FieldValues, type Path } from "react-hook-form";
-import { useRef, type ReactNode } from "react";
 import { z } from "zod";
 
+
+// Configuration
 const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-export const API_BASE = runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ?? runtime.process?.env?.ATLETA_API ?? "";
-export const AUTH_TOKEN_KEY = "atleta.auth.token";
+export const API_BASE = runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ?? "";
+export const AUTH_TOKEN_KEY = runtime.process?.env?.EXPO_PUBLIC_AUTH_TOKEN_KEY ?? "";
+export const AUTH_ROLE_KEY = runtime.process?.env?.EXPO_PUBLIC_AUTH_ROLE_KEY ?? "";
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 15000;
 
+// Types
 export type BannerTone = "error" | "success" | "info";
 export type AuthRole = "athlete" | "coach";
 export type AuthStep = 1 | 2 | 3;
-
 export type StoredUpload = Pick<DocumentPickerAsset, "name" | "uri" | "mimeType" | "size">;
 
+// Data Validation
 export const emailSchema = z
   .string()
   .trim()
@@ -110,28 +114,29 @@ export type CoachSignupValues = z.infer<typeof coachSignupSchema>;
 export type LoginValues = z.infer<typeof loginSchema>;
 export type ResetValues = z.infer<typeof resetSchema>;
 
+// Error Handling
+const AUTH_ERROR_MAP: Record<number, string> = {
+  400: "Validation failed. Check the highlighted fields and try again.",
+  401: "Unauthorized. Please verify your email and password.",
+  409: "An account already exists for that email address."
+};
+
 export function authErrorMessage(status: number | undefined, fallback: string) {
-  if (status === 400) {
-    return "Validation failed. Check the highlighted fields and try again.";
-  }
-
-  if (status === 401) {
-    return "Unauthorized. Please verify your email and password.";
-  }
-
-  if (status === 409) {
-    return "An account already exists for that email address.";
-  }
-
-  return fallback;
+  return (status && AUTH_ERROR_MAP[status]) || fallback;
 }
 
-export const AUTH_ROLE_KEY = "atleta.auth.role";
+export function getAuthErrorMessage(error: unknown, fallback: string) {
+  const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : undefined;
+  const message = error instanceof Error ? error.message : fallback;
+  return authErrorMessage(status, message);
+}
 
+// This lets users to stay logged in when reopenning the app
 export async function storeAuthToken(token: string) {
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
 }
 
+// This keeps the role of the user when reopening the app
 export async function storeAuthRole(role: AuthRole) {
   await SecureStore.setItemAsync(AUTH_ROLE_KEY, role);
 }
@@ -147,30 +152,16 @@ export function extractAuthToken(payload: Record<string, unknown>) {
 }
 
 export function extractAuthRole(payload: Record<string, unknown>, emailFallback?: string): AuthRole {
-  if (typeof payload.role === "string" && (payload.role === "athlete" || payload.role === "coach")) {
-    return payload.role;
-  }
-  if (payload.user && typeof payload.user === "object" && payload.user !== null && "role" in payload.user) {
-    const userRole = (payload.user as { role?: string }).role;
-    if (userRole === "athlete" || userRole === "coach") {
-      return userRole;
-    }
-  }
-  if (emailFallback && emailFallback.toLowerCase().includes("coach")) {
-    return "coach";
-  }
-  return "athlete";
+  const role = payload.role ?? (payload.user as { role?: string } | undefined)?.role;
+  if (role === "athlete" || role === "coach") return role;
+  return emailFallback?.toLowerCase().includes("coach") ? "coach" : "athlete";
 }
 
+// API Request (change this if backend api is ready)
 function mockAuthResponse(path: string) {
-  if (path.includes("login") || path.includes("register")) {
-    return {
-      token: "local-dev-token",
-      message: "Local frontend auth mode. Set EXPO_PUBLIC_ATLETA_API to use the backend."
-    };
-  }
-
+  const isAuth = path.includes("login") || path.includes("register");
   return {
+    ...(isAuth ? { token: "local-dev-token" } : {}),
     message: "Local frontend auth mode. Set EXPO_PUBLIC_ATLETA_API to use the backend."
   };
 }
@@ -185,37 +176,23 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("The API request timed out. Check your backend URL and try again.");
     }
-
     throw error;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-export async function requestJson(path: string, body: unknown) {
-  if (!API_BASE) {
-    return mockAuthResponse(path);
-  }
+async function fetchApi(path: string, options: RequestInit) {
+  if (!API_BASE) return mockAuthResponse(path);
 
   const response = await withRequestTimeout((signal) =>
-    fetch(`${API_BASE}${path}`, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body),
-      signal
-    })
+    fetch(`${API_BASE}${path}`, { ...options, signal })
   );
 
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (!response.ok) {
-    const error = new Error((payload.message as string | undefined) ?? "Something went wrong.") as Error & {
-      status?: number;
-    };
-
+    const error = new Error((payload.message as string | undefined) ?? "Something went wrong.") as Error & { status?: number };
     error.status = response.status;
     throw error;
   }
@@ -223,48 +200,29 @@ export async function requestJson(path: string, body: unknown) {
   return payload;
 }
 
-export async function requestMultipart(path: string, body: FormData) {
-  if (!API_BASE) {
-    return mockAuthResponse(path);
-  }
-
-  const response = await withRequestTimeout((signal) =>
-    fetch(`${API_BASE}${path}`, {
-      method: "POST",
-      headers: {
-        Accept: "application/json"
-      },
-      body,
-      signal
-    })
-  );
-
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-
-  if (!response.ok) {
-    const error = new Error((payload.message as string | undefined) ?? "Something went wrong.") as Error & {
-      status?: number;
-    };
-
-    error.status = response.status;
-    throw error;
-  }
-
-  return payload;
+// Handles json requests
+export function requestJson(path: string, body: unknown) {
+  return fetchApi(path, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
 }
 
-type BannerProps = {
-  tone: BannerTone;
-  message?: string | null;
-};
+// Handles file upload requests
+export function requestMultipart(path: string, body: FormData) {
+  return fetchApi(path, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body
+  });
+}
 
-export function Banner({ tone, message }: BannerProps) {
-  if (!message) {
-    return null;
-  }
-
+// UI Components
+export function Banner({ tone, message }: { tone: BannerTone; message?: string | null }) {
+  if (!message) return null;
   return (
-    <View style={[bannerStyles.banner, tone === "error" && bannerStyles.error, tone === "success" && bannerStyles.success, tone === "info" && bannerStyles.info]}>
+    <View style={[bannerStyles.banner, bannerStyles[tone]]}>
       <Text style={bannerStyles.text}>{message}</Text>
     </View>
   );
@@ -284,7 +242,12 @@ export function Field({ label, helperText, error, rightAccessory, style, ...prop
     <View style={fieldStyles.group}>
       <Text style={fieldStyles.label}>{label}</Text>
       <View style={[fieldStyles.inputWrap, error ? fieldStyles.inputError : undefined]}>
-        <TextInput ref={inputRef} placeholderTextColor="#9aa2b8" style={[fieldStyles.input, rightAccessory ? fieldStyles.inputWithAccessory : undefined, style]} {...props} />
+        <TextInput
+          ref={inputRef}
+          placeholderTextColor="#9aa2b8"
+          style={[fieldStyles.input, rightAccessory ? fieldStyles.inputWithAccessory : undefined, style]}
+          {...props}
+        />
         {rightAccessory ? (
           <Pressable accessibilityRole="button" onPress={() => inputRef.current?.focus()} style={fieldStyles.rightAccessory}>
             {rightAccessory}
@@ -295,102 +258,6 @@ export function Field({ label, helperText, error, rightAccessory, style, ...prop
     </View>
   );
 }
-
-type MinimalistCalendarIconProps = {
-  size?: number;
-  color?: string;
-};
-
-export function MinimalistCalendarIcon({ size = 22, color = "#141c3a" }: MinimalistCalendarIconProps) {
-  const width = size;
-  const height = Math.round(size * 1.05);
-  const ringHeight = Math.round(size * 0.22);
-  const ringWidth = 2.2;
-  const borderWidth = 1.8;
-  const borderRadius = 4;
-  const dotSize = Math.max(2.5, Math.round(size * 0.13));
-
-  return (
-    <View style={{ width, height, justifyContent: "flex-end", alignItems: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: width * 0.12,
-          right: width * 0.12,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          zIndex: 2
-        }}
-      >
-        {[0, 1, 2, 3, 4].map((i) => (
-          <View
-            key={i}
-            style={{
-              width: ringWidth,
-              height: ringHeight,
-              backgroundColor: color,
-              borderRadius: ringWidth / 2
-            }}
-          />
-        ))}
-      </View>
-
-      <View
-        style={{
-          width,
-          height: height * 0.88,
-          borderWidth,
-          borderColor: color,
-          borderRadius,
-          overflow: "hidden"
-        }}
-      >
-        <View
-          style={{
-            height: Math.round(height * 0.2),
-            borderBottomWidth: borderWidth,
-            borderBottomColor: color,
-            width: "100%"
-          }}
-        />
-
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "space-evenly",
-            alignItems: "center",
-            paddingVertical: 1
-          }}
-        >
-          {[0, 1, 2].map((row) => (
-            <View
-              key={row}
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                width: "68%"
-              }}
-            >
-              {[0, 1, 2].map((col) => (
-                <View
-                  key={col}
-                  style={{
-                    width: dotSize,
-                    height: dotSize,
-                    backgroundColor: color,
-                    borderRadius: 0.5
-                  }}
-                />
-              ))}
-            </View>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
 
 type FormFieldProps<T extends FieldValues> = Omit<FieldProps, "value" | "onChangeText" | "onBlur"> & {
   control: Control<T>;
@@ -409,6 +276,40 @@ export function FormField<T extends FieldValues>({ control, name, ...props }: Fo
     />
   );
 }
+
+export function MinimalistCalendarIcon({ size = 22, color = "#141c3a" }: { size?: number; color?: string }) {
+  const width = size;
+  const height = Math.round(size * 1.05);
+  const ringHeight = Math.round(size * 0.22);
+  const ringWidth = 2.2;
+  const borderWidth = 1.8;
+  const borderRadius = 4;
+  const dotSize = Math.max(2.5, Math.round(size * 0.13));
+
+  return (
+    <View style={{ width, height, justifyContent: "flex-end", alignItems: "center" }}>
+      <View style={[calendarStyles.ringRow, { left: width * 0.12, right: width * 0.12 }]}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <View key={i} style={{ width: ringWidth, height: ringHeight, backgroundColor: color, borderRadius: ringWidth / 2 }} />
+        ))}
+      </View>
+
+      <View style={{ width, height: height * 0.88, borderWidth, borderColor: color, borderRadius, overflow: "hidden" }}>
+        <View style={{ height: Math.round(height * 0.2), borderBottomWidth: borderWidth, borderBottomColor: color, width: "100%" }} />
+        <View style={calendarStyles.dotGrid}>
+          {[0, 1, 2].map((row) => (
+            <View key={row} style={calendarStyles.dotRow}>
+              {[0, 1, 2].map((col) => (
+                <View key={col} style={{ width: dotSize, height: dotSize, backgroundColor: color, borderRadius: 0.5 }} />
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 type ButtonProps = {
   label: string;
   onPress: () => void;
@@ -419,26 +320,31 @@ type ButtonProps = {
 
 export function Button({ label, onPress, loading = false, variant = "primary", icon }: ButtonProps) {
   return (
-    <Pressable onPress={onPress} disabled={loading} style={({ pressed }) => [buttonStyles.base, variant === "primary" && buttonStyles.primary, variant === "secondary" && buttonStyles.secondary, variant === "ghost" && buttonStyles.ghost, pressed && !loading && buttonStyles.pressed, loading && buttonStyles.disabled]}>
+    <Pressable
+      onPress={onPress}
+      disabled={loading}
+      style={({ pressed }) => [
+        buttonStyles.base,
+        buttonStyles[variant],
+        pressed && !loading && buttonStyles.pressed,
+        loading && buttonStyles.disabled
+      ]}
+    >
       {loading ? (
         <ActivityIndicator color={variant === "ghost" ? "#16203f" : "#fff"} />
       ) : (
         <View style={buttonStyles.contentRow}>
           {icon ? <Image source={icon} style={buttonStyles.icon} /> : null}
-          <Text style={[buttonStyles.text, variant === "secondary" && buttonStyles.secondaryText, variant === "ghost" && buttonStyles.ghostText]}>{label}</Text>
+          <Text style={[buttonStyles.text, variant === "secondary" && buttonStyles.secondaryText, variant === "ghost" && buttonStyles.ghostText]}>
+            {label}
+          </Text>
         </View>
       )}
     </Pressable>
   );
 }
 
-type RolePillProps = {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-};
-
-export function RolePill({ label, selected, onPress }: RolePillProps) {
+export function RolePill({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[pillStyles.pill, selected && pillStyles.selected]}>
       <Text style={[pillStyles.text, selected && pillStyles.selectedText]}>{label}</Text>
@@ -446,12 +352,7 @@ export function RolePill({ label, selected, onPress }: RolePillProps) {
   );
 }
 
-type SectionTitleProps = {
-  title: string;
-  subtitle?: string;
-};
-
-export function SectionTitle({ title, subtitle }: SectionTitleProps) {
+export function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <View style={titleStyles.wrap}>
       <Text style={titleStyles.title}>{title}</Text>
@@ -460,13 +361,7 @@ export function SectionTitle({ title, subtitle }: SectionTitleProps) {
   );
 }
 
-type StepBadgeProps = {
-  step: number;
-  label: string;
-  active: boolean;
-};
-
-export function StepBadge({ step, label, active }: StepBadgeProps) {
+export function StepBadge({ step, label, active }: { step: number; label: string; active: boolean }) {
   return (
     <View style={[stepStyles.badge, active && stepStyles.badgeActive]}>
       <Text style={[stepStyles.step, active && stepStyles.stepActive]}>{step}</Text>
@@ -483,6 +378,74 @@ export function FullScreenOverlay({ label }: { label: string }) {
     </View>
   );
 }
+
+export function AuthHeader() {
+  return (
+    <>
+      <Text style={authScreenStyles.brand}>ATLETA</Text>
+      <View style={authScreenStyles.rule} />
+    </>
+  );
+}
+
+// Styles
+export const authScreenStyles = StyleSheet.create({
+  content: {
+    flexGrow: 1,
+    backgroundColor: "#f8fafc",
+    paddingBottom: 36
+  },
+  shell: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingTop: 72
+  },
+  brand: {
+    color: "#141c3a",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: -0.3
+  },
+  rule: {
+    backgroundColor: "#141c3a",
+    height: 1,
+    marginVertical: 28,
+    opacity: 0.8
+  },
+  dividerRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginBottom: 18
+  },
+  divider: {
+    backgroundColor: "#e5d2d2",
+    flex: 1,
+    height: 1
+  },
+  or: {
+    color: "#6b7280",
+    fontSize: 14,
+    marginHorizontal: 18
+  },
+  spacer: {
+    height: 12
+  },
+  footer: {
+    color: "#6b7280",
+    fontSize: 16,
+    marginTop: 22,
+    textAlign: "center"
+  },
+  footerLink: {
+    color: "#141c3a",
+    fontWeight: "800"
+  },
+  error: {
+    color: "#dc2626",
+    fontSize: 12,
+    marginTop: 6
+  }
+});
 
 const bannerStyles = StyleSheet.create({
   banner: {
@@ -560,6 +523,27 @@ const fieldStyles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 12,
     marginTop: 6
+  }
+});
+
+const calendarStyles = StyleSheet.create({
+  ringRow: {
+    position: "absolute",
+    top: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    zIndex: 2
+  },
+  dotGrid: {
+    flex: 1,
+    justifyContent: "space-evenly",
+    alignItems: "center",
+    paddingVertical: 1
+  },
+  dotRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "68%"
   }
 });
 

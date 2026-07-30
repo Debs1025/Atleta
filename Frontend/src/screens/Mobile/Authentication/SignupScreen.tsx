@@ -3,7 +3,29 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as DocumentPicker from "expo-document-picker";
-import { Banner, Button, FormField, MinimalistCalendarIcon, RolePill, SectionTitle, StepBadge, authErrorMessage, athleteSignupSchema, coachSignupSchema, MAX_DOCUMENT_BYTES, requestJson, requestMultipart, type AthleteSignupValues, type AuthRole, type AuthStep, type CoachSignupValues, type StoredUpload } from "./authShared";
+import {
+  AuthHeader,
+  authScreenStyles,
+  Banner,
+  Button,
+  FormField,
+  getAuthErrorMessage,
+  MinimalistCalendarIcon,
+  RolePill,
+  SectionTitle,
+  StepBadge,
+  athleteSignupSchema,
+  coachSignupSchema,
+  MAX_DOCUMENT_BYTES,
+  requestJson,
+  requestMultipart,
+  type AthleteSignupValues,
+  type AuthRole,
+  type AuthStep,
+  type BannerTone,
+  type CoachSignupValues,
+  type StoredUpload
+} from "./authShared";
 
 type SignupScreenProps = {
   onGoLogin: () => void;
@@ -20,6 +42,32 @@ type ChoiceGroupProps = {
 
 const genderOptions = ["Male", "Female"] as const;
 const sportOptions = ["Basketball", "Track and Field", "Swimming"] as const;
+
+const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
+  role: "athlete",
+  first_name: "",
+  last_name: "",
+  email: "",
+  password: "",
+  contact_number: "",
+  birthdate: "",
+  gender: "Male",
+  province: "",
+  sport_type: "Basketball"
+};
+
+const DEFAULT_COACH_VALUES: CoachSignupValues = {
+  role: "coach",
+  first_name: "",
+  last_name: "",
+  email: "",
+  password: "",
+  contact_number: "",
+  certification_license_num: "",
+  years_of_experience: 0,
+  current_institution: "",
+  eligible_documents: null
+};
 
 function ChoiceGroup({ label, placeholder = "Select an option", options, value, error, onChange }: ChoiceGroupProps) {
   const [open, setOpen] = useState(false);
@@ -76,7 +124,7 @@ function ChoiceGroup({ label, placeholder = "Select an option", options, value, 
         </View>
       ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={authScreenStyles.error}>{error}</Text> : null}
     </View>
   );
 }
@@ -84,75 +132,32 @@ function ChoiceGroup({ label, placeholder = "Select an option", options, value, 
 export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const [role, setRole] = useState<AuthRole>("athlete");
   const [step, setStep] = useState<AuthStep>(1);
-  const [feedback, setFeedback] = useState<{ tone: "error" | "success" | "info"; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [documentFile, setDocumentFile] = useState<StoredUpload | null>(null);
   const [accountCreated, setAccountCreated] = useState(false);
 
   const athleteForm = useForm<AthleteSignupValues>({
     resolver: zodResolver(athleteSignupSchema),
-    defaultValues: {
-      role: "athlete",
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      contact_number: "",
-      birthdate: "",
-      gender: "Male",
-      province: "",
-      sport_type: "Basketball"
-    }
+    defaultValues: DEFAULT_ATHLETE_VALUES
   });
 
   const coachForm = useForm<CoachSignupValues>({
     resolver: zodResolver(coachSignupSchema),
-    defaultValues: {
-      role: "coach",
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      contact_number: "",
-      certification_license_num: "",
-      years_of_experience: 0,
-      current_institution: "",
-      eligible_documents: null
-    }
+    defaultValues: DEFAULT_COACH_VALUES
   });
 
   const activeForm = role === "athlete" ? athleteForm : coachForm;
   const sharedErrors = activeForm.formState.errors as Partial<Record<string, { message?: string }>>;
   const athleteErrors = athleteForm.formState.errors as Partial<Record<string, { message?: string }>>;
   const coachErrors = coachForm.formState.errors as Partial<Record<string, { message?: string }>>;
+
   useEffect(() => {
     setFeedback(null);
     setStep(1);
     setDocumentFile(null);
-    athleteForm.reset({
-      role: "athlete",
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      contact_number: "",
-      birthdate: "",
-      gender: "Male",
-      province: "",
-      sport_type: "Basketball"
-    });
-    coachForm.reset({
-      role: "coach",
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      contact_number: "",
-      certification_license_num: "",
-      years_of_experience: 0,
-      current_institution: "",
-      eligible_documents: null
-    });
+    athleteForm.reset(DEFAULT_ATHLETE_VALUES);
+    coachForm.reset(DEFAULT_COACH_VALUES);
   }, [athleteForm, coachForm, role]);
 
   const goNext = async () => {
@@ -172,12 +177,9 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       multiple: false
     });
 
-    if (result.canceled || !result.assets?.length) {
-      return;
-    }
+    if (result.canceled || !result.assets?.length) return;
 
     const asset = result.assets[0];
-
     if (typeof asset.size === "number" && asset.size > MAX_DOCUMENT_BYTES) {
       setFeedback({ tone: "error", message: "Document must be smaller than 25MB." });
       return;
@@ -204,9 +206,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       setAccountCreated(true);
       athleteForm.reset();
     } catch (error) {
-      const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : undefined;
-      const fallback = error instanceof Error ? error.message : "Unable to create the account right now.";
-      setFeedback({ tone: "error", message: authErrorMessage(status, fallback) });
+      setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
     } finally {
       setLoading(false);
     }
@@ -241,9 +241,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       coachForm.reset();
       setDocumentFile(null);
     } catch (error) {
-      const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : undefined;
-      const fallback = error instanceof Error ? error.message : "Unable to create the account right now.";
-      setFeedback({ tone: "error", message: authErrorMessage(status, fallback) });
+      setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
     } finally {
       setLoading(false);
     }
@@ -266,10 +264,9 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.shell}>
-        <Text style={styles.brand}>ATLETA</Text>
-        <View style={styles.rule} />
+    <ScrollView contentContainerStyle={authScreenStyles.content} keyboardShouldPersistTaps="handled">
+      <View style={authScreenStyles.shell}>
+        <AuthHeader />
 
         <SectionTitle title="Create your account" subtitle="Pick your role, fill in your details, and continue with personalized access." />
         <Banner tone={feedback?.tone ?? "info"} message={feedback?.message ?? ""} />
@@ -290,15 +287,25 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
             <Text style={styles.helper}>The fields below will update automatically for the role you choose.</Text>
             <Button label="Continue" onPress={() => setStep(2)} />
 
-            <View style={styles.dividerRow}>
-              <View style={styles.divider} />
-              <Text style={styles.or}>or</Text>
-              <View style={styles.divider} />
+            <View style={authScreenStyles.dividerRow}>
+              <View style={authScreenStyles.divider} />
+              <Text style={authScreenStyles.or}>or</Text>
+              <View style={authScreenStyles.divider} />
             </View>
 
-            <Button label="Sign Up with Google" variant="secondary" icon={require("../../../assets/google.png")} onPress={() => setFeedback({ tone: "info", message: "Google sign-up is ready for your backend or Firebase OAuth flow." })} />
-            <View style={styles.spacer} />
-            <Button label="Sign Up with Facebook" variant="secondary" icon={require("../../../assets/facebook.png")} onPress={() => setFeedback({ tone: "info", message: "Facebook sign-up can be connected to your auth provider later." })} />
+            <Button
+              label="Sign Up with Google"
+              variant="secondary"
+              icon={require("../../../assets/google.png")}
+              onPress={() => setFeedback({ tone: "info", message: "Google sign-up is ready for your backend or Firebase OAuth flow." })}
+            />
+            <View style={authScreenStyles.spacer} />
+            <Button
+              label="Sign Up with Facebook"
+              variant="secondary"
+              icon={require("../../../assets/facebook.png")}
+              onPress={() => setFeedback({ tone: "info", message: "Facebook sign-up can be connected to your auth provider later." })}
+            />
           </View>
         ) : null}
 
@@ -343,7 +350,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               <Text style={styles.documentLabel}>Eligible Documents</Text>
               <Button label={documentFile ? "Replace File" : "Choose File"} variant="secondary" onPress={uploadDocument} />
               <Text style={styles.documentHint}>{documentFile ? documentFile.name : "Professional license, certification, image, or PDF. Max 25MB."}</Text>
-              {coachErrors.eligible_documents?.message ? <Text style={styles.error}>{coachErrors.eligible_documents.message}</Text> : null}
+              {coachErrors.eligible_documents?.message ? <Text style={authScreenStyles.error}>{coachErrors.eligible_documents.message}</Text> : null}
             </View>
 
             <View style={styles.navRow}>
@@ -354,8 +361,8 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           </View>
         ) : null}
 
-        <Text style={styles.footer}>
-          Already have an account? <Text style={styles.footerLink} onPress={onGoLogin}>Log In</Text>
+        <Text style={authScreenStyles.footer}>
+          Already have an account? <Text style={authScreenStyles.footerLink} onPress={onGoLogin}>Log In</Text>
         </Text>
       </View>
     </ScrollView>
@@ -363,28 +370,6 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    flexGrow: 1,
-    backgroundColor: "#f8fafc",
-    paddingBottom: 36
-  },
-  shell: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 72
-  },
-  brand: {
-    color: "#141c3a",
-    fontSize: 30,
-    fontWeight: "900",
-    letterSpacing: -0.3
-  },
-  rule: {
-    backgroundColor: "#141c3a",
-    height: 1,
-    marginVertical: 28,
-    opacity: 0.8
-  },
   stepRow: {
     marginBottom: 12
   },
@@ -541,38 +526,5 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 24,
     textAlign: "center"
-  },
-  error: {
-    color: "#dc2626",
-    fontSize: 12,
-    marginTop: 6
-  },
-  dividerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginVertical: 18
-  },
-  divider: {
-    backgroundColor: "#e5d2d2",
-    flex: 1,
-    height: 1
-  },
-  or: {
-    color: "#6b7280",
-    fontSize: 14,
-    marginHorizontal: 18
-  },
-  spacer: {
-    height: 12
-  },
-  footer: {
-    color: "#6b7280",
-    fontSize: 16,
-    marginTop: 22,
-    textAlign: "center"
-  },
-  footerLink: {
-    color: "#141c3a",
-    fontWeight: "800"
   }
 });

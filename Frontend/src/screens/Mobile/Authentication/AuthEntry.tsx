@@ -12,7 +12,6 @@ type ScreenMode = "login" | "signup" | "reset";
 
 async function getStoredSessionToken() {
   let timeout: ReturnType<typeof setTimeout> | undefined;
-
   try {
     return await Promise.race([
       SecureStore.getItemAsync(AUTH_TOKEN_KEY).catch(() => null),
@@ -21,9 +20,7 @@ async function getStoredSessionToken() {
       })
     ]);
   } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
+    if (timeout) clearTimeout(timeout);
   }
 }
 
@@ -36,13 +33,9 @@ export function AuthEntry() {
     let mounted = true;
 
     (async () => {
-      const token = await getStoredSessionToken();
-      const role = await getStoredAuthRole();
-
+      const [token, role] = await Promise.all([getStoredSessionToken(), getStoredAuthRole()]);
       if (mounted) {
-        if (token) {
-          setActiveRole(role ?? "athlete");
-        }
+        if (token) setActiveRole(role ?? "athlete");
         setBooting(false);
       }
     })();
@@ -53,8 +46,10 @@ export function AuthEntry() {
   }, []);
 
   const handleLogout = async () => {
-    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
-    await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+    await Promise.all([
+      SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
+      SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null)
+    ]);
     setActiveRole(null);
     setScreen("login");
   };
@@ -63,27 +58,20 @@ export function AuthEntry() {
     return <FullScreenOverlay label="Preparing your secure ATLETA session..." />;
   }
 
-  if (activeRole === "athlete") {
-    return <AthleteMainPage onLogout={handleLogout} />;
-  }
-
-  if (activeRole === "coach") {
-    return <CoachMainPage onLogout={handleLogout} />;
-  }
+  if (activeRole === "athlete") return <AthleteMainPage onLogout={handleLogout} />;
+  if (activeRole === "coach") return <CoachMainPage onLogout={handleLogout} />;
 
   return (
     <View style={styles.container}>
-      {screen === "login" ? (
+      {screen === "login" && (
         <LoginScreen
           onGoSignup={() => setScreen("signup")}
           onGoReset={() => setScreen("reset")}
-          onAuthenticated={(role) => setActiveRole(role)}
+          onAuthenticated={setActiveRole}
         />
-      ) : null}
-
-      {screen === "signup" ? <SignupScreen onGoLogin={() => setScreen("login")} /> : null}
-
-      {screen === "reset" ? <PasswordResetScreen onGoLogin={() => setScreen("login")} /> : null}
+      )}
+      {screen === "signup" && <SignupScreen onGoLogin={() => setScreen("login")} />}
+      {screen === "reset" && <PasswordResetScreen onGoLogin={() => setScreen("login")} />}
     </View>
   );
 }
