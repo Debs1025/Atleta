@@ -5,7 +5,7 @@ import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, ty
 import { LoginScreen } from "./LoginScreen";
 import { PasswordResetScreen } from "./PasswordResetScreen";
 import { SignupScreen } from "./SignupScreen";
-import { AthleteMainPage } from "../Athlete/Dashboard/AthleteMainPage";
+import { AthleteHomePage } from "../Athlete/Dashboard/AthleteHomePage";
 import { CoachMainPage } from "../Coach/Dashboard/CoachMainPage";
 
 type ScreenMode = "login" | "signup" | "reset";
@@ -58,7 +58,7 @@ export function AuthEntry() {
     return <FullScreenOverlay label="Preparing your secure ATLETA session..." />;
   }
 
-  if (activeRole === "athlete") return <AthleteMainPage onLogout={handleLogout} />;
+  if (activeRole === "athlete") return <AthleteHomePage onLogout={handleLogout} />;
   if (activeRole === "coach") return <CoachMainPage onLogout={handleLogout} />;
 
   return (
