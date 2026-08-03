@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HomeAnalyticsPage, AthleteProfile } from "./HomeAnalyticsPage";
 import { AthleteProfilePage } from "../Profile/AthleteProfilePage";
+import { NotificationPage, NotificationItem } from "./Notification";
 
 // Sample data to be used since mayo pang backend
 export const initialAthleteProfile: AthleteProfile = {
@@ -48,6 +49,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   const [activeTab, setActiveTab] = useState<TabType>("HOME");
   const [profile, setProfile] = useState<AthleteProfile>(initialAthleteProfile);
   const [loading, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     // Skeleton Loader
@@ -64,6 +67,18 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top + 14, 58);
 
+  const unreadCount = notifications.filter((n) => !n.read_status).length;
+
+  if (showNotifications) {
+    return (
+      <NotificationPage
+        onBack={() => setShowNotifications(false)}
+        notifications={notifications.length > 0 ? notifications : undefined}
+        onNotificationsChange={setNotifications}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -71,12 +86,16 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       {/* Top Header Bar */}
       <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
         <Text style={styles.brandLogoText}>ATLETA</Text>
-        <Pressable style={styles.notificationButton}>
+        <Pressable
+          style={styles.notificationButton}
+          onPress={() => setShowNotifications(true)}
+        >
           <Image
             source={require("../../../../assets/notification.png")}
             style={styles.notificationIcon}
             resizeMode="contain"
           />
+          {unreadCount > 0 && <View style={styles.notificationBadge} />}
         </Pressable>
       </View>
 
@@ -214,11 +233,21 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     padding: 6,
+    position: "relative",
   },
   notificationIcon: {
     width: 22,
     height: 22,
     tintColor: "#FFFFFF",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#38BDF8",
   },
   screenContainer: {
     flex: 1,
