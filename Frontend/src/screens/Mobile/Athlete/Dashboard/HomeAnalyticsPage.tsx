@@ -103,6 +103,9 @@ export function HomeAnalyticsPage({
       style={styles.dashboardContainer}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
+      nestedScrollEnabled={true}
+      overScrollMode="never"
+      keyboardShouldPersistTaps="handled"
     >
       {/* Category */}
       <View style={styles.categoryBadge}>
@@ -315,7 +318,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   categoryBadge: {
     backgroundColor: "#38BDF8",

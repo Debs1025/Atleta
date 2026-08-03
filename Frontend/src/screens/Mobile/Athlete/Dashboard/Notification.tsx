@@ -317,6 +317,9 @@ export function NotificationPage({
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        overScrollMode="never"
+        keyboardShouldPersistTaps="handled"
       >
         {/* Date Grouping Label */}
         <View style={styles.dateGroupHeader}>
@@ -644,7 +647,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   dateGroupHeader: {
     marginTop: 18,

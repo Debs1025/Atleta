@@ -13,6 +13,18 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { AthleteProfile, EligibleDocument } from "../Dashboard/HomeAnalyticsPage";
 
+export interface DailySessionLog {
+  date: string; // "YYYY-MM-DD"
+  duration_minutes: number;
+  srpe: number; // Scale 1 - 10
+}
+
+export interface WorkloadAnalyticsData {
+  acute_load_7day_avg: number;
+  chronic_load_28day_avg: number;
+  weekly_logs: DailySessionLog[];
+}
+
 export interface AthleteProfilePageProps {
   profile: AthleteProfile;
   onUpdateProfile: (updatedProfile: AthleteProfile) => void;
@@ -27,6 +39,20 @@ const DEFAULT_CATEGORIES: Array<AthleteProfile["category"]> = [
   "SWIMMING",
   "TRACK AND FIELD",
 ];
+
+const DEFAULT_WORKLOAD_DATA: WorkloadAnalyticsData = {
+  acute_load_7day_avg: 420,
+  chronic_load_28day_avg: 380,
+  weekly_logs: [
+    { date: "MON", duration_minutes: 75, srpe: 7 },
+    { date: "TUE", duration_minutes: 60, srpe: 6 },
+    { date: "WED", duration_minutes: 90, srpe: 8 },
+    { date: "THU", duration_minutes: 45, srpe: 5 },
+    { date: "FRI", duration_minutes: 80, srpe: 7 },
+    { date: "SAT", duration_minutes: 60, srpe: 6 },
+    { date: "SUN", duration_minutes: 0, srpe: 0 },
+  ],
+};
 
 const MONTH_NAMES = [
   "JANUARY",
@@ -144,6 +170,55 @@ export function AthleteProfilePage({
   const apeRatioVal = heightCm > 0 ? wingspanCm / heightCm : 1;
   const apeIndex = isNaN(apeRatioVal) ? "1.00" : apeRatioVal.toFixed(2);
   const apeDiff = wingspanCm - heightCm;
+
+  // Workload Analytics State (Read-only for athlete, provided by Coach)
+  const [workloadData, setWorkloadData] = useState<WorkloadAnalyticsData>(
+    (profile as any).workload_analytics || DEFAULT_WORKLOAD_DATA
+  );
+  const [workloadDrawerOpen, setWorkloadDrawerOpen] = useState(true);
+
+  // Sync / fetch coach-provided workload logs for the athlete
+  React.useEffect(() => {
+    if ((profile as any).workload_analytics) {
+      setWorkloadData((profile as any).workload_analytics);
+    } else {
+      setWorkloadData(DEFAULT_WORKLOAD_DATA);
+    }
+  }, [profile]);
+
+  // Dynamic Client-side Formulas for Workload Indicators:
+  // Session Load (Arbitrary Units AU) = duration_minutes * sRPE (scale 1-10)
+  // Acute Load = Total 7-day session load sum
+  const acuteLoadSum = workloadData.weekly_logs.reduce(
+    (acc, log) => acc + log.duration_minutes * log.srpe,
+    0
+  );
+  const chronicLoad = workloadData.chronic_load_28day_avg || 380;
+  // ACWR (Acute:Chronic Workload Ratio) = Acute Load / Chronic Load
+  const acwrRatio = chronicLoad > 0 ? acuteLoadSum / chronicLoad : 1.0;
+
+  // Workload Risk Zone Status
+  let acwrStatus = "OPTIMAL ZONE";
+  let statusBadgeBg = "#064E3B";
+  let statusBadgeColor = "#34D399";
+  let acwrDesc = "Optimal training load — progressive fitness gains with minimal injury risk.";
+
+  if (acwrRatio < 0.8) {
+    acwrStatus = "UNDERLOAD";
+    statusBadgeBg = "#451A03";
+    statusBadgeColor = "#FBBF24";
+    acwrDesc = "Underload zone — potential fitness loss or detraining risk.";
+  } else if (acwrRatio > 1.5) {
+    acwrStatus = "POOR PERFORMANCE";
+    statusBadgeBg = "#450A0A";
+    statusBadgeColor = "#F87171";
+    acwrDesc = "High fatigue & workload spike detected — increased risk of poor performance.";
+  } else if (acwrRatio > 1.3) {
+    acwrStatus = "HIGH LOAD";
+    statusBadgeBg = "#431407";
+    statusBadgeColor = "#FB923C";
+    acwrDesc = "Elevated workload — monitor athlete fatigue and recovery closely.";
+  }
 
   // Handler to replace/upload existing document file
   const handlePickDocument = async (docId: string) => {
@@ -342,6 +417,9 @@ export function AthleteProfilePage({
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
+      nestedScrollEnabled={true}
+      overScrollMode="never"
+      keyboardShouldPersistTaps="handled"
     >
       {/* Section Heading & Edit Button Bar */}
       <View style={styles.sectionHeaderRow}>
@@ -586,6 +664,117 @@ export function AthleteProfilePage({
                     ({apeDiff >= 0 ? `+${apeDiff}` : apeDiff} cm reach)
                   </Text>
                 </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Workload Analytics & Training Load Section */}
+        <View style={styles.drawerContainer}>
+          <Pressable
+            style={styles.drawerHeader}
+            onPress={() => setWorkloadDrawerOpen(!workloadDrawerOpen)}
+          >
+            <View style={styles.drawerTitleRow}>
+              <Ionicons name="fitness-outline" size={16} color="#38BDF8" />
+              <Text style={styles.drawerTitleText}>
+                Workload Analytics & Training Load
+              </Text>
+            </View>
+            <Ionicons
+              name={workloadDrawerOpen ? "chevron-up" : "chevron-down"}
+              size={18}
+              color="#38BDF8"
+            />
+          </Pressable>
+
+          {workloadDrawerOpen && (
+            <View style={styles.drawerContent}>
+              {/* ACWR & Risk Zone Status Card */}
+              <View style={styles.workloadAcwrCard}>
+                <View style={styles.workloadAcwrHeader}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.workloadSubLabel}>
+                      ACWR (Acute:Chronic Workload Ratio)
+                    </Text>
+                    <Text style={styles.workloadAcwrValue}>
+                      {acwrRatio.toFixed(2)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.workloadStatusBadge,
+                      { backgroundColor: statusBadgeBg },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.workloadStatusText,
+                        { color: statusBadgeColor },
+                      ]}
+                    >
+                      {acwrStatus}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Subtitle / Formula description */}
+                <Text style={styles.workloadDescText}>{acwrDesc}</Text>
+
+                {/* Acute vs Chronic Load Progress comparison */}
+                <View style={styles.loadComparisonRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.loadBoxLabel}>7-Day Acute Load</Text>
+                    <Text style={styles.loadBoxValue}>{Math.round(acuteLoadSum)} AU</Text>
+                  </View>
+                  <View style={styles.loadVerticalDivider} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.loadBoxLabel}>28-Day Chronic Load</Text>
+                    <Text style={styles.loadBoxValue}>{Math.round(chronicLoad)} AU</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* 7-Day Session Log Summary (Provided by Coach) */}
+              <View style={styles.weeklyLogSection}>
+                <View style={styles.weeklyLogHeaderRow}>
+                  <Text style={styles.weeklyLogTitle}>7-DAY TRAINING LOG</Text>
+                  <View style={styles.coachBadgeTag}>
+                    <Ionicons name="person-outline" size={12} color="#38BDF8" />
+                    <Text style={styles.coachBadgeText}>COACH ASSIGNED</Text>
+                  </View>
+                </View>
+
+                {/* Horizontal scrollable daily log cards for clear mobile visibility */}
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled={true}
+                  overScrollMode="never"
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dailyLogsScrollContent}
+                >
+                  {workloadData.weekly_logs.map((log, index) => {
+                    const sessionLoad = log.duration_minutes * log.srpe;
+                    return (
+                      <View key={index} style={styles.dailyLogCard}>
+                        <Text style={styles.dailyLogDate}>{log.date}</Text>
+                        <Text style={styles.dailyLogDuration}>
+                          {log.duration_minutes > 0 ? `${log.duration_minutes}m` : "Rest"}
+                        </Text>
+                        {log.duration_minutes > 0 ? (
+                          <View style={styles.srpeTag}>
+                            <Text style={styles.srpeTagText}>sRPE {log.srpe}</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.srpeTag, { backgroundColor: "#111C35" }]}>
+                            <Text style={[styles.srpeTagText, { color: "#64748B" }]}>Off</Text>
+                          </View>
+                        )}
+                        <Text style={styles.dailyLoadText}>{sessionLoad} AU</Text>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
               </View>
             </View>
           )}
@@ -995,6 +1184,8 @@ export function AthleteProfilePage({
         </Pressable>
       </Modal>
 
+
+
       {/* Category Selection Modal */}
       <Modal
         visible={showCategoryPicker}
@@ -1334,7 +1525,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -2127,5 +2318,154 @@ const styles = StyleSheet.create({
   },
   calendarYearTextSelected: {
     color: "#38BDF8",
+  },
+
+  /* WORKLOAD ANALYTICS STYLES */
+  workloadAcwrCard: {
+    backgroundColor: "#0D1B2A",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  workloadAcwrHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  workloadSubLabel: {
+    color: "#94A3B8",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  workloadAcwrValue: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  workloadStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  workloadStatusText: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  workloadDescText: {
+    color: "#CBD5E1",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  loadComparisonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#111C35",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  loadBoxLabel: {
+    color: "#94A3B8",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  loadBoxValue: {
+    color: "#38BDF8",
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  loadVerticalDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#1E293B",
+  },
+  weeklyLogSection: {
+    marginTop: 6,
+  },
+  weeklyLogHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  weeklyLogTitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  coachBadgeTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#111C35",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  coachBadgeText: {
+    color: "#38BDF8",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  dailyLogsScrollContent: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  dailyLogCard: {
+    width: 76,
+    backgroundColor: "#0D1B2A",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  dailyLogDate: {
+    color: "#94A3B8",
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  dailyLogDuration: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  srpeTag: {
+    backgroundColor: "#1E293B",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  srpeTagText: {
+    color: "#38BDF8",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  dailyLoadText: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "700",
   },
 });
