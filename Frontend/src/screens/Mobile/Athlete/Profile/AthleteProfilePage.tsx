@@ -123,6 +123,12 @@ export function AthleteProfilePage({
     profile.eligible_documents || DEFAULT_DOCUMENTS
   );
 
+  React.useEffect(() => {
+    if (profile.eligible_documents) {
+      setDocuments(profile.eligible_documents);
+    }
+  }, [profile.eligible_documents]);
+
   // UI state
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);

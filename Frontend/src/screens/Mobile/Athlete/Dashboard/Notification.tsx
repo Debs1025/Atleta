@@ -53,6 +53,12 @@ export interface NotificationPageProps {
   onBack: () => void;
   notifications?: NotificationItem[];
   onNotificationsChange?: (items: NotificationItem[]) => void;
+  onUploadDocumentSuccess?: (payload: {
+    document_name: string;
+    required_type: string;
+    fileName: string;
+    fileUri?: string;
+  }) => void;
 }
 
 //sample notification from coach
@@ -107,6 +113,7 @@ export function NotificationPage({
   onBack,
   notifications: externalNotifications,
   onNotificationsChange,
+  onUploadDocumentSuccess,
 }: NotificationPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top + 10, 52);
@@ -247,16 +254,31 @@ export function NotificationPage({
             message_body: `Submitted ${selectedFile.name} for ${n.highlighted_text || "verification"}.`,
             document_details: n.document_details
               ? {
-                  ...n.document_details,
-                  is_uploaded: true,
-                  file_name: selectedFile.name,
-                }
+                ...n.document_details,
+                is_uploaded: true,
+                file_name: selectedFile.name,
+              }
               : undefined,
           };
         }
         return n;
       });
       updateFeed(updated);
+
+      if (onUploadDocumentSuccess) {
+        onUploadDocumentSuccess({
+          document_name:
+            selectedDocNotif.highlighted_text ||
+            selectedDocNotif.document_details?.document_name ||
+            "PSA (Birth Certificate)",
+          required_type:
+            selectedDocNotif.document_details?.required_type ||
+            "BIRTH_CERTIFICATE",
+          fileName: selectedFile.name,
+          fileUri: selectedFile.uri,
+        });
+      }
+
       Alert.alert(
         "Upload Successful",
         `${selectedFile.name} has been uploaded to your coach!`
@@ -377,8 +399,8 @@ export function NotificationPage({
                     {item.inquiry_details?.status === "ACCEPTED"
                       ? "Inquiry Accepted ✓"
                       : item.inquiry_details?.status === "DECLINED"
-                      ? "Inquiry Declined"
-                      : item.action_label}
+                        ? "Inquiry Declined"
+                        : item.action_label}
                   </Text>
                 </Pressable>
               </View>

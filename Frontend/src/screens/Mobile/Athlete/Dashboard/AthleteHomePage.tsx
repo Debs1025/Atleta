@@ -2,9 +2,33 @@ import React, { useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { HomeAnalyticsPage, AthleteProfile } from "./HomeAnalyticsPage";
+import { HomeAnalyticsPage, AthleteProfile, EligibleDocument } from "./HomeAnalyticsPage";
 import { AthleteProfilePage } from "../Profile/AthleteProfilePage";
 import { NotificationPage, NotificationItem } from "./Notification";
+
+//eligible docs with sample data for testing
+const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [
+  {
+    id: "doc_01",
+    title: "PSA / NSO Birth Certificate",
+    category: "BIRTH_CERTIFICATE",
+    status: "PENDING",
+  },
+  {
+    id: "doc_02",
+    title: "Medical Fitness Clearance",
+    category: "MEDICAL_CLEARANCE",
+    fileName: "medical_clearance_2026.pdf",
+    status: "UPLOADED",
+    uploadedAt: "FEB 04, 2026",
+  },
+  {
+    id: "doc_03",
+    title: "School / Student ID Verification",
+    category: "SCHOOL_ID",
+    status: "PENDING",
+  },
+];
 
 // Sample data to be used since mayo pang backend
 export const initialAthleteProfile: AthleteProfile = {
@@ -37,6 +61,7 @@ export const initialAthleteProfile: AthleteProfile = {
     free_throw_percentage: 82,
     last_5_games_scores: [14, 18, 30, 16, 24],
   },
+  eligible_documents: DEFAULT_ELIGIBLE_DOCS,
 };
 
 type TabType = "HOME" | "COACHES" | "PROFILE";
@@ -64,6 +89,63 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     setProfile(updatedProfile);
   };
 
+  const handleUploadDocumentFromNotification = (docInfo: {
+    document_name: string;
+    required_type: string;
+    fileName: string;
+    fileUri?: string;
+  }) => {
+    const todayStr = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).toUpperCase();
+
+    const currentDocs = profile.eligible_documents || DEFAULT_ELIGIBLE_DOCS;
+    let found = false;
+
+    const updatedDocs = currentDocs.map((docItem) => {
+      const isMatchCategory =
+        docItem.category === docInfo.required_type ||
+        (docInfo.required_type === "BIRTH_CERTIFICATE" && docItem.category === "BIRTH_CERTIFICATE");
+      const isMatchTitle =
+        docItem.title.toLowerCase().includes("psa") ||
+        docItem.title.toLowerCase().includes("birth") ||
+        docItem.title.toLowerCase().includes(docInfo.document_name.toLowerCase());
+
+      if (isMatchCategory || isMatchTitle) {
+        found = true;
+        return {
+          ...docItem,
+          fileName: docInfo.fileName,
+          fileUri: docInfo.fileUri,
+          status: "UPLOADED" as const,
+          uploadedAt: todayStr,
+        };
+      }
+      return docItem;
+    });
+
+    if (!found) {
+      updatedDocs.push({
+        id: `doc_${Date.now()}`,
+        title: docInfo.document_name,
+        category: (docInfo.required_type as any) || "OTHER",
+        fileName: docInfo.fileName,
+        fileUri: docInfo.fileUri,
+        status: "UPLOADED" as const,
+        uploadedAt: todayStr,
+      });
+    }
+
+    const updatedProfile: AthleteProfile = {
+      ...profile,
+      eligible_documents: updatedDocs,
+    };
+
+    setProfile(updatedProfile);
+  };
+
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top + 14, 58);
 
@@ -75,6 +157,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         onBack={() => setShowNotifications(false)}
         notifications={notifications.length > 0 ? notifications : undefined}
         onNotificationsChange={setNotifications}
+        onUploadDocumentSuccess={handleUploadDocumentFromNotification}
       />
     );
   }
