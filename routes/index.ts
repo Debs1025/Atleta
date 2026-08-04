@@ -3,6 +3,7 @@ import userRoutes from './userRoutes';
 import athleteRoutes from './athleteRoutes';
 import notificationRoutes from './notificationRoutes';
 import analyticsRoutes from './analyticsRoutes';
+import teamRoutes from './teamRoutes';
 
 const router = Router();
 
@@ -17,5 +18,8 @@ router.use('/notifications', notificationRoutes);
 
 // Mount analytics routes at /analytics (/api/v1/analytics)
 router.use('/analytics', analyticsRoutes);
+
+// Mount team routes at /teams (/api/v1/teams)
+router.use('/teams', teamRoutes);
 
 export default router;

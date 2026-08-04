@@ -7,6 +7,7 @@ import {
   updateAthlete,
   uploadDocument,
 } from '../controllers/athleteController';
+import { getAthleteTeamHandler } from '../controllers/teamController';
 
 const router = Router();
 
@@ -18,6 +19,9 @@ const upload = multer({
 // GET /api/v1/athletes/:athleteId/home – Aggregated personal analytics & team summary
 router.get('/:athleteId/home', authenticate, getAthleteHome);
 
+// GET /api/v1/athletes/:athleteId/team – Retrieve athlete's current team, coach, and roster
+router.get('/:athleteId/team', authenticate, getAthleteTeamHandler);
+
 // GET /api/v1/athletes/:athleteId – Fetch full digital dashboard data
 router.get('/:athleteId', getAthlete);
 
@@ -28,3 +32,4 @@ router.put('/:athleteId', authenticate, updateAthlete);
 router.post('/:athleteId/documents', authenticate, upload.single('document'), uploadDocument);
 
 export default router;
+
