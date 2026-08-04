@@ -8,16 +8,14 @@ import {
   View,
 } from "react-native";
 
+import { Coach } from "../Teams/Teams";
+
 export interface TeamAffiliation {
   team_id: string;
   team_name: string;
   sport_type: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD";
   division?: string;
-  head_coach: {
-    coach_id: string;
-    full_name: string;
-    role_title: string;
-  };
+  head_coach: Coach;
   is_verified: boolean;
 }
 
@@ -58,12 +56,16 @@ interface HomeAnalyticsPageProps {
   profile: AthleteProfile;
   loading?: boolean;
   onNavigateToProfile?: () => void;
+  onNavigateToCoaches?: () => void;
+  onNavigateToTeamProfile?: () => void;
 }
 
 export function HomeAnalyticsPage({
   profile,
   loading = false,
   onNavigateToProfile,
+  onNavigateToCoaches,
+  onNavigateToTeamProfile,
 }: HomeAnalyticsPageProps) {
   if (loading) {
     return <HomeSkeletonLoader />;
@@ -239,45 +241,83 @@ export function HomeAnalyticsPage({
         </View>
 
         <View style={styles.teamCardContainer}>
-          {/* Group / Teams */}
-          <View style={styles.teamHeaderRow}>
-            <View style={styles.groupIconWrapper}>
-              <Image
-                source={require("../../../../assets/groupprofile.png")}
-                style={styles.groupIconImage}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.teamNameText}>{team.team_name}</Text>
-          </View>
-
-          {/* Coach */}
-          <View style={styles.coachSectionWrapper}>
-            <Text style={styles.coachLabelHeader}>COACH</Text>
-            <View style={styles.coachInnerCard}>
-              <View style={styles.coachAvatarWrapper}>
-                <Image
-                  source={require("../../../../assets/profile.png")}
-                  style={styles.coachAvatarImage}
-                  resizeMode="contain"
-                />
+          {profile?.current_affiliation?.team_id &&
+          profile.current_affiliation.team_id !== "" &&
+          profile.current_affiliation.team_name !== "Unassigned Team" ? (
+            <>
+              {/* Group / Teams */}
+              <View style={styles.teamHeaderRow}>
+                <View style={styles.groupIconWrapper}>
+                  <Image
+                    source={require("../../../../assets/groupprofile.png")}
+                    style={styles.groupIconImage}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={styles.teamNameText}>{team.team_name}</Text>
               </View>
-              <View style={styles.coachInfoTextGroup}>
-                <Text style={styles.coachNameText}>
-                  {team.head_coach.full_name}
-                </Text>
-                <Text style={styles.coachRoleText}>
-                  {team.head_coach.role_title}
-                </Text>
-              </View>
-            </View>
-          </View>
 
-          {/* View Full Team Profile Button */}
-          {onNavigateToProfile && (
-            <Pressable style={styles.viewTeamButton} onPress={onNavigateToProfile}>
-              <Text style={styles.viewTeamButtonText}>View Full Team Profile</Text>
-            </Pressable>
+              {/* Coach */}
+              <View style={styles.coachSectionWrapper}>
+                <Text style={styles.coachLabelHeader}>COACH</Text>
+                <View style={styles.coachInnerCard}>
+                  <View style={styles.coachAvatarWrapper}>
+                    <Image
+                      source={require("../../../../assets/profile.png")}
+                      style={styles.coachAvatarImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={styles.coachInfoTextGroup}>
+                    <Text style={styles.coachNameText}>
+                      {team.head_coach.full_name}
+                    </Text>
+                    <Text style={styles.coachRoleText}>
+                      {team.head_coach.role_title}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* View Full Team Profile Button */}
+              <Pressable
+                style={styles.viewTeamButton}
+                onPress={() =>
+                  onNavigateToTeamProfile
+                    ? onNavigateToTeamProfile()
+                    : onNavigateToProfile && onNavigateToProfile()
+                }
+              >
+                <Text style={styles.viewTeamButtonText}>
+                  View Full Team Profile
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={styles.noTeamContainer}>
+              <Text style={styles.noTeamTitle}>No Team Joined</Text>
+              <Text style={styles.noTeamSubtext}>
+                You are currently not affiliated with any athletic team program.
+              </Text>
+              <Pressable
+                style={styles.joinTeamButton}
+                onPress={() => onNavigateToCoaches && onNavigateToCoaches()}
+              >
+                <Text style={styles.joinTeamButtonText}>JOIN TEAM</Text>
+              </Pressable>
+
+              {/* TEMPORARY DEV TEST BUTTON TO PREVIEW TEAM PROFILE UI */}
+              <Pressable
+                style={styles.devTestButton}
+                onPress={() =>
+                  onNavigateToTeamProfile && onNavigateToTeamProfile()
+                }
+              >
+                <Text style={styles.devTestButtonText}>
+                  Preview Team Profile UI
+                </Text>
+              </Pressable>
+            </View>
           )}
         </View>
       </View>
@@ -318,7 +358,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 120,
+    paddingBottom: 32,
   },
   categoryBadge: {
     backgroundColor: "#38BDF8",
@@ -633,6 +673,53 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
+  },
+  noTeamContainer: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  noTeamTitle: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  noTeamSubtext: {
+    color: "#94A3B8",
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  joinTeamButton: {
+    backgroundColor: "#00A3FF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: "100%",
+    alignItems: "center",
+  },
+  joinTeamButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  devTestButton: {
+    marginTop: 10,
+    backgroundColor: "#111C35",
+    borderWidth: 1,
+    borderColor: "#38BDF8",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    width: "100%",
+    alignItems: "center",
+  },
+  devTestButtonText: {
+    color: "#38BDF8",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   skeletonPill: {
     backgroundColor: "#16233E",

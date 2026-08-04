@@ -648,7 +648,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 120,
+    paddingBottom: 36,
   },
   dateGroupHeader: {
     marginTop: 18,

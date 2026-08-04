@@ -5,6 +5,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HomeAnalyticsPage, AthleteProfile, EligibleDocument } from "./HomeAnalyticsPage";
 import { AthleteProfilePage } from "../Profile/AthleteProfilePage";
 import { NotificationPage, NotificationItem } from "./Notification";
+import { Teams } from "../Teams/Teams";
+import { TeamProfileScreen } from "./TeamProfile";
+import { CoachProfileScreen } from "./CoachProfile";
 
 //eligible docs with sample data for testing
 const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [
@@ -41,16 +44,18 @@ export const initialAthleteProfile: AthleteProfile = {
   weight_kg: 82,
   wingspan_cm: 194,
   current_affiliation: {
-    team_id: "team_lakers_01",
-    team_name: "Camarines Sur Lakers",
+    team_id: "",
+    team_name: "Unassigned Team",
     sport_type: "BASKETBALL",
     division: "Division 1",
     head_coach: {
-      coach_id: "coach_01",
-      full_name: "MARCUS STERLING",
+      coach_id: "",
+      full_name: "No Coach Assigned",
       role_title: "Head Coach",
+      years_experience: "0 Years",
+      quote: "",
     },
-    is_verified: true,
+    is_verified: false,
   },
   // sample data for testing of formulas
   analytics: {
@@ -72,10 +77,23 @@ interface AthleteHomePageProps {
 
 export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   const [activeTab, setActiveTab] = useState<TabType>("HOME");
+  const [dashboardScreen, setDashboardScreen] = useState<
+    "HOME_MAIN" | "TEAM_PROFILE" | "COACH_PROFILE"
+  >("HOME_MAIN");
   const [profile, setProfile] = useState<AthleteProfile>(initialAthleteProfile);
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [hideParentBars, setHideParentBars] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "HOME") {
+      setDashboardScreen("HOME_MAIN");
+    }
+    if (activeTab !== "COACHES" && dashboardScreen === "HOME_MAIN") {
+      setHideParentBars(false);
+    }
+  }, [activeTab, dashboardScreen]);
 
   useEffect(() => {
     // Skeleton Loader
@@ -167,30 +185,56 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       <StatusBar style="light" />
 
       {/* Top Header Bar */}
-      <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
-        <Text style={styles.brandLogoText}>ATLETA</Text>
-        <Pressable
-          style={styles.notificationButton}
-          onPress={() => setShowNotifications(true)}
-        >
-          <Image
-            source={require("../../../../assets/notification.png")}
-            style={styles.notificationIcon}
-            resizeMode="contain"
-          />
-          {unreadCount > 0 && <View style={styles.notificationBadge} />}
-        </Pressable>
-      </View>
+      {!hideParentBars && (
+        <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
+          <Text style={styles.brandLogoText}>ATLETA</Text>
+          <Pressable
+            style={styles.notificationButton}
+            onPress={() => setShowNotifications(true)}
+          >
+            <Image
+              source={require("../../../../assets/notification.png")}
+              style={styles.notificationIcon}
+              resizeMode="contain"
+            />
+            {unreadCount > 0 && <View style={styles.notificationBadge} />}
+          </Pressable>
+        </View>
+      )}
 
       {/* Main Active Screen Body */}
       <View style={styles.screenContainer}>
-        {activeTab === "HOME" && (
-          <HomeAnalyticsPage
-            profile={profile}
-            loading={loading}
-            onNavigateToProfile={() => setActiveTab("PROFILE")}
-          />
-        )}
+        {activeTab === "HOME" &&
+          (dashboardScreen === "TEAM_PROFILE" ? (
+            <TeamProfileScreen
+              onBack={() => {
+                setDashboardScreen("HOME_MAIN");
+                setHideParentBars(false);
+              }}
+              onViewCoachProfile={() => {
+                setDashboardScreen("COACH_PROFILE");
+                setHideParentBars(true);
+              }}
+            />
+          ) : dashboardScreen === "COACH_PROFILE" ? (
+            <CoachProfileScreen
+              onBack={() => {
+                setDashboardScreen("TEAM_PROFILE");
+                setHideParentBars(true);
+              }}
+            />
+          ) : (
+            <HomeAnalyticsPage
+              profile={profile}
+              loading={loading}
+              onNavigateToProfile={() => setActiveTab("PROFILE")}
+              onNavigateToCoaches={() => setActiveTab("COACHES")}
+              onNavigateToTeamProfile={() => {
+                setDashboardScreen("TEAM_PROFILE");
+                setHideParentBars(true);
+              }}
+            />
+          ))}
 
         {activeTab === "PROFILE" && (
           <AthleteProfilePage
@@ -202,17 +246,16 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         )}
 
         {activeTab === "COACHES" && (
-          <View style={styles.coachesPlaceholderContainer}>
-            <Text style={styles.coachesPlaceholderTitle}>COACHES DIRECTORY</Text>
-            <Text style={styles.coachesPlaceholderSubtitle}>
-              Connect with head coaches and athletic staff for {profile.category}.
-            </Text>
-          </View>
+          <Teams
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            onScreenStateChange={(isSubScreen) => setHideParentBars(isSubScreen)}
+          />
         )}
       </View>
 
       {/* Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
+      {!hideParentBars && (
+        <View style={styles.bottomTabBar}>
         {/* HOME TAB */}
         <Pressable
           style={styles.tabButton}
@@ -286,6 +329,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           </Text>
         </Pressable>
       </View>
+      )}
     </View>
   );
 }

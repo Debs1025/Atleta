@@ -1,65 +1,33 @@
-import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { CoachProfileSchema } from "./Teams";
 
-import { CoachProfileSchema } from "../Teams/Teams";
-
-export type CoachProfileData = CoachProfileSchema;
-
-// sample coach data for testing 
-export const DEFAULT_COACH_PROFILE: CoachProfileData = {
-  coach_id: "coach_erick_01",
-  full_name: "COACH ERICK NATHANIEL",
-  institution: "Albay National High School",
-  role_title: "Head Coach",
-  tags: ["BASKETBALL", "ACTIVE SCOUTING"],
-  years_experience: "15+",
-  core_specialties: [
-    "Basketball Strategy",
-    "Strength & Conditioning",
-    "Player Development",
-  ],
-  success_rate: "94%",
-  recruits_placed: "80+ Recruits Placed",
-  philosophy:
-    "Coach Erick Nathaniel brings over a decade of high-stakes experience to Albay National High School. His approach centers on the \"Total Athlete\" concept—integrating rigorous tactical basketball training with advanced physiological conditioning and academic excellence.",
-  quote:
-    "We don't just build players; we build professionals. My goal is to bridge the gap between high school potential and collegiate readiness by instilling discipline, tactical intelligence, and a relentless work ethic from day one.",
-  certificates: [
-    "Professional Basketball",
-    "Certified Athlete Coach",
-    "Certified Basketball Trainer",
-  ],
-  contact_info: {
-    email: "coach@gmail.com",
-    facebook: "Gerard Pelonio",
-    phone: "+67000",
-  },
-};
-
-interface CoachProfileProps {
-  coachData?: CoachProfileData;
+interface InquireCoachProps {
+  coach: CoachProfileSchema;
   onBack: () => void;
+  onGoHome: () => void;
+  onGoInquiries: () => void;
 }
 
-export function CoachProfileScreen({
-  coachData = DEFAULT_COACH_PROFILE,
+export function InquireCoachScreen({
+  coach,
   onBack,
-}: CoachProfileProps) {
-  const {
-    full_name,
-    institution,
-    role_title,
-    tags,
-    years_experience,
-    core_specialties,
-    success_rate,
-    recruits_placed,
-    philosophy,
-    quote,
-    certificates,
-    contact_info,
-  } = coachData;
+  onGoHome,
+  onGoInquiries,
+}: InquireCoachProps) {
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleSendInquiry = () => {
+    setModalVisible(true);
+  };
 
   return (
     <View style={styles.container}>
@@ -76,7 +44,7 @@ export function CoachProfileScreen({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Profile Header Block */}
+        {/* Header Section */}
         <View style={styles.profileHeaderBlock}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarBox}>
@@ -87,14 +55,14 @@ export function CoachProfileScreen({
             </View>
           </View>
 
-          <Text style={styles.coachName}>{full_name}</Text>
+          <Text style={styles.coachName}>{coach.full_name}</Text>
           <Text style={styles.institutionRole}>
-            {institution} | {role_title}
+            {coach.institution} | {coach.role_title}
           </Text>
 
           {/* Tags Row */}
           <View style={styles.tagsRow}>
-            {tags.map((tag, idx) => {
+            {coach.tags && coach.tags.map((tag, idx) => {
               const isActive = tag.includes("ACTIVE") || tag.includes("SCOUTING");
               return (
                 <View
@@ -123,7 +91,7 @@ export function CoachProfileScreen({
           {/* Card 1: Experience */}
           <View style={styles.metricCardCenter}>
             <Text style={styles.metricCardLabel}>EXPERIENCE</Text>
-            <Text style={styles.metricBigValue}>{years_experience}</Text>
+            <Text style={styles.metricBigValue}>{coach.years_experience}</Text>
             <Text style={styles.metricSubtext}>Years of Elite Coaching</Text>
           </View>
 
@@ -131,7 +99,7 @@ export function CoachProfileScreen({
           <View style={styles.metricCard}>
             <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
             <View style={styles.specialtiesList}>
-              {core_specialties.map((item, idx) => (
+              {coach.core_specialties.map((item, idx) => (
                 <View key={idx} style={styles.specialtyItemCard}>
                   <Ionicons
                     name={
@@ -154,8 +122,8 @@ export function CoachProfileScreen({
           {/* Card 3: Success Rate */}
           <View style={styles.metricCardCenter}>
             <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
-            <Text style={styles.metricBigValue}>{success_rate}</Text>
-            <Text style={styles.metricSubtext}>{recruits_placed}</Text>
+            <Text style={styles.metricBigValue}>{coach.success_rate}</Text>
+            <Text style={styles.metricSubtext}>{coach.recruits_placed}</Text>
           </View>
         </View>
 
@@ -166,17 +134,17 @@ export function CoachProfileScreen({
             <Text style={styles.sectionTitleText}>COACHING PHILOSOPHY</Text>
           </View>
 
-          <Text style={styles.philosophyParagraph}>{philosophy}</Text>
+          <Text style={styles.philosophyParagraph}>{coach.philosophy}</Text>
 
           <View style={styles.quoteCard}>
-            <Text style={styles.quoteText}>"{quote}"</Text>
+            <Text style={styles.quoteText}>"{coach.quote}"</Text>
           </View>
         </View>
 
         {/* Certificates Container */}
         <View style={styles.certificatesCard}>
           <Text style={styles.metricCardLabel}>CERTIFICATES</Text>
-          {certificates.map((cert, idx) => (
+          {coach.certificates.map((cert, idx) => (
             <View key={idx} style={styles.certBox}>
               <Text style={styles.certText}>{cert}</Text>
             </View>
@@ -188,25 +156,73 @@ export function CoachProfileScreen({
           <Text style={styles.metricCardLabel}>CONTACT INFORMATION</Text>
           <View style={styles.contactRow}>
             <Ionicons name="mail-outline" size={16} color="#38BDF8" />
-            <Text style={styles.contactText}>{contact_info.email}</Text>
+            <Text style={styles.contactText}>{coach.contact_info.email}</Text>
           </View>
 
           <View style={styles.contactRow}>
             <Ionicons name="logo-facebook" size={16} color="#38BDF8" />
-            <Text style={styles.contactText}>{contact_info.facebook}</Text>
+            <Text style={styles.contactText}>{coach.contact_info.facebook}</Text>
           </View>
 
           <View style={styles.contactRow}>
             <Ionicons name="call-outline" size={16} color="#38BDF8" />
-            <Text style={styles.contactText}>{contact_info.phone}</Text>
+            <Text style={styles.contactText}>{coach.contact_info.phone}</Text>
           </View>
         </View>
+
+        {/* Primary CTA Button */}
+        <Pressable style={styles.sendInquiryButton} onPress={handleSendInquiry}>
+          <Ionicons
+            name="paper-plane-outline"
+            size={18}
+            color="#FFFFFF"
+            style={styles.sendIcon}
+          />
+          <Text style={styles.sendInquiryText}>SEND RECRUITMENT INQUIRY</Text>
+        </Pressable>
       </ScrollView>
+
+      {/* SCREEN 4: INQUIRY SENT SUCCESS MODAL (image_067d57.jpg) */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Inquiry Sent ✓</Text>
+            <Text style={styles.modalSubtitle}>
+              You can view your inquiry to the inquiry page
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <Pressable
+                style={styles.modalButton}
+                onPress={() => {
+                  setModalVisible(false);
+                  onGoHome();
+                }}
+              >
+                <Text style={styles.modalButtonText}>Back Home</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.modalButton}
+                onPress={() => {
+                  setModalVisible(false);
+                  onGoInquiries();
+                }}
+              >
+                <Text style={styles.modalButtonText}>View Page</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
-
-export const CoachProfile = CoachProfileScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -438,5 +454,69 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 13,
     marginLeft: 10,
+  },
+  sendInquiryButton: {
+    backgroundColor: "#00A3FF",
+    borderRadius: 12,
+    paddingVertical: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  sendIcon: {
+    marginRight: 8,
+  },
+  sendInquiryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  /* MODAL STYLES (Screen 4) */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#10B981",
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+  },
+  modalTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    opacity: 0.9,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  modalButtonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  modalButton: {
+    flex: 0.48,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  modalButtonText: {
+    color: "#10B981",
+    fontSize: 13,
+    fontWeight: "800",
   },
 });
