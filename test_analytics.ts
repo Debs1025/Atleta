@@ -1,5 +1,5 @@
 import { generateToken } from './services/userService';
-import { getAthleteHomeSummary, invalidateAthleteHomeCache } from './services/athleteService';
+import { getAthleteHomeSummary } from './services/athleteService';
 import { createNotification, getAthleteNotifications, markNotificationAsRead, markAllNotificationsAsRead } from './services/notificationService';
 import { eventBus, EVENTS } from './utils/eventBus';
 
@@ -14,25 +14,27 @@ async function runTests() {
   console.log('--- TEST 1: System Events & Push Alert Speed (< 2s) ---');
   const eventStartTime = Date.now();
 
-  await createNotification(
-    TEST_ATHLETE_ID,
-    'Recruitment_Inquiry',
-    'Coach Tim Cone sent a new recruitment inquiry for Ginebra Kings!'
-  );
-
-  await createNotification(
-    TEST_ATHLETE_ID,
-    'Document_Action_Required',
-    'Your PSA Birth Certificate requires re-upload due to blurriness.'
-  );
-
-  eventBus.emit(EVENTS.PUSH_NOTIFICATION, {
-    recipient_user_id: TEST_ATHLETE_ID,
-    type: 'Inquiry_Status_Update',
-    message_body: 'Your inquiry status was updated to Accepted.',
+  await createNotification({
+    recipient_id: TEST_ATHLETE_ID,
+    type: 'RECRUITMENT_INQUIRY',
+    title: 'New Inquiry',
+    message: 'Coach Tim Cone sent a new recruitment inquiry for Ginebra Kings!',
   });
 
-  // Wait 100ms for event handling and push alert
+  await createNotification({
+    recipient_id: TEST_ATHLETE_ID,
+    type: 'ACTION_REQUIRED',
+    title: 'Document Action',
+    message: 'Your PSA Birth Certificate requires re-upload due to blurriness.',
+  });
+
+  eventBus.emit(EVENTS.PUSH_NOTIFICATION, {
+    recipient_id: TEST_ATHLETE_ID,
+    type: 'SYSTEM',
+    title: 'Inquiry Status Update',
+    message: 'Your inquiry status was updated to Accepted.',
+  });
+
   await new Promise((resolve) => setTimeout(resolve, 100));
   const eventDuration = Date.now() - eventStartTime;
   console.log(`✅ System push alerts dispatched in ${eventDuration}ms (< 2000ms threshold requirement).\n`);
@@ -42,7 +44,7 @@ async function runTests() {
   let notifications = await getAthleteNotifications(TEST_ATHLETE_ID);
   console.log(`Found ${notifications.length} notifications for athlete ${TEST_ATHLETE_ID}:`);
   notifications.forEach((n) => {
-    console.log(`  - [${n.type}] Read: ${n.is_read} | Body: "${n.message_body}"`);
+    console.log(`  - [${n.type}] Read: ${n.is_read} | Message: "${n.message}"`);
   });
 
   if (notifications.length >= 2) {
@@ -54,7 +56,7 @@ async function runTests() {
   // 3. Mark Single Notification Read
   console.log('--- TEST 3: PUT /api/v1/notifications/:id/read ---');
   const firstNotifId = notifications[0].notification_id;
-  const readResult = await markNotificationAsRead(TEST_ATHLETE_ID, firstNotifId);
+  const readResult = await markNotificationAsRead(firstNotifId, TEST_ATHLETE_ID);
   console.log('Mark single read result:', readResult);
   notifications = await getAthleteNotifications(TEST_ATHLETE_ID);
   const updatedTarget = notifications.find((n) => n.notification_id === firstNotifId);
@@ -101,7 +103,7 @@ async function runTests() {
 
   // 6. Cache Invalidation Test
   console.log('--- TEST 6: Match Certification Cache Invalidation ---');
-  eventBus.emit(EVENTS.MATCH_CERTIFIED, { athlete_id: TEST_ATHLETE_ID, match_id: 'm-999' });
+  eventBus.emit(EVENTS.MATCH_CERTIFIED, { athlete_id: TEST_ATHLETE_ID });
   console.log('✅ Match certification event emitted, cache invalidated.\n');
 
   console.log('====================================================');

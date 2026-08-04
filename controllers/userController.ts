@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import {
   validateRegisterUser,
@@ -19,7 +19,7 @@ import {
 
 /**
  * POST /api/v1/users & POST /api/v1/users/register
- * Register a new user and provision their role-specific profile.
+ * Register a new user and provision their role-specific profile in an atomic batch.
  */
 export async function registerUser(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -120,7 +120,7 @@ export async function socialLogin(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /api/v1/users/me
- * Retrieve profile of current authenticated user.
+ * Retrieve profile, role, and permissions of currently authenticated user.
  */
 export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -140,7 +140,7 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
 
 /**
  * POST /api/v1/users/password-reset
- * Send a secure recovery link via Nodemailer to a registered email.
+ * Send a secure recovery link to a registered email.
  */
 export async function requestPasswordReset(req: AuthRequest, res: Response): Promise<void> {
   try {

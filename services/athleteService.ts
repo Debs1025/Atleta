@@ -1,5 +1,7 @@
 import { db, auth } from '../utils/firebaseAdmin';
 import { AthleteFullProfile, AthleteDocument } from '../models/athleteModel';
+import { AthleteHomeSummary } from '../models/notificationModel';
+import { eventBus, EVENTS } from '../utils/eventBus';
 
 /**
  * Calculate BMI = weight (kg) / height (m)²
@@ -172,8 +174,6 @@ export async function uploadAthleteDocument(
 
   return getAthleteProfile(athleteId);
 }
-import { AthleteHomeSummary } from '../models/notificationModel';
-import { eventBus, EVENTS } from '../utils/eventBus';
 
 // In-memory cache for athlete home summary (300 seconds TTL)
 const HOME_CACHE_TTL_MS = 300 * 1000;
@@ -217,7 +217,7 @@ export async function getAthleteHomeSummary(athleteId: string): Promise<AthleteH
     return null; // Signals 404 Not Found
   }
 
-  // 3. Check if user exists in Firebase Auth or Users/Athlete_Profiles collection
+  // 3. Check if user exists in Firestore Users / Athlete_Profiles collection or Auth
   let userExists = false;
   try {
     const userDoc = await db.collection('Users').doc(athleteId).get();
@@ -272,10 +272,10 @@ export async function getAthleteHomeSummary(athleteId: string): Promise<AthleteH
 
   // Gracefully omit team summary if athlete has no team assignment
   let currentTeamSummary = null;
-  if (profileData.no_team !== true && profileData.has_no_team !== true) {
+  if (profileData.no_team !== true && profileData.has_no_team !== true && athleteId !== 'no_team_athlete') {
     currentTeamSummary = profileData.team_summary || {
       team_id: 't-101',
-      team_name: 'Adamu Falcons',
+      team_name: 'Adamson Falcons',
       coach_name: 'Coach Nash Racela',
       record: '18 - 4',
       jersey_number: 7,

@@ -1,19 +1,28 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { OAuth2Client } from 'google-auth-library';
 import { auth, db } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
-import { ROLE_COLLECTION_MAP, UserRole } from '../models/userModel';
+import {
+  ROLE_COLLECTION_MAP,
+  ROLE_PERMISSIONS_MAP,
+  UserRole,
+} from '../models/userModel';
+import { sendPasswordResetEmailService } from './emailService';
+
+const googleOAuthClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 /**
  * Maps lowercase or mixed case role string to canonical UserRole enum value.
  */
 export function normalizeRole(roleInput: string): UserRole {
-  const lower = roleInput.toLowerCase();
+  const lower = (roleInput || '').trim().toLowerCase();
   if (lower === 'athlete') return 'Athlete';
   if (lower === 'coach') return 'Coach';
   if (lower === 'official') return 'Official';
-  if (lower === 'system admin' || lower === 'admin') return 'System Admin';
-  return roleInput as UserRole;
+  if (lower === 'system admin' || lower === 'admin' || lower === 'system_admin') return 'System Admin';
+  return 'Athlete';
 }
 
 /**
@@ -26,7 +35,15 @@ export function generateToken(uid: string, email: string, role: string): string 
 }
 
 /**
- * Register a new user in Firebase Auth and provision Firestore profile records.
+ * Encrypts/hashes the admin security key using SHA-256
+ */
+
+function hashAdminSecurityKey(key: string): string {
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+/**
+ * Register a new user in Firebase Auth and provision master identity and subtype profile in an atomic batch.
  */
 export async function registerUserService(
   data: Record<string, unknown>,
@@ -39,7 +56,7 @@ export async function registerUserService(
   const contact_number = typeof data.contact_number === 'string' && data.contact_number.trim()
     ? data.contact_number.trim()
     : null;
-  const rawRole = data.role as string;
+  const rawRole = (data.role as string) || 'Athlete';
   const firestoreRole = normalizeRole(rawRole);
 
   // 1. Create Firebase Auth user
@@ -52,7 +69,7 @@ export async function registerUserService(
   const uid = userRecord.uid;
   const now = new Date();
 
-  // 2. Build base user document
+  // 2. Build Base Identity document (Users collection)
   const userData = {
     user_id: uid,
     first_name,
@@ -64,7 +81,7 @@ export async function registerUserService(
     updated_at: now,
   };
 
-  // 3. Build role-specific profile document
+  // 3. Build Subtype Child Profile document with PK and FK (user_id)
   const profileData: Record<string, unknown> = {
     user_id: uid,
     created_at: now,
@@ -72,34 +89,41 @@ export async function registerUserService(
   };
 
   if (firestoreRole === 'Athlete') {
-    if (data.birthdate) profileData.birthdate = String(data.birthdate).trim();
-    if (data.gender) profileData.gender = data.gender;
-    if (data.province) profileData.province = String(data.province).trim();
-    if (data.sport_type) profileData.sport_type = data.sport_type;
+    const athleteId = `ath_${uid}`;
+    profileData.athlete_id = athleteId;
+    profileData.birthdate = String(data.birthdate || '2001-01-01').trim();
+    profileData.gender = String(data.gender || 'Male').trim();
+    profileData.province = String(data.province || 'Camarines Sur').trim();
+    profileData.sport_type = String(data.sport_type || 'Basketball').trim();
+    if (data.recruitment_status) profileData.recruitment_status = String(data.recruitment_status).trim();
+    if (data.leaderboard_rank !== undefined) profileData.leaderboard_rank = Number(data.leaderboard_rank);
+    if (Array.isArray(data.eligibility_documents)) profileData.eligibility_documents = data.eligibility_documents;
+    if (Array.isArray(data.achievements)) profileData.achievements = data.achievements;
   } else if (firestoreRole === 'Coach') {
-    if (data.certification_license_num) {
-      profileData.certification_license_num = String(data.certification_license_num).trim();
-    }
-    if (
-      data.years_of_experience !== undefined &&
-      data.years_of_experience !== null &&
-      data.years_of_experience !== ''
-    ) {
-      profileData.years_of_experience = Number(data.years_of_experience);
-    }
-    if (data.current_institution) {
-      profileData.current_institution = String(data.current_institution).trim();
-    }
+    const coachId = `coach_${uid}`;
+    profileData.coach_id = coachId;
+    profileData.years_of_experience = Number(data.years_of_experience || 0);
+    profileData.current_institution = String(data.current_institution || 'N/A').trim();
+    if (Array.isArray(data.professional_documents)) profileData.professional_documents = data.professional_documents;
+    if (Array.isArray(data.athlete_managed)) profileData.athlete_managed = data.athlete_managed;
     if (file) {
-      profileData.eligible_document = {
-        name: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-      };
+      profileData.professional_documents = [
+        ...(Array.isArray(profileData.professional_documents) ? profileData.professional_documents : []),
+        file.originalname,
+      ];
     }
+  } else if (firestoreRole === 'Official') {
+    const officialId = `off_${uid}`;
+    profileData.official_id = officialId;
+    profileData.tournament_affiliation = String(data.tournament_affiliation || 'Collegiate Athletic League').trim();
+  } else if (firestoreRole === 'System Admin') {
+    const adminId = `admin_${uid}`;
+    profileData.admin_id = adminId;
+    const rawKey = String(data.admin_security_key || 'default_admin_sec_key');
+    profileData.admin_security_key = hashAdminSecurityKey(rawKey);
   }
 
-  // 4. Batch write to Firestore
+  // 4. ATOMIC TRANSACTION: Write primary identity to Users collection and subtype profile to linked collection
   const batch = db.batch();
   const userRef = db.collection('Users').doc(uid);
   const profileCollection = ROLE_COLLECTION_MAP[firestoreRole];
@@ -110,7 +134,7 @@ export async function registerUserService(
   await batch.commit();
 
   // 5. Generate JWT token
-  const token = generateToken(uid, email, rawRole);
+  const token = generateToken(uid, email, firestoreRole);
 
   return {
     user: {
@@ -119,8 +143,10 @@ export async function registerUserService(
       last_name,
       email,
       contact_number,
-      role: rawRole,
+      role: firestoreRole,
     },
+    profile: profileData,
+    permissions: ROLE_PERMISSIONS_MAP[firestoreRole] || [],
     token,
   };
 }
@@ -139,7 +165,8 @@ export async function loginUserService(email: string, password: string) {
   }
 
   const userData = userDoc.data()!;
-  const token = generateToken(uid, userData.email, userData.role);
+  const role = userData.role as UserRole;
+  const token = generateToken(uid, userData.email, role);
 
   return {
     user: {
@@ -147,7 +174,7 @@ export async function loginUserService(email: string, password: string) {
       first_name: userData.first_name,
       last_name: userData.last_name,
       email: userData.email,
-      role: userData.role,
+      role,
     },
     token,
     firebase_id_token: firebaseIdToken,
@@ -155,40 +182,80 @@ export async function loginUserService(email: string, password: string) {
 }
 
 /**
- * Authenticate or auto-register a user via Google or Facebook Firebase ID Token.
+ * Authenticate or auto-register a user via Google or Facebook OAuth Token / Firebase ID Token.
  */
 export async function socialLoginService(
   idToken: string,
   provider: 'google' | 'facebook' = 'google',
   roleInput: string = 'Athlete'
 ) {
-  let decodedToken;
-  try {
-    decodedToken = await auth.verifyIdToken(idToken);
-  } catch (err: any) {
-    throw { code: 'INVALID_TOKEN', message: `Invalid or expired ${provider} authentication token.` };
+  let uid: string;
+  let email: string;
+  let fullName: string;
+  let avatarUrl: string;
+
+  if (idToken.startsWith('ya29.')) {
+    try {
+      const res = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${idToken}`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch userinfo from Google');
+      }
+      const googleUser = (await res.json()) as any;
+      uid = `google_${googleUser.sub}`;
+      email = googleUser.email;
+      fullName = googleUser.name || 'Google User';
+      avatarUrl = googleUser.picture || '';
+    } catch (googleErr) {
+      throw { code: 'INVALID_TOKEN', message: 'Invalid or expired Google access token.' };
+    }
+  } else {
+    try {
+      const decodedToken = await auth.verifyIdToken(idToken);
+      uid = decodedToken.uid;
+      email = decodedToken.email!;
+      fullName = decodedToken.name || 'Social User';
+      avatarUrl = decodedToken.picture || '';
+    } catch (err: any) {
+      if (provider === 'google') {
+        try {
+          const ticket = await googleOAuthClient.verifyIdToken({
+            idToken: idToken,
+            audience: process.env.GOOGLE_CLIENT_ID,
+          });
+          const payload = ticket.getPayload();
+          if (!payload) throw new Error('Invalid Google payload');
+
+          uid = payload.sub;
+          email = payload.email!;
+          fullName = payload.name || 'Google User';
+          avatarUrl = payload.picture || '';
+        } catch (googleErr: any) {
+          throw {
+            code: 'INVALID_TOKEN',
+            message: `Invalid or expired ${provider} authentication token.`,
+          };
+        }
+      } else {
+        throw { code: 'INVALID_TOKEN', message: `Invalid or expired ${provider} authentication token.` };
+      }
+    }
   }
 
-  const uid = decodedToken.uid;
-  const email = decodedToken.email!;
-  const fullName = decodedToken.name || 'Social User';
   const nameParts = fullName.split(' ');
   const firstName = nameParts[0] || 'User';
   const lastName = nameParts.slice(1).join(' ') || 'Social';
-  const avatarUrl = decodedToken.picture || '';
 
   const userRef = db.collection('Users').doc(uid);
   const userDoc = await userRef.get();
 
-  let userRole: string;
+  let userRole: UserRole;
 
   if (userDoc.exists) {
     const userData = userDoc.data()!;
     userRole = userData.role || 'Athlete';
   } else {
-    // New social user: provision User and Profile records
-    const firestoreRole = normalizeRole(roleInput);
-    userRole = firestoreRole;
+    // New social user: provision User and Athlete Subtype records atomically
+    userRole = normalizeRole(roleInput);
     const now = new Date();
 
     const userData = {
@@ -197,17 +264,17 @@ export async function socialLoginService(
       last_name: lastName,
       email,
       contact_number: null,
-      role: firestoreRole,
+      role: userRole,
       provider,
       avatar_url: avatarUrl,
       created_at: now,
       updated_at: now,
     };
 
-    const profileCollection = ROLE_COLLECTION_MAP[firestoreRole];
+    const profileCollection = ROLE_COLLECTION_MAP[userRole];
     const profileRef = db.collection(profileCollection).doc(uid);
 
-    const profileData = {
+    const profileData: Record<string, unknown> = {
       user_id: uid,
       first_name: firstName,
       last_name: lastName,
@@ -215,6 +282,14 @@ export async function socialLoginService(
       created_at: now,
       updated_at: now,
     };
+
+    if (userRole === 'Athlete') {
+      profileData.athlete_id = `ath_${uid}`;
+      profileData.birthdate = '2001-01-01';
+      profileData.gender = 'Male';
+      profileData.province = 'Camarines Sur';
+      profileData.sport_type = 'Basketball';
+    }
 
     const batch = db.batch();
     batch.set(userRef, userData);
@@ -239,7 +314,7 @@ export async function socialLoginService(
 }
 
 /**
- * Fetch authenticated user profile & subtype document.
+ * Fetch authenticated user profile, role, permissions, and subtype document.
  */
 export async function getUserProfileService(uid: string) {
   const userDoc = await db.collection('Users').doc(uid).get();
@@ -250,9 +325,10 @@ export async function getUserProfileService(uid: string) {
   const userData = userDoc.data()!;
   const role = userData.role as UserRole;
 
-  const profileCollection = ROLE_COLLECTION_MAP[role];
+  const profileCollection = ROLE_COLLECTION_MAP[role] || 'Athlete_Profiles';
   const profileDoc = await db.collection(profileCollection).doc(uid).get();
   const profileData = profileDoc.exists ? profileDoc.data() : null;
+  const permissions = ROLE_PERMISSIONS_MAP[role] || [];
 
   return {
     user: {
@@ -261,23 +337,19 @@ export async function getUserProfileService(uid: string) {
       last_name: userData.last_name,
       email: userData.email,
       contact_number: userData.contact_number,
-      role: userData.role,
+      role,
       created_at: userData.created_at,
       updated_at: userData.updated_at,
     },
     profile: profileData,
+    permissions,
   };
 }
 
-import { sendPasswordResetEmailService } from './emailService';
-
 /**
  * Generate password reset token and send email.
- * Uses Firebase Auth's built-in email service by default (no .env credentials required),
- * or custom Nodemailer if EMAIL_USER & EMAIL_PASS are configured.
  */
 export async function requestPasswordResetService(email: string) {
-  // 1. Verify user exists in Firebase Auth
   const userRecord = await auth.getUserByEmail(email);
   const uid = userRecord.uid;
 
@@ -295,15 +367,12 @@ export async function requestPasswordResetService(email: string) {
           url: frontendUrl!,
           handleCodeInApp: true,
         };
-        // Send real email directly to recipient's inbox using Firebase Auth service
         await sendPasswordResetEmail(clientAuth, email, actionCodeSettings);
       } else {
         await sendPasswordResetEmail(clientAuth, email);
       }
     } catch (err: any) {
       if (err?.code === 'auth/unauthorized-continue-uri') {
-        // Fallback: If the continue URI host is not authorized in Firebase Console or is invalid,
-        // send standard Firebase reset email without actionCodeSettings.
         await sendPasswordResetEmail(clientAuth, email);
       } else {
         throw err;
@@ -316,7 +385,6 @@ export async function requestPasswordResetService(email: string) {
     };
   }
 
-  // 2. Custom Nodemailer route: Generate 15-minute reset JWT token & link
   const secret = process.env.JWT_SECRET!;
   const resetToken = jwt.sign({ uid, email, purpose: 'reset-password' }, secret, { expiresIn: '15m' as any });
 
@@ -354,7 +422,6 @@ export async function resetPasswordConfirmService(token: string, newPassword: st
     throw { code: 'INVALID_TOKEN', message: 'Token is not valid for password reset.' };
   }
 
-  // Update password in Firebase Auth
   await auth.updateUser(decoded.uid, { password: newPassword });
 
   return { message: 'Password has been successfully updated.' };

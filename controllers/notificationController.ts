@@ -8,40 +8,20 @@ import {
 
 /**
  * GET /api/v1/notifications
- * Fetch notifications for the current authenticated athlete.
+ * Fetch notifications for current authenticated athlete.
  */
 export async function getNotifications(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const athleteId = req.user?.uid;
-    if (!athleteId) {
-      res.status(401).json({ error: 'Unauthorized. Authentication token required.' });
-      return;
-    }
+    const recipientId = req.user!.uid;
+    const notifications = await getAthleteNotifications(recipientId);
 
-    const notifications = await getAthleteNotifications(athleteId);
-    res.status(200).json({ notifications });
+    res.status(200).json({
+      recipient_id: recipientId,
+      unread_count: notifications.filter((n) => !n.is_read).length,
+      notifications,
+    });
   } catch (error: any) {
     console.error('getNotifications error:', error);
-    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
-  }
-}
-
-/**
- * PUT /api/v1/notifications/read-all
- * Mark all notifications for the current athlete as read.
- */
-export async function markAllRead(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const athleteId = req.user?.uid;
-    if (!athleteId) {
-      res.status(401).json({ error: 'Unauthorized. Authentication token required.' });
-      return;
-    }
-
-    const result = await markAllNotificationsAsRead(athleteId);
-    res.status(200).json(result);
-  } catch (error: any) {
-    console.error('markAllRead error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
@@ -50,32 +30,45 @@ export async function markAllRead(req: AuthRequest, res: Response): Promise<void
  * PUT /api/v1/notifications/:notificationId/read
  * Mark a single notification as read.
  */
-export async function markRead(req: AuthRequest, res: Response): Promise<void> {
+export async function markAsRead(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const athleteId = req.user?.uid;
     const notificationId = Array.isArray(req.params.notificationId)
       ? req.params.notificationId[0]
       : req.params.notificationId;
-
-    if (!athleteId) {
-      res.status(401).json({ error: 'Unauthorized. Authentication token required.' });
-      return;
-    }
+    const recipientId = req.user!.uid;
 
     if (!notificationId) {
       res.status(400).json({ error: 'Notification ID is required.' });
       return;
     }
 
-    const result = await markNotificationAsRead(athleteId, notificationId);
-    if (!result.success) {
-      res.status(404).json({ error: result.message });
-      return;
-    }
+    await markNotificationAsRead(notificationId, recipientId);
 
-    res.status(200).json(result);
+    res.status(200).json({
+      message: 'Notification marked as read.',
+      notification_id: notificationId,
+    });
   } catch (error: any) {
-    console.error('markRead error:', error);
+    console.error('markAsRead error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * PUT /api/v1/notifications/read-all
+ * Mark all notifications as read for current authenticated athlete.
+ */
+export async function markAllAsRead(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const recipientId = req.user!.uid;
+    const count = await markAllNotificationsAsRead(recipientId);
+
+    res.status(200).json({
+      message: 'All notifications marked as read.',
+      updated_count: count,
+    });
+  } catch (error: any) {
+    console.error('markAllAsRead error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

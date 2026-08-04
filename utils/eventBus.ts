@@ -21,4 +21,5 @@ export const eventBus = new SystemEventBus();
 export const EVENTS = {
   PUSH_NOTIFICATION: 'system:push_notification',
   MATCH_CERTIFIED: 'system:match_certified',
+  SRPE_LOGGED: 'system:srpe_logged',
 };

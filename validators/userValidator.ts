@@ -1,6 +1,6 @@
 import { RegisterUserDto, LoginUserDto, UserRole } from '../models/userModel';
 
-const VALID_ROLES: string[] = ['Athlete', 'Coach', 'Official', 'System Admin', 'athlete', 'coach'];
+const VALID_ROLES: string[] = ['Athlete', 'Coach', 'Official', 'System Admin'];
 
 // RFC 5322 compliant email regex
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
@@ -11,13 +11,24 @@ export interface ValidationError {
 }
 
 /**
- * Validates the registration request body.
- * Supports both JSON and multipart form data.
+ * Normalizes input role string to exact UserRole enum
+ */
+export function normalizeRole(roleInput: string): UserRole {
+  const lower = (roleInput || '').trim().toLowerCase();
+  if (lower === 'athlete') return 'Athlete';
+  if (lower === 'coach') return 'Coach';
+  if (lower === 'official') return 'Official';
+  if (lower === 'system admin' || lower === 'admin' || lower === 'system_admin') return 'System Admin';
+  return 'Athlete';
+}
+
+/**
+ * Validates registration request body for Base Identity and Subtype Child Profiles.
  */
 export function validateRegisterUser(data: Record<string, unknown>, hasFile: boolean = false): ValidationError[] {
   const errors: ValidationError[] = [];
 
-  // first_name
+  // first_name (Required, Max 255)
   const firstName = typeof data.first_name === 'string' ? data.first_name.trim() : '';
   if (!firstName) {
     errors.push({ field: 'first_name', message: 'First name is required.' });
@@ -25,7 +36,7 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
     errors.push({ field: 'first_name', message: 'First name must not exceed 255 characters.' });
   }
 
-  // last_name
+  // last_name (Required, Max 255)
   const lastName = typeof data.last_name === 'string' ? data.last_name.trim() : '';
   if (!lastName) {
     errors.push({ field: 'last_name', message: 'Last name is required.' });
@@ -33,7 +44,7 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
     errors.push({ field: 'last_name', message: 'Last name must not exceed 255 characters.' });
   }
 
-  // email
+  // email (Required, Unique, RFC 5322 compliant)
   const email = typeof data.email === 'string' ? data.email.trim() : '';
   if (!email) {
     errors.push({ field: 'email', message: 'Email is required.' });
@@ -41,7 +52,7 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
     errors.push({ field: 'email', message: 'Email must be a valid RFC 5322 compliant address.' });
   }
 
-  // password
+  // password (Required, Min 6)
   const password = typeof data.password === 'string' ? data.password : '';
   if (!password) {
     errors.push({ field: 'password', message: 'Password is required.' });
@@ -49,32 +60,69 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
     errors.push({ field: 'password', message: 'Password must be at least 6 characters.' });
   }
 
-  // contact_number (optional, but if provided must be 11 chars)
+  // contact_number (Optional, 11 characters)
   const contactNumber = typeof data.contact_number === 'string' ? data.contact_number.trim() : '';
   if (contactNumber && contactNumber.length !== 11) {
     errors.push({ field: 'contact_number', message: 'Contact number must be exactly 11 characters.' });
   }
 
-  // role
-  const role = typeof data.role === 'string' ? data.role : '';
-  if (!role) {
+  // role (Required, Enum "Athlete" | "Coach" | "Official" | "System Admin")
+  const rawRole = typeof data.role === 'string' ? data.role.trim() : '';
+  if (!rawRole) {
     errors.push({ field: 'role', message: 'Role is required.' });
-  } else if (!VALID_ROLES.includes(role)) {
-    errors.push({ field: 'role', message: `Role must be one of: ${VALID_ROLES.join(', ')}.` });
+  } else {
+    const isMatched = VALID_ROLES.some((r) => r.toLowerCase() === rawRole.toLowerCase());
+    if (!isMatched) {
+      errors.push({ field: 'role', message: `Role must be one of: ${VALID_ROLES.join(', ')}.` });
+    }
   }
 
-  // Role specific optional/additional field validations
-  const normalizedRole = role.toLowerCase();
-  if (normalizedRole === 'athlete') {
-    if (data.birthdate && !/^\d{4}-\d{2}-\d{2}$/.test(String(data.birthdate).trim())) {
-      errors.push({ field: 'birthdate', message: 'Birthdate must use YYYY-MM-DD format.' });
+  const role = normalizeRole(rawRole);
+
+  // --- Subtype Child Profile Field Validations ---
+  if (role === 'Athlete') {
+    const birthdate = typeof data.birthdate === 'string' ? data.birthdate.trim() : '';
+    if (!birthdate) {
+      errors.push({ field: 'birthdate', message: 'Birthdate is required for Athlete profile.' });
     }
-  } else if (normalizedRole === 'coach') {
-    if (data.years_of_experience !== undefined && data.years_of_experience !== null && data.years_of_experience !== '') {
+
+    const gender = typeof data.gender === 'string' ? data.gender.trim() : '';
+    if (!gender) {
+      errors.push({ field: 'gender', message: 'Gender is required for Athlete profile.' });
+    }
+
+    const province = typeof data.province === 'string' ? data.province.trim() : '';
+    if (!province) {
+      errors.push({ field: 'province', message: 'Province is required for Athlete profile.' });
+    }
+
+    const sportType = typeof data.sport_type === 'string' ? data.sport_type.trim() : '';
+    if (!sportType) {
+      errors.push({ field: 'sport_type', message: 'Sport type is required for Athlete profile.' });
+    }
+  } else if (role === 'Coach') {
+    if (data.years_of_experience === undefined || data.years_of_experience === null || data.years_of_experience === '') {
+      errors.push({ field: 'years_of_experience', message: 'Years of experience is required for Coach profile.' });
+    } else {
       const years = Number(data.years_of_experience);
-      if (isNaN(years) || years < 0 || years > 60) {
-        errors.push({ field: 'years_of_experience', message: 'Years of experience must be between 0 and 60.' });
+      if (isNaN(years) || years < 0 || years > 70) {
+        errors.push({ field: 'years_of_experience', message: 'Years of experience must be a non-negative number.' });
       }
+    }
+
+    const institution = typeof data.current_institution === 'string' ? data.current_institution.trim() : '';
+    if (!institution) {
+      errors.push({ field: 'current_institution', message: 'Current institution is required for Coach profile.' });
+    }
+  } else if (role === 'Official') {
+    const affiliation = typeof data.tournament_affiliation === 'string' ? data.tournament_affiliation.trim() : '';
+    if (!affiliation) {
+      errors.push({ field: 'tournament_affiliation', message: 'Tournament affiliation is required for Official profile.' });
+    }
+  } else if (role === 'System Admin') {
+    const adminKey = typeof data.admin_security_key === 'string' ? data.admin_security_key.trim() : '';
+    if (!adminKey) {
+      errors.push({ field: 'admin_security_key', message: 'Admin security key is required for System Admin profile.' });
     }
   }
 

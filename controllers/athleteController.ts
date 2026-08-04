@@ -9,7 +9,7 @@ import {
 
 /**
  * GET /api/v1/athletes/:athleteId/home
- * Aggregate personal analytics, shooting efficiency, 5-game trend, and team summary.
+ * Aggregate personal analytics, shooting efficiency, 5-game trend, and current team summary.
  * Returns Cache-Control: private, max-age=300
  */
 export async function getAthleteHome(req: AuthRequest, res: Response): Promise<void> {

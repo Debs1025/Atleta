@@ -2,6 +2,7 @@ import { Router } from 'express';
 import userRoutes from './userRoutes';
 import athleteRoutes from './athleteRoutes';
 import notificationRoutes from './notificationRoutes';
+import analyticsRoutes from './analyticsRoutes';
 
 const router = Router();
 
@@ -13,5 +14,8 @@ router.use('/athletes', athleteRoutes);
 
 // Mount notification routes at /notifications (/api/v1/notifications)
 router.use('/notifications', notificationRoutes);
+
+// Mount analytics routes at /analytics (/api/v1/analytics)
+router.use('/analytics', analyticsRoutes);
 
 export default router;
