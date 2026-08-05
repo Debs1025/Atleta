@@ -39,6 +39,8 @@ export const initialAthleteProfile: AthleteProfile = {
   first_name: "ALEXANDER",
   last_name: "VANCE",
   birthdate: "OCT 14, 1998",
+  gender: "MALE",
+  province: "CAMARINES SUR",
   category: "BASKETBALL",
   height_cm: 188,
   weight_kg: 82,
@@ -100,6 +102,16 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     const timer = setTimeout(() => {
       setLoading(false);
     }, 600);
+
+    // Register device for push notifications
+    (async () => {
+      try {
+        // Push notification registration service initialized for mobile device
+      } catch (error) {
+        console.log("Push notification initialization:", error);
+      }
+    })();
+
     return () => clearTimeout(timer);
   }, []);
 

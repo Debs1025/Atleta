@@ -92,7 +92,7 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
 
         {step === "request" && (
           <>
-            <SectionTitle title="Reset password" subtitle="Enter your registered email address to receive a recovery link." />
+            <SectionTitle title="Reset password" subtitle="Enter your registered email address to receive a secure recovery link." />
             <Banner tone={feedback?.tone ?? "info"} message={feedback?.message ?? ""} />
 
             <View style={styles.card}>

@@ -52,11 +52,8 @@ export const passwordSchema = z
 export const contactSchema = z
   .string()
   .trim()
-  .optional()
-  .or(z.literal(""))
-  .refine((value) => !value || /^09\d{9}$/.test(value), {
-    message: "Contact number must use the 09XXXXXXXXX format."
-  });
+  .min(1, "Contact number is required.")
+  .regex(/^09\d{9}$/, "Contact number must be 11 digits starting (09xxxxxxxxx).");
 
 export const athleteSignupSchema = z.object({
   role: z.literal("athlete"),
@@ -74,6 +71,9 @@ export const athleteSignupSchema = z.object({
   province: z.string().trim().min(1, "Province is required.").max(255, "Province is too long."),
   sport_type: z.enum(["Basketball", "Swimming", "Track and Field"], {
     errorMap: () => ({ message: "Select a sport type." })
+  }),
+  terms_accepted: z.boolean().refine((val) => val === true, {
+    message: "You must agree to the Terms of Service and Privacy Protocol."
   })
 });
 
@@ -97,7 +97,10 @@ export const coachSignupSchema = z.object({
     .nullable()
     .refine((value) => Boolean(value), {
       message: "Please upload an eligible document."
-    })
+    }),
+  terms_accepted: z.boolean().refine((val) => val === true, {
+    message: "You must agree to the Terms of Service and Privacy Protocol."
+  })
 });
 
 export const loginSchema = z.object({
@@ -375,6 +378,33 @@ export function FullScreenOverlay({ label }: { label: string }) {
     <View style={overlayStyles.overlay}>
       <ActivityIndicator size="large" color="#d6def8" />
       <Text style={overlayStyles.text}>{label}</Text>
+    </View>
+  );
+}
+
+type CheckboxProps = {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  label: string;
+  error?: string;
+};
+
+export function Checkbox({ value, onValueChange, label, error }: CheckboxProps) {
+  return (
+    <View style={checkboxStyles.wrap}>
+      <Pressable
+        onPress={() => onValueChange(!value)}
+        style={({ pressed }) => [
+          checkboxStyles.container,
+          pressed && checkboxStyles.pressed
+        ]}
+      >
+        <View style={[checkboxStyles.box, value && checkboxStyles.boxChecked, error ? checkboxStyles.boxError : undefined]}>
+          {value ? <Text style={checkboxStyles.checkmark}>✓</Text> : null}
+        </View>
+        <Text style={checkboxStyles.label}>{label}</Text>
+      </Pressable>
+      {error ? <Text style={fieldStyles.errorText}>{error}</Text> : null}
     </View>
   );
 }
@@ -685,5 +715,49 @@ const overlayStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     marginTop: 12
+  }
+});
+
+const checkboxStyles = StyleSheet.create({
+  wrap: {
+    marginVertical: 14
+  },
+  container: {
+    alignItems: "flex-start",
+    flexDirection: "row"
+  },
+  pressed: {
+    opacity: 0.8
+  },
+  box: {
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderColor: "#a3a3a3",
+    borderRadius: 4,
+    borderWidth: 1.5,
+    height: 22,
+    justifyContent: "center",
+    marginRight: 10,
+    marginTop: 2,
+    width: 22
+  },
+  boxChecked: {
+    backgroundColor: "#141c3a",
+    borderColor: "#141c3a"
+  },
+  boxError: {
+    borderColor: "#ef4444"
+  },
+  checkmark: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  label: {
+    color: "#4b5563",
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 19
   }
 });

@@ -43,10 +43,15 @@ export interface AthleteProfile {
   first_name: string;
   last_name: string;
   birthdate: string;
+  gender?: string;
+  province?: string;
   category: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD";
   height_cm: number;
   weight_kg: number;
   wingspan_cm: number;
+  recruitment_status?: string;
+  leaderboard_rank?: number | string;
+  achievements?: string[];
   current_affiliation: TeamAffiliation;
   analytics?: AthleteAnalytics;
   eligible_documents?: EligibleDocument[];
@@ -203,7 +208,7 @@ export function HomeAnalyticsPage({
         <Text style={styles.graphSubHeading}>LAST GAMES</Text>
         <View style={styles.barsContainer}>
           {scores.map((score, index) => {
-            const isHighest = score > 0 && score === maxScore;
+            const isMostRecent = index === scores.length - 1;
             const barHeightPct =
               maxScore > 0 && score > 0
                 ? Math.max(15, Math.min(100, (score / maxScore) * 85))
@@ -215,14 +220,14 @@ export function HomeAnalyticsPage({
                     style={[
                       styles.graphPillBar,
                       { height: `${barHeightPct}%` },
-                      isHighest ? styles.graphPillBarHighest : styles.graphPillBarNormal,
+                      isMostRecent ? styles.graphPillBarHighest : styles.graphPillBarNormal,
                     ]}
                   />
                 </View>
                 <Text
                   style={[
                     styles.gameLabelText,
-                    isHighest && styles.gameLabelTextHighest,
+                    isMostRecent && styles.gameLabelTextHighest,
                   ]}
                 >
                   G{index + 1}

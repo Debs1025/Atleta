@@ -8,7 +8,9 @@ import {
   authScreenStyles,
   Banner,
   Button,
+  Checkbox,
   FormField,
+  FullScreenOverlay,
   getAuthErrorMessage,
   MinimalistCalendarIcon,
   RolePill,
@@ -53,7 +55,8 @@ const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
   birthdate: "",
   gender: "Male",
   province: "",
-  sport_type: "Basketball"
+  sport_type: "Basketball",
+  terms_accepted: false
 };
 
 const DEFAULT_COACH_VALUES: CoachSignupValues = {
@@ -66,7 +69,8 @@ const DEFAULT_COACH_VALUES: CoachSignupValues = {
   certification_license_num: "",
   years_of_experience: 0,
   current_institution: "",
-  eligible_documents: null
+  eligible_documents: null,
+  terms_accepted: false
 };
 
 function ChoiceGroup({ label, placeholder = "Select an option", options, value, error, onChange }: ChoiceGroupProps) {
@@ -264,108 +268,125 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   }
 
   return (
-    <ScrollView contentContainerStyle={authScreenStyles.content} keyboardShouldPersistTaps="handled">
-      <View style={authScreenStyles.shell}>
-        <AuthHeader />
+    <View style={{ flex: 1 }}>
+      {loading ? <FullScreenOverlay label="Creating your account..." /> : null}
+      <ScrollView contentContainerStyle={authScreenStyles.content} keyboardShouldPersistTaps="handled">
+        <View style={authScreenStyles.shell}>
+          <AuthHeader />
 
-        <SectionTitle title="Create your account" subtitle="Pick your role, fill in your details, and continue with personalized access." />
-        <Banner tone={feedback?.tone ?? "info"} message={feedback?.message ?? ""} />
+          <SectionTitle title="Create your account" subtitle="Pick your role, fill in your details, and continue with personalized access." />
+          <Banner tone={feedback?.tone ?? "info"} message={feedback?.message ?? ""} />
 
-        <View style={styles.stepRow}>
-          <StepBadge step={1} label="Role" active={step === 1} />
-          <StepBadge step={2} label="Account" active={step === 2} />
-          <StepBadge step={3} label="Details" active={step === 3} />
+          <View style={styles.stepRow}>
+            <StepBadge step={1} label="Role" active={step === 1} />
+            <StepBadge step={2} label="Account" active={step === 2} />
+            <StepBadge step={3} label="Details" active={step === 3} />
+          </View>
+
+          {step === 1 ? (
+            <View>
+              <Text style={styles.sectionLabel}>Select your role</Text>
+              <View style={styles.roleRow}>
+                <RolePill label="Athlete" selected={role === "athlete"} onPress={() => setRole("athlete")} />
+                <RolePill label="Coach" selected={role === "coach"} onPress={() => setRole("coach")} />
+              </View>
+              <Text style={styles.helper}>The fields below will update automatically for the role you choose.</Text>
+              <Button label="Continue" onPress={() => setStep(2)} />
+
+              <View style={authScreenStyles.dividerRow}>
+                <View style={authScreenStyles.divider} />
+                <Text style={authScreenStyles.or}>or</Text>
+                <View style={authScreenStyles.divider} />
+              </View>
+
+              <Button
+                label="Sign Up with Google"
+                variant="secondary"
+                icon={require("../../../assets/google.png")}
+                onPress={() => setFeedback({ tone: "info", message: "Google sign-up is ready for your backend or Firebase OAuth flow." })}
+              />
+              <View style={authScreenStyles.spacer} />
+              <Button
+                label="Sign Up with Facebook"
+                variant="secondary"
+                icon={require("../../../assets/facebook.png")}
+                onPress={() => setFeedback({ tone: "info", message: "Facebook sign-up can be connected to your auth provider later." })}
+              />
+            </View>
+          ) : null}
+
+          {step === 2 ? (
+            <View>
+              <FormField control={activeForm.control as never} name={"first_name" as never} label="First Name" placeholder="G. Francis" error={sharedErrors.first_name?.message} />
+              <FormField control={activeForm.control as never} name={"last_name" as never} label="Last Name" placeholder="Pelonio" error={sharedErrors.last_name?.message} />
+              <FormField control={activeForm.control as never} name={"email" as never} label="Email Address" placeholder="coach@gmail.com" autoCapitalize="none" keyboardType="email-address" error={sharedErrors.email?.message} />
+              <FormField control={activeForm.control as never} name={"password" as never} label="Password" placeholder="At least 8 chars" secureTextEntry error={sharedErrors.password?.message} />
+              <FormField control={activeForm.control as never} name={"contact_number" as never} label="Contact Number" placeholder="09XXXXXXXXX" keyboardType="phone-pad" error={sharedErrors.contact_number?.message} />
+
+              <View style={styles.navRow}>
+                <Button label="Back" variant="ghost" onPress={() => setStep(1)} />
+                <View style={styles.navSpacer} />
+                <Button label="Next" onPress={goNext} />
+              </View>
+            </View>
+          ) : null}
+
+          {step === 3 && role === "athlete" ? (
+            <View>
+              <FormField control={athleteForm.control} name="birthdate" label="Birthdate" placeholder="YYYY-MM-DD" rightAccessory={<MinimalistCalendarIcon />} error={athleteErrors.birthdate?.message} />
+              <ChoiceGroup label="Gender" placeholder="Select Gender" options={genderOptions} value={selectedGender} error={athleteErrors.gender?.message} onChange={(value) => athleteForm.setValue("gender", value as AthleteSignupValues["gender"], { shouldDirty: true, shouldValidate: true })} />
+              <FormField control={athleteForm.control} name="province" label="Province" placeholder="Camarines Sur" error={athleteErrors.province?.message} />
+              <ChoiceGroup label="Sport Type" placeholder="Select Sport Type" options={sportOptions} value={selectedSport} error={athleteErrors.sport_type?.message} onChange={(value) => athleteForm.setValue("sport_type", value as AthleteSignupValues["sport_type"], { shouldDirty: true, shouldValidate: true })} />
+
+              <Checkbox
+                value={athleteForm.watch("terms_accepted")}
+                onValueChange={(val) => athleteForm.setValue("terms_accepted", val, { shouldDirty: true, shouldValidate: true })}
+                label="I Agree to the Terms of Service and Privacy Protocol for Performance Tracking"
+                error={athleteErrors.terms_accepted?.message}
+              />
+
+              <View style={styles.navRow}>
+                <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
+                <View style={styles.navSpacer} />
+                <Button label="Sign Up" loading={loading} onPress={submit} />
+              </View>
+            </View>
+          ) : null}
+
+          {step === 3 && role === "coach" ? (
+            <View>
+              <FormField control={coachForm.control} name="certification_license_num" label="Certification License Number" placeholder="Optional" error={coachErrors.certification_license_num?.message} />
+              <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
+              <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="School, club, or program" error={coachErrors.current_institution?.message} />
+
+              <View style={styles.documentBox}>
+                <Text style={styles.documentLabel}>Eligible Documents</Text>
+                <Button label={documentFile ? "Replace File" : "Choose File"} variant="secondary" onPress={uploadDocument} />
+                <Text style={styles.documentHint}>{documentFile ? documentFile.name : "Professional license, certification, image, or PDF. Max 25MB."}</Text>
+                {coachErrors.eligible_documents?.message ? <Text style={authScreenStyles.error}>{coachErrors.eligible_documents.message}</Text> : null}
+              </View>
+
+              <Checkbox
+                value={coachForm.watch("terms_accepted")}
+                onValueChange={(val) => coachForm.setValue("terms_accepted", val, { shouldDirty: true, shouldValidate: true })}
+                label="I Agree to the Terms of Service and Privacy Protocol for Performance Tracking"
+                error={coachErrors.terms_accepted?.message}
+              />
+
+              <View style={styles.navRow}>
+                <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
+                <View style={styles.navSpacer} />
+                <Button label="Sign Up" loading={loading} onPress={submit} />
+              </View>
+            </View>
+          ) : null}
+
+          <Text style={authScreenStyles.footer}>
+            Already have an account? <Text style={authScreenStyles.footerLink} onPress={onGoLogin}>Log In</Text>
+          </Text>
         </View>
-
-        {step === 1 ? (
-          <View>
-            <Text style={styles.sectionLabel}>Select your role</Text>
-            <View style={styles.roleRow}>
-              <RolePill label="Athlete" selected={role === "athlete"} onPress={() => setRole("athlete")} />
-              <RolePill label="Coach" selected={role === "coach"} onPress={() => setRole("coach")} />
-            </View>
-            <Text style={styles.helper}>The fields below will update automatically for the role you choose.</Text>
-            <Button label="Continue" onPress={() => setStep(2)} />
-
-            <View style={authScreenStyles.dividerRow}>
-              <View style={authScreenStyles.divider} />
-              <Text style={authScreenStyles.or}>or</Text>
-              <View style={authScreenStyles.divider} />
-            </View>
-
-            <Button
-              label="Sign Up with Google"
-              variant="secondary"
-              icon={require("../../../assets/google.png")}
-              onPress={() => setFeedback({ tone: "info", message: "Google sign-up is ready for your backend or Firebase OAuth flow." })}
-            />
-            <View style={authScreenStyles.spacer} />
-            <Button
-              label="Sign Up with Facebook"
-              variant="secondary"
-              icon={require("../../../assets/facebook.png")}
-              onPress={() => setFeedback({ tone: "info", message: "Facebook sign-up can be connected to your auth provider later." })}
-            />
-          </View>
-        ) : null}
-
-        {step === 2 ? (
-          <View>
-            <FormField control={activeForm.control as never} name={"first_name" as never} label="First Name" placeholder="G. Francis" error={sharedErrors.first_name?.message} />
-            <FormField control={activeForm.control as never} name={"last_name" as never} label="Last Name" placeholder="Pelonio" error={sharedErrors.last_name?.message} />
-            <FormField control={activeForm.control as never} name={"email" as never} label="Email Address" placeholder="coach@gmail.com" autoCapitalize="none" keyboardType="email-address" error={sharedErrors.email?.message} />
-            <FormField control={activeForm.control as never} name={"password" as never} label="Password" placeholder="At least 8 chars" secureTextEntry error={sharedErrors.password?.message} />
-            <FormField control={activeForm.control as never} name={"contact_number" as never} label="Contact Number" placeholder="09XXXXXXXXX" keyboardType="phone-pad" error={sharedErrors.contact_number?.message} />
-
-            <View style={styles.navRow}>
-              <Button label="Back" variant="ghost" onPress={() => setStep(1)} />
-              <View style={styles.navSpacer} />
-              <Button label="Next" onPress={goNext} />
-            </View>
-          </View>
-        ) : null}
-
-        {step === 3 && role === "athlete" ? (
-          <View>
-            <FormField control={athleteForm.control} name="birthdate" label="Birthdate" placeholder="YYYY-MM-DD" rightAccessory={<MinimalistCalendarIcon />} error={athleteErrors.birthdate?.message} />
-            <ChoiceGroup label="Gender" placeholder="Select Gender" options={genderOptions} value={selectedGender} error={athleteErrors.gender?.message} onChange={(value) => athleteForm.setValue("gender", value as AthleteSignupValues["gender"], { shouldDirty: true, shouldValidate: true })} />
-            <FormField control={athleteForm.control} name="province" label="Province" placeholder="Camarines Sur" error={athleteErrors.province?.message} />
-            <ChoiceGroup label="Sport Type" placeholder="Select Sport Type" options={sportOptions} value={selectedSport} error={athleteErrors.sport_type?.message} onChange={(value) => athleteForm.setValue("sport_type", value as AthleteSignupValues["sport_type"], { shouldDirty: true, shouldValidate: true })} />
-
-            <View style={styles.navRow}>
-              <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
-              <View style={styles.navSpacer} />
-              <Button label="Sign Up" loading={loading} onPress={submit} />
-            </View>
-          </View>
-        ) : null}
-
-        {step === 3 && role === "coach" ? (
-          <View>
-            <FormField control={coachForm.control} name="certification_license_num" label="Certification License Number" placeholder="Optional" error={coachErrors.certification_license_num?.message} />
-            <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
-            <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="School, club, or program" error={coachErrors.current_institution?.message} />
-
-            <View style={styles.documentBox}>
-              <Text style={styles.documentLabel}>Eligible Documents</Text>
-              <Button label={documentFile ? "Replace File" : "Choose File"} variant="secondary" onPress={uploadDocument} />
-              <Text style={styles.documentHint}>{documentFile ? documentFile.name : "Professional license, certification, image, or PDF. Max 25MB."}</Text>
-              {coachErrors.eligible_documents?.message ? <Text style={authScreenStyles.error}>{coachErrors.eligible_documents.message}</Text> : null}
-            </View>
-
-            <View style={styles.navRow}>
-              <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
-              <View style={styles.navSpacer} />
-              <Button label="Sign Up" loading={loading} onPress={submit} />
-            </View>
-          </View>
-        ) : null}
-
-        <Text style={authScreenStyles.footer}>
-          Already have an account? <Text style={authScreenStyles.footerLink} onPress={onGoLogin}>Log In</Text>
-        </Text>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 

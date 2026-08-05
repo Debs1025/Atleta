@@ -113,6 +113,8 @@ export function AthleteProfilePage({
   const [firstName, setFirstName] = useState(profile.first_name);
   const [lastName, setLastName] = useState(profile.last_name);
   const [birthdate, setBirthdate] = useState(profile.birthdate);
+  const [gender, setGender] = useState(profile.gender || "MALE");
+  const [province, setProvince] = useState(profile.province || "CAMARINES SUR");
   const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
   const [heightCm, setHeightCm] = useState(profile.height_cm);
   const [weightKg, setWeightKg] = useState(profile.weight_kg);
@@ -177,11 +179,17 @@ export function AthleteProfilePage({
   const apeIndex = isNaN(apeRatioVal) ? "1.00" : apeRatioVal.toFixed(2);
   const apeDiff = wingspanCm - heightCm;
 
-  // Workload Analytics State (Read-only for athlete, provided by Coach)
+  // Workload Analytics State
   const [workloadData, setWorkloadData] = useState<WorkloadAnalyticsData>(
     (profile as any).workload_analytics || DEFAULT_WORKLOAD_DATA
   );
   const [workloadDrawerOpen, setWorkloadDrawerOpen] = useState(true);
+
+  // Interactive Daily Workout Log State
+  const [logDuration, setLogDuration] = useState("60");
+  const [logHardness, setLogHardness] = useState(7);
+  const [logSuccessToast, setLogSuccessToast] = useState("");
+  const [showWarningModal, setShowWarningModal] = useState(false);
 
   // Sync / fetch coach-provided workload logs for the athlete
   React.useEffect(() => {
@@ -202,6 +210,50 @@ export function AthleteProfilePage({
   const chronicLoad = workloadData.chronic_load_28day_avg || 380;
   // ACWR (Acute:Chronic Workload Ratio) = Acute Load / Chronic Load
   const acwrRatio = chronicLoad > 0 ? acuteLoadSum / chronicLoad : 1.0;
+
+  // Workout Routine Score (Monotony) & Total Body Stress (Strain)
+  const dailyLoads = workloadData.weekly_logs.map((l) => l.duration_minutes * l.srpe);
+  const meanDailyLoad = dailyLoads.reduce((a, b) => a + b, 0) / (dailyLoads.length || 1);
+  const variance = dailyLoads.reduce((sq, n) => sq + Math.pow(n - meanDailyLoad, 2), 0) / (dailyLoads.length || 1);
+  const stdDevLoad = Math.sqrt(variance);
+  const routineScore = stdDevLoad > 0 ? Number((meanDailyLoad / stdDevLoad).toFixed(2)) : 1.25;
+  const totalBodyStress = Math.round(acuteLoadSum * routineScore);
+
+  // Latest workout score
+  const latestLog = workloadData.weekly_logs.find((l) => l.duration_minutes > 0) || workloadData.weekly_logs[0];
+  const latestWorkoutScore = (latestLog?.duration_minutes || 0) * (latestLog?.srpe || 0);
+
+  const handleLogWorkout = () => {
+    const duration = parseInt(logDuration, 10);
+    if (isNaN(duration) || duration <= 0) {
+      return;
+    }
+
+    const updatedLogs = [...workloadData.weekly_logs];
+    const targetIndex = updatedLogs.findIndex((l) => l.duration_minutes === 0) !== -1
+      ? updatedLogs.findIndex((l) => l.duration_minutes === 0)
+      : updatedLogs.length - 1;
+
+    updatedLogs[targetIndex] = {
+      ...updatedLogs[targetIndex],
+      duration_minutes: duration,
+      srpe: logHardness,
+    };
+
+    setWorkloadData({
+      ...workloadData,
+      weekly_logs: updatedLogs,
+    });
+
+    setLogSuccessToast(`Logged ${duration} mins | Intensity ${logHardness}/10!`);
+    setTimeout(() => setLogSuccessToast(""), 3000);
+
+    const nextAcute = updatedLogs.reduce((acc, log) => acc + log.duration_minutes * log.srpe, 0);
+    const nextRatio = chronicLoad > 0 ? nextAcute / chronicLoad : 1.0;
+    if (nextRatio > 1.5 || routineScore > 2.0) {
+      setShowWarningModal(true);
+    }
+  };
 
   // Workload Risk Zone Status
   let acwrStatus = "OPTIMAL ZONE";
@@ -388,6 +440,8 @@ export function AthleteProfilePage({
       first_name: firstName,
       last_name: lastName,
       birthdate: birthdate,
+      gender: gender,
+      province: province,
       category: category,
       height_cm: Number(heightCm) || profile.height_cm,
       weight_kg: Number(weightKg) || profile.weight_kg,
@@ -405,6 +459,8 @@ export function AthleteProfilePage({
     setFirstName(profile.first_name);
     setLastName(profile.last_name);
     setBirthdate(profile.birthdate);
+    setGender(profile.gender || "MALE");
+    setProvince(profile.province || "CAMARINES SUR");
     setCategory(profile.category);
     setHeightCm(profile.height_cm);
     setWeightKg(profile.weight_kg);
@@ -561,6 +617,57 @@ export function AthleteProfilePage({
               <Text style={styles.dropdownText}>{category}</Text>
               <Ionicons name="chevron-down" size={18} color="#38BDF8" />
             </Pressable>
+          </View>
+        </View>
+
+        {/* Gender & Province Row */}
+        <View style={[styles.rowTwoFields, { marginTop: -8 }]}>
+          {/* Field 1: Gender */}
+          <View style={[styles.fieldGroup, { flex: 1 }]}>
+            <Text style={styles.fieldLabel}>GENDER</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                isEditing && styles.inputWrapperEditable,
+              ]}
+            >
+              <TextInput
+                style={styles.textInput}
+                value={gender}
+                editable={isEditing}
+                onChangeText={(text) => setGender(text)}
+                placeholder="MALE"
+                placeholderTextColor="#64748B"
+                autoCapitalize="characters"
+              />
+              {isEditing && (
+                <Ionicons name="pencil-sharp" size={14} color="#38BDF8" />
+              )}
+            </View>
+          </View>
+
+          {/* Field 2: Province */}
+          <View style={[styles.fieldGroup, { flex: 1 }]}>
+            <Text style={styles.fieldLabel}>PROVINCE</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                isEditing && styles.inputWrapperEditable,
+              ]}
+            >
+              <TextInput
+                style={styles.textInput}
+                value={province}
+                editable={isEditing}
+                onChangeText={(text) => setProvince(text)}
+                placeholder="CAMARINES SUR"
+                placeholderTextColor="#64748B"
+                autoCapitalize="characters"
+              />
+              {isEditing && (
+                <Ionicons name="pencil-sharp" size={14} color="#38BDF8" />
+              )}
+            </View>
           </View>
         </View>
 
@@ -727,21 +834,114 @@ export function AthleteProfilePage({
                 {/* Subtitle / Formula description */}
                 <Text style={styles.workloadDescText}>{acwrDesc}</Text>
 
+                {/* Visual Fatigue Gauge Meter */}
+                <View style={{ marginTop: 12, marginBottom: 14 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                    <Text style={{ color: "#34D399", fontSize: 10, fontWeight: "800" }}>SAFE (0.80 - 1.30)</Text>
+                    <Text style={{ color: "#F87171", fontSize: 10, fontWeight: "800" }}>DANGER (&gt; 1.50)</Text>
+                  </View>
+                  <View style={{ height: 8, backgroundColor: "#1E293B", borderRadius: 4, flexDirection: "row", overflow: "hidden" }}>
+                    <View style={{ flex: 1.3, backgroundColor: "#34D399" }} />
+                    <View style={{ flex: 0.2, backgroundColor: "#FB923C" }} />
+                    <View style={{ flex: 0.5, backgroundColor: "#F87171" }} />
+                  </View>
+                  <View style={{ position: "absolute", top: 16, left: `${Math.min(95, Math.max(2, (acwrRatio / 2.0) * 100))}%` }}>
+                    <Text style={{ color: statusBadgeColor, fontSize: 10, fontWeight: "900" }}>▲</Text>
+                  </View>
+                </View>
+
                 {/* Acute vs Chronic Load Progress comparison */}
                 <View style={styles.loadComparisonRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={styles.loadBoxLabel}>7-Day Acute Load</Text>
-                    <Text style={styles.loadBoxValue}>{Math.round(acuteLoadSum)} AU</Text>
+                    <Text style={styles.loadBoxValue}>{Math.round(acuteLoadSum)} Effort Pts</Text>
                   </View>
                   <View style={styles.loadVerticalDivider} />
                   <View style={{ flex: 1, marginLeft: 8 }}>
-                    <Text style={styles.loadBoxLabel}>28-Day Chronic Load</Text>
-                    <Text style={styles.loadBoxValue}>{Math.round(chronicLoad)} AU</Text>
+                    <Text style={styles.loadBoxLabel}>28-Day Baseline Load</Text>
+                    <Text style={styles.loadBoxValue}>{Math.round(chronicLoad)} Baseline Pts</Text>
                   </View>
+                </View>
+
+                {/* Easy Metrics Breakdown Cards */}
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
+                  <View style={{ flex: 1, minWidth: "45%", backgroundColor: "#16233E", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#223354" }}>
+                    <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>WORKOUT SCORE</Text>
+                    <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "900", marginTop: 4 }}>{latestWorkoutScore} pts</Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>{latestLog.duration_minutes}m | Intensity {latestLog.srpe}/10</Text>
+                  </View>
+
+                  <View style={{ flex: 1, minWidth: "45%", backgroundColor: "#16233E", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#223354" }}>
+                    <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>FATIGUE METER</Text>
+                    <Text style={{ color: statusBadgeColor, fontSize: 15, fontWeight: "900", marginTop: 4 }}>{acwrRatio.toFixed(2)}</Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>Acute ÷ Chronic</Text>
+                  </View>
+
+                  <View style={{ flex: 1, minWidth: "45%", backgroundColor: "#16233E", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#223354" }}>
+                    <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>ROUTINE SCORE</Text>
+                    <Text style={{ color: routineScore > 2.0 ? "#F87171" : "#38BDF8", fontSize: 15, fontWeight: "900", marginTop: 4 }}>{routineScore}</Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>Consistency Rating</Text>
+                  </View>
+
+                  <View style={{ flex: 1, minWidth: "45%", backgroundColor: "#16233E", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#223354" }}>
+                    <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>BODY STRESS</Text>
+                    <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "900", marginTop: 4 }}>{totalBodyStress} pts</Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>Load × Routine</Text>
+                  </View>
+                </View>
+
+                {/* Daily Workout Log Box */}
+                <View style={{ backgroundColor: "#16233E", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#223354", marginTop: 14 }}>
+                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>LOG TODAY'S WORKOUT</Text>
+                  <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: "#94A3B8", fontSize: 10, fontWeight: "700", marginBottom: 4 }}>DURATION (MINS)</Text>
+                      <View style={{ backgroundColor: "#111C35", borderRadius: 10, borderWidth: 1, borderColor: "#223354", paddingHorizontal: 12, paddingVertical: 8 }}>
+                        <TextInput
+                          style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "800", padding: 0 }}
+                          value={logDuration}
+                          onChangeText={setLogDuration}
+                          keyboardType="numeric"
+                          placeholder="60"
+                          placeholderTextColor="#64748B"
+                        />
+                      </View>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: "#94A3B8", fontSize: 10, fontWeight: "700", marginBottom: 4 }}>INTENSITY (1 - 10)</Text>
+                      <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
+                          <Pressable
+                            key={val}
+                            onPress={() => setLogHardness(val)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 8,
+                              borderRadius: 8,
+                              backgroundColor: logHardness === val ? "#38BDF8" : "#111C35",
+                              borderWidth: 1,
+                              borderColor: "#223354"
+                            }}
+                          >
+                            <Text style={{ color: logHardness === val ? "#080F21" : "#FFFFFF", fontSize: 12, fontWeight: "900" }}>{val}</Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </View>
+                  <Pressable
+                    onPress={handleLogWorkout}
+                    style={{ backgroundColor: "#38BDF8", borderRadius: 10, paddingVertical: 10, alignItems: "center", marginTop: 12 }}
+                  >
+                    <Text style={{ color: "#080F21", fontSize: 12, fontWeight: "900", letterSpacing: 0.5 }}>LOG WORKOUT SESSION</Text>
+                  </Pressable>
+                  {logSuccessToast ? (
+                    <Text style={{ color: "#34D399", fontSize: 11, fontWeight: "700", marginTop: 6, textAlign: "center" }}>{logSuccessToast}</Text>
+                  ) : null}
                 </View>
               </View>
 
-              {/* 7-Day Session Log Summary (Provided by Coach) */}
+              {/* 7-Day Session Log Summary */}
               <View style={styles.weeklyLogSection}>
                 <View style={styles.weeklyLogHeaderRow}>
                   <Text style={styles.weeklyLogTitle}>7-DAY TRAINING LOG</Text>
@@ -769,14 +969,14 @@ export function AthleteProfilePage({
                         </Text>
                         {log.duration_minutes > 0 ? (
                           <View style={styles.srpeTag}>
-                            <Text style={styles.srpeTagText}>sRPE {log.srpe}</Text>
+                            <Text style={styles.srpeTagText}>Intensity {log.srpe}/10</Text>
                           </View>
                         ) : (
                           <View style={[styles.srpeTag, { backgroundColor: "#111C35" }]}>
                             <Text style={[styles.srpeTagText, { color: "#64748B" }]}>Off</Text>
                           </View>
                         )}
-                        <Text style={styles.dailyLoadText}>{sessionLoad} AU</Text>
+                        <Text style={styles.dailyLoadText}>{sessionLoad} pts</Text>
                       </View>
                     );
                   })}
@@ -810,6 +1010,33 @@ export function AthleteProfilePage({
               </View>
             )}
           </View>
+
+          {/* Verify Athlete Profile Action Button */}
+          <Pressable
+            style={{
+              backgroundColor: "#16233E",
+              borderColor: "#38BDF8",
+              borderWidth: 1,
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              marginTop: 10
+            }}
+            onPress={() => {
+              setDocsDrawerOpen(true);
+              setNewDocTitle("");
+              setNewDocAsset(null);
+              setAddDocError("");
+              setShowAddDocModal(true);
+            }}
+          >
+            <Ionicons name="shield-checkmark-outline" size={18} color="#38BDF8" />
+            <Text style={{ color: "#38BDF8", fontSize: 12, fontWeight: "800", letterSpacing: 0.5 }}>VERIFY ATHLETE PROFILE</Text>
+          </Pressable>
         </View>
 
         {/* Upload Eligible Documents Drawer (Expandable, Collapsed by Default) */}
@@ -1100,6 +1327,36 @@ export function AthleteProfilePage({
           )}
         </View>
       </View>
+
+      {/* Fatigue / Burnout Warning Alert Modal */}
+      <Modal
+        visible={showWarningModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowWarningModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowWarningModal(false)}>
+          <Pressable style={[styles.modalCard, { borderColor: "#EF4444", borderWidth: 2 }]} onPress={(e) => e.stopPropagation()}>
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Ionicons name="alert-circle" size={48} color="#EF4444" />
+              <Text style={{ color: "#EF4444", fontSize: 16, fontWeight: "900", textAlign: "center", marginTop: 8 }}>
+                HIGH FATIGUE &amp; INJURY RISK DETECTED
+              </Text>
+            </View>
+
+            <Text style={{ color: "#E2E8F0", fontSize: 13, lineHeight: 19, textAlign: "center", marginBottom: 16 }}>
+              Your Fatigue Meter ({acwrRatio.toFixed(2)}) or Workout Routine Score ({routineScore}) has exceeded safe recovery limits (&gt; 1.50). Continued heavy training poses high risk of muscle strain, poor performance, or burnout.
+            </Text>
+
+            <Pressable
+              style={{ backgroundColor: "#EF4444", borderRadius: 10, paddingVertical: 12, alignItems: "center" }}
+              onPress={() => setShowWarningModal(false)}
+            >
+              <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "900", letterSpacing: 0.5 }}>I UNDERSTAND &amp; WILL REST</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Add Document Modal */}
       <Modal
