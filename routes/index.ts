@@ -4,6 +4,8 @@ import athleteRoutes from './athleteRoutes';
 import notificationRoutes from './notificationRoutes';
 import analyticsRoutes from './analyticsRoutes';
 import teamRoutes from './teamRoutes';
+import coachRoutes from './coachRoutes';
+import inquiryRoutes from './inquiryRoutes';
 
 const router = Router();
 
@@ -21,5 +23,11 @@ router.use('/analytics', analyticsRoutes);
 
 // Mount team routes at /teams (/api/v1/teams)
 router.use('/teams', teamRoutes);
+
+// Mount coach routes at /coaches (/api/v1/coaches)
+router.use('/coaches', coachRoutes);
+
+// Mount inquiry routes at /inquiries (/api/v1/inquiries)
+router.use('/inquiries', inquiryRoutes);
 
 export default router;
