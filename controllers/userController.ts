@@ -50,6 +50,45 @@ export async function registerUser(req: AuthRequest, res: Response): Promise<voi
 }
 
 /**
+ * POST /api/v1/users/coach
+ * Register a new coach, handle certification uploads, and provision their Coach_Profiles entity.
+ * ACCEPTANCE CRITERIA: Missing certification files block creation with 400 Bad Request.
+ */
+export async function registerCoach(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const data = req.body as Record<string, unknown>;
+    const file = (req as any).file as Express.Multer.File | undefined;
+
+    // Validate input
+    const { validateRegisterCoach } = require('../validators/coachValidator');
+    const errors = validateRegisterCoach(data, !!file);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const { registerCoachService } = require('../services/userService');
+    const result = await registerCoachService(data, file);
+
+    res.status(201).json({
+      message: 'Coach registered successfully with certification documents.',
+      ...result,
+    });
+  } catch (error: any) {
+    if (error.code === 'auth/email-already-exists') {
+      res.status(409).json({ error: 'A coach with this email already exists.' });
+      return;
+    }
+    if (error.message && error.message.includes('certification document')) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('Register coach error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
  * POST /api/v1/users/login
  * Validate credentials and return a Bearer token.
  */

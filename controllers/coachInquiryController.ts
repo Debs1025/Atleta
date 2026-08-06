@@ -102,3 +102,100 @@ export async function getAthleteInquiriesHandler(req: AuthRequest, res: Response
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
+
+/**
+ * GET /api/v1/coaches/me/settings
+ * Retrieve coach privacy, sync, and notification preferences.
+ */
+export async function getCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const coachId = `coach_${req.user!.uid}`;
+    const { getCoachSettings } = require('../services/coachSettingsService');
+
+    const settings = await getCoachSettings(coachId);
+    res.status(200).json(settings);
+  } catch (error: any) {
+    console.error('getCoachSettingsHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * PUT /api/v1/coaches/me/settings
+ * Update sync preferences and notification toggles (game_log_updates, recruitment_inquiries).
+ */
+export async function updateCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const coachId = `coach_${req.user!.uid}`;
+    const { validateUpdateCoachSettings } = require('../validators/coachValidator');
+    const errors = validateUpdateCoachSettings(req.body);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const { updateCoachSettings } = require('../services/coachSettingsService');
+    const settings = await updateCoachSettings(coachId, req.body);
+
+    res.status(200).json({
+      message: 'Coach settings updated successfully.',
+      settings,
+    });
+  } catch (error: any) {
+    console.error('updateCoachSettingsHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * PUT /api/v1/coaches/me/profile
+ * Update coach full name, sport category, and uploaded certification document URLs.
+ */
+export async function updateCoachProfileHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.uid;
+    const coachId = `coach_${userId}`;
+    const { updateCoachProfile } = require('../services/coachSettingsService');
+
+    const updatedProfile = await updateCoachProfile(coachId, userId, req.body);
+
+    res.status(200).json({
+      message: 'Coach profile updated successfully.',
+      profile: updatedProfile,
+    });
+  } catch (error: any) {
+    console.error('updateCoachProfileHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * PUT /api/v1/coaches/me/password
+ * Change password requiring current password verification.
+ * ACCEPTANCE CRITERIA: Password changes without correct current password return HTTP 401 Unauthorized.
+ */
+export async function changeCoachPasswordHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.uid;
+    const { validateChangeCoachPassword } = require('../validators/coachValidator');
+    const errors = validateChangeCoachPassword(req.body);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const { current_password, new_password } = req.body;
+    const { changeCoachPassword, ServiceError: SettingsServiceError } = require('../services/coachSettingsService');
+
+    const result = await changeCoachPassword(userId, current_password, new_password);
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error.statusCode) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('changeCoachPasswordHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+

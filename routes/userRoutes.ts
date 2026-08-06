@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { authenticate } from '../middlewares/authMiddleware';
+import { authRateLimiter } from '../middlewares/rateLimitMiddleware';
 import {
   registerUser,
+  registerCoach,
   loginUser,
   socialLogin,
   getMe,
@@ -24,8 +26,12 @@ router.post('/', upload.single('eligible_documents'), registerUser);
 // POST /api/v1/users/register – Alias for register
 router.post('/register', upload.single('eligible_documents'), registerUser);
 
-// POST /api/v1/users/login – Login and receive a token
-router.post('/login', loginUser);
+// POST /api/v1/users/coach & /api/v1/users/register-coach – Register a new coach with required certification documents (Rate-limited: 5 req/min)
+router.post('/coach', authRateLimiter, upload.single('professional_documents'), registerCoach);
+router.post('/register-coach', authRateLimiter, upload.single('professional_documents'), registerCoach);
+
+// POST /api/v1/users/login – Login and receive a token (Rate-limited: 5 req/min)
+router.post('/login', authRateLimiter, loginUser);
 
 // POST /api/v1/users/google-login, /facebook-login, & /social-login – OAuth login via Firebase ID Token
 router.post('/google-login', socialLogin as any);

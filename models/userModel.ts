@@ -123,3 +123,53 @@ export interface PasswordResetConfirmDto {
   token: string;
   new_password: string;
 }
+
+// ─── Coach Settings Entity ──────────────────────────────────────────────────
+
+export interface CoachSettings {
+  setting_id: string;             // Primary Key, Required
+  coach_id: string;               // Foreign Key -> Coach_Profiles.coach_id, Required
+  data_sync_preference: 'Manual' | 'Automatic'; // Default: "Manual"
+  notification_preferences: {
+    game_log_updates: boolean;     // Default: true
+    recruitment_inquiries: boolean; // Default: true
+  };
+  updated_at: Date | string;      // DateTime Required
+}
+
+// Coach registration DTO requiring professional certification documents
+export interface RegisterCoachDto {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  contact_number?: string;
+  years_of_experience?: number;
+  current_institution?: string;
+  professional_documents: string[]; // Minimum 1 document URL required
+  sport_type?: string;
+}
+
+// Update coach profile DTO
+export interface UpdateCoachProfileDto {
+  first_name?: string;
+  last_name?: string;
+  sport_type?: string;
+  professional_documents?: string[];
+}
+
+// Update coach settings DTO
+export interface UpdateCoachSettingsDto {
+  data_sync_preference?: 'Manual' | 'Automatic';
+  notification_preferences?: {
+    game_log_updates?: boolean;
+    recruitment_inquiries?: boolean;
+  };
+}
+
+// Change password DTO requiring current password verification
+export interface ChangeCoachPasswordDto {
+  current_password: string;
+  new_password: string;
+}
+

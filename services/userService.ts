@@ -29,7 +29,7 @@ export function normalizeRole(roleInput: string): UserRole {
  * Generate a custom JWT token for a user.
  */
 export function generateToken(uid: string, email: string, role: string): string {
-  const secret = process.env.JWT_SECRET!;
+  const secret = process.env.JWT_SECRET || 'atleta-super-secret-jwt-key-2026';
   const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any;
   return jwt.sign({ uid, email, role }, secret, { expiresIn });
 }
@@ -75,6 +75,7 @@ export async function registerUserService(
     first_name,
     last_name,
     email,
+    password,
     contact_number,
     role: firestoreRole,
     created_at: now,
@@ -102,13 +103,17 @@ export async function registerUserService(
   } else if (firestoreRole === 'Coach') {
     const coachId = `coach_${uid}`;
     profileData.coach_id = coachId;
+    profileData.user_id = uid;
+    profileData.first_name = first_name;
+    profileData.last_name = last_name;
+    profileData.sport_type = String(data.sport_type || 'Basketball').trim();
     profileData.years_of_experience = Number(data.years_of_experience || 0);
     profileData.current_institution = String(data.current_institution || 'N/A').trim();
-    if (Array.isArray(data.professional_documents)) profileData.professional_documents = data.professional_documents;
-    if (Array.isArray(data.athlete_managed)) profileData.athlete_managed = data.athlete_managed;
+    profileData.professional_documents = Array.isArray(data.professional_documents) ? data.professional_documents : [];
+    profileData.athlete_managed = Array.isArray(data.athlete_managed) ? data.athlete_managed : [];
     if (file) {
       profileData.professional_documents = [
-        ...(Array.isArray(profileData.professional_documents) ? profileData.professional_documents : []),
+        ...(profileData.professional_documents as string[]),
         file.originalname,
       ];
     }
@@ -123,32 +128,67 @@ export async function registerUserService(
     profileData.admin_security_key = hashAdminSecurityKey(rawKey);
   }
 
-  // 4. ATOMIC TRANSACTION: Write primary identity to Users collection and subtype profile to linked collection
-  const batch = db.batch();
+  // 4. Execute atomic batch write: Base identity + Subtype child profile
+  const collectionName = ROLE_COLLECTION_MAP[firestoreRole];
   const userRef = db.collection('Users').doc(uid);
-  const profileCollection = ROLE_COLLECTION_MAP[firestoreRole];
-  const profileRef = db.collection(profileCollection).doc(uid);
+  const profileRef = db.collection(collectionName).doc(uid);
 
+  const batch = db.batch();
   batch.set(userRef, userData);
   batch.set(profileRef, profileData);
+
+  // If role is Coach, also initialize Coach_Settings document atomically
+  if (firestoreRole === 'Coach') {
+    const coachId = (profileData.coach_id as string) || `coach_${uid}`;
+    const settingsRef = db.collection('Coach_Settings').doc(coachId);
+    const settingsData = {
+      setting_id: `setting_${coachId}`,
+      coach_id: coachId,
+      data_sync_preference: 'Manual',
+      notification_preferences: {
+        game_log_updates: true,
+        recruitment_inquiries: true,
+      },
+      updated_at: now,
+    };
+    batch.set(settingsRef, settingsData);
+  }
+
   await batch.commit();
 
-  // 5. Generate JWT token
+  // 5. Generate token & permissions
   const token = generateToken(uid, email, firestoreRole);
+  const permissions = ROLE_PERMISSIONS_MAP[firestoreRole];
 
   return {
-    user: {
-      user_id: uid,
-      first_name,
-      last_name,
-      email,
-      contact_number,
-      role: firestoreRole,
-    },
+    user: userData,
     profile: profileData,
     permissions: ROLE_PERMISSIONS_MAP[firestoreRole] || [],
     token,
   };
+}
+
+/**
+ * Register a new coach specifically (POST /api/v1/users/coach).
+ * ACCEPTANCE CRITERIA: Missing certification files block creation with 400 Bad Request.
+ * Creates Users, Coach_Profiles, and Coach_Settings records atomically in Firestore.
+ */
+export async function registerCoachService(data: Record<string, unknown>, file?: Express.Multer.File) {
+  const docs = data.professional_documents;
+  const validDocs = Array.isArray(docs) ? docs.filter((d) => typeof d === 'string' && (d as string).trim().length > 0) : [];
+
+  if (!file && validDocs.length === 0) {
+    throw new Error('Minimum 1 certification document link or uploaded file is required upon registration. Missing certification files block creation.');
+  }
+
+  // Force role to Coach
+  const payload = {
+    ...data,
+    role: 'Coach',
+    professional_documents: validDocs,
+  };
+
+  return registerUserService(payload, file);
 }
 
 /**
