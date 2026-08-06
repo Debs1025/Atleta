@@ -137,7 +137,7 @@ export function AthleteProfilePage({
   const [docsDrawerOpen, setDocsDrawerOpen] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
 
-  // Add Document Modal
+  // Add Document 
   const [showAddDocModal, setShowAddDocModal] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocAsset, setNewDocAsset] = useState<{ name: string; uri: string } | null>(null);
@@ -155,7 +155,7 @@ export function AthleteProfilePage({
   const [passwordSuccessMsg, setPasswordSuccessMsg] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
 
-  // Logout confirmation modal
+  // Logout
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Calendar Birthdate Picker modal state
