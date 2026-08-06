@@ -92,14 +92,26 @@ export async function registerUserService(
   if (firestoreRole === 'Athlete') {
     const athleteId = `ath_${uid}`;
     profileData.athlete_id = athleteId;
+    profileData.user_id = uid;
+    profileData.first_name = first_name;
+    profileData.last_name = last_name;
+    profileData.email = email;
     profileData.birthdate = String(data.birthdate || '2001-01-01').trim();
     profileData.gender = String(data.gender || 'Male').trim();
     profileData.province = String(data.province || 'Camarines Sur').trim();
     profileData.sport_type = String(data.sport_type || 'Basketball').trim();
+    profileData.position = String(data.position || 'Unassigned').trim();
+    profileData.jersey_number = data.jersey_number !== undefined ? Number(data.jersey_number) : null;
+    profileData.eligibility_documents = Array.isArray(data.eligibility_documents) ? data.eligibility_documents : [];
     if (data.recruitment_status) profileData.recruitment_status = String(data.recruitment_status).trim();
     if (data.leaderboard_rank !== undefined) profileData.leaderboard_rank = Number(data.leaderboard_rank);
-    if (Array.isArray(data.eligibility_documents)) profileData.eligibility_documents = data.eligibility_documents;
     if (Array.isArray(data.achievements)) profileData.achievements = data.achievements;
+    if (file) {
+      profileData.eligibility_documents = [
+        ...(profileData.eligibility_documents as string[]),
+        file.originalname,
+      ];
+    }
   } else if (firestoreRole === 'Coach') {
     const coachId = `coach_${uid}`;
     profileData.coach_id = coachId;
@@ -136,6 +148,12 @@ export async function registerUserService(
   const batch = db.batch();
   batch.set(userRef, userData);
   batch.set(profileRef, profileData);
+
+  if (firestoreRole === 'Athlete') {
+    const athleteId = `ath_${uid}`;
+    const altProfileRef = db.collection('Athlete_Profiles').doc(athleteId);
+    batch.set(altProfileRef, profileData);
+  }
 
   // If role is Coach, also initialize Coach_Settings document atomically
   if (firestoreRole === 'Coach') {

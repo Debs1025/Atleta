@@ -119,3 +119,58 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
+
+/**
+ * GET /api/v1/athletes/search?query=
+ * Autocomplete search registered athletes by name, ID, or position, returning eligibility document status.
+ */
+export async function searchAthletesHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const query = req.query.query as string | undefined;
+    const { searchAthletes } = require('../services/teamService');
+
+    const athletes = await searchAthletes(query);
+
+    res.status(200).json({
+      total: athletes.length,
+      query: query || null,
+      athletes,
+    });
+  } catch (error: any) {
+    console.error('searchAthletesHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * POST /api/v1/athletes/register-athlete & /api/v1/athletes/register
+ * Register a new athlete, provision Users and Athlete_Profiles documents.
+ */
+export async function registerAthlete(req: Request, res: Response): Promise<void> {
+  try {
+    const data = req.body as Record<string, unknown>;
+    const file = (req as any).file as Express.Multer.File | undefined;
+
+    const { validateRegisterUser } = require('../validators/userValidator');
+    const errors = validateRegisterUser(data);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const { registerUserService } = require('../services/userService');
+    const result = await registerUserService({ ...data, role: 'Athlete' }, file);
+
+    res.status(201).json({
+      message: 'Athlete registered successfully.',
+      ...result,
+    });
+  } catch (error: any) {
+    if (error.code === 'auth/email-already-exists') {
+      res.status(409).json({ error: 'An account with this email already exists.' });
+      return;
+    }
+    console.error('Register athlete error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}

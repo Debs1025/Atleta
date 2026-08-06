@@ -1,11 +1,23 @@
 import { db } from '../utils/firebaseAdmin';
 import {
   Team,
+  TeamRosterMember,
   RosterAthlete,
   TeamSummary,
   TeamDetailResponse,
   AthleteTeamResponse,
+  CreateTeamDto,
+  UpdateRosterItem,
 } from '../models/teamModel';
+
+export class ServiceError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode: number = 400) {
+    super(message);
+    this.statusCode = statusCode;
+    Object.setPrototypeOf(this, ServiceError.prototype);
+  }
+}
 
 // ─── Helper: Enrich coach from Coach_Profiles + Users ───────────────────────
 
@@ -16,7 +28,14 @@ async function enrichCoach(coachId: string): Promise<{
   current_institution: string;
   quote: string | null;
 }> {
-  const coachDoc = await db.collection('Coach_Profiles').doc(coachId).get();
+  let coachDoc = await db.collection('Coach_Profiles').doc(coachId).get();
+
+  // Fallback to stripping 'coach_' prefix if needed
+  if (!coachDoc.exists && coachId.startsWith('coach_')) {
+    const rawUid = coachId.replace('coach_', '');
+    coachDoc = await db.collection('Coach_Profiles').doc(rawUid).get();
+  }
+
   const coachData = coachDoc.exists ? coachDoc.data()! : {};
 
   let firstName = coachData.first_name || '';
@@ -41,14 +60,18 @@ async function enrichCoach(coachId: string): Promise<{
   };
 }
 
-// ─── Helper: Enrich roster athletes ─────────────────────────────────────────
+// ─── Helper: Enrich roster athletes with computed eligibility verification ───
 
-async function enrichRoster(athleteIds: string[]): Promise<RosterAthlete[]> {
-  if (!athleteIds || athleteIds.length === 0) return [];
+async function enrichRoster(rosterList: (string | TeamRosterMember)[]): Promise<RosterAthlete[]> {
+  if (!rosterList || rosterList.length === 0) return [];
 
   const roster: RosterAthlete[] = [];
 
-  for (const athleteId of athleteIds) {
+  for (const item of rosterList) {
+    const athleteId = typeof item === 'string' ? item : item.athlete_id;
+    const positionOverride = typeof item === 'object' ? item.position : undefined;
+    const jerseyOverride = typeof item === 'object' ? item.jersey_number : undefined;
+
     const profileDoc = await db.collection('Athlete_Profiles').doc(athleteId).get();
     const profileData = profileDoc.exists ? profileDoc.data()! : {};
 
@@ -65,14 +88,22 @@ async function enrichRoster(athleteIds: string[]): Promise<RosterAthlete[]> {
       }
     }
 
+    const docs = Array.isArray(profileData.eligibility_documents)
+      ? profileData.eligibility_documents
+      : [];
+    const isVerified = docs.length > 0;
+
     roster.push({
       athlete_id: athleteId,
       user_id: profileData.user_id || athleteId,
       first_name: firstName || 'Athlete',
       last_name: lastName || '',
-      position: profileData.position || 'Unassigned',
+      position: positionOverride || profileData.position || 'Unassigned',
+      jersey_number: jerseyOverride !== undefined ? jerseyOverride : (profileData.jersey_number ?? null),
       sport_type: profileData.sport_type || '',
       avatar_url: profileData.avatar_url || undefined,
+      eligibility_documents: docs,
+      is_eligibility_verified: isVerified,
     });
   }
 
@@ -82,16 +113,80 @@ async function enrichRoster(athleteIds: string[]): Promise<RosterAthlete[]> {
 // ─── Service Functions ──────────────────────────────────────────────────────
 
 /**
- * Browse team directory directly from Firestore Teams collection.
- * GET /api/v1/teams?sport=&search=
+ * Create a new team instance (POST /api/v1/teams).
+ */
+export async function createTeam(coachId: string, payload: CreateTeamDto): Promise<Team> {
+  const teamId = `t_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const now = new Date().toISOString();
+
+  const newTeam: Record<string, any> = {
+    team_id: teamId,
+    team_name: payload.team_name.trim(),
+    sport_type: payload.sport_type.trim(),
+    division: payload.division.trim(),
+    region: payload.region ? payload.region.trim() : 'NCR',
+    established_year: payload.established_year || new Date().getFullYear(),
+    season_record: { wins: 0, losses: 0 },
+    coach_id: coachId,
+    roster_list: [],
+    timestamp: now,
+  };
+
+  if (payload.description) newTeam.description = payload.description.trim();
+  if (payload.mission_statement) newTeam.mission_statement = payload.mission_statement.trim();
+
+  await db.collection('Teams').doc(teamId).set(newTeam);
+  return newTeam as Team;
+}
+
+/**
+ * Retrieve all teams managed by a specific coach (GET /api/v1/teams?coachId=).
+ */
+export async function getCoachTeams(coachId: string): Promise<TeamSummary[]> {
+  const possibleCoachIds = [coachId, `coach_${coachId}`, coachId.replace('coach_', '')];
+
+  const snapshot = await db
+    .collection('Teams')
+    .where('coach_id', 'in', possibleCoachIds)
+    .get();
+
+  const teams: TeamSummary[] = [];
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data() as Team;
+    const coach = await enrichCoach(data.coach_id);
+
+    teams.push({
+      team_id: data.team_id,
+      team_name: data.team_name,
+      sport_type: data.sport_type,
+      division: data.division || 'Varsity',
+      region: data.region || 'NCR',
+      season_record: data.season_record || { wins: 0, losses: 0 },
+      athlete_count: data.roster_list ? data.roster_list.length : 0,
+      coach_name: coach.full_name,
+      coach_id: data.coach_id,
+      established_year: data.established_year,
+    });
+  }
+
+  return teams;
+}
+
+/**
+ * Browse team directory with optional sport and search filters.
  */
 export async function browseTeamDirectory(
   sport?: string,
   search?: string,
+  coachId?: string,
 ): Promise<TeamSummary[]> {
+  if (coachId) {
+    return getCoachTeams(coachId);
+  }
+
   let query: FirebaseFirestore.Query = db.collection('Teams');
 
-  // Filter by sport_type if provided
   if (sport && sport.trim().length > 0) {
     query = query.where('sport_type', '==', sport.trim());
   }
@@ -102,7 +197,6 @@ export async function browseTeamDirectory(
   for (const doc of snapshot.docs) {
     const data = doc.data() as Team;
 
-    // Apply case-insensitive search filter on team_name
     if (search && search.trim().length > 0) {
       const searchLower = search.trim().toLowerCase();
       if (!data.team_name.toLowerCase().includes(searchLower)) {
@@ -110,16 +204,18 @@ export async function browseTeamDirectory(
       }
     }
 
-    // Enrich coach name
     const coach = await enrichCoach(data.coach_id);
 
     teams.push({
       team_id: data.team_id,
       team_name: data.team_name,
       sport_type: data.sport_type,
-      region: data.region,
+      division: data.division || 'Varsity',
+      region: data.region || 'NCR',
+      season_record: data.season_record || { wins: 0, losses: 0 },
       athlete_count: data.roster_list ? data.roster_list.length : 0,
       coach_name: coach.full_name,
+      coach_id: data.coach_id,
       established_year: data.established_year,
     });
   }
@@ -128,9 +224,8 @@ export async function browseTeamDirectory(
 }
 
 /**
- * Get full team details directly from Firestore Teams collection.
+ * Get full team details including coach info and enriched roster with eligibility status.
  * GET /api/v1/teams/:teamId
- * Returns null if team not found (→ 404).
  */
 export async function getTeamDetails(teamId: string): Promise<TeamDetailResponse | null> {
   const teamDoc = await db.collection('Teams').doc(teamId).get();
@@ -147,7 +242,9 @@ export async function getTeamDetails(teamId: string): Promise<TeamDetailResponse
     team_id: data.team_id,
     team_name: data.team_name,
     sport_type: data.sport_type,
-    region: data.region,
+    division: data.division || 'Varsity',
+    region: data.region || 'NCR',
+    season_record: data.season_record || { wins: 0, losses: 0 },
     description: data.description || null,
     mission_statement: data.mission_statement || null,
     established_year: data.established_year || null,
@@ -159,25 +256,268 @@ export async function getTeamDetails(teamId: string): Promise<TeamDetailResponse
 }
 
 /**
- * Get athlete's current team directly from Firestore Teams collection.
- * GET /api/v1/athletes/:athleteId/team
- * Returns null if athlete has no team assignment (→ 404).
+ * Update team squad roster, player positions, jersey numbers, and check athlete eligibility.
+ * PUT /api/v1/teams/:teamId/roster
+ *
+ * ACCEPTANCE CRITERIA:
+ * 1. Requires coach ownership authorization (403 Forbidden if not team manager).
+ * 2. Blocks roster confirmation if any added athlete has unverified/missing eligibility documents, unless override_unverified: true.
  */
-export async function getAthleteTeam(athleteId: string): Promise<AthleteTeamResponse | null> {
-  // Search Teams collection for any team with this athlete in roster_list
-  const snapshot = await db
-    .collection('Teams')
-    .where('roster_list', 'array-contains', athleteId)
-    .get();
+export async function updateTeamRoster(
+  coachId: string,
+  teamId: string,
+  rosterItems: UpdateRosterItem[],
+  overrideUnverified: boolean = false,
+) {
+  const teamDoc = await db.collection('Teams').doc(teamId).get();
 
-  if (snapshot.empty) {
-    return null; // No team assignment found for this athlete
+  if (!teamDoc.exists) {
+    throw new ServiceError(`Team with ID '${teamId}' not found.`, 404);
   }
 
-  // Use the first matched team
-  const teamDoc = snapshot.docs[0];
   const teamData = teamDoc.data() as Team;
 
+  // Authorization check: Coach may only edit teams they manage
+  const isOwner =
+    teamData.coach_id === coachId ||
+    teamData.coach_id === `coach_${coachId}` ||
+    teamData.coach_id.replace('coach_', '') === coachId;
+
+  if (!isOwner) {
+    throw new ServiceError(
+      'Unauthorized. Coaches may only edit squad rosters for teams they manage.',
+      403,
+    );
+  }
+
+  // Check eligibility documents for all athletes in roster
+  const unverifiedAthletes: string[] = [];
+  const updatedRosterMembers: TeamRosterMember[] = [];
+
+  for (const item of rosterItems) {
+    const athleteId = item.athlete_id;
+    const profileDoc = await db.collection('Athlete_Profiles').doc(athleteId).get();
+    const profileData = profileDoc.exists ? profileDoc.data()! : {};
+
+    let firstName = profileData.first_name || '';
+    let lastName = profileData.last_name || '';
+
+    if (!firstName || !lastName) {
+      const userDoc = await db.collection('Users').doc(profileData.user_id || athleteId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data()!;
+        firstName = firstName || userData.first_name || 'Athlete';
+        lastName = lastName || userData.last_name || '';
+      }
+    }
+
+    const docs = Array.isArray(profileData.eligibility_documents)
+      ? profileData.eligibility_documents
+      : [];
+
+    if (docs.length === 0) {
+      unverifiedAthletes.push(`${firstName} ${lastName}`.trim() || athleteId);
+    }
+
+    // Update position and jersey_number on Athlete_Profiles
+    const athleteUpdates: Record<string, any> = { updated_at: new Date() };
+    if (item.position) athleteUpdates.position = item.position.trim();
+    if (item.jersey_number !== undefined) athleteUpdates.jersey_number = Number(item.jersey_number);
+
+    if (profileDoc.exists) {
+      await db.collection('Athlete_Profiles').doc(athleteId).set(athleteUpdates, { merge: true });
+    }
+
+    const userId = profileData.user_id || athleteId;
+    const isVerified = docs.length > 0;
+
+    updatedRosterMembers.push({
+      athlete_id: athleteId,
+      user_id: userId,
+      first_name: firstName || 'Athlete',
+      last_name: lastName || '',
+      position: item.position ? item.position.trim() : (profileData.position || 'Unassigned'),
+      jersey_number: item.jersey_number !== undefined ? Number(item.jersey_number) : (profileData.jersey_number ?? undefined),
+      added_at: new Date().toISOString(),
+      eligibility_documents: docs,
+      is_eligibility_verified: isVerified,
+    });
+  }
+
+  // ACCEPTANCE CRITERIA: Block roster confirmation if unverified athletes exist and override_unverified is false
+  if (unverifiedAthletes.length > 0 && !overrideUnverified) {
+    throw new ServiceError(
+      `Roster confirmation blocked. The following athlete(s) have unverified or missing eligibility documents: [${unverifiedAthletes.join(', ')}]. Provide 'override_unverified: true' to bypass or notify the athlete to submit eligibility documents.`,
+      400,
+    );
+  }
+
+  // Update roster_list in Firestore Teams document with full athlete details
+  await db.collection('Teams').doc(teamId).set(
+    {
+      roster_list: updatedRosterMembers,
+      timestamp: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+
+  return getTeamDetails(teamId);
+}
+
+/**
+ * Autocomplete search registered athletes by name, ID, position, or email across Users, Athlete_Profiles, and Teams.roster_list collections.
+ * GET /api/v1/athletes/search?query=
+ */
+export async function searchAthletes(queryStr?: string) {
+  const resultsMap = new Map<string, RosterAthlete>();
+  const queryLower = (queryStr || '').trim().toLowerCase();
+
+  // 1. Search Users collection for all registered user accounts with role === 'Athlete' or 'Player'
+  const usersSnapshot = await db.collection('Users').get();
+  for (const userDoc of usersSnapshot.docs) {
+    const u = userDoc.data();
+    const role = (u.role || '').toString().toLowerCase();
+
+    if (role.includes('athlete') || role.includes('player') || role === 'user' || !u.role) {
+      const uid = userDoc.id;
+      const firstName = u.first_name || '';
+      const lastName = u.last_name || '';
+      const fullName = `${firstName} ${lastName}`.trim();
+      const athleteId = u.athlete_id || uid;
+
+      const profileDoc = await db.collection('Athlete_Profiles').doc(uid).get();
+      const p = profileDoc.exists ? profileDoc.data()! : {};
+
+      const docs = Array.isArray(p.eligibility_documents)
+        ? p.eligibility_documents
+        : Array.isArray(u.eligibility_documents)
+        ? u.eligibility_documents
+        : [];
+
+      const athleteObj: RosterAthlete = {
+        athlete_id: athleteId,
+        user_id: uid,
+        first_name: firstName || 'Athlete',
+        last_name: lastName || '',
+        position: p.position || u.position || 'Unassigned',
+        jersey_number: p.jersey_number ?? u.jersey_number ?? null,
+        sport_type: p.sport_type || u.sport_type || '',
+        avatar_url: p.avatar_url || u.avatar_url || undefined,
+        eligibility_documents: docs,
+        is_eligibility_verified: docs.length > 0,
+      };
+
+      const searchHaystack = `${fullName} ${athleteObj.position} ${athleteId} ${uid} ${u.email || ''}`.toLowerCase();
+      if (!queryLower || searchHaystack.includes(queryLower)) {
+        resultsMap.set(athleteId, athleteObj);
+      }
+    }
+  }
+
+  // 2. Search Athlete_Profiles collection for any profiles
+  const profilesSnapshot = await db.collection('Athlete_Profiles').get();
+  for (const profileDoc of profilesSnapshot.docs) {
+    const p = profileDoc.data();
+    const athleteId = p.athlete_id || profileDoc.id;
+
+    if (!resultsMap.has(athleteId)) {
+      const uid = p.user_id || profileDoc.id;
+      let firstName = p.first_name || '';
+      let lastName = p.last_name || '';
+
+      if (!firstName || !lastName) {
+        const userDoc = await db.collection('Users').doc(uid).get();
+        if (userDoc.exists) {
+          const u = userDoc.data()!;
+          firstName = firstName || u.first_name || '';
+          lastName = lastName || u.last_name || '';
+        }
+      }
+
+      const docs = Array.isArray(p.eligibility_documents) ? p.eligibility_documents : [];
+      const athleteObj: RosterAthlete = {
+        athlete_id: athleteId,
+        user_id: uid,
+        first_name: firstName || 'Athlete',
+        last_name: lastName || '',
+        position: p.position || 'Unassigned',
+        jersey_number: p.jersey_number ?? null,
+        sport_type: p.sport_type || '',
+        avatar_url: p.avatar_url || undefined,
+        eligibility_documents: docs,
+        is_eligibility_verified: docs.length > 0,
+      };
+
+      const searchHaystack = `${firstName} ${lastName} ${athleteObj.position} ${athleteId}`.toLowerCase();
+      if (!queryLower || searchHaystack.includes(queryLower)) {
+        resultsMap.set(athleteId, athleteObj);
+      }
+    }
+  }
+
+  // 3. Search Teams collection roster_list array for any athletes
+  const teamsSnapshot = await db.collection('Teams').get();
+  for (const teamDoc of teamsSnapshot.docs) {
+    const teamData = teamDoc.data() as Team;
+    if (Array.isArray(teamData.roster_list)) {
+      for (const item of teamData.roster_list) {
+        if (typeof item === 'object' && item.athlete_id) {
+          const athleteId = item.athlete_id;
+          if (!resultsMap.has(athleteId)) {
+            const firstName = item.first_name || 'Athlete';
+            const lastName = item.last_name || '';
+            const docs = Array.isArray(item.eligibility_documents) ? item.eligibility_documents : [];
+
+            const athleteObj: RosterAthlete = {
+              athlete_id: athleteId,
+              user_id: item.user_id || athleteId,
+              first_name: firstName,
+              last_name: lastName,
+              position: item.position || 'Unassigned',
+              jersey_number: item.jersey_number ?? null,
+              sport_type: teamData.sport_type || '',
+              eligibility_documents: docs,
+              is_eligibility_verified: item.is_eligibility_verified ?? (docs.length > 0),
+            };
+
+            const searchHaystack = `${firstName} ${lastName} ${athleteObj.position} ${athleteId}`.toLowerCase();
+            if (!queryLower || searchHaystack.includes(queryLower)) {
+              resultsMap.set(athleteId, athleteObj);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return Array.from(resultsMap.values());
+}
+
+/**
+ * Get athlete's current team.
+ */
+export async function getAthleteTeam(athleteId: string): Promise<AthleteTeamResponse | null> {
+  const snapshot = await db.collection('Teams').get();
+
+  let matchedDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  for (const doc of snapshot.docs) {
+    const data = doc.data() as Team;
+    if (Array.isArray(data.roster_list)) {
+      const found = data.roster_list.some((item) =>
+        typeof item === 'string' ? item === athleteId : item.athlete_id === athleteId,
+      );
+      if (found) {
+        matchedDoc = doc;
+        break;
+      }
+    }
+  }
+
+  if (!matchedDoc) {
+    return null;
+  }
+
+  const teamData = matchedDoc.data() as Team;
   const coach = await enrichCoach(teamData.coach_id).catch(() => ({
     coach_id: teamData.coach_id,
     full_name: 'Coach',
@@ -192,6 +532,7 @@ export async function getAthleteTeam(athleteId: string): Promise<AthleteTeamResp
       team_id: teamData.team_id,
       team_name: teamData.team_name,
       sport_type: teamData.sport_type,
+      division: teamData.division || 'Varsity',
       region: teamData.region,
       description: teamData.description || null,
     },

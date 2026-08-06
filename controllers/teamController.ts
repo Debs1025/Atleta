@@ -1,32 +1,116 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import {
   browseTeamDirectory,
   getTeamDetails,
   getAthleteTeam,
+  createTeam,
+  updateTeamRoster,
+  ServiceError,
 } from '../services/teamService';
+import { validateCreateTeam, validateUpdateRoster } from '../validators/teamValidator';
 
 /**
- * GET /api/v1/teams?sport=&search=
- * Browse team directory filtered by sport and/or name search.
+ * GET /api/v1/teams?sport=&search=&coachId=
+ * Browse team directory filtered by sport, coachId, and/or name search.
  */
 export async function browseTeams(req: AuthRequest, res: Response): Promise<void> {
   try {
     const sport = req.query.sport as string | undefined;
     const search = req.query.search as string | undefined;
+    const coachId = (req.query.coachId || req.query.coach_id) as string | undefined;
 
     const startTime = Date.now();
-    const teams = await browseTeamDirectory(sport, search);
+    const teams = await browseTeamDirectory(sport, search, coachId);
     const responseTimeMs = Date.now() - startTime;
 
     res.set('X-Response-Time-Ms', String(responseTimeMs));
     res.status(200).json({
       total: teams.length,
-      filters: { sport: sport || null, search: search || null },
+      filters: { sport: sport || null, search: search || null, coachId: coachId || null },
       teams,
     });
   } catch (error: any) {
     console.error('browseTeams error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * POST /api/v1/teams
+ * Create a new team instance with name, sport category, and division.
+ */
+export async function createTeamHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const coachId = req.user?.uid || 'coach_default';
+
+    const errors = validateCreateTeam(req.body);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const team = await createTeam(coachId, req.body);
+
+    res.status(201).json({
+      message: 'Team instance created successfully.',
+      team,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('createTeamHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * PUT /api/v1/teams/:teamId/roster
+ * Update roster positions, jersey numbers, or remove players with eligibility verification check.
+ *
+ * ACCEPTANCE CRITERIA:
+ * 1. Require valid Bearer token; coaches may only edit teams they manage (403 Forbidden).
+ * 2. Adding an athlete with unverified/missing documents flags an error and blocks roster confirmation unless override_unverified: true.
+ */
+export async function updateRosterHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const coachId = req.user!.uid;
+    const teamId = Array.isArray(req.params.teamId) ? req.params.teamId[0] : req.params.teamId;
+
+    if (!teamId) {
+      res.status(400).json({ error: 'Team ID is required.' });
+      return;
+    }
+
+    const errors = validateUpdateRoster(req.body);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const rawBody = req.body || {};
+    const rosterItems = (Array.isArray(rawBody)
+      ? rawBody
+      : (rawBody.roster || rawBody.roster_list || [])).map((item: any) => ({
+        ...item,
+        athlete_id: item.athlete_id || item.user_id,
+      }));
+    const overrideUnverified = !!rawBody.override_unverified;
+
+    const teamDetail = await updateTeamRoster(coachId, teamId, rosterItems, overrideUnverified);
+
+    res.status(200).json({
+      message: 'Squad roster updated successfully.',
+      team: teamDetail,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('updateRosterHandler error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
