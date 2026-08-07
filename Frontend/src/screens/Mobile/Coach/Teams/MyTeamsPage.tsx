@@ -42,6 +42,7 @@ interface MyTeamsPageProps {
   }) => void;
   onLogout?: () => void;
   onSettingsPress?: () => void;
+  onProfilePress?: () => void;
 }
 
 export function MyTeamsPage({
@@ -51,6 +52,7 @@ export function MyTeamsPage({
   onCreateTeam,
   onLogout,
   onSettingsPress,
+  onProfilePress,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
@@ -70,8 +72,7 @@ export function MyTeamsPage({
   return (
     <View style={styles.container}>
       {/* TOP HEADER */}
-      {/* TOP HEADER */}
-      <AtletaHeader onSettingsPress={onSettingsPress} onProfilePress={onLogout} />
+      <AtletaHeader onSettingsPress={onSettingsPress} onProfilePress={onProfilePress || onLogout} />
 
       {/* SCROLLABLE PAGE BODY */}
       <ScrollView

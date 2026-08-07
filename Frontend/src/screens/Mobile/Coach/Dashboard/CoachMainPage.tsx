@@ -31,6 +31,10 @@ import { ViewAllPlayers } from "./ViewAllPlayers";
 import { CoachSettings } from "./CoachSettings";
 import { AtletaHeader } from "../Components/AtletaHeader";
 import { AtletaNavbar } from "../Components/AtletaNavbar";
+import { CoachProfile } from "../Profile/CoachProfile";
+import { CoachEditProfile } from "../Profile/CoachEditProfile";
+import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+
 // Font Platform Constants
 const fontPlatform = Platform.select({
   ios: "System",
@@ -44,7 +48,13 @@ const fontBoldPlatform = Platform.select({
   default: "sans-serif",
 });
 
-type ViewState = "dashboard" | "teams_list" | "manage_team" | "view_all_players" | "settings";
+type ViewState =
+  | "dashboard"
+  | "teams_list"
+  | "manage_team"
+  | "view_all_players"
+  | "settings"
+  | "edit_profile";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -114,6 +124,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [activeSportFilter, setActiveSportFilter] = useState<string>("ALL");
   const [showFabOverlay, setShowFabOverlay] = useState(false);
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
 
   // Current Selected Team
   const currentTeam = useMemo(
@@ -269,155 +281,182 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* SCREEN 5: COACH SETTINGS PAGE */}
-      {activeView === "settings" && (
-        <CoachSettings
-          onBack={() => setActiveView("dashboard")}
-          onLogout={onLogout}
-        />
-      )}
-
-      {/* SCREEN 1: COACH HOME DASHBOARD */}
-      {activeView === "dashboard" && (
-        <>
-          {/* FIXED HEADER BAR */}
-          <AtletaHeader
-            onSettingsPress={() => setActiveView("settings")}
-            onProfilePress={onLogout}
-          />
-
-          {/* SCROLLABLE DASHBOARD BODY */}
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
-            ]}
-            showsVerticalScrollIndicator={false}
-            overScrollMode="never"
-            scrollEventThrottle={16}
-          >
-            {/* Greeting Block */}
-            <View style={styles.greetingSection}>
-              <Text style={styles.greetingTitle}>Hi, {coach.first_name}!</Text>
-              <Text style={styles.greetingSubtitle}>
-                Empower your athletes today. Ready to manage your elite teams?
-              </Text>
-            </View>
-
-            {/* Sports Categories Filter */}
-            <View style={styles.filterContainer}>
-              <Text style={styles.filterLabel}>SPORTS CATEGORIES</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
-                {SPORT_CATEGORIES.map((category) => {
-                  const isActive = activeSportFilter === category;
-                  return (
-                    <TouchableOpacity
-                      key={category}
-                      onPress={() => setActiveSportFilter(category)}
-                      activeOpacity={0.8}
-                      style={[styles.pillButton, isActive ? styles.pillActive : styles.pillInactive]}
-                    >
-                      <Text style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}>
-                        {category}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            {/* PLAYERS Section */}
-            <View style={styles.playersSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>PLAYERS</Text>
-                <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
-                  <Text style={styles.viewAllText}>View All</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Player Rows */}
-              <View style={styles.playersList}>
-                {filteredDashboardPlayers.slice(0, 4).map((player, index) => (
-                  <PlayerRowItem
-                    key={player.athlete_id}
-                    player={player}
-                    isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
-                    onViewStats={handleViewStats}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* TOTAL ATHLETES Card */}
-            <View style={styles.summaryTile}>
-              <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
-              <View style={styles.summaryPill}>
-                <Text style={styles.summaryPillValue}>24</Text>
-              </View>
-            </View>
-          </ScrollView>
-        </>
-      )}
-
-      {/* SCREEN 3: MY TEAMS PAGE */}
-      {activeView === "teams_list" && (
-        <MyTeamsPage
-          teams={teams}
-          athletesPool={athletesPool}
-          onSelectTeam={(team) => {
-            setSelectedTeamId(team.team_id);
-            setActiveView("manage_team");
-          }}
-          onCreateTeam={handleCreateTeam}
-          onLogout={onLogout}
-          onSettingsPress={() => setActiveView("settings")}
-        />
-      )}
-
-      {/* SCREEN 4: MANAGE TEAM SCREEN */}
-      {activeView === "manage_team" && currentTeam && (
-        <ManageTeamPage
-          team={currentTeam}
-          athletesPool={athletesPool}
+      {/* SCREEN 6: EDIT PROFILE SCREEN */}
+      {activeView === "edit_profile" && (
+        <CoachEditProfile
+          profileData={coachProfile}
+          onSave={(updated) => setCoachProfile(updated)}
           onBack={() => {
-            setActiveView("teams_list");
-            setActiveTab("Teams");
+            setActiveView("dashboard");
+            setShowProfileModal(true);
           }}
-          onDeleteTeam={handleDeleteTeam}
-          onUpdateTeamName={handleUpdateTeamName}
-          onUpdateTeamDetails={handleUpdateTeamDetails}
-          onUpdateRosterPlayer={handleUpdateRosterPlayer}
-          onUpdateRosterPlayerDetails={handleUpdateRosterPlayerDetails}
-          onRemovePlayer={handleRemovePlayer}
-          onAddPlayers={handleAddPlayersToTeam}
         />
       )}
 
-      {/* SCREEN 5: VIEW ALL PLAYERS PAGE */}
-      {activeView === "view_all_players" && (
-        <ViewAllPlayers
-          athletesPool={athletesPool}
-          teams={teams}
-          onBack={() => setActiveView("dashboard")}
-          onLogout={onLogout}
+        {/* SCREEN 5: COACH SETTINGS PAGE */}
+        {activeView === "settings" && (
+          <CoachSettings
+            onBack={() => setActiveView("dashboard")}
+            onLogout={onLogout}
+          />
+        )}
+
+        {/* SCREEN 1: COACH HOME DASHBOARD */}
+        {activeView === "dashboard" && (
+          <>
+            {/* FIXED HEADER BAR */}
+            <AtletaHeader
+              onSettingsPress={() => setActiveView("settings")}
+              onProfilePress={() => setShowProfileModal(true)}
+            />
+
+            {/* SCROLLABLE DASHBOARD BODY */}
+            <ScrollView
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
+              ]}
+              showsVerticalScrollIndicator={false}
+              overScrollMode="never"
+              scrollEventThrottle={16}
+            >
+              {/* Greeting Block */}
+              <View style={styles.greetingSection}>
+                <Text style={styles.greetingTitle}>Hi, {coach.first_name}!</Text>
+                <Text style={styles.greetingSubtitle}>
+                  Empower your athletes today. Ready to manage your elite teams?
+                </Text>
+              </View>
+
+              {/* Sports Categories Filter */}
+              <View style={styles.filterContainer}>
+                <Text style={styles.filterLabel}>SPORTS CATEGORIES</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
+                  {SPORT_CATEGORIES.map((category) => {
+                    const isActive = activeSportFilter === category;
+                    return (
+                      <TouchableOpacity
+                        key={category}
+                        onPress={() => setActiveSportFilter(category)}
+                        activeOpacity={0.8}
+                        style={[styles.pillButton, isActive ? styles.pillActive : styles.pillInactive]}
+                      >
+                        <Text style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}>
+                          {category}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* PLAYERS Section */}
+              <View style={styles.playersSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>PLAYERS</Text>
+                  <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
+                    <Text style={styles.viewAllText}>View All</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Player Rows */}
+                <View style={styles.playersList}>
+                  {filteredDashboardPlayers.slice(0, 4).map((player, index) => (
+                    <PlayerRowItem
+                      key={player.athlete_id}
+                      player={player}
+                      isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
+                      onViewStats={handleViewStats}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              {/* TOTAL ATHLETES Card */}
+              <View style={styles.summaryTile}>
+                <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
+                <View style={styles.summaryPill}>
+                  <Text style={styles.summaryPillValue}>24</Text>
+                </View>
+              </View>
+            </ScrollView>
+          </>
+        )}
+
+        {/* SCREEN 3: MY TEAMS PAGE */}
+        {activeView === "teams_list" && (
+          <MyTeamsPage
+            teams={teams}
+            athletesPool={athletesPool}
+            onSelectTeam={(team) => {
+              setSelectedTeamId(team.team_id);
+              setActiveView("manage_team");
+            }}
+            onCreateTeam={handleCreateTeam}
+            onLogout={onLogout}
+            onSettingsPress={() => setActiveView("settings")}
+            onProfilePress={() => setShowProfileModal(true)}
+          />
+        )}
+
+        {/* SCREEN 4: MANAGE TEAM SCREEN */}
+        {activeView === "manage_team" && currentTeam && (
+          <ManageTeamPage
+            team={currentTeam}
+            athletesPool={athletesPool}
+            onBack={() => {
+              setActiveView("teams_list");
+              setActiveTab("Teams");
+            }}
+            onDeleteTeam={handleDeleteTeam}
+            onUpdateTeamName={handleUpdateTeamName}
+            onUpdateTeamDetails={handleUpdateTeamDetails}
+            onUpdateRosterPlayer={handleUpdateRosterPlayer}
+            onUpdateRosterPlayerDetails={handleUpdateRosterPlayerDetails}
+            onRemovePlayer={handleRemovePlayer}
+            onAddPlayers={handleAddPlayersToTeam}
+          />
+        )}
+
+        {/* SCREEN 5: VIEW ALL PLAYERS PAGE */}
+        {activeView === "view_all_players" && (
+          <ViewAllPlayers
+            athletesPool={athletesPool}
+            teams={teams}
+            onBack={() => setActiveView("dashboard")}
+            onLogout={onLogout}
+          />
+        )}
+
+        {/* FLOATING ACTION BUTTON (FAB) - Only shown on Coach Home Dashboard Main Page */}
+        {activeView === "dashboard" && (
+          <TouchableOpacity
+            style={styles.floatingFabButton}
+            onPress={() => setShowFabOverlay(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add" size={28} color="#070D19" />
+          </TouchableOpacity>
+        )}
+
+        {/* FIXED BOTTOM NAVIGATION BAR */}
+        {activeView !== "manage_team" &&
+          activeView !== "view_all_players" &&
+          activeView !== "settings" &&
+          activeView !== "edit_profile" && (
+            <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
+          )}
+
+        {/* COACH PROFILE OVERVIEW MODAL */}
+        <CoachProfile
+          visible={showProfileModal}
+          profileData={coachProfile}
+          onClose={() => setShowProfileModal(false)}
+          onOpenEdit={() => {
+            setShowProfileModal(false);
+            setActiveView("edit_profile");
+          }}
         />
-      )}
-
-      {/* FLOATING ACTION BUTTON (FAB) - Only shown on Coach Home Dashboard Main Page */}
-      {activeView === "dashboard" && (
-        <TouchableOpacity
-          style={styles.floatingFabButton}
-          onPress={() => setShowFabOverlay(true)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add" size={28} color="#070D19" />
-        </TouchableOpacity>
-      )}
-
-      {/* FIXED BOTTOM NAVIGATION BAR */}
-      {activeView !== "manage_team" && activeView !== "view_all_players" && activeView !== "settings" && (
-        <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
-      )}
 
       {/* SCREEN 2: FLOATING ACTION OVERLAY MENU */}
       <Modal transparent animationType="fade" visible={showFabOverlay} onRequestClose={() => setShowFabOverlay(false)}>

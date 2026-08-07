@@ -164,21 +164,6 @@ export function AthleteProfilePage({
   const [pickerMonth, setPickerMonth] = useState(9);
   const [calendarMode, setCalendarMode] = useState<"DAYS" | "MONTHS" | "YEARS">("DAYS");
 
-  if (loading) {
-    return <ProfileSkeletonLoader />;
-  }
-
-  // Calculate BMI & Ape Index dynamically using mathematical formulas:
-  // BMI = weight_kg / (height_cm / 100)^2
-  // Ape Index = wingspan_cm / height_cm
-  const heightM = heightCm > 0 ? heightCm / 100 : 1;
-  const bmiVal = weightKg / (heightM * heightM);
-  const bmi = isNaN(bmiVal) ? "0.0" : bmiVal.toFixed(1);
-
-  const apeRatioVal = heightCm > 0 ? wingspanCm / heightCm : 1;
-  const apeIndex = isNaN(apeRatioVal) ? "1.00" : apeRatioVal.toFixed(2);
-  const apeDiff = wingspanCm - heightCm;
-
   // Workload Analytics State
   const [workloadData, setWorkloadData] = useState<WorkloadAnalyticsData>(
     (profile as any).workload_analytics || DEFAULT_WORKLOAD_DATA
@@ -199,6 +184,21 @@ export function AthleteProfilePage({
       setWorkloadData(DEFAULT_WORKLOAD_DATA);
     }
   }, [profile]);
+
+  if (loading) {
+    return <ProfileSkeletonLoader />;
+  }
+
+  // Calculate BMI & Ape Index dynamically using mathematical formulas:
+  // BMI = weight_kg / (height_cm / 100)^2
+  // Ape Index = wingspan_cm / height_cm
+  const heightM = heightCm > 0 ? heightCm / 100 : 1;
+  const bmiVal = weightKg / (heightM * heightM);
+  const bmi = isNaN(bmiVal) ? "0.0" : bmiVal.toFixed(1);
+
+  const apeRatioVal = heightCm > 0 ? wingspanCm / heightCm : 1;
+  const apeIndex = isNaN(apeRatioVal) ? "1.00" : apeRatioVal.toFixed(2);
+  const apeDiff = wingspanCm - heightCm;
 
   // Dynamic Client-side Formulas for Workload Indicators:
   // Session Load (Arbitrary Units AU) = duration_minutes * sRPE (scale 1-10)

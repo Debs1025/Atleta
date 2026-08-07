@@ -1,4 +1,88 @@
-// Coach Side Data Types
+// Coach Side Data Types with Mock Testing Data
+export interface CredentialItem {
+  id: string;
+  title: string;
+  type: 'certified' | 'manager' | 'degree' | string;
+  icon_name: 'shield-check' | 'user-plus' | 'star' | string;
+}
+
+export interface UploadedDocument {
+  id: string;
+  file_name: string;
+  file_type: 'PDF' | 'JPG' | 'PNG';
+  file_url: string;
+}
+
+export interface CoachProfileState {
+  coach_id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  role_title: string; // e.g., "BASKETBALL COACH"
+  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL';
+  regional_affiliations: {
+    association_name: string;
+    office_name: string;
+  };
+  credentials: CredentialItem[];
+  uploaded_documents: UploadedDocument[];
+  system_statistics: {
+    total_athletes: number;
+    metric_logs: number;
+  };
+  last_updated: string; // e.g., "OCT 24, 2023"
+}
+
+export const DEFAULT_COACH_PROFILE: CoachProfileState = {
+  coach_id: "coach_erick_001",
+  user_id: "usr_coach_01",
+  first_name: "Erick Nathaniel",
+  last_name: "De Belen",
+  full_name: "ERICK NATHANIEL S. DE BELEN",
+  email: "coach@gmail.com",
+  role_title: "BASKETBALL COACH",
+  sports_focus: "BASKETBALL",
+  regional_affiliations: {
+    association_name: "Bicol Region Athletic Association (BRAA)",
+    office_name: "Albay Provincial Sports Office",
+  },
+  credentials: [
+    {
+      id: "cred_1",
+      title: "Certified Basketball Coach",
+      type: "certified",
+      icon_name: "shield-check",
+    },
+    {
+      id: "cred_2",
+      title: "Athlete Roster Manager",
+      type: "manager",
+      icon_name: "user-plus",
+    },
+    {
+      id: "cred_3",
+      title: "Bachelors In Sport Sciences",
+      type: "degree",
+      icon_name: "star",
+    },
+  ],
+  uploaded_documents: [
+    {
+      id: "doc_1",
+      file_name: "Coaching License.pdf",
+      file_type: "PDF",
+      file_url: "file://coaching_license.pdf",
+    },
+  ],
+  system_statistics: {
+    total_athletes: 42,
+    metric_logs: 156,
+  },
+  last_updated: "OCT 24, 2023",
+};
+
 export interface UserCoach {
   user_id: string;
   first_name: string;
@@ -64,30 +148,7 @@ export interface TeamDetailsState {
   selected_roster: AthleteItem[];
 }
 
-export interface CoachUserIdentity {
-  user_id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  contact_number?: string;
-  role: "Coach";
-}
 
-export interface CoachProfileData {
-  coach_id: string;
-  user_id: string;
-  professional_documents: {
-    file_name: string;
-    file_url: string;
-    uploaded_at: string;
-  }[];
-  years_of_experience: number;
-  current_institution: string;
-  quote?: string;
-  specialties: string[];
-  athlete_managed: string[];
-  last_updated: string;
-}
 
 export interface CoachSettingsData {
   setting_id: string;
