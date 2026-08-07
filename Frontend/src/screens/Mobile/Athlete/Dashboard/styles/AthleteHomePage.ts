@@ -6,7 +6,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#080F21",
   },
   topHeaderBar: {
-    paddingTop: 58,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
     paddingBottom: 14,
     paddingHorizontal: 20,
     backgroundColor: "#080F21",

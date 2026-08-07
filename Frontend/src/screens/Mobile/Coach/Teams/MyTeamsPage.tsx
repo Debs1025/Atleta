@@ -11,7 +11,7 @@ import {
 import styles from "./styles/MyTeamsPage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Team, RosterAthlete, TeamWizardState } from "../DataTypes";
+import { Team, RosterAthlete, TeamDetailsState } from "../DataTypes";
 import { CreateTeam } from "./CreateTeam";
 import { AddAthlete } from "./AddAthlete";
 import { SetPlayer } from "./SetPlayer";
@@ -50,10 +50,10 @@ export function MyTeamsPage({
   onLogout,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 20;
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [showCreateWizard, setShowCreateWizard] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
 
   // Search filtering
   const filteredTeams = useMemo(() => {
@@ -127,7 +127,7 @@ export function MyTeamsPage({
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Ionicons name="calendar-outline" size={16} color="#64748B" />
                     <Text style={styles.playerCountText}>
-                      {team.roster_list.length > 0 ? `${team.roster_list.length} Players` : "24 Players"}
+                      {`${team.roster_list.length} ${team.roster_list.length === 1 ? "Player" : "Players"}`}
                     </Text>
                   </View>
                 </View>
@@ -141,24 +141,24 @@ export function MyTeamsPage({
         {/* CREATE NEW TEAM + BUTTON (Inline at bottom of teams list, not fixed) */}
         <TouchableOpacity
           style={styles.createTeamCtaButton}
-          onPress={() => setShowCreateWizard(true)}
+          onPress={() => setShowCreateTeam(true)}
           activeOpacity={0.85}
         >
           <Text style={styles.createTeamCtaText}>CREATE NEW TEAM +</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Multi-step Create Team Wizard Modal Flow */}
+      {/* Multi-step Create Team Modal Flow */}
       <Modal
-        visible={showCreateWizard}
+        visible={showCreateTeam}
         animationType="slide"
-        onRequestClose={() => setShowCreateWizard(false)}
+        onRequestClose={() => setShowCreateTeam(false)}
       >
-        <CreateTeamWizardFlow
-          onClose={() => setShowCreateWizard(false)}
+        <CreateTeamDetailsFlow
+          onClose={() => setShowCreateTeam(false)}
           onSubmit={(teamData) => {
             onCreateTeam(teamData);
-            setShowCreateWizard(false);
+            setShowCreateTeam(false);
           }}
         />
       </Modal>
@@ -166,7 +166,7 @@ export function MyTeamsPage({
   );
 }
 
-function CreateTeamWizardFlow({
+function CreateTeamDetailsFlow({
   onClose,
   onSubmit,
 }: {
@@ -179,33 +179,33 @@ function CreateTeamWizardFlow({
   }) => void;
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [wizardState, setWizardState] = useState<TeamWizardState>({
+  const [teamDetails, setTeamDetails] = useState<TeamDetailsState>({
     team_name: "",
     sport_type: "BASKETBALL",
     division: "Elite Professional",
     selected_roster: [],
   });
 
-  const updateState = (updated: Partial<TeamWizardState>) => {
-    setWizardState((prev) => ({ ...prev, ...updated }));
+  const updateState = (updated: Partial<TeamDetailsState>) => {
+    setTeamDetails((prev) => ({ ...prev, ...updated }));
   };
 
+  // Map selected_roster to RosterAthlete for backend compatibility
   const handleFinalize = () => {
-    // Map AthleteItem[] to RosterAthlete[] for backend compatibility
-    const rosterList: RosterAthlete[] = wizardState.selected_roster.map((a) => ({
+    const rosterList: RosterAthlete[] = teamDetails.selected_roster.map((a) => ({
       athlete_id: a.athlete_id,
       user_id: `usr_${a.athlete_id}`,
       full_name: a.full_name,
       position: a.primary_position,
       jersey_number: a.jersey_number || "00",
-      sport_type: wizardState.sport_type || "BASKETBALL",
+      sport_type: teamDetails.sport_type || "BASKETBALL",
       is_eligibility_verified: a.is_verified,
     }));
 
     onSubmit({
-      team_name: wizardState.team_name,
-      sport_type: (wizardState.sport_type || "BASKETBALL") as Team["sport_type"],
-      division: wizardState.division || "Elite Professional",
+      team_name: teamDetails.team_name,
+      sport_type: (teamDetails.sport_type || "BASKETBALL") as Team["sport_type"],
+      division: teamDetails.division || "Elite Professional",
       roster_list: rosterList,
     });
   };
@@ -213,7 +213,7 @@ function CreateTeamWizardFlow({
   if (step === 1) {
     return (
       <CreateTeam
-        wizardState={wizardState}
+        teamDetails={teamDetails}
         onChangeState={updateState}
         onNext={() => setStep(2)}
         onBack={onClose}
@@ -224,7 +224,7 @@ function CreateTeamWizardFlow({
   if (step === 2) {
     return (
       <AddAthlete
-        wizardState={wizardState}
+        teamDetails={teamDetails}
         onChangeState={updateState}
         onNext={() => setStep(3)}
         onBack={() => setStep(1)}
@@ -235,7 +235,7 @@ function CreateTeamWizardFlow({
   if (step === 3) {
     return (
       <SetPlayer
-        wizardState={wizardState}
+        teamDetails={teamDetails}
         onChangeState={updateState}
         onAddMore={() => setStep(2)}
         onNext={() => setStep(4)}
@@ -246,7 +246,7 @@ function CreateTeamWizardFlow({
 
   return (
     <FullDetails
-      wizardState={wizardState}
+      teamDetails={teamDetails}
       onFinalizeTeam={handleFinalize}
       onEditTeamName={() => setStep(1)}
       onBack={() => setStep(3)}

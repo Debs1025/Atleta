@@ -8,36 +8,35 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { TeamWizardState } from "../DataTypes";
+import { TeamDetailsState } from "../DataTypes";
 import styles from "./styles/CreateTeam";
 
-const SPORT_CATEGORIES: Array<TeamWizardState["sport_type"]> = [
+const SPORT_CATEGORIES: Array<TeamDetailsState["sport_type"]> = [
   "BASKETBALL",
   "TRACK AND FIELD",
   "SWIMMING",
-  "VOLLEYBALL",
 ];
 
 export interface CreateTeamProps {
-  wizardState: TeamWizardState;
-  onChangeState: (updated: Partial<TeamWizardState>) => void;
+  teamDetails: TeamDetailsState;
+  onChangeState: (updated: Partial<TeamDetailsState>) => void;
   onNext: () => void;
   onBack: () => void;
 }
 
 export function CreateTeam({
-  wizardState,
+  teamDetails,
   onChangeState,
   onNext,
   onBack,
 }: CreateTeamProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 12;
+  const headerTopPadding = Math.max(insets.top, 12);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const isFormValid =
-    wizardState.team_name.trim().length > 0 && wizardState.sport_type !== "";
+    teamDetails.team_name.trim().length > 0 && teamDetails.sport_type !== "";
 
   return (
     <View style={styles.container}>
@@ -53,7 +52,10 @@ export function CreateTeam({
 
       {/* SCROLLABLE FORM BODY */}
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerTopPadding + 70 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -74,7 +76,7 @@ export function CreateTeam({
             style={styles.textInput}
             placeholder="e.g. Bicol Runners"
             placeholderTextColor="#94A3B8"
-            value={wizardState.team_name}
+            value={teamDetails.team_name}
             onChangeText={(text) => onChangeState({ team_name: text })}
             autoCapitalize="words"
           />
@@ -93,12 +95,12 @@ export function CreateTeam({
           >
             <Text
               style={
-                wizardState.sport_type
+                teamDetails.sport_type
                   ? styles.dropdownValueText
                   : styles.dropdownPlaceholderText
               }
             >
-              {wizardState.sport_type || "Select Sport"}
+              {teamDetails.sport_type || "Select Sport"}
             </Text>
             <Ionicons
               name={dropdownOpen ? "chevron-up" : "chevron-down"}
@@ -111,7 +113,7 @@ export function CreateTeam({
           {dropdownOpen && (
             <View style={styles.dropdownMenu}>
               {SPORT_CATEGORIES.map((sport) => {
-                const isSelected = wizardState.sport_type === sport;
+                const isSelected = teamDetails.sport_type === sport;
                 return (
                   <TouchableOpacity
                     key={sport}

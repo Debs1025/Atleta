@@ -17,6 +17,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#070D19",
   },
+  fixedHeaderContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    backgroundColor: "#070D19",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
   scrollContent: {
     paddingHorizontal: 20,
   },

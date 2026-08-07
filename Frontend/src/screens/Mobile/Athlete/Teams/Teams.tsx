@@ -29,7 +29,7 @@ export interface Coach {
 export interface TeamSchema {
   team_id: string;
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL";
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING";
   managed_by_coach_id: string;
   created_at: string;
   roster_athletes: string[]; // List of athlete UUIDs

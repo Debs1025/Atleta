@@ -178,7 +178,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   };
 
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top + 14, 58);
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   const unreadCount = notifications.filter((n) => !n.read_status).length;
 
@@ -216,7 +216,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       )}
 
       {/* Main Active Screen Body */}
-      <View style={styles.screenContainer}>
+      <View style={[styles.screenContainer, { paddingTop: !hideParentBars ? headerTopPadding + 54 : 0 }]}>
         {activeTab === "HOME" &&
           (dashboardScreen === "TEAM_PROFILE" ? (
             <TeamProfileScreen

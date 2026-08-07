@@ -18,6 +18,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#070D19",
   },
   fixedHeaderContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,

@@ -13,27 +13,27 @@ import {
   AthleteItem,
   AthleteNotification,
   MOCK_ATHLETE_ITEMS,
-  TeamWizardState,
+  TeamDetailsState,
 } from "../DataTypes";
 import styles from "./styles/AddAthlete";
 
 export interface AddAthleteProps {
-  wizardState: TeamWizardState;
-  onChangeState: (updated: Partial<TeamWizardState>) => void;
+  teamDetails: TeamDetailsState;
+  onChangeState: (updated: Partial<TeamDetailsState>) => void;
   onNext: () => void;
   onBack: () => void;
   onNotifyAthlete?: (notification: AthleteNotification) => void;
 }
 
 export function AddAthlete({
-  wizardState,
+  teamDetails,
   onChangeState,
   onNext,
   onBack,
   onNotifyAthlete,
 }: AddAthleteProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 12;
+  const headerTopPadding = Math.max(insets.top, 12);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [notifiedIds, setNotifiedIds] = useState<Record<string, boolean>>({});
@@ -50,20 +50,20 @@ export function AddAthlete({
     );
   }, [searchQuery]);
 
-  // Check if athlete is in current wizard selected roster
+  // Check if athlete is in current selected roster
   const isSelected = (athleteId: string) => {
-    return wizardState.selected_roster.some((item) => item.athlete_id === athleteId);
+    return teamDetails.selected_roster.some((item) => item.athlete_id === athleteId);
   };
 
   // Toggle selection
   const handleToggleAthlete = (athlete: AthleteItem) => {
     if (isSelected(athlete.athlete_id)) {
-      const updated = wizardState.selected_roster.filter(
+      const updated = teamDetails.selected_roster.filter(
         (item) => item.athlete_id !== athlete.athlete_id
       );
       onChangeState({ selected_roster: updated });
     } else {
-      const updated = [...wizardState.selected_roster, athlete];
+      const updated = [...teamDetails.selected_roster, athlete];
       onChangeState({ selected_roster: updated });
     }
   };
@@ -99,7 +99,7 @@ export function AddAthlete({
       action_label: "Upload Documents",
     };
 
-    // Update local reactive state
+    // Shows a notification to the athlete
     setNotifiedIds((prev) => ({ ...prev, [athlete.athlete_id]: true }));
     onNotifyAthlete?.(notification);
 
@@ -123,7 +123,10 @@ export function AddAthlete({
 
       {/* SCROLLABLE LIST BODY */}
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerTopPadding + 70 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -267,9 +270,9 @@ export function AddAthlete({
         <TouchableOpacity
           style={[
             styles.primaryCtaButton,
-            wizardState.selected_roster.length === 0 && styles.primaryCtaDisabled,
+            teamDetails.selected_roster.length === 0 && styles.primaryCtaDisabled,
           ]}
-          disabled={wizardState.selected_roster.length === 0}
+          disabled={teamDetails.selected_roster.length === 0}
           onPress={onNext}
           activeOpacity={0.8}
         >

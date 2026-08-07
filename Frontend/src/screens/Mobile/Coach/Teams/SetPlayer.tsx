@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
+  Modal,
   ScrollView,
   Text,
   TextInput,
@@ -8,36 +9,52 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AthleteItem, TeamWizardState } from "../DataTypes";
+import { AthleteItem, TeamDetailsState } from "../DataTypes";
 import styles from "./styles/SetPlayer";
 
 export interface SetPlayerProps {
-  wizardState: TeamWizardState;
-  onChangeState: (updated: Partial<TeamWizardState>) => void;
+  teamDetails: TeamDetailsState;
+  onChangeState: (updated: Partial<TeamDetailsState>) => void;
   onAddMore: () => void;
   onNext: () => void;
   onBack: () => void;
 }
 
 export function SetPlayer({
-  wizardState,
+  teamDetails,
   onChangeState,
   onAddMore,
   onNext,
   onBack,
 }: SetPlayerProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 12;
+  const headerTopPadding = Math.max(insets.top, 12);
 
   // Track expanded accordion item ID (default expand first item if available)
   const [expandedId, setExpandedId] = useState<string | null>(
-    wizardState.selected_roster.length > 0
-      ? wizardState.selected_roster[0].athlete_id
+    teamDetails.selected_roster.length > 0
+      ? teamDetails.selected_roster[0].athlete_id
       : null
   );
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const SWIMMING_STROKES = ["Freestyle", "Butterfly", "Backstroke", "Breaststroke", "Individual Medley"];
+
+  // Update athlete details
+  const handleUpdateAthleteDetails = (
+    athleteId: string,
+    updates: Partial<AthleteItem>
+  ) => {
+    const updated = teamDetails.selected_roster.map((item) => {
+      if (item.athlete_id === athleteId) {
+        return { ...item, ...updates };
+      }
+      return item;
+    });
+    onChangeState({ selected_roster: updated });
   };
 
   // Update athlete position or jersey number
@@ -46,18 +63,12 @@ export function SetPlayer({
     field: "primary_position" | "jersey_number",
     value: string
   ) => {
-    const updated = wizardState.selected_roster.map((item) => {
-      if (item.athlete_id === athleteId) {
-        return { ...item, [field]: value };
-      }
-      return item;
-    });
-    onChangeState({ selected_roster: updated });
+    handleUpdateAthleteDetails(athleteId, { [field]: value });
   };
 
   // Remove player from roster
   const handleRemoveAthlete = (athleteId: string) => {
-    const updated = wizardState.selected_roster.filter(
+    const updated = teamDetails.selected_roster.filter(
       (item) => item.athlete_id !== athleteId
     );
     onChangeState({ selected_roster: updated });
@@ -65,6 +76,48 @@ export function SetPlayer({
       setExpandedId(null);
     }
   };
+
+  // Confirmation overlay modal state to avoid misclicks
+  const [playerToRemove, setPlayerToRemove] = useState<AthleteItem | null>(null);
+  // Swimming stroke type picker state
+  const [strokePickerAthlete, setStrokePickerAthlete] = useState<AthleteItem | null>(null);
+  // Basketball position picker state
+  const [posPickerAthlete, setPosPickerAthlete] = useState<AthleteItem | null>(null);
+
+  // Validation check: all players in roster must have both required inputs filled
+  const isRosterValid = useMemo(() => {
+    if (teamDetails.selected_roster.length === 0) return false;
+
+    return teamDetails.selected_roster.every((athlete) => {
+      if (teamDetails.sport_type === "TRACK AND FIELD") {
+        const hasDistance = Boolean(
+          athlete.event_distance &&
+            athlete.event_distance.replace(/[^0-9]/g, "").trim().length > 0
+        );
+        const hasJersey = Boolean(
+          athlete.jersey_number && athlete.jersey_number.trim().length > 0
+        );
+        return hasDistance && hasJersey;
+      } else if (teamDetails.sport_type === "SWIMMING") {
+        const hasDistance = Boolean(
+          athlete.event_distance &&
+            athlete.event_distance.replace(/[^0-9]/g, "").trim().length > 0
+        );
+        const hasStroke = Boolean(
+          athlete.stroke_style && athlete.stroke_style.trim().length > 0
+        );
+        return hasDistance && hasStroke;
+      } else {
+        const hasPos = Boolean(
+          athlete.primary_position && athlete.primary_position.trim().length > 0
+        );
+        const hasJersey = Boolean(
+          athlete.jersey_number && athlete.jersey_number.trim().length > 0
+        );
+        return hasPos && hasJersey;
+      }
+    });
+  }, [teamDetails.selected_roster, teamDetails.sport_type]);
 
   return (
     <View style={styles.container}>
@@ -80,23 +133,26 @@ export function SetPlayer({
 
       {/* SCROLLABLE BODY */}
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerTopPadding + 70 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* SQUAD MANAGEMENT HEADER BLOCK */}
-        <Text style={styles.squadManagementLabel}>SQUAD MANAGEMENT</Text>
+        <Text style={styles.squadManagementLabel}>TEAM MANAGEMENT</Text>
         <View style={styles.titleBadgeRow}>
           <Text style={styles.sectionTitle}>Team Roster</Text>
           <View style={styles.totalCountBadge}>
             <Text style={styles.totalCountText}>
-              TOTAL: {wizardState.selected_roster.length}
+              TOTAL: {teamDetails.selected_roster.length}
             </Text>
           </View>
         </View>
 
         {/* ACCORDION ROSTER LIST */}
-        {wizardState.selected_roster.map((athlete) => {
+        {teamDetails.selected_roster.map((athlete) => {
           const isExpanded = expandedId === athlete.athlete_id;
 
           return (
@@ -125,8 +181,11 @@ export function SetPlayer({
                       </View>
                     ) : (
                       <Text style={styles.playerSubMeta}>
-                        #{athlete.jersey_number || "00"} •{" "}
-                        {athlete.primary_position || "Position"}
+                        {teamDetails.sport_type === "SWIMMING"
+                          ? `${athlete.event_distance || ""} ${athlete.stroke_style ? `• ${athlete.stroke_style}` : ""}`.trim() || "Unset"
+                          : teamDetails.sport_type === "TRACK AND FIELD"
+                          ? `${athlete.event_distance || ""} ${athlete.jersey_number ? `• #${athlete.jersey_number}` : ""}`.trim() || "Unset"
+                          : `${athlete.jersey_number ? `#${athlete.jersey_number} • ` : ""}${athlete.primary_position || ""}`.trim() || "Unset"}
                       </Text>
                     )}
                   </View>
@@ -143,45 +202,137 @@ export function SetPlayer({
               {isExpanded && (
                 <View style={styles.expandedFormContent}>
                   <View style={styles.formRow}>
-                    <View style={styles.fieldCol}>
-                      <Text style={styles.inputLabel}>POSITION</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        value={athlete.primary_position}
-                        onChangeText={(val) =>
-                          handleUpdateAthlete(
-                            athlete.athlete_id,
-                            "primary_position",
-                            val
-                          )
-                        }
-                        placeholder="Defensive End"
-                        placeholderTextColor="#94A3B8"
-                      />
-                    </View>
+                    {teamDetails.sport_type === "TRACK AND FIELD" ? (
+                      <>
+                        <View style={styles.fieldCol}>
+                          <Text style={styles.inputLabel}>DISTANCE *</Text>
+                          <View style={styles.distanceContainer}>
+                            <TextInput
+                              style={styles.distanceInput}
+                              value={(athlete.event_distance || "").replace(/[^0-9]/g, "")}
+                              onChangeText={(val) => {
+                                const digits = val.replace(/[^0-9]/g, "");
+                                const formatted = digits ? `${digits}m` : "";
+                                handleUpdateAthleteDetails(athlete.athlete_id, {
+                                  event_distance: formatted,
+                                  primary_position: formatted,
+                                });
+                              }}
+                              placeholder=""
+                              placeholderTextColor="#94A3B8"
+                              keyboardType="number-pad"
+                              maxLength={4}
+                            />
+                            <Text style={styles.meterBadgeText}>m</Text>
+                          </View>
+                        </View>
 
-                    <View style={styles.fieldCol}>
-                      <Text style={styles.inputLabel}>JERSEY NUMBER</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        value={athlete.jersey_number || ""}
-                        onChangeText={(val) =>
-                          handleUpdateAthlete(
-                            athlete.athlete_id,
-                            "jersey_number",
-                            val
-                          )
-                        }
-                        placeholder="95"
-                        placeholderTextColor="#94A3B8"
-                        keyboardType="number-pad"
-                      />
-                    </View>
+                        <View style={styles.fieldCol}>
+                          <Text style={styles.inputLabel}>JERSEY NUMBER *</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={athlete.jersey_number || ""}
+                            onChangeText={(val) =>
+                              handleUpdateAthleteDetails(athlete.athlete_id, {
+                                jersey_number: val,
+                              })
+                            }
+                            placeholder=""
+                            placeholderTextColor="#94A3B8"
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                      </>
+                    ) : teamDetails.sport_type === "SWIMMING" ? (
+                      <>
+                        <View style={styles.fieldCol}>
+                          <Text style={styles.inputLabel}>DISTANCE *</Text>
+                          <View style={styles.distanceContainer}>
+                            <TextInput
+                              style={styles.distanceInput}
+                              value={(athlete.event_distance || "").replace(/[^0-9]/g, "")}
+                              onChangeText={(val) => {
+                                const digits = val.replace(/[^0-9]/g, "");
+                                const formatted = digits ? `${digits}m` : "";
+                                handleUpdateAthleteDetails(athlete.athlete_id, {
+                                  event_distance: formatted,
+                                });
+                              }}
+                              placeholder=""
+                              placeholderTextColor="#94A3B8"
+                              keyboardType="number-pad"
+                              maxLength={4}
+                            />
+                            <Text style={styles.meterBadgeText}>m</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.fieldCol}>
+                          <Text style={styles.inputLabel}>TYPE OF SWIMMING *</Text>
+                          <TouchableOpacity
+                            style={styles.typePickerButton}
+                            onPress={() => setStrokePickerAthlete(athlete)}
+                            activeOpacity={0.8}
+                          >
+                            <Text
+                              style={[
+                                styles.typePickerText,
+                                !athlete.stroke_style && { color: "#64748B" },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {athlete.stroke_style || "Select Type"}
+                            </Text>
+                            <Ionicons name="chevron-down" size={16} color="#64748B" />
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.fieldCol}>
+                          <Text style={styles.inputLabel}>POSITION *</Text>
+                          <TouchableOpacity
+                            style={styles.typePickerButton}
+                            onPress={() => setPosPickerAthlete(athlete)}
+                            activeOpacity={0.8}
+                          >
+                            <Text
+                              style={[
+                                styles.typePickerText,
+                                !athlete.primary_position && { color: "#64748B" },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {athlete.primary_position || "Select Position"}
+                            </Text>
+                            <Ionicons name="chevron-down" size={16} color="#64748B" />
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.fieldCol}>
+                          <Text style={styles.inputLabel}>JERSEY NUMBER *</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={athlete.jersey_number || ""}
+                            onChangeText={(val) =>
+                              handleUpdateAthlete(
+                                athlete.athlete_id,
+                                "jersey_number",
+                                val
+                              )
+                            }
+                            placeholder=""
+                            placeholderTextColor="#94A3B8"
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                      </>
+                    )}
                   </View>
 
                   <TouchableOpacity
                     style={styles.removePlayerButton}
-                    onPress={() => handleRemoveAthlete(athlete.athlete_id)}
+                    onPress={() => setPlayerToRemove(athlete)}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.removePlayerText}>
@@ -210,16 +361,150 @@ export function SetPlayer({
         <TouchableOpacity
           style={[
             styles.primaryCtaButton,
-            wizardState.selected_roster.length === 0 && styles.primaryCtaDisabled,
+            !isRosterValid && styles.primaryCtaDisabled,
           ]}
-          disabled={wizardState.selected_roster.length === 0}
+          disabled={!isRosterValid}
           onPress={onNext}
           activeOpacity={0.8}
         >
           <Text style={styles.primaryCtaText}>SEE FULL DETAILS</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" opacity={isRosterValid ? 1 : 0.5} />
         </TouchableOpacity>
       </View>
+
+      {/* CONFIRMATION OVERLAY FOR REMOVING PLAYER */}
+      <Modal
+        visible={playerToRemove !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPlayerToRemove(null)}
+      >
+        <TouchableOpacity
+          style={styles.confirmOverlayBackdrop}
+          activeOpacity={1}
+          onPress={() => setPlayerToRemove(null)}
+        >
+          <View style={styles.confirmDialogCard}>
+            <View style={styles.warningIconCircle}>
+              <Ionicons name="trash-outline" size={24} color="#EF4444" />
+            </View>
+
+            <Text style={styles.confirmTitle}>Remove Player from Team?</Text>
+            <Text style={styles.confirmMessage}>
+              Are you sure you want to remove{" "}
+              <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
+                {playerToRemove?.full_name} (#{playerToRemove?.jersey_number || "00"})
+              </Text>{" "}
+              from <Text style={{ color: "#00C8FF", fontWeight: "800" }}>{teamDetails.team_name || "the roster"}</Text>?
+            </Text>
+
+            <View style={styles.confirmButtonRow}>
+              <TouchableOpacity
+                style={styles.cancelConfirmButton}
+                onPress={() => setPlayerToRemove(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelConfirmText}>CANCEL</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.removeConfirmButton}
+                onPress={() => {
+                  if (playerToRemove) {
+                    handleRemoveAthlete(playerToRemove.athlete_id);
+                    setPlayerToRemove(null);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.removeConfirmText}>YES, REMOVE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      {/* SWIMMING STROKE TYPE PICKER MODAL */}
+      <Modal
+        visible={strokePickerAthlete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStrokePickerAthlete(null)}
+      >
+        <TouchableOpacity
+          style={styles.confirmOverlayBackdrop}
+          activeOpacity={1}
+          onPress={() => setStrokePickerAthlete(null)}
+        >
+          <View style={[styles.confirmDialogCard, { paddingVertical: 20 }]}>
+            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>SELECT TYPE OF SWIMMING</Text>
+            <View style={{ width: "100%", gap: 8 }}>
+              {["Freestyle", "Butterfly", "Backstroke", "Breaststroke", "Individual Medley"].map((stroke) => (
+                <TouchableOpacity
+                  key={stroke}
+                  style={styles.pickerOptionRow}
+                  onPress={() => {
+                    if (strokePickerAthlete) {
+                      handleUpdateAthleteDetails(strokePickerAthlete.athlete_id, {
+                        stroke_style: stroke,
+                        primary_position: stroke,
+                      });
+                    }
+                    setStrokePickerAthlete(null);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="water-outline" size={18} color="#00C8FF" style={{ marginRight: 12 }} />
+                  <Text style={styles.pickerOptionLabel}>{stroke}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* BASKETBALL POSITION PICKER MODAL */}
+      <Modal
+        visible={posPickerAthlete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPosPickerAthlete(null)}
+      >
+        <TouchableOpacity
+          style={styles.confirmOverlayBackdrop}
+          activeOpacity={1}
+          onPress={() => setPosPickerAthlete(null)}
+        >
+          <View style={[styles.confirmDialogCard, { paddingVertical: 20 }]}>
+            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>SELECT BASKETBALL POSITION</Text>
+            <View style={{ width: "100%", gap: 8 }}>
+              {[
+                { code: "PG", label: "Point Guard" },
+                { code: "SG", label: "Shooting Guard" },
+                { code: "SF", label: "Small Forward" },
+                { code: "PF", label: "Power Forward" },
+                { code: "C", label: "Center" },
+              ].map((pos) => (
+                <TouchableOpacity
+                  key={pos.code}
+                  style={styles.pickerOptionRow}
+                  onPress={() => {
+                    if (posPickerAthlete) {
+                      handleUpdateAthleteDetails(posPickerAthlete.athlete_id, {
+                        primary_position: pos.label,
+                      });
+                    }
+                    setPosPickerAthlete(null);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.pickerOptionCode}>{pos.code}</Text>
+                  <Text style={styles.pickerOptionLabel}>{pos.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }

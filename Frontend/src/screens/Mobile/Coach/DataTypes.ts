@@ -41,7 +41,7 @@ export interface Team {
 
 export type NavigationTab = "Home" | "Teams" | "Discovery" | "Performance";
 
-// Create Team Wizard & Roster Builder Interfaces
+// Create Team 
 export interface AthleteItem {
   athlete_id: string;
   id_number: string; // e.g. "42019"
@@ -49,15 +49,17 @@ export interface AthleteItem {
   grad_class: string; // e.g. "Class of 2025"
   primary_position: string; // e.g. "Point Guard"
   jersey_number?: string;
+  event_distance?: string;
+  stroke_style?: string;
   is_verified: boolean;
   missing_documents?: string[]; // e.g. ["Missing PSA Registration", "Residency proof expired"]
   avatar_url?: string;
   status_tag?: "ACTIVE ROTATION" | "RESTRICTED" | "INACTIVE";
 }
 
-export interface TeamWizardState {
+export interface TeamDetailsState {
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL" | "";
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "";
   division: string;
   selected_roster: AthleteItem[];
 }
@@ -73,6 +75,7 @@ export interface AthleteNotification {
   action_label: string;
 }
 
+// For testing only, remove when the backend is available
 export const MOCK_ATHLETE_ITEMS: AthleteItem[] = [
   {
     athlete_id: "ath_101",
@@ -314,7 +317,38 @@ export const INITIAL_TEAMS: Team[] = [
     season_record: { wins: 18, losses: 1 },
     coach_id: "coach_erick_001",
     created_at: "2026-01-15",
-    roster_list: [],
+    roster_list: [
+      {
+        athlete_id: "ath_sw_01",
+        user_id: "usr_sw_01",
+        full_name: "Diego Cruz",
+        position: "50m Freestyle",
+        jersey_number: "01",
+        sport_type: "SWIMMING",
+        stroke_style: "Freestyle",
+        is_eligibility_verified: true,
+      },
+      {
+        athlete_id: "ath_sw_02",
+        user_id: "usr_sw_02",
+        full_name: "Sienna Reyes",
+        position: "100m Butterfly",
+        jersey_number: "04",
+        sport_type: "SWIMMING",
+        stroke_style: "Butterfly",
+        is_eligibility_verified: true,
+      },
+      {
+        athlete_id: "ath_sw_03",
+        user_id: "usr_sw_03",
+        full_name: "Lucas Tan",
+        position: "200m Backstroke",
+        jersey_number: "09",
+        sport_type: "SWIMMING",
+        stroke_style: "Backstroke",
+        is_eligibility_verified: true,
+      },
+    ],
   },
   {
     team_id: "team_04",
@@ -324,6 +358,37 @@ export const INITIAL_TEAMS: Team[] = [
     season_record: { wins: 12, losses: 3 },
     coach_id: "coach_erick_001",
     created_at: "2026-02-10",
-    roster_list: [],
+    roster_list: [
+      {
+        athlete_id: "ath_tf_01",
+        user_id: "usr_tf_01",
+        full_name: "Gabriel Santos",
+        position: "100m Sprint",
+        jersey_number: "07",
+        sport_type: "TRACK AND FIELD",
+        event_distance: "100m",
+        is_eligibility_verified: true,
+      },
+      {
+        athlete_id: "ath_tf_02",
+        user_id: "usr_tf_02",
+        full_name: "Mia Gonzales",
+        position: "400m Hurdles",
+        jersey_number: "14",
+        sport_type: "TRACK AND FIELD",
+        event_distance: "400m",
+        is_eligibility_verified: true,
+      },
+      {
+        athlete_id: "ath_tf_03",
+        user_id: "usr_tf_03",
+        full_name: "Noah Perez",
+        position: "Long Jump",
+        jersey_number: "21",
+        sport_type: "TRACK AND FIELD",
+        event_distance: "Field Event",
+        is_eligibility_verified: true,
+      },
+    ],
   },
 ];

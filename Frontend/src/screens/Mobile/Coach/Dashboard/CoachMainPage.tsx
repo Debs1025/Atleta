@@ -95,7 +95,7 @@ const PlayerRowItem = React.memo(
 
 export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 20;
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   // Local State
   const [coach] = useState<UserCoach>(MOCK_COACH);
@@ -268,7 +268,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
       {/* SCREEN 1: COACH HOME DASHBOARD */}
       {activeView === "dashboard" && (
-        <View style={{ flex: 1 }}>
+        <>
           {/* FIXED HEADER BAR */}
           <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
             <View style={styles.header}>
@@ -355,7 +355,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               </View>
             </View>
           </ScrollView>
-        </View>
+        </>
       )}
 
       {/* SCREEN 3: MY TEAMS PAGE */}

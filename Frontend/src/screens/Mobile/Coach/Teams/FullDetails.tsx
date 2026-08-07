@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  Alert,
+  Modal,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -8,24 +8,24 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MOCK_COACH, TeamWizardState } from "../DataTypes";
+import { MOCK_COACH, TeamDetailsState } from "../DataTypes";
 import styles from "./styles/FullDetails";
 
 export interface FullDetailsProps {
-  wizardState: TeamWizardState;
+  teamDetails: TeamDetailsState;
   onFinalizeTeam: () => void;
   onEditTeamName?: () => void;
   onBack: () => void;
 }
 
 export function FullDetails({
-  wizardState,
+  teamDetails,
   onFinalizeTeam,
   onEditTeamName,
   onBack,
 }: FullDetailsProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 12;
+  const headerTopPadding = Math.max(insets.top, 12);
 
   const coachName = `${MOCK_COACH.first_name} ${MOCK_COACH.last_name}`;
 
@@ -50,17 +50,10 @@ export function FullDetails({
    * });
    * const newTeam = await response.json();
    */
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
   const handleCreateTeamPress = () => {
-    Alert.alert(
-      "Team Initialized!",
-      `Successfully created ${wizardState.team_name} with ${wizardState.selected_roster.length} roster athletes.`,
-      [
-        {
-          text: "OK",
-          onPress: () => onFinalizeTeam(),
-        },
-      ]
-    );
+    setShowSuccessModal(true);
   };
 
   return (
@@ -77,14 +70,17 @@ export function FullDetails({
 
       {/* SCROLLABLE BODY */}
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerTopPadding + 70 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* TEAM NAME HEADER BLOCK */}
         <View style={styles.teamHeaderBlock}>
           <View style={styles.teamNameRow}>
             <Text style={styles.teamNameTitle}>
-              {wizardState.team_name.toUpperCase() || "CAMARINES SUR PANTHERS"}
+              {teamDetails.team_name.toUpperCase() || "CAMARINES SUR PANTHERS"}
             </Text>
             <TouchableOpacity
               style={styles.editIconButton}
@@ -96,7 +92,7 @@ export function FullDetails({
           </View>
 
           <Text style={styles.clubSubTitleText}>
-            {wizardState.sport_type ? `${wizardState.sport_type} CLUB` : "BASKETBALL CLUB"}
+            {teamDetails.sport_type ? `${teamDetails.sport_type} CLUB` : "BASKETBALL CLUB"}
           </Text>
         </View>
 
@@ -112,8 +108,8 @@ export function FullDetails({
             <Text style={styles.coachTitleSub}>Head Coach</Text>
             <View style={styles.coachTagPill}>
               <Text style={styles.coachTagText}>
-                {wizardState.sport_type
-                  ? `${wizardState.sport_type} COACH`
+                {teamDetails.sport_type
+                  ? `${teamDetails.sport_type} COACH`
                   : "BASKETBALL COACH"}
               </Text>
             </View>
@@ -125,24 +121,47 @@ export function FullDetails({
           <Text style={styles.sectionTitle}>Team Roster</Text>
           <View style={styles.totalBadge}>
             <Text style={styles.totalBadgeText}>
-              TOTAL: {wizardState.selected_roster.length}
+              TOTAL: {teamDetails.selected_roster.length}
             </Text>
           </View>
         </View>
 
         {/* ROSTER CARDS LIST */}
-        {wizardState.selected_roster.map((athlete, idx) => (
-          <View key={`${athlete.athlete_id}_${idx}`} style={styles.rosterCard}>
-            <Text style={styles.playerRoleLabelLeft}>Player</Text>
-            <View style={styles.playerMainInfo}>
-              <Text style={styles.playerNameText}>{athlete.full_name}</Text>
-              <Text style={styles.playerPosMetaText}>
-                #{athlete.jersey_number || "00"} •{" "}
-                {(athlete.primary_position || "POSITION").toUpperCase()}
-              </Text>
+        {teamDetails.selected_roster.map((athlete, idx) => {
+          let posMeta = "";
+          if (teamDetails.sport_type === "SWIMMING") {
+            const parts = [];
+            if (athlete.event_distance) parts.push(athlete.event_distance);
+            if (athlete.stroke_style || (athlete.primary_position && athlete.primary_position !== "Point Guard")) {
+              parts.push((athlete.stroke_style || athlete.primary_position).toUpperCase());
+            }
+            posMeta = parts.join(" • ") || "SWIMMER";
+          } else if (teamDetails.sport_type === "TRACK AND FIELD") {
+            const parts = [];
+            if (athlete.event_distance || (athlete.primary_position && athlete.primary_position !== "Point Guard")) {
+              parts.push((athlete.event_distance || athlete.primary_position).toUpperCase());
+            }
+            if (athlete.jersey_number) {
+              parts.push(`#${athlete.jersey_number}`);
+            }
+            posMeta = parts.join(" • ") || "SPRINTER";
+          } else {
+            const parts = [];
+            if (athlete.jersey_number) parts.push(`#${athlete.jersey_number}`);
+            if (athlete.primary_position) parts.push(athlete.primary_position.toUpperCase());
+            posMeta = parts.join(" • ") || "PLAYER";
+          }
+
+          return (
+            <View key={`${athlete.athlete_id}_${idx}`} style={styles.rosterCard}>
+              <Text style={styles.playerRoleLabelLeft}>Player</Text>
+              <View style={styles.playerMainInfo}>
+                <Text style={styles.playerNameText}>{athlete.full_name}</Text>
+                <Text style={styles.playerPosMetaText}>{posMeta}</Text>
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       {/* FIXED BOTTOM ACTION BUTTON */}
@@ -155,6 +174,74 @@ export function FullDetails({
           <Text style={styles.primaryCtaText}>CREATE TEAM</Text>
         </TouchableOpacity>
       </View>
+
+      {/* TEAM CREATED SUCCESS CONFIRMATION MODAL */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.confirmOverlayBackdrop}
+          activeOpacity={1}
+          onPress={() => {
+            setShowSuccessModal(false);
+            onFinalizeTeam();
+          }}
+        >
+          <View style={styles.confirmDialogCard}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark-circle-sharp" size={46} color="#00C8FF" />
+            </View>
+
+            <Text style={styles.successTitle}>TEAM INITIALIZED !</Text>
+            <Text style={styles.successTeamName}>
+              {teamDetails.team_name.toUpperCase() || "CAMARINES SUR PANTHERS"}
+            </Text>
+            <Text style={styles.successMessage}>
+              Your team parameters and athlete roster have been successfully created.
+            </Text>
+
+            <View style={styles.summaryBox}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>SPORT CATEGORY</Text>
+                <View style={styles.summaryBadgePill}>
+                  <Text style={styles.summaryBadgeText}>
+                    {teamDetails.sport_type || "BASKETBALL"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>ROSTER SIZE</Text>
+                <Text style={styles.summaryValueText}>
+                  {teamDetails.selected_roster.length} Active Athletes
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>DIVISION</Text>
+                <Text style={styles.summaryValueText}>
+                  {teamDetails.division || "Elite Professional"}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.finishCtaButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                onFinalizeTeam();
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.finishCtaText}>GO TO MY TEAMS</Text>
+              <Ionicons name="arrow-forward" size={18} color="#070D19" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }

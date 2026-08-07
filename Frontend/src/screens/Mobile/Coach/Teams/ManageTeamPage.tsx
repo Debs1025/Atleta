@@ -45,10 +45,9 @@ const fontBoldPlatform = Platform.select({
   default: "sans-serif",
 });
 
-const cleanNumericDistance = (val?: string, defaultDist = "100") => {
-  if (!val) return defaultDist;
-  const digits = val.replace(/[^0-9]/g, "");
-  return digits || defaultDist;
+const cleanNumericDistance = (val?: string) => {
+  if (!val) return "";
+  return val.replace(/[^0-9]/g, "");
 };
 
 interface ManageTeamPageProps {
@@ -89,7 +88,7 @@ export function ManageTeamPage({
   onAddPlayers,
 }: ManageTeamPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 20;
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   // Add Players Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -158,14 +157,8 @@ export function ManageTeamPage({
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: headerTopPadding, paddingBottom: 120 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Manage Team Header with Minimalist Delete Trash Icon */}
+      {/* FIXED TOP HEADER */}
+      <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
         <View style={styles.header}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <TouchableOpacity onPress={onBack} style={{ marginRight: 14 }} activeOpacity={0.7}>
@@ -183,6 +176,15 @@ export function ManageTeamPage({
             <Ionicons name="trash-outline" size={20} color="#EF4444" />
           </TouchableOpacity>
         </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerTopPadding + 70, paddingBottom: 120 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
 
         {/* Team Metadata Card */}
         <View style={styles.metadataBox}>
@@ -212,8 +214,8 @@ export function ManageTeamPage({
                     team.sport_type === "BASKETBALL"
                       ? "basketball"
                       : team.sport_type === "SWIMMING"
-                      ? "water"
-                      : "fitness"
+                        ? "water"
+                        : "fitness"
                   }
                   size={14}
                   color="#00C8FF"
@@ -266,7 +268,7 @@ export function ManageTeamPage({
                         onPress={() => setPosPickerPlayer(player)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.posText}>{player.position || "PG"}</Text>
+                        <Text style={styles.posText}>{player.position || ""}</Text>
                         <Ionicons name="chevron-down" size={12} color="#64748B" />
                       </TouchableOpacity>
                     </View>
@@ -275,7 +277,7 @@ export function ManageTeamPage({
                       <Text style={styles.miniLabel}>JERSEY</Text>
                       <TextInput
                         style={styles.uniformInputBox}
-                        value={player.jersey_number}
+                        value={player.jersey_number || ""}
                         keyboardType="number-pad"
                         maxLength={3}
                         onChangeText={(val) =>
@@ -298,7 +300,7 @@ export function ManageTeamPage({
                       <View style={styles.distanceInputContainer}>
                         <TextInput
                           style={styles.distanceNumericInput}
-                          value={cleanNumericDistance(player.event_distance, "100")}
+                          value={cleanNumericDistance(player.event_distance || player.position)}
                           keyboardType="number-pad"
                           maxLength={4}
                           onChangeText={(val) => {
@@ -318,7 +320,7 @@ export function ManageTeamPage({
                       <Text style={styles.miniLabel}>JERSEY</Text>
                       <TextInput
                         style={styles.uniformInputBox}
-                        value={player.jersey_number}
+                        value={player.jersey_number || ""}
                         keyboardType="number-pad"
                         maxLength={3}
                         onChangeText={(val) =>
@@ -341,7 +343,7 @@ export function ManageTeamPage({
                       <View style={styles.distanceInputContainer}>
                         <TextInput
                           style={styles.distanceNumericInput}
-                          value={cleanNumericDistance(player.event_distance, "50")}
+                          value={cleanNumericDistance(player.event_distance || player.position)}
                           keyboardType="number-pad"
                           maxLength={4}
                           onChangeText={(val) => {
@@ -365,7 +367,7 @@ export function ManageTeamPage({
                         activeOpacity={0.8}
                       >
                         <Text style={[styles.posText, { fontSize: 11.5 }]} numberOfLines={1}>
-                          {player.stroke_style || "Freestyle"}
+                          {player.stroke_style || player.position || ""}
                         </Text>
                         <Ionicons name="chevron-down" size={11} color="#64748B" />
                       </TouchableOpacity>
@@ -403,8 +405,16 @@ export function ManageTeamPage({
         animationType="slide"
         onRequestClose={() => setShowEditMetadataModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditMetadataModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation?.()}
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>EDIT TEAM DETAILS</Text>
               <TouchableOpacity onPress={() => setShowEditMetadataModal(false)}>
@@ -469,8 +479,8 @@ export function ManageTeamPage({
                 <Text style={styles.primarySaveButtonText}>SAVE CHANGES</Text>
               </TouchableOpacity>
             </ScrollView>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* MODAL 2: BASKETBALL POSITION PICKER */}
@@ -651,8 +661,16 @@ export function ManageTeamPage({
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAddModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation?.()}
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>ADD ATHLETES TO ROSTER</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
@@ -702,12 +720,12 @@ export function ManageTeamPage({
               style={[styles.confirmAddBtn, selectedIds.length === 0 && styles.disabledAddBtn]}
               disabled={selectedIds.length === 0}
               onPress={handleConfirmAdd}
-              activeOpacity={0.85}
+              activeOpacity={0.8}
             >
               <Text style={styles.confirmAddText}>ADD SELECTED ({selectedIds.length})</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
