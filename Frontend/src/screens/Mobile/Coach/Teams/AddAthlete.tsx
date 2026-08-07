@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import {
-  Alert,
+  Modal,
   ScrollView,
   Text,
   TextInput,
@@ -37,6 +37,8 @@ export function AddAthlete({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [notifiedIds, setNotifiedIds] = useState<Record<string, boolean>>({});
+  const [showSuccessNotifyModal, setShowSuccessNotifyModal] = useState(false);
+  const [notifiedAthleteName, setNotifiedAthleteName] = useState("");
 
   // Filter pool based on search query
   const filteredAthletes = useMemo(() => {
@@ -103,10 +105,8 @@ export function AddAthlete({
     setNotifiedIds((prev) => ({ ...prev, [athlete.athlete_id]: true }));
     onNotifyAthlete?.(notification);
 
-    Alert.alert(
-      "Notification Dispatched",
-      `Sent notification to ${athlete.full_name} to submit required documents.`
-    );
+    setNotifiedAthleteName(athlete.full_name);
+    setShowSuccessNotifyModal(true);
   };
 
   return (
@@ -280,6 +280,41 @@ export function AddAthlete({
           <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* NOTIFICATION SENT SUCCESS MODAL */}
+      <Modal
+        visible={showSuccessNotifyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessNotifyModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSuccessNotifyModal(false)}
+        >
+          <View style={styles.modalContentCard}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="paper-plane-sharp" size={38} color="#00C8FF" />
+            </View>
+
+            <Text style={styles.successNotifyTitle}>NOTIFICATION DISPATCHED !</Text>
+            <Text style={styles.successNotifyMessage}>
+              Successfully notified{" "}
+              <Text style={{ color: "#FFFFFF", fontWeight: "900" }}>{notifiedAthleteName}</Text> to
+              upload missing roster documents.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.successCtaBtn}
+              onPress={() => setShowSuccessNotifyModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.successCtaText}>GOT IT</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }

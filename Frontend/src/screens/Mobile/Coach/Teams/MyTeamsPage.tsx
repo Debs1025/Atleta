@@ -16,6 +16,7 @@ import { CreateTeam } from "./CreateTeam";
 import { AddAthlete } from "./AddAthlete";
 import { SetPlayer } from "./SetPlayer";
 import { FullDetails } from "./FullDetails";
+import { AtletaHeader } from "../Components/AtletaHeader";
 
 const fontPlatform = Platform.select({
   ios: "System",
@@ -40,6 +41,7 @@ interface MyTeamsPageProps {
     roster_list: RosterAthlete[];
   }) => void;
   onLogout?: () => void;
+  onSettingsPress?: () => void;
 }
 
 export function MyTeamsPage({
@@ -48,6 +50,7 @@ export function MyTeamsPage({
   onSelectTeam,
   onCreateTeam,
   onLogout,
+  onSettingsPress,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
@@ -67,20 +70,8 @@ export function MyTeamsPage({
   return (
     <View style={styles.container}>
       {/* TOP HEADER */}
-      <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
-        <View style={styles.header}>
-          <Text style={styles.brandTitle}>ATLETA</Text>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconCircleButton} activeOpacity={0.8}>
-              <Ionicons name="settings-outline" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.profileCircleButton} onPress={onLogout} activeOpacity={0.8}>
-              <Ionicons name="person" size={18} color="#070D19" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={styles.headerDivider} />
-      </View>
+      {/* TOP HEADER */}
+      <AtletaHeader onSettingsPress={onSettingsPress} onProfilePress={onLogout} />
 
       {/* SCROLLABLE PAGE BODY */}
       <ScrollView

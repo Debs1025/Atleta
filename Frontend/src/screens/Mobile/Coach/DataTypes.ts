@@ -64,6 +64,49 @@ export interface TeamDetailsState {
   selected_roster: AthleteItem[];
 }
 
+export interface CoachUserIdentity {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  contact_number?: string;
+  role: "Coach";
+}
+
+export interface CoachProfileData {
+  coach_id: string;
+  user_id: string;
+  professional_documents: {
+    file_name: string;
+    file_url: string;
+    uploaded_at: string;
+  }[];
+  years_of_experience: number;
+  current_institution: string;
+  quote?: string;
+  specialties: string[];
+  athlete_managed: string[];
+  last_updated: string;
+}
+
+export interface CoachSettingsData {
+  setting_id: string;
+  coach_id: string;
+  data_sync_preference: "Manual" | "Automatic";
+  game_log_updates: boolean;
+  recruitment_inquiries: boolean;
+  updated_at: string;
+}
+
+export const DEFAULT_COACH_SETTINGS: CoachSettingsData = {
+  setting_id: "set_coach_01",
+  coach_id: "coach_erick_001",
+  data_sync_preference: "Manual",
+  game_log_updates: true,
+  recruitment_inquiries: true,
+  updated_at: "2026-08-07",
+};
+
 export interface AthleteNotification {
   notification_id: string;
   target_athlete_id: string;

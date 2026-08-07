@@ -28,6 +28,9 @@ import {
 import { MyTeamsPage } from "../Teams/MyTeamsPage";
 import { ManageTeamPage } from "../Teams/ManageTeamPage";
 import { ViewAllPlayers } from "./ViewAllPlayers";
+import { CoachSettings } from "./CoachSettings";
+import { AtletaHeader } from "../Components/AtletaHeader";
+import { AtletaNavbar } from "../Components/AtletaNavbar";
 // Font Platform Constants
 const fontPlatform = Platform.select({
   ios: "System",
@@ -41,7 +44,7 @@ const fontBoldPlatform = Platform.select({
   default: "sans-serif",
 });
 
-type ViewState = "dashboard" | "teams_list" | "manage_team" | "view_all_players";
+type ViewState = "dashboard" | "teams_list" | "manage_team" | "view_all_players" | "settings";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -266,24 +269,22 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     <View style={styles.container}>
       <StatusBar style="light" />
 
+      {/* SCREEN 5: COACH SETTINGS PAGE */}
+      {activeView === "settings" && (
+        <CoachSettings
+          onBack={() => setActiveView("dashboard")}
+          onLogout={onLogout}
+        />
+      )}
+
       {/* SCREEN 1: COACH HOME DASHBOARD */}
       {activeView === "dashboard" && (
         <>
           {/* FIXED HEADER BAR */}
-          <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
-            <View style={styles.header}>
-              <Text style={styles.brandTitle}>ATLETA</Text>
-              <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.iconCircleButton} activeOpacity={0.8}>
-                  <Ionicons name="settings-outline" size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.profileCircleButton} onPress={onLogout} activeOpacity={0.8}>
-                  <Ionicons name="person" size={18} color="#070D19" />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.headerDivider} />
-          </View>
+          <AtletaHeader
+            onSettingsPress={() => setActiveView("settings")}
+            onProfilePress={onLogout}
+          />
 
           {/* SCROLLABLE DASHBOARD BODY */}
           <ScrollView
@@ -369,6 +370,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           }}
           onCreateTeam={handleCreateTeam}
           onLogout={onLogout}
+          onSettingsPress={() => setActiveView("settings")}
         />
       )}
 
@@ -413,32 +415,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       )}
 
       {/* FIXED BOTTOM NAVIGATION BAR */}
-      {activeView !== "manage_team" && activeView !== "view_all_players" && (
-        <View style={styles.navContainer}>
-          <View style={styles.tabsRow}>
-            {[
-              { key: "Home", label: "Home", icon: "home-outline" },
-              { key: "Teams", label: "Teams", icon: "people-outline" },
-              { key: "Discovery", label: "Discovery", icon: "search-outline" },
-              { key: "Performance", label: "Performance", icon: "bar-chart-outline" },
-            ].map((t) => {
-              const isActive = activeTab === t.key;
-              return (
-                <TouchableOpacity
-                  key={t.key}
-                  style={styles.tabButton}
-                  onPress={() => handleSelectTab(t.key as NavigationTab)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name={t.icon as any} size={20} color={isActive ? "#FFFFFF" : "#64748B"} />
-                  <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
-                    {t.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+      {activeView !== "manage_team" && activeView !== "view_all_players" && activeView !== "settings" && (
+        <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
       )}
 
       {/* SCREEN 2: FLOATING ACTION OVERLAY MENU */}
