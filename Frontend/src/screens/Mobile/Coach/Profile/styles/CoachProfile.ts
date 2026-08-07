@@ -27,15 +27,22 @@ const styles = StyleSheet.create({
   },
 
   // Top Bar
-  topHeaderBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  fixedHeaderContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.1)",
     backgroundColor: "#070D19",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   headerTitle: {
     color: "#FFFFFF",
@@ -44,6 +51,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     fontFamily: fontBoldPlatform,
     textTransform: "uppercase",
+  },
+  headerRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  editAssetIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0, 200, 255, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 200, 255, 0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  editAssetImage: {
+    width: 18,
+    height: 18,
+    tintColor: "#00C8FF",
   },
   closeIconButton: {
     width: 36,
@@ -59,28 +86,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 24,
   },
-  diamondWrapper: {
-    width: 100,
-    height: 100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 28,
-    marginTop: 12,
-  },
-  diamondFrame: {
-    width: 90,
-    height: 90,
+  avatarCircleFrame: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     borderWidth: 2,
     borderColor: "#00C8FF",
     backgroundColor: "#0B1528",
-    transform: [{ rotate: "45deg" }],
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+    marginBottom: 20,
+    marginTop: 8,
+    shadowColor: "#00C8FF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  diamondInnerIcon: {
-    transform: [{ rotate: "-45deg" }],
-    justifyContent: "center",
-    alignItems: "center",
+  avatarCircleImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 48,
   },
   fullNameText: {
     color: "#FFFFFF",

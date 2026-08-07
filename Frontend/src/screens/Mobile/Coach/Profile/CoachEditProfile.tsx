@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   ScrollView,
   Text,
   TextInput,
@@ -11,13 +12,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import styles from "./styles/CoachEditProfile";
-import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument } from "../DataTypes";
+import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
 
 const SPORT_OPTIONS: CoachProfileState["sports_focus"][] = [
   "BASKETBALL",
   "SWIMMING",
   "TRACK AND FIELD",
-  "VOLLEYBALL",
 ];
 
 export interface CoachEditProfileProps {
@@ -43,9 +43,14 @@ export function CoachEditProfile({
     sports_focus: currentProfile.sports_focus,
   });
 
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(currentProfile.avatar_url);
+
   const [documents, setDocuments] = useState<UploadedDocument[]>(
     currentProfile.uploaded_documents || []
   );
+
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editingDocName, setEditingDocName] = useState<string>("");
 
   useEffect(() => {
     setForm({
@@ -53,14 +58,58 @@ export function CoachEditProfile({
       email: currentProfile.email,
       sports_focus: currentProfile.sports_focus,
     });
+    setAvatarUri(currentProfile.avatar_url);
     setDocuments(currentProfile.uploaded_documents || []);
   }, [currentProfile]);
 
-  // Native Document Picker Handler
+  const handleRenameDocument = (docId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+
+    setDocuments((prev) =>
+      prev.map((d) => {
+        if (d.id !== docId) return d;
+
+        // Preserve file extension if present in original file_name
+        const originalExt = d.file_name.includes(".")
+          ? "." + d.file_name.split(".").pop()
+          : "";
+
+        let finalFileName = trimmed;
+        if (originalExt && !trimmed.toLowerCase().endsWith(originalExt.toLowerCase())) {
+          finalFileName = `${trimmed}${originalExt}`;
+        }
+
+        return {
+          ...d,
+          file_name: finalFileName,
+          file_type: d.file_type, // Strictly preserve original file_type (PDF / JPG / PNG)
+        };
+      })
+    );
+  };
+
+  const handlePickAvatarImage = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "image/*",
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const pickedAsset = result.assets[0];
+        setAvatarUri(pickedAsset.uri);
+      }
+    } catch {
+      Alert.alert("Image Error", "Failed to select profile image.");
+    }
+  };
+
+  // Credentials Document Upload Handler
   const handleUploadCertification = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "image/*"],
+        type: ["application/pdf", "image/jpeg", "image/png"],
         copyToCacheDirectory: true,
       });
 
@@ -71,8 +120,8 @@ export function CoachEditProfile({
           fileExt === "JPG" || fileExt === "JPEG"
             ? "JPG"
             : fileExt === "PNG"
-            ? "PNG"
-            : "PDF";
+              ? "PNG"
+              : "PDF";
 
         const newDoc: UploadedDocument = {
           id: `doc_${Date.now()}`,
@@ -126,14 +175,32 @@ export function CoachEditProfile({
       })
       .toUpperCase();
 
+    const nameParts = form.full_name.trim().split(" ");
+    const firstName = nameParts[0] || currentProfile.first_name;
+    const lastName = nameParts.slice(1).join(" ") || currentProfile.last_name;
     const updatedRoleTitle = `${form.sports_focus} COACH`;
+
+    const docCredentials: CredentialItem[] = documents.map((doc) => ({
+      id: doc.id,
+      title: doc.file_name.replace(/\.[^/.]+$/, ""),
+      type: "certified",
+      icon_name: "shield-check",
+    }));
+
+    const nonDocCredentials = (currentProfile.credentials || []).filter(
+      (c) => !c.id.startsWith("doc_")
+    );
 
     const updatedProfile: CoachProfileState = {
       ...currentProfile,
+      first_name: firstName,
+      last_name: lastName,
       full_name: form.full_name.trim(),
       email: form.email.trim(),
       sports_focus: form.sports_focus,
       role_title: updatedRoleTitle,
+      avatar_url: avatarUri,
+      credentials: [...nonDocCredentials, ...docCredentials],
       uploaded_documents: documents,
       last_updated: todayFormatted,
     };
@@ -150,35 +217,51 @@ export function CoachEditProfile({
     ]);
   };
 
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
+
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
+    <View style={styles.container}>
       {/* TOP HEADER */}
-      <View style={styles.topHeaderBar}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={onBack}
-          activeOpacity={0.8}
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>EDIT PROFILE</Text>
+      <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onBack}
+            activeOpacity={0.8}
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>EDIT PROFILE</Text>
+        </View>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerTopPadding + 64, paddingBottom: 50 },
+        ]}
       >
         {/* AVATAR PREVIEW HEADER */}
         <View style={styles.avatarPreviewSection}>
-          <View style={styles.diamondWrapper}>
-            <View style={styles.diamondFrame}>
-              <View style={styles.diamondInnerIcon}>
-                <Ionicons name="person-add" size={38} color="#00C8FF" />
-              </View>
-            </View>
-          </View>
-          <Text style={styles.avatarCaption}>AVATAR PREVIEW</Text>
+          <TouchableOpacity
+            style={styles.avatarCircleFrame}
+            onPress={handlePickAvatarImage}
+            activeOpacity={0.8}
+            accessibilityLabel="Upload Profile Picture"
+          >
+            {avatarUri ? (
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.avatarCircleImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Ionicons name="camera-outline" size={36} color="#00C8FF" />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.avatarCaption}>TAP CIRCLE TO UPLOAD AVATAR</Text>
         </View>
 
         {/* FORM INPUT FIELDS */}
@@ -286,25 +369,73 @@ export function CoachEditProfile({
               </Text>
             </View>
           ) : (
-            documents.map((doc) => (
-              <View key={doc.id} style={styles.uploadedDocRow}>
-                <View style={styles.uploadedDocLeft}>
-                  <Ionicons name="document-text-outline" size={20} color="#94A3B8" />
-                  <Text style={styles.uploadedDocName} numberOfLines={1}>
-                    {doc.file_name}
-                  </Text>
-                </View>
+            documents.map((doc) => {
+              const isEditingThis = editingDocId === doc.id;
+              return (
+                <View key={doc.id} style={styles.uploadedDocRow}>
+                  <View style={styles.uploadedDocLeft}>
+                    <Ionicons name="document-text-outline" size={20} color="#00C8FF" />
+                    {isEditingThis ? (
+                      <TextInput
+                        style={styles.inlineEditInput}
+                        value={editingDocName}
+                        onChangeText={setEditingDocName}
+                        autoFocus
+                        onSubmitEditing={() => {
+                          if (editingDocName.trim()) {
+                            handleRenameDocument(doc.id, editingDocName.trim());
+                          }
+                          setEditingDocId(null);
+                        }}
+                      />
+                    ) : (
+                      <Text style={styles.uploadedDocName} numberOfLines={1}>
+                        {doc.file_name}
+                      </Text>
+                    )}
+                  </View>
 
-                <TouchableOpacity
-                  style={styles.trashIconButton}
-                  onPress={() => handleDeleteDocument(doc.id, doc.file_name)}
-                  activeOpacity={0.7}
-                  accessibilityLabel={`Delete document ${doc.file_name}`}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            ))
+                  <View style={styles.uploadedDocActions}>
+                    {isEditingThis ? (
+                      <TouchableOpacity
+                        style={styles.saveDocNameBtn}
+                        onPress={() => {
+                          if (editingDocName.trim()) {
+                            handleRenameDocument(doc.id, editingDocName.trim());
+                          }
+                          setEditingDocId(null);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Save document name"
+                      >
+                        <Ionicons name="checkmark" size={18} color="#00C8FF" />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.editDocNameBtn}
+                        onPress={() => {
+                          setEditingDocId(doc.id);
+                          setEditingDocName(doc.file_name);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityLabel={`Edit document name ${doc.file_name}`}
+                      >
+                        <Ionicons name="pencil-outline" size={18} color="#00C8FF" />
+                      </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                      style={styles.trashIconButton}
+                      onPress={() => handleDeleteDocument(doc.id, doc.file_name)}
+                      activeOpacity={0.7}
+                      accessibilityLabel={`Delete document ${doc.file_name}`}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
           )}
         </View>
 

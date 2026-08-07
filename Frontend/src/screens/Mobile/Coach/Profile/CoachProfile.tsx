@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
   Animated,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +20,7 @@ export interface CoachProfileProps {
   profileData?: CoachProfileState;
 }
 
-function InlineProfileSkeleton() {
+function InlineProfileSkeleton({ topPadding }: { topPadding: number }) {
   const animatedValue = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -42,7 +43,7 @@ function InlineProfileSkeleton() {
   }, [animatedValue]);
 
   return (
-    <Animated.View style={[styles.skeletonContainer, { opacity: animatedValue }]}>
+    <Animated.View style={[styles.skeletonContainer, { opacity: animatedValue, paddingTop: topPadding }]}>
       <View style={styles.skeletonDiamondWrapper}>
         <View style={styles.skeletonDiamond} />
       </View>
@@ -66,16 +67,22 @@ export function CoachProfile({
   profileData,
 }: CoachProfileProps) {
   const insets = useSafeAreaInsets();
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
+
   const profile = profileData || DEFAULT_COACH_PROFILE;
   const [isLoading, setIsLoading] = useState(true);
+  const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
-    if (visible) {
+    if (visible && !hasLoadedOnce.current) {
       setIsLoading(true);
       const timer = setTimeout(() => {
         setIsLoading(false);
-      }, 300);
+        hasLoadedOnce.current = true;
+      }, 200);
       return () => clearTimeout(timer);
+    } else if (visible) {
+      setIsLoading(false);
     }
   }, [visible]);
 
@@ -95,39 +102,65 @@ export function CoachProfile({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent={false}
+      statusBarTranslucent={true}
       onRequestClose={onClose}
     >
-      <View style={[styles.modalContainer, { paddingTop: Math.max(insets.top, 16) }]}>
-        {/* TOP BAR HEADER */}
-        <View style={styles.topHeaderBar}>
-          <Text style={styles.headerTitle}>MY PROFILE</Text>
-          <TouchableOpacity
-            style={styles.closeIconButton}
-            onPress={onClose}
-            activeOpacity={0.8}
-            accessibilityLabel="Close Profile"
-          >
-            <Ionicons name="close" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+      <View style={styles.modalContainer}>
+        {/* FIXED TOP HEADER BAR */}
+        <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>MY PROFILE</Text>
+            <View style={styles.headerRightActions}>
+              {onOpenEdit && (
+                <TouchableOpacity
+                  style={styles.editAssetIconButton}
+                  onPress={onOpenEdit}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Edit Profile"
+                >
+                  <Image
+                    source={require("../../../../assets/editbutton.png")}
+                    style={styles.editAssetImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.closeIconButton}
+                onPress={onClose}
+                activeOpacity={0.8}
+                accessibilityLabel="Close Profile"
+              >
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         {isLoading ? (
-          <InlineProfileSkeleton />
+          <InlineProfileSkeleton topPadding={headerTopPadding + 64} />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: headerTopPadding + 64, paddingBottom: 50 },
+            ]}
           >
-            {/* DIAMOND AVATAR & HERO HEADER */}
+            {/* AVATAR & HERO HEADER */}
             <View style={styles.heroSection}>
-              <View style={styles.diamondWrapper}>
-                <View style={styles.diamondFrame}>
-                  <View style={styles.diamondInnerIcon}>
-                    <Ionicons name="person" size={42} color="#00C8FF" />
-                  </View>
-                </View>
+              <View style={styles.avatarCircleFrame}>
+                {profile.avatar_url ? (
+                  <Image
+                    source={{ uri: profile.avatar_url }}
+                    style={styles.avatarCircleImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons name="person" size={44} color="#00C8FF" />
+                )}
               </View>
 
               <Text style={styles.fullNameText}>{profile.full_name}</Text>
@@ -165,21 +198,35 @@ export function CoachProfile({
             <View style={styles.cardContainer}>
               <Text style={styles.credentialsHeading}>CREDENTIALS</Text>
 
-              {profile.credentials?.map((item, index) => {
-                const isLast = index === profile.credentials.length - 1;
-                return (
-                  <View
-                    key={item.id || `cred_${index}`}
-                    style={[
-                      styles.credentialItemRow,
-                      !isLast && styles.credentialBorderBottom,
-                    ]}
-                  >
-                    <Text style={styles.credentialTitleText}>{item.title}</Text>
-                    {renderCredentialIcon(item.icon_name)}
-                  </View>
-                );
-              })}
+              {(() => {
+                const displayCredentials = [
+                  ...(profile.credentials || []),
+                  ...(profile.uploaded_documents || [])
+                    .filter((doc) => !profile.credentials?.some((c) => c.id === doc.id))
+                    .map((doc) => ({
+                      id: doc.id,
+                      title: doc.file_name.replace(/\.[^/.]+$/, ""),
+                      type: "certified",
+                      icon_name: "shield-check",
+                    })),
+                ];
+
+                return displayCredentials.map((item, index) => {
+                  const isLast = index === displayCredentials.length - 1;
+                  return (
+                    <View
+                      key={item.id || `cred_${index}`}
+                      style={[
+                        styles.credentialItemRow,
+                        !isLast && styles.credentialBorderBottom,
+                      ]}
+                    >
+                      <Text style={styles.credentialTitleText}>{item.title}</Text>
+                      {renderCredentialIcon(item.icon_name)}
+                    </View>
+                  );
+                });
+              })()}
             </View>
 
             {/* SYSTEM STATISTICS */}
@@ -199,18 +246,6 @@ export function CoachProfile({
                 <Text style={styles.statLabelText}>METRIC LOGS</Text>
               </View>
             </View>
-
-            {/* EDIT PROFILE BUTTON */}
-            {onOpenEdit && (
-              <TouchableOpacity
-                style={styles.editProfileCtaBtn}
-                onPress={onOpenEdit}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="create-outline" size={18} color="#00C8FF" />
-                <Text style={styles.editProfileCtaText}>EDIT PROFILE</Text>
-              </TouchableOpacity>
-            )}
           </ScrollView>
         )}
       </View>

@@ -21,7 +21,8 @@ export interface CoachProfileState {
   full_name: string;
   email: string;
   role_title: string; // e.g., "BASKETBALL COACH"
-  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL';
+  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  avatar_url?: string;
   regional_affiliations: {
     association_name: string;
     office_name: string;
