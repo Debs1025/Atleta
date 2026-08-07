@@ -1,0 +1,271 @@
+import { Platform, StyleSheet } from "react-native";
+
+const fontPlatform = Platform.select({
+  ios: "System",
+  android: "sans-serif-medium",
+  default: "sans-serif",
+});
+
+const fontBoldPlatform = Platform.select({
+  ios: "System",
+  android: "sans-serif-black",
+  default: "sans-serif",
+});
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#070D19",
+  },
+  fixedHeaderContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "#070D19",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 1,
+    fontFamily: fontBoldPlatform,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 120,
+  },
+  searchBarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#2563EB",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    height: 48,
+    marginBottom: 20,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 14.5,
+    fontFamily: fontPlatform,
+    marginLeft: 10,
+  },
+  sectionTitleRow: {
+    marginBottom: 14,
+  },
+  sectionTitleText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    fontFamily: fontPlatform,
+    textTransform: "uppercase",
+  },
+  athleteCard: {
+    backgroundColor: "#0F172A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    padding: 16,
+    marginBottom: 16,
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginBottom: 12,
+  },
+  avatarThumbnail: {
+    width: 52,
+    height: 52,
+    borderRadius: 6,
+    backgroundColor: "#1E293B",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardMainInfo: {
+    flex: 1,
+  },
+  nameIdRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  athleteName: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+    fontFamily: fontBoldPlatform,
+    marginBottom: 2,
+  },
+  idNumberText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+    fontFamily: fontBoldPlatform,
+    textAlign: "right",
+  },
+  idLabelSub: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "700",
+    fontFamily: fontPlatform,
+    textAlign: "right",
+  },
+  subMetaText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    fontFamily: fontPlatform,
+    marginBottom: 6,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  verifiedBadgeText: {
+    color: "#10B981",
+    fontSize: 12,
+    fontWeight: "800",
+    fontFamily: fontPlatform,
+  },
+  actionReqBadgeText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "800",
+    fontFamily: fontPlatform,
+  },
+  dividerLine: {
+    height: 1,
+    backgroundColor: "#1E293B",
+    marginVertical: 12,
+  },
+  markersRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  markerColumn: {
+    flex: 1,
+  },
+  markerLabel: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    fontFamily: fontPlatform,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  markerValue: {
+    color: "#1E293B",
+    fontSize: 12,
+    fontWeight: "700",
+    fontFamily: fontPlatform,
+  },
+  alertBox: {
+    backgroundColor: "#FEE2E2",
+    borderLeftWidth: 4,
+    borderLeftColor: "#DC2626",
+    borderRadius: 6,
+    padding: 12,
+    marginBottom: 14,
+  },
+  alertTitle: {
+    color: "#991B1B",
+    fontSize: 13,
+    fontWeight: "900",
+    fontFamily: fontBoldPlatform,
+    marginBottom: 4,
+  },
+  alertItemText: {
+    color: "#B91C1C",
+    fontSize: 12.5,
+    fontFamily: fontPlatform,
+    marginLeft: 4,
+    lineHeight: 18,
+  },
+  cardActionButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardActionAdded: {
+    backgroundColor: "#10B981",
+  },
+  cardActionButtonText: {
+    color: "#0F172A",
+    fontSize: 13.5,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    fontFamily: fontBoldPlatform,
+  },
+  cardActionAddedText: {
+    color: "#FFFFFF",
+  },
+  notifyButton: {
+    backgroundColor: "#E2E8F0",
+    borderRadius: 6,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifyButtonDone: {
+    backgroundColor: "#334155",
+  },
+  notifyButtonText: {
+    color: "#0F172A",
+    fontSize: 13.5,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    fontFamily: fontBoldPlatform,
+  },
+  notifyButtonDoneText: {
+    color: "#94A3B8",
+  },
+  fixedBottomContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    backgroundColor: "#070D19",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+  },
+  primaryCtaButton: {
+    backgroundColor: "#0B132B",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    borderRadius: 8,
+    paddingVertical: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  primaryCtaDisabled: {
+    opacity: 0.5,
+  },
+  primaryCtaText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    fontFamily: fontBoldPlatform,
+  },
+});
+
+export default styles;

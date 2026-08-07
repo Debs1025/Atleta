@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -121,12 +122,4 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
   );
 }
 
-const styles = StyleSheet.create({
-  link: {
-    color: "#16203f",
-    fontSize: 16,
-    fontWeight: "600",
-    marginVertical: 18,
-    textAlign: "center"
-  }
-});
+

@@ -41,6 +41,104 @@ export interface Team {
 
 export type NavigationTab = "Home" | "Teams" | "Discovery" | "Performance";
 
+// Create Team Wizard & Roster Builder Interfaces
+export interface AthleteItem {
+  athlete_id: string;
+  id_number: string; // e.g. "42019"
+  full_name: string;
+  grad_class: string; // e.g. "Class of 2025"
+  primary_position: string; // e.g. "Point Guard"
+  jersey_number?: string;
+  is_verified: boolean;
+  missing_documents?: string[]; // e.g. ["Missing PSA Registration", "Residency proof expired"]
+  avatar_url?: string;
+  status_tag?: "ACTIVE ROTATION" | "RESTRICTED" | "INACTIVE";
+}
+
+export interface TeamWizardState {
+  team_name: string;
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL" | "";
+  division: string;
+  selected_roster: AthleteItem[];
+}
+
+export interface AthleteNotification {
+  notification_id: string;
+  target_athlete_id: string;
+  type: "ACTION_REQUIRED";
+  title: string;
+  message_body: string;
+  highlighted_text: string;
+  relative_time: string;
+  action_label: string;
+}
+
+export const MOCK_ATHLETE_ITEMS: AthleteItem[] = [
+  {
+    athlete_id: "ath_101",
+    id_number: "42019",
+    full_name: "Marcus Thorne",
+    grad_class: "Class of 2025",
+    primary_position: "Point Guard",
+    jersey_number: "42",
+    is_verified: true,
+    status_tag: "ACTIVE ROTATION",
+  },
+  {
+    athlete_id: "ath_102",
+    id_number: "39822",
+    full_name: "Julian Vance",
+    grad_class: "Class of 2024",
+    primary_position: "Shooting Guard",
+    jersey_number: "22",
+    is_verified: false,
+    missing_documents: ["Missing PSA Registration", "Residency proof expired"],
+    status_tag: "RESTRICTED",
+  },
+  {
+    athlete_id: "ath_103",
+    id_number: "55102",
+    full_name: "Elena Rodriguez",
+    grad_class: "Class of 2025",
+    primary_position: "Point Guard",
+    jersey_number: "11",
+    is_verified: true,
+    status_tag: "ACTIVE ROTATION",
+  },
+  {
+    athlete_id: "ath_104",
+    id_number: "18402",
+    full_name: "Julian Mercer",
+    grad_class: "Class of 2025",
+    primary_position: "Quarterback",
+    jersey_number: "18",
+    is_verified: true,
+    status_tag: "ACTIVE ROTATION",
+  },
+  {
+    athlete_id: "ath_105",
+    id_number: "07119",
+    full_name: "Kaleb Rossi",
+    grad_class: "Class of 2026",
+    primary_position: "Linebacker",
+    jersey_number: "07",
+    is_verified: false,
+    missing_documents: ["Medical Clearance Expired"],
+    status_tag: "RESTRICTED",
+  },
+  {
+    athlete_id: "ath_106",
+    id_number: "33910",
+    full_name: "Dominic Hayes",
+    grad_class: "Class of 2025",
+    primary_position: "Safety",
+    jersey_number: "33",
+    is_verified: true,
+    status_tag: "ACTIVE ROTATION",
+  },
+];
+
+
 
 // For testing only, remove when the backend is available
 export const MOCK_COACH: UserCoach = {

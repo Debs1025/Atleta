@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import styles from "./styles/PasswordResetScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -155,17 +156,4 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    borderColor: "#141c3a",
-    borderWidth: 1,
-    padding: 20
-  },
-  back: {
-    color: "#141c3a",
-    fontSize: 16,
-    fontWeight: "800",
-    marginTop: 18,
-    textAlign: "center"
-  }
-});
+

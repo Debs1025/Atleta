@@ -3,15 +3,19 @@ import {
   Modal,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import styles from "./styles/MyTeamsPage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Team, RosterAthlete } from "../DataTypes";
+import { Team, RosterAthlete, TeamWizardState } from "../DataTypes";
+import { CreateTeam } from "./CreateTeam";
+import { AddAthlete } from "./AddAthlete";
+import { SetPlayer } from "./SetPlayer";
+import { FullDetails } from "./FullDetails";
 
 const fontPlatform = Platform.select({
   ios: "System",
@@ -144,43 +148,28 @@ export function MyTeamsPage({
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Multi-step Create Team Wizard Modal */}
+      {/* Multi-step Create Team Wizard Modal Flow */}
       <Modal
         visible={showCreateWizard}
-        transparent
         animationType="slide"
         onRequestClose={() => setShowCreateWizard(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>CREATE NEW TEAM</Text>
-              <TouchableOpacity onPress={() => setShowCreateWizard(false)}>
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            <CreateTeamWizard
-              athletesPool={athletesPool}
-              onClose={() => setShowCreateWizard(false)}
-              onSubmit={(teamData) => {
-                onCreateTeam(teamData);
-                setShowCreateWizard(false);
-              }}
-            />
-          </View>
-        </View>
+        <CreateTeamWizardFlow
+          onClose={() => setShowCreateWizard(false)}
+          onSubmit={(teamData) => {
+            onCreateTeam(teamData);
+            setShowCreateWizard(false);
+          }}
+        />
       </Modal>
     </View>
   );
 }
 
-function CreateTeamWizard({
-  athletesPool,
+function CreateTeamWizardFlow({
   onClose,
   onSubmit,
 }: {
-  athletesPool: RosterAthlete[];
   onClose: () => void;
   onSubmit: (data: {
     team_name: string;
@@ -189,288 +178,80 @@ function CreateTeamWizard({
     roster_list: RosterAthlete[];
   }) => void;
 }) {
-  const [teamName, setTeamName] = useState("");
-  const [division, setDivision] = useState("Elite Professional");
-  const [sport, setSport] = useState<Team["sport_type"]>("BASKETBALL");
-  const [selectedAthletes, setSelectedAthletes] = useState<RosterAthlete[]>([]);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [wizardState, setWizardState] = useState<TeamWizardState>({
+    team_name: "",
+    sport_type: "BASKETBALL",
+    division: "Elite Professional",
+    selected_roster: [],
+  });
+
+  const updateState = (updated: Partial<TeamWizardState>) => {
+    setWizardState((prev) => ({ ...prev, ...updated }));
+  };
 
   const handleFinalize = () => {
-    if (!teamName.trim()) return;
+    // Map AthleteItem[] to RosterAthlete[] for backend compatibility
+    const rosterList: RosterAthlete[] = wizardState.selected_roster.map((a) => ({
+      athlete_id: a.athlete_id,
+      user_id: `usr_${a.athlete_id}`,
+      full_name: a.full_name,
+      position: a.primary_position,
+      jersey_number: a.jersey_number || "00",
+      sport_type: wizardState.sport_type || "BASKETBALL",
+      is_eligibility_verified: a.is_verified,
+    }));
+
     onSubmit({
-      team_name: teamName.trim(),
-      sport_type: sport,
-      division: division.trim(),
-      roster_list: selectedAthletes,
+      team_name: wizardState.team_name,
+      sport_type: (wizardState.sport_type || "BASKETBALL") as Team["sport_type"],
+      division: wizardState.division || "Elite Professional",
+      roster_list: rosterList,
     });
   };
 
+  if (step === 1) {
+    return (
+      <CreateTeam
+        wizardState={wizardState}
+        onChangeState={updateState}
+        onNext={() => setStep(2)}
+        onBack={onClose}
+      />
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <AddAthlete
+        wizardState={wizardState}
+        onChangeState={updateState}
+        onNext={() => setStep(3)}
+        onBack={() => setStep(1)}
+      />
+    );
+  }
+
+  if (step === 3) {
+    return (
+      <SetPlayer
+        wizardState={wizardState}
+        onChangeState={updateState}
+        onAddMore={() => setStep(2)}
+        onNext={() => setStep(4)}
+        onBack={() => setStep(2)}
+      />
+    );
+  }
+
   return (
-    <ScrollView style={{ gap: 12 }}>
-      <Text style={styles.inputLabel}>TEAM NAME *</Text>
-      <TextInput
-        style={styles.wizardInput}
-        placeholder="e.g. Camarines Sur Panthers"
-        placeholderTextColor="#64748B"
-        value={teamName}
-        onChangeText={setTeamName}
-      />
-
-      <Text style={styles.inputLabel}>DIVISION</Text>
-      <TextInput
-        style={styles.wizardInput}
-        placeholder="e.g. Elite Professional"
-        placeholderTextColor="#64748B"
-        value={division}
-        onChangeText={setDivision}
-      />
-
-      <Text style={styles.inputLabel}>SPORT CATEGORY</Text>
-      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", marginVertical: 6 }}>
-        {(["BASKETBALL", "TRACK AND FIELD", "SWIMMING"] as const).map((s) => (
-          <TouchableOpacity
-            key={s}
-            onPress={() => setSport(s)}
-            style={[styles.sportPill, sport === s && styles.sportPillActive]}
-          >
-            <Text style={[styles.sportPillText, sport === s && styles.sportPillTextActive]}>{s}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <TouchableOpacity
-        style={[styles.nextButton, !teamName.trim() && styles.nextButtonDisabled]}
-        disabled={!teamName.trim()}
-        onPress={handleFinalize}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.nextButtonText}>FINALIZE & CREATE TEAM</Text>
-      </TouchableOpacity>
-    </ScrollView>
+    <FullDetails
+      wizardState={wizardState}
+      onFinalizeTeam={handleFinalize}
+      onEditTeamName={() => setStep(1)}
+      onBack={() => setStep(3)}
+    />
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#070D19",
-  },
-  fixedHeaderContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 50,
-    backgroundColor: "#070D19",
-    paddingHorizontal: 20,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  brandTitle: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: 2,
-    fontFamily: fontBoldPlatform,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  iconCircleButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#0E1626",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  profileCircleButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerDivider: {
-    height: 1,
-    backgroundColor: "#1E293B",
-    marginBottom: 0,
-  },
-  titleBlock: {
-    marginBottom: 20,
-  },
-  pageTitle: {
-    color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  pageSubtitle: {
-    color: "#94A3B8",
-    fontSize: 14,
-  },
-  searchBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#0F172A",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    height: 48,
-    marginBottom: 24,
-  },
-  searchInput: {
-    flex: 1,
-    color: "#FFFFFF",
-    fontSize: 14,
-  },
-  teamCard: {
-    backgroundColor: "#0F172A",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    padding: 18,
-  },
-  sportBadge: {
-    backgroundColor: "#1E293B",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    marginBottom: 12,
-  },
-  sportBadgeText: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  cardBodyRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  teamName: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  playerCountText: {
-    color: "#64748B",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  createTeamCtaButton: {
-    backgroundColor: "#1D4ED8",
-    borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 20,
-    marginBottom: 16,
-    shadowColor: "#2563EB",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  createTeamCtaText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    textShadowColor: "rgba(255, 255, 255, 0.6)",
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(5, 10, 24, 0.85)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#0F172A",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    padding: 20,
-    maxHeight: "85%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  inputLabel: {
-    color: "#64748B",
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 8,
-  },
-  wizardInput: {
-    backgroundColor: "#070D19",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 10,
-    color: "#FFFFFF",
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  sportPill: {
-    backgroundColor: "#070D19",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  sportPillActive: {
-    borderColor: "#00C8FF",
-    backgroundColor: "#111C35",
-  },
-  sportPillText: {
-    color: "#94A3B8",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  sportPillTextActive: {
-    color: "#00C8FF",
-  },
-  nextButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  nextButtonDisabled: {
-    backgroundColor: "#1E293B",
-    opacity: 0.6,
-  },
-  nextButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-});
+

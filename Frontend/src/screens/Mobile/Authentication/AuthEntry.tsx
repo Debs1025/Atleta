@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
+import styles from "./styles/AuthEntry";
 import * as SecureStore from "expo-secure-store";
 import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, type AuthRole } from "./authShared";
 import { LoginScreen } from "./LoginScreen";
@@ -76,9 +77,4 @@ export function AuthEntry() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc"
-  }
-});
+
