@@ -20,7 +20,8 @@
     "google-auth-library": "^11.0.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "sharp": "^0.35.3"
   },
   "keywords": [],
   "devDependencies": {

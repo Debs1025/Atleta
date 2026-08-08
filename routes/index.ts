@@ -6,6 +6,7 @@ import analyticsRoutes from './analyticsRoutes';
 import teamRoutes from './teamRoutes';
 import coachRoutes from './coachRoutes';
 import inquiryRoutes from './inquiryRoutes';
+import matchRoutes from './matchRoutes';
 
 const router = Router();
 
@@ -29,5 +30,8 @@ router.use('/coaches', coachRoutes);
 
 // Mount inquiry routes at /inquiries (/api/v1/inquiries)
 router.use('/inquiries', inquiryRoutes);
+
+// Mount match routes at /matches (/api/v1/matches)
+router.use('/matches', matchRoutes);
 
 export default router;
