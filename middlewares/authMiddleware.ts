@@ -39,3 +39,14 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return;
   }
 }
+
+/**
+ * Middleware to require the Coach role.
+ */
+export function requireCoach(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (!req.user || req.user.role !== 'Coach') {
+    res.status(403).json({ error: 'Access denied. Coach role required.' });
+    return;
+  }
+  next();
+}

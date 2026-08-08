@@ -179,10 +179,20 @@ async function runTests() {
     assert(err.statusCode === 413 && err.message.includes('25MB'), 'File upload > 25MB returns HTTP 413 Payload Too Large');
   }
 
-  // Valid scoresheet upload
+  // Valid scoresheet upload (CSV format test)
+  const mockCsvContent = `Team,Score
+HAWKS,103
+CELTICS,107
+
+Player,Jersey,Points,Rebounds,Assists,Fouls
+J. Carter,8,12,4,3,2
+D. Johnson,12,8,5,2,3`;
+
   const ocrResult = await processScoresheetOCR(createdMatchId, {
-    originalname: 'scoresheet_adu_vs_dlsu.png',
-    size: 2 * 1024 * 1024,
+    originalname: 'scoresheet_adu_vs_dlsu.csv',
+    mimetype: 'text/csv',
+    buffer: Buffer.from(mockCsvContent),
+    size: mockCsvContent.length,
   } as any);
   assert(ocrResult !== null && ocrResult.parsed_tables.team_scores.length > 0, 'Scoresheet OCR table extraction returned parsed tables');
 

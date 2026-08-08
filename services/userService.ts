@@ -155,6 +155,12 @@ export async function registerUserService(
     batch.set(altProfileRef, profileData);
   }
 
+  if (firestoreRole === 'Coach') {
+    const coachId = `coach_${uid}`;
+    const altProfileRef = db.collection('Coach_Profiles').doc(coachId);
+    batch.set(altProfileRef, profileData);
+  }
+
   // If role is Coach, also initialize Coach_Settings document atomically
   if (firestoreRole === 'Coach') {
     const coachId = (profileData.coach_id as string) || `coach_${uid}`;

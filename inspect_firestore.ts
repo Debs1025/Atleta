@@ -1,25 +1,23 @@
 import { db } from './utils/firebaseAdmin';
 
-async function inspectFirestore() {
-  console.log('--- Inspecting Firestore Collections ---');
+async function seedUser() {
+  const targetId = 'ath_test_player_1786170767350';
+  console.log(`Writing missing Users document for ID: "${targetId}"...\n`);
 
   try {
-    const collections = await db.listCollections();
-    console.log('Collections in Firestore:', collections.map((c) => c.id));
+    await db.collection('Users').doc(targetId).set({
+      first_name: 'Jerom',
+      last_name: 'Lastimosa',
+      email: 'jerom.lastimosa@test.com',
+      role: 'Athlete',
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
 
-    for (const col of collections) {
-      if (col.id.toLowerCase().includes('notif')) {
-        console.log(`\nInspecting collection: ${col.id}`);
-        const snapshot = await col.limit(5).get();
-        snapshot.docs.forEach((doc) => {
-          console.log(`Doc ID: ${doc.id}`);
-          console.log('Data:', JSON.stringify(doc.data(), null, 2));
-        });
-      }
-    }
+    console.log('✅ Successfully created Users document!');
   } catch (err: any) {
-    console.error('Error inspecting Firestore:', err.message || err);
+    console.error('Error:', err);
   }
 }
 
-inspectFirestore();
+seedUser();
