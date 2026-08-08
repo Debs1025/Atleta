@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { authenticate } from '../middlewares/authMiddleware';
+import { authenticate, requireCoach } from '../middlewares/authMiddleware';
 import {
   submitMatch,
   uploadScoresheet,
   getBoxscore,
 } from '../controllers/matchController';
+import {
+  submitAuditRequestController,
+  exportMatchPdfController,
+} from '../controllers/auditController';
 
 const router = Router();
 
@@ -22,5 +26,11 @@ router.post('/:matchId/scoresheet', authenticate, upload.single('scoresheet'), u
 
 // GET /api/v1/matches/:matchId/boxscore – Fetch compiled match stats and computed efficiency metrics
 router.get('/:matchId/boxscore', authenticate, getBoxscore);
+
+// POST /api/v1/matches/:matchId/audit-request – Submit a formal audit request to the appointed Tournament Official
+router.post('/:matchId/audit-request', authenticate, requireCoach, submitAuditRequestController);
+
+// GET /api/v1/matches/:matchId/pdf – Compile and stream a certified PDF match report
+router.get('/:matchId/pdf', authenticate, requireCoach, exportMatchPdfController);
 
 export default router;
