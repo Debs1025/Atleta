@@ -34,6 +34,8 @@ import { AtletaNavbar } from "../Components/AtletaNavbar";
 import { CoachProfile } from "../Profile/CoachProfile";
 import { CoachEditProfile } from "../Profile/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+import { OCRlogging } from "./OCRlogging";
+import { OCRoutput, RawOCRDetectedData } from "./OCRoutput";
 
 // Font Platform Constants
 const fontPlatform = Platform.select({
@@ -54,7 +56,9 @@ type ViewState =
   | "manage_team"
   | "view_all_players"
   | "settings"
-  | "edit_profile";
+  | "edit_profile"
+  | "ocr_logging"
+  | "ocr_output";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -113,7 +117,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   // Local State
   const [coach] = useState<UserCoach>(MOCK_COACH);
   const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
-  const [athletesPool] = useState<RosterAthlete[]>(MOCK_ATHLETES_POOL);
+  const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>(MOCK_ATHLETES_POOL);
 
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
@@ -126,6 +130,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
+  const [ocrPayload, setOcrPayload] = useState<RawOCRDetectedData | undefined>();
 
   // Current Selected Team
   const currentTeam = useMemo(
@@ -301,6 +306,60 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           />
         )}
 
+        {/* OCR SCREEN 1: UPLOAD STATS & FILE PICKER */}
+        {activeView === "ocr_logging" && (
+          <OCRlogging
+            onBack={() => setActiveView("dashboard")}
+            onUploadSuccess={(data) => {
+              setOcrPayload(data);
+              setActiveView("ocr_output");
+            }}
+          />
+        )}
+
+        {/* OCR SCREEN 2: DETECTED RAW TEAM STATISTICS REVIEW & EDIT */}
+        {activeView === "ocr_output" && (
+          <OCRoutput
+            rawOCRData={ocrPayload}
+            onBack={() => setActiveView("ocr_logging")}
+            onConfirmSave={(finalData) => {
+              // Update roster athletes state with the confirmed OCR performance stats
+              setAthletesPool((prev: RosterAthlete[]) =>
+                prev.map((athlete: RosterAthlete) => {
+                  const matchedStat = finalData.athlete_overview.find(
+                    (s) => s.player_name.toLowerCase() === athlete.full_name.toLowerCase()
+                  );
+                  if (matchedStat) {
+                    return {
+                      ...athlete,
+                      event_distance: matchedStat.time ? matchedStat.time : athlete.event_distance,
+                    };
+                  }
+                  return athlete;
+                })
+              );
+              setTeams((prev: Team[]) =>
+                prev.map((t: Team) => ({
+                  ...t,
+                  roster_list: t.roster_list.map((p: RosterAthlete) => {
+                    const matchedStat = finalData.athlete_overview.find(
+                      (s) => s.player_name.toLowerCase() === p.full_name.toLowerCase()
+                    );
+                    if (matchedStat) {
+                      return {
+                        ...p,
+                        event_distance: matchedStat.time ? matchedStat.time : p.event_distance,
+                      };
+                    }
+                    return p;
+                  }),
+                }))
+              );
+              setActiveView("dashboard");
+            }}
+          />
+        )}
+
         {/* SCREEN 1: COACH HOME DASHBOARD */}
         {activeView === "dashboard" && (
           <>
@@ -443,7 +502,9 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         {activeView !== "manage_team" &&
           activeView !== "view_all_players" &&
           activeView !== "settings" &&
-          activeView !== "edit_profile" && (
+          activeView !== "edit_profile" &&
+          activeView !== "ocr_logging" &&
+          activeView !== "ocr_output" && (
             <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
           )}
 
@@ -471,7 +532,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 style={styles.fabActionRow}
                 onPress={() => {
                   setShowFabOverlay(false);
-                  Alert.alert("Upload Stats", "Upload game stats sheet or CSV for evaluation.");
+                  setActiveView("ocr_logging");
                 }}
               >
                 <Ionicons name="document-text-outline" size={18} color="#FFFFFF" />
