@@ -12,6 +12,10 @@ import {
   resetPassword,
   changePassword,
 } from '../controllers/userController';
+import {
+  registerOfficialHandler,
+  loginOfficialHandler
+} from '../controllers/officialController';
 
 const router = Router();
 
@@ -29,6 +33,12 @@ router.post('/register', upload.single('eligible_documents'), registerUser);
 // POST /api/v1/users/coach & /api/v1/users/register-coach – Register a new coach with required certification documents (Rate-limited: 5 req/min)
 router.post('/coach', authRateLimiter, upload.single('professional_documents'), registerCoach);
 router.post('/register-coach', authRateLimiter, upload.single('professional_documents'), registerCoach);
+
+// POST /api/v1/users/official – Register an official with full legal name and tournament organization details
+router.post('/official', authRateLimiter, registerOfficialHandler);
+
+// POST /api/v1/users/official/login – Validate credentials and issue Bearer JWT (Rate-limited: 5 req/min)
+router.post('/official/login', authRateLimiter, loginOfficialHandler);
 
 // POST /api/v1/users/login – Login and receive a token (Rate-limited: 5 req/min)
 router.post('/login', authRateLimiter, loginUser);

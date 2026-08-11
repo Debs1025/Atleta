@@ -4,8 +4,9 @@ export type UserRole = 'Athlete' | 'Coach' | 'Official' | 'System Admin';
 // Base user stored in the "Users" collection
 export interface User {
   user_id: string;
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
+  full_legal_name?: string | null;
   email: string;
   contact_number?: string | null;
   role: UserRole;
@@ -45,10 +46,37 @@ export interface CoachProfile {
 export interface OfficialProfile {
   official_id: string;
   user_id: string;
-  tournament_affiliation: string;
+  organization_name: string;
+  certification_status: 'Pending' | 'Verified';
   created_at: Date;
   updated_at: Date;
 }
+
+// Official_Settings Entity
+export interface OfficialSettings {
+  setting_id: string;
+  official_id: string;
+  split_screen_defaults: boolean;
+  discrepancy_presets: boolean;
+  match_reminders: boolean;
+  updated_at: Date | string;
+}
+
+// Official Registration request body
+export interface RegisterOfficialDto {
+  full_legal_name: string;
+  email: string;
+  password: string;
+  organization_name: string;
+}
+
+// Update Official settings preferences
+export interface UpdateOfficialSettingsDto {
+  split_screen_defaults?: boolean;
+  discrepancy_presets?: boolean;
+  match_reminders?: boolean;
+}
+
 
 // Admin_Profiles Subtype
 export interface AdminProfile {
