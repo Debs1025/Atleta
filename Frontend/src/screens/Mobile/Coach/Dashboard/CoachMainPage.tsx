@@ -36,8 +36,14 @@ import { CoachEditProfile } from "../Profile/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
 import { OCRlogging } from "./OCRlogging";
 import { OCRoutput, RawOCRDetectedData } from "./OCRoutput";
+import { CreateLogScreen } from "../MultiLogging/createLog";
+import { BasketballMatchScreen } from "../MultiLogging/basketballMatch";
+import { SwimmingMatchScreen } from "../MultiLogging/swimmingMatch";
+import { TrackFieldMatchScreen } from "../MultiLogging/TrackFieldMatch";
+import { MatchDetailsScreen } from "../MultiLogging/MatchDetails";
+import { MatchSessionProvider } from "../MultiLogging/MatchSessionContext";
 
-// Font Platform Constants
+// Font Styles
 const fontPlatform = Platform.select({
   ios: "System",
   android: "sans-serif-medium",
@@ -58,7 +64,12 @@ type ViewState =
   | "settings"
   | "edit_profile"
   | "ocr_logging"
-  | "ocr_output";
+  | "ocr_output"
+  | "create_log"
+  | "basketball_match"
+  | "swimming_match"
+  | "track_field_match"
+  | "match_details";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -487,7 +498,59 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           />
         )}
 
-        {/* FLOATING ACTION BUTTON (FAB) - Only shown on Coach Home Dashboard Main Page */}
+        {/* MULTI-LOGGING MODULE (CREATE LOG, LIVE BOARDS, MATCH DETAILS) */}
+        {(activeView === "create_log" ||
+          activeView === "basketball_match" ||
+          activeView === "swimming_match" ||
+          activeView === "track_field_match" ||
+          activeView === "match_details") && (
+          <MatchSessionProvider>
+            {activeView === "create_log" && (
+              <CreateLogScreen
+                onBack={() => setActiveView("dashboard")}
+                onStartLogging={(session) => {
+                  if (session.sport_type === "BASKETBALL") {
+                    setActiveView("basketball_match");
+                  } else if (session.sport_type === "SWIMMING") {
+                    setActiveView("swimming_match");
+                  } else if (session.sport_type === "TRACK AND FIELD") {
+                    setActiveView("track_field_match");
+                  }
+                }}
+              />
+            )}
+
+            {activeView === "basketball_match" && (
+              <BasketballMatchScreen
+                onClose={() => setActiveView("dashboard")}
+                onSaveMatch={() => setActiveView("match_details")}
+              />
+            )}
+
+            {activeView === "swimming_match" && (
+              <SwimmingMatchScreen
+                onClose={() => setActiveView("dashboard")}
+                onSaveMatch={() => setActiveView("match_details")}
+              />
+            )}
+
+            {activeView === "track_field_match" && (
+              <TrackFieldMatchScreen
+                onClose={() => setActiveView("dashboard")}
+                onSaveMatch={() => setActiveView("match_details")}
+              />
+            )}
+
+            {activeView === "match_details" && (
+              <MatchDetailsScreen
+                onBack={() => setActiveView("dashboard")}
+                onDone={() => setActiveView("dashboard")}
+              />
+            )}
+          </MatchSessionProvider>
+        )}
+
+        {/* FLOATING ACTION BUTTON */}
         {activeView === "dashboard" && (
           <TouchableOpacity
             style={styles.floatingFabButton}
@@ -504,7 +567,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           activeView !== "settings" &&
           activeView !== "edit_profile" &&
           activeView !== "ocr_logging" &&
-          activeView !== "ocr_output" && (
+          activeView !== "ocr_output" &&
+          activeView !== "create_log" &&
+          activeView !== "basketball_match" &&
+          activeView !== "swimming_match" &&
+          activeView !== "track_field_match" &&
+          activeView !== "match_details" && (
             <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
           )}
 
@@ -558,8 +626,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 style={styles.fabActionRow}
                 onPress={() => {
                   setShowFabOverlay(false);
-                  setActiveView("teams_list");
-                  setActiveTab("Teams");
+                  setActiveView("create_log");
                 }}
               >
                 <Ionicons name="basketball-outline" size={18} color="#FFFFFF" />
