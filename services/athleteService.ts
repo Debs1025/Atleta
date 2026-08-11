@@ -35,10 +35,11 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
   const firstName = userData.first_name || profileData.first_name || 'Athlete';
   const lastName = userData.last_name || profileData.last_name || 'User';
 
-  const heightCm = profileData.height_cm || profileData.physical_attributes?.height_cm || 188;
-  const weightKg = profileData.weight_kg || profileData.physical_attributes?.weight_kg || 85;
-  const wingspanCm = profileData.wingspan_cm || profileData.physical_attributes?.wingspan_cm || 195;
-  const verticalCm = profileData.vertical_cm || profileData.physical_attributes?.vertical_cm || 88;
+  const phys = profileData.physical_profile || {};
+  const heightCm = phys.height_cm || profileData.height_cm || profileData.physical_attributes?.height_cm || 188;
+  const weightKg = phys.weight_kg || profileData.weight_kg || profileData.physical_attributes?.weight_kg || 85;
+  const wingspanCm = phys.wingspan_cm || profileData.wingspan_cm || profileData.physical_attributes?.wingspan_cm || 195;
+  const verticalCm = phys.vertical_cm || profileData.vertical_cm || profileData.physical_attributes?.vertical_cm || 88;
 
   const bmi = calculateBMI(weightKg, heightCm);
   const apeIndex = calculateApeIndex(wingspanCm, heightCm);
@@ -130,10 +131,28 @@ export async function updateAthleteProfile(
   const profileRef = db.collection('Athlete_Profiles').doc(athleteId);
   const doc = await profileRef.get();
 
-  const payload: Record<string, unknown> = {
+  const payload: Record<string, any> = {
     ...updateData,
     updated_at: new Date(),
   };
+
+  // Auto-package physical attributes if updated individually
+  if (payload.height_cm !== undefined || payload.weight_kg !== undefined || payload.wingspan_cm !== undefined) {
+    const existing = doc.exists ? (doc.data()?.physical_profile || {}) : {};
+    payload.physical_profile = {
+      height_cm: payload.height_cm !== undefined ? Number(payload.height_cm) : (existing.height_cm || 188),
+      weight_kg: payload.weight_kg !== undefined ? Number(payload.weight_kg) : (existing.weight_kg || 85),
+      wingspan_cm: payload.wingspan_cm !== undefined ? Number(payload.wingspan_cm) : (existing.wingspan_cm || 195),
+    };
+    delete payload.height_cm;
+    delete payload.weight_kg;
+    delete payload.wingspan_cm;
+  }
+
+  // Remove first_name, last_name, email from profile updates to avoid database duplication
+  delete payload.first_name;
+  delete payload.last_name;
+  delete payload.email;
 
   if (doc.exists) {
     await profileRef.update(payload);

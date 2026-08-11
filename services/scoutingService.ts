@@ -265,7 +265,7 @@ export async function dispatchRecruitmentProposal(
   coachId: string,
   athleteId: string,
   offerDetails?: string,
-): Promise<ScoutingProposalResult> {
+): Promise<any> {
   // 1. Verify athlete exists
   const athleteDoc = await db.collection('Athlete_Profiles').doc(athleteId).get();
   if (!athleteDoc.exists) {
@@ -275,8 +275,9 @@ export async function dispatchRecruitmentProposal(
   // 2. Check for duplicate active proposal ('Sent')
   const activeProposalsSnapshot = await db
     .collection('Scouting_Registry')
-    .where('coach_id', '==', coachId)
+    .where('coach_scout_id', '==', coachId)
     .where('athlete_id', '==', athleteId)
+    .where('initiated_by', '==', coachId)
     .where('offer_status', '==', 'Sent')
     .get();
 
@@ -288,13 +289,14 @@ export async function dispatchRecruitmentProposal(
   const scoutId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  const proposalData: ScoutingProposalResult = {
+  const proposalData: Record<string, any> = {
     scout_id: scoutId,
-    coach_id: coachId,
+    coach_scout_id: coachId,
     athlete_id: athleteId,
+    initiated_by: coachId, // Coach initiated
     offer_status: 'Sent',
-    offer_details: offerDetails || undefined,
-    created_at: now,
+    offer_message: offerDetails || undefined,
+    date_initiated: now,
     updated_at: now,
   };
 
@@ -324,16 +326,17 @@ export async function dispatchRecruitmentProposal(
 /**
  * Retrieve sent recruitment proposals.
  */
-export async function getRecruitmentProposals(coachId: string): Promise<ScoutingProposalResult[]> {
+export async function getRecruitmentProposals(coachId: string): Promise<any[]> {
   const proposalsSnapshot = await db
     .collection('Scouting_Registry')
-    .where('coach_id', '==', coachId)
+    .where('coach_scout_id', '==', coachId)
+    .where('initiated_by', '==', coachId)
     .get();
 
-  const proposals: ScoutingProposalResult[] = [];
+  const proposals: any[] = [];
 
   for (const doc of proposalsSnapshot.docs) {
-    const data = doc.data() as ScoutingProposalResult;
+    const data = doc.data() as any;
 
     // Fetch details for enrichment
     let userDoc = await db.collection('Users').doc(data.athlete_id).get();
@@ -358,6 +361,6 @@ export async function getRecruitmentProposals(coachId: string): Promise<Scouting
     });
   }
 
-  // Sort descending by created_at date
-  return proposals.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Sort descending by date_initiated date
+  return proposals.sort((a, b) => new Date(b.date_initiated).getTime() - new Date(a.date_initiated).getTime());
 }

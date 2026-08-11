@@ -16,16 +16,23 @@ export async function getAthleteHome(req: AuthRequest, res: Response): Promise<v
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
     const authenticatedUid = req.user?.uid;
+    const authenticatedRole = req.user?.role;
 
     if (!athleteId) {
       res.status(400).json({ error: 'Athlete ID is required.' });
       return;
     }
 
-    // Security requirement: An athlete may only access their own home summary
-    if (authenticatedUid && authenticatedUid !== athleteId) {
-      res.status(403).json({ error: 'Forbidden. You may only access your own home summary.' });
-      return;
+    // Access control:
+    // - Coaches and Admins can view any athlete's home summary
+    // - Athletes can only view their own (uid matches athleteId with or without ath_ prefix)
+    if (authenticatedUid && authenticatedRole === 'Athlete') {
+      const normalizedAthleteId = athleteId.replace(/^ath_/, '');
+      const normalizedUid = authenticatedUid.replace(/^ath_/, '');
+      if (normalizedUid !== normalizedAthleteId) {
+        res.status(403).json({ error: 'Forbidden. You may only access your own home summary.' });
+        return;
+      }
     }
 
     const homeData = await getAthleteHomeSummary(athleteId);

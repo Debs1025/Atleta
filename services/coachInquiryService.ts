@@ -147,11 +147,12 @@ export async function submitRecruitmentInquiry(
   const athleteInquiriesSnapshot = await db
     .collection('Scouting_Registry')
     .where('athlete_id', '==', athleteId)
+    .where('initiated_by', '==', athleteId)
     .get();
 
   const recentCount = athleteInquiriesSnapshot.docs.filter((doc) => {
     const data = doc.data() as RecruitmentInquiry;
-    return new Date(data.sent_at).getTime() >= oneDayAgoMs;
+    return new Date(data.date_initiated).getTime() >= oneDayAgoMs;
   }).length;
 
   if (recentCount >= 10) {
@@ -161,41 +162,43 @@ export async function submitRecruitmentInquiry(
     );
   }
 
-  // 3. Duplicate Active Inquiry Check (Pending or Accepted for same athlete + coach)
+  // 3. Duplicate Active Inquiry Check (Sent or Accepted for same athlete + coach)
   const activeSnapshot = await db
     .collection('Scouting_Registry')
     .where('athlete_id', '==', athleteId)
-    .where('coach_id', '==', coachId)
+    .where('coach_scout_id', '==', coachId)
+    .where('initiated_by', '==', athleteId)
     .get();
 
   const hasActiveInquiry = activeSnapshot.docs.some((doc) => {
     const data = doc.data() as RecruitmentInquiry;
-    return data.status === 'Pending' || data.status === 'Accepted';
+    return data.offer_status === 'Sent' || data.offer_status === 'Accepted';
   });
 
   if (hasActiveInquiry) {
     throw new ServiceError(
-      `You already have an active recruitment inquiry (Pending or Accepted) with ${coachProfile.full_name}.`,
+      `You already have an active recruitment inquiry (Sent or Accepted) with ${coachProfile.full_name}.`,
       400,
     );
   }
 
   // 4. Create new inquiry document in Scouting_Registry
-  const inquiryId = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const scoutId = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
 
   const inquiry: RecruitmentInquiry = {
-    inquiry_id: inquiryId,
+    scout_id: scoutId,
     athlete_id: athleteId,
-    coach_id: coachId,
-    message: message ? message.trim() : null,
-    status: 'Pending',
+    coach_scout_id: coachId,
+    initiated_by: athleteId, // Athlete sent the inquiry
+    offer_message: message ? message.trim() : null,
+    offer_status: 'Sent', // Default status matches manuscript
     decline_reason: null,
-    sent_at: now,
+    date_initiated: now,
     updated_at: now,
   };
 
-  await db.collection('Scouting_Registry').doc(inquiryId).set(inquiry);
+  await db.collection('Scouting_Registry').doc(scoutId).set(inquiry);
 
   // 5. Emit push notification event to coach (< 2s execution)
   eventBus.emit(EVENTS.PUSH_NOTIFICATION, {
@@ -216,6 +219,7 @@ export async function getAthleteInquiries(athleteId: string): Promise<EnrichedIn
   const snapshot = await db
     .collection('Scouting_Registry')
     .where('athlete_id', '==', athleteId)
+    .where('initiated_by', '==', athleteId)
     .get();
 
   const inquiries: RecruitmentInquiry[] = [];
@@ -227,7 +231,7 @@ export async function getAthleteInquiries(athleteId: string): Promise<EnrichedIn
   const enrichedInquiries: EnrichedInquiry[] = [];
 
   for (const inq of inquiries) {
-    const coach = await getPublicCoachProfile(inq.coach_id).catch(() => null);
+    const coach = await getPublicCoachProfile(inq.coach_scout_id).catch(() => null);
 
     enrichedInquiries.push({
       ...inq,
@@ -237,8 +241,8 @@ export async function getAthleteInquiries(athleteId: string): Promise<EnrichedIn
     });
   }
 
-  // Sort descending by sent_at
+  // Sort descending by date_initiated
   return enrichedInquiries.sort(
-    (a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime(),
+    (a, b) => new Date(b.date_initiated).getTime() - new Date(a.date_initiated).getTime(),
   );
 }

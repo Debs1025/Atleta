@@ -23,9 +23,23 @@ export interface AthleteProfile {
   province: string;
   sport_type: string;
   recruitment_status?: string | null;
-  leaderboard_rank?: number | null;
-  eligibility_documents?: string[];
-  achievements?: string[];
+  rank?: string | number | null;
+  physical_profile?: {
+    height_cm: number;
+    weight_kg: number;
+    wingspan_cm: number;
+  } | null;
+  eligibility_documents?: {
+    psa_verified: boolean;
+    academic_check: boolean;
+    proof_of_residency: boolean;
+    document_urls: string[];
+  } | null;
+  achievements?: {
+    title: string;
+    year: string;
+    content: string;
+  }[] | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -118,9 +132,23 @@ export interface RegisterUserDto {
   province?: string;
   sport_type?: string;
   recruitment_status?: string;
-  leaderboard_rank?: number;
-  eligibility_documents?: string[];
-  achievements?: string[];
+  rank?: string | number;
+  physical_profile?: {
+    height_cm: number;
+    weight_kg: number;
+    wingspan_cm: number;
+  };
+  eligibility_documents?: {
+    psa_verified: boolean;
+    academic_check: boolean;
+    proof_of_residency: boolean;
+    document_urls: string[];
+  };
+  achievements?: {
+    title: string;
+    year: string;
+    content: string;
+  }[];
 
   // Coach Subtype fields
   professional_documents?: string[];
@@ -199,5 +227,31 @@ export interface UpdateCoachSettingsDto {
 export interface ChangeCoachPasswordDto {
   current_password: string;
   new_password: string;
+}
+
+// ─── Official Notification & Schedule Entities ────────────────────────────────
+
+export interface OfficialNotification {
+  notification_id: string;
+  official_id: string;
+  type: 'AUDIT_REQUEST' | 'SCHEDULE_UPDATE';
+  title: string;
+  message: string;
+  reference_id?: string | null;
+  is_read: boolean;
+  created_at: string | Date;
+}
+
+export interface OfficialSchedule {
+  schedule_id: string;
+  match_id: string;
+  official_id: string;
+  venue: string;
+  court_number: string | number;
+  scheduled_time: string;
+  month: number;
+  year: number;
+  assigned_officials: string[];
+  venue_logistics?: string | null;
 }
 

@@ -100,6 +100,37 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
     if (!sportType) {
       errors.push({ field: 'sport_type', message: 'Sport type is required for Athlete profile.' });
     }
+
+    // physical_profile validation
+    if (data.physical_profile !== undefined && data.physical_profile !== null) {
+      const p = data.physical_profile as Record<string, unknown>;
+      if (typeof p.height_cm !== 'number' || typeof p.weight_kg !== 'number' || typeof p.wingspan_cm !== 'number') {
+        errors.push({ field: 'physical_profile', message: 'Physical profile must contain height_cm, weight_kg, and wingspan_cm as numbers.' });
+      }
+    }
+
+    // eligibility_documents validation
+    if (data.eligibility_documents !== undefined && data.eligibility_documents !== null) {
+      const docs = data.eligibility_documents as Record<string, unknown>;
+      if (typeof docs.psa_verified !== 'boolean' || typeof docs.academic_check !== 'boolean' || typeof docs.proof_of_residency !== 'boolean' || !Array.isArray(docs.document_urls)) {
+        errors.push({ field: 'eligibility_documents', message: 'Eligibility documents must contain psa_verified, academic_check, proof_of_residency, and document_urls array.' });
+      }
+    }
+
+    // achievements validation
+    if (data.achievements !== undefined && data.achievements !== null) {
+      if (!Array.isArray(data.achievements)) {
+        errors.push({ field: 'achievements', message: 'Achievements must be an array of objects.' });
+      } else {
+        for (const ach of data.achievements) {
+          const a = ach as Record<string, unknown>;
+          if (typeof a.title !== 'string' || typeof a.year !== 'string' || typeof a.content !== 'string') {
+            errors.push({ field: 'achievements', message: 'Each achievement must contain title, year, and content as strings.' });
+            break;
+          }
+        }
+      }
+    }
   } else if (role === 'Coach') {
     if (data.years_of_experience === undefined || data.years_of_experience === null || data.years_of_experience === '') {
       errors.push({ field: 'years_of_experience', message: 'Years of experience is required for Coach profile.' });

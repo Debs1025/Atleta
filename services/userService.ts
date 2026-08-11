@@ -93,25 +93,45 @@ export async function registerUserService(
     const athleteId = `ath_${uid}`;
     profileData.athlete_id = athleteId;
     profileData.user_id = uid;
-    profileData.first_name = first_name;
-    profileData.last_name = last_name;
-    profileData.email = email;
+    
+    // Aligned schemas: first_name, last_name, email removed from profile to prevent duplication
     profileData.birthdate = String(data.birthdate || '2001-01-01').trim();
     profileData.gender = String(data.gender || 'Male').trim();
     profileData.province = String(data.province || 'Camarines Sur').trim();
     profileData.sport_type = String(data.sport_type || 'Basketball').trim();
     profileData.position = String(data.position || 'Unassigned').trim();
     profileData.jersey_number = data.jersey_number !== undefined ? Number(data.jersey_number) : null;
-    profileData.eligibility_documents = Array.isArray(data.eligibility_documents) ? data.eligibility_documents : [];
-    if (data.recruitment_status) profileData.recruitment_status = String(data.recruitment_status).trim();
-    if (data.leaderboard_rank !== undefined) profileData.leaderboard_rank = Number(data.leaderboard_rank);
-    if (Array.isArray(data.achievements)) profileData.achievements = data.achievements;
-    if (file) {
-      profileData.eligibility_documents = [
-        ...(profileData.eligibility_documents as string[]),
-        file.originalname,
-      ];
+    
+    if (data.recruitment_status) {
+      profileData.recruitment_status = String(data.recruitment_status).trim();
+    } else {
+      profileData.recruitment_status = 'Available';
     }
+
+    if (data.rank !== undefined) {
+      profileData.rank = data.rank;
+    } else if (data.leaderboard_rank !== undefined) {
+      profileData.rank = data.leaderboard_rank;
+    } else {
+      profileData.rank = null;
+    }
+
+    profileData.physical_profile = data.physical_profile || null;
+
+    // Eligibility documents mapping (JSON Object instead of string array)
+    const docsPayload = (data.eligibility_documents as any) || {
+      psa_verified: false,
+      academic_check: false,
+      proof_of_residency: false,
+      document_urls: [],
+    };
+    if (file && Array.isArray(docsPayload.document_urls)) {
+      docsPayload.document_urls = [...docsPayload.document_urls, file.originalname];
+    }
+    profileData.eligibility_documents = docsPayload;
+
+    // Achievements mapping (array of structured objects)
+    profileData.achievements = Array.isArray(data.achievements) ? data.achievements : null;
   } else if (firestoreRole === 'Coach') {
     const coachId = `coach_${uid}`;
     profileData.coach_id = coachId;

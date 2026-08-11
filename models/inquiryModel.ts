@@ -20,16 +20,17 @@ export interface CoachPublicProfile {
 
 // ─── Scouting Registry / Inquiry Entity ─────────────────────────────────────
 
-export type InquiryStatus = 'Pending' | 'Accepted' | 'Declined';
+export type OfferStatus = 'Sent' | 'Accepted' | 'Declined';
 
 export interface RecruitmentInquiry {
-  inquiry_id: string;             // Primary Key, UUID, Required
-  athlete_id: string;             // Foreign Key -> Athlete.athlete_id, Required
-  coach_id: string;               // Foreign Key -> Coach.coach_id, Required
-  message?: string | null;        // Optional, Max 1000 characters
-  status: InquiryStatus;          // Default: "Pending"
+  scout_id: string;               // Primary Key, UUID, Required (formerly inquiry_id)
+  athlete_id: string;             // Foreign Key -> Athlete.athlete_id, Required (dont change t_id)
+  coach_scout_id: string;         // Foreign Key -> Coach.coach_id, Required
+  initiated_by: string;           // UUID of the initiator (athlete or coach), Required
+  offer_message?: string | null;  // Optional, Max 1000 characters
+  offer_status: OfferStatus;      // Default: "Sent"
   decline_reason?: string | null; // Optional, populated when status is "Declined"
-  sent_at: string;                // ISO DateTime string, Default: NOW()
+  date_initiated: string;         // ISO DateTime string, Default: NOW()
   updated_at: string;             // ISO DateTime string, Default: NOW()
 }
 

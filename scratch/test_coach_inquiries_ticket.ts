@@ -77,8 +77,8 @@ async function runTests() {
     TEST_COACH_ID,
     'Hi Coach Nash, I would love to share my highlights reel for Adamson Falcons recruiting!',
   );
-  assert(inquiry !== null && inquiry.status === 'Pending', 'Valid recruitment inquiry submitted with Pending status');
-  assert(inquiry.coach_id === TEST_COACH_ID, 'Correct coach_id attached');
+  assert(inquiry !== null && inquiry.offer_status === 'Sent', 'Valid recruitment inquiry submitted with Sent status');
+  assert(inquiry.coach_scout_id === TEST_COACH_ID, 'Correct coach_scout_id attached');
   assert(inquiry.athlete_id === TEST_ATHLETE_1, 'Correct athlete_id attached');
 
   // 3c. ACCEPTANCE CRITERIA: Duplicate active inquiry (Pending/Accepted) to same coach → 400 Bad Request
