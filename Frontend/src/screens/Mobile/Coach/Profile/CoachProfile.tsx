@@ -243,7 +243,7 @@ export function CoachProfile({
                 <Text style={styles.statNumberText}>
                   {profile.system_statistics?.metric_logs ?? 156}
                 </Text>
-                <Text style={styles.statLabelText}>METRIC LOGS</Text>
+                <Text style={styles.statLabelText}>MATCH LOGGED</Text>
               </View>
             </View>
           </ScrollView>

@@ -293,6 +293,16 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     setActiveTab("Teams");
   }, []);
 
+  const handleMatchSaveCompleted = useCallback(() => {
+    setCoachProfile((prev) => ({
+      ...prev,
+      system_statistics: {
+        ...prev.system_statistics,
+        metric_logs: (prev.system_statistics?.metric_logs || 0) + 1,
+      },
+    }));
+  }, []);
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -545,6 +555,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               <MatchDetailsScreen
                 onBack={() => setActiveView("dashboard")}
                 onDone={() => setActiveView("dashboard")}
+                onSaveComplete={handleMatchSaveCompleted}
               />
             )}
           </MatchSessionProvider>

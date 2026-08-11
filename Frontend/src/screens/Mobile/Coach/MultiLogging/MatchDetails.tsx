@@ -16,9 +16,10 @@ import { useMatchSession } from "./MatchSessionContext";
 interface MatchDetailsProps {
   onBack?: () => void;
   onDone?: () => void;
+  onSaveComplete?: () => void;
 }
 
-export function MatchDetailsScreen({ onBack, onDone }: MatchDetailsProps) {
+export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDetailsProps) {
   const insets = useSafeAreaInsets();
   const { session, setSessionDetails, resetSession } = useMatchSession();
 
@@ -58,6 +59,7 @@ export function MatchDetailsScreen({ onBack, onDone }: MatchDetailsProps) {
     };
 
     setSessionDetails(updatedSession);
+    if (onSaveComplete) onSaveComplete();
     setShowSaveSuccessModal(true);
   };
 
