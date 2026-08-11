@@ -1,6 +1,7 @@
 import { db } from '../utils/firebaseAdmin';
 import { registerUserService } from '../services/userService';
 import { submitRecruitmentInquiry } from '../services/coachInquiryService';
+import { dispatchRecruitmentProposal } from '../services/scoutingService';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -74,9 +75,25 @@ async function seedAthleteData() {
   );
   console.log(`Recruitment inquiry sent successfully with scout ID: ${inquiry.scout_id}`);
 
+  // 4. Coach dispatches a proposal BACK to the Athlete → creates a real Notification for the athlete
+  console.log('Coach dispatching recruitment proposal back to Athlete...');
+  const coachUserId = coachResult.user.user_id;
+  const proposal = await dispatchRecruitmentProposal(
+    coachId,
+    athleteId,
+    'We have reviewed your profile and would like to invite you to trial with Adamson Falcons!',
+  );
+  console.log(`Proposal dispatched with scout ID: ${proposal.scout_id}`);
+
+  // The notification recipient is the athlete's raw Firebase UID (ath_ prefix stripped)
+  const athleteRawUid = athleteId.replace(/^ath_/, '');
+  console.log(`→ Notification written to Firestore with recipient_id: ${athleteRawUid}`);
+
   console.log('\n✅ [SEEDING ATHLETE DATA] Seeding completed successfully!');
-  console.log(`Email: ${athleteEmail}`);
-  console.log(`Password: Password123!\n`);
+  console.log(`Athlete Email: ${athleteEmail}`);
+  console.log(`Athlete ID:    ${athleteId}`);
+  console.log(`Coach ID:      ${coachId}`);
+  console.log(`Password:      Password123!\n`);
   process.exit(0);
 }
 

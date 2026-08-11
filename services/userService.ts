@@ -160,25 +160,33 @@ export async function registerUserService(
     profileData.admin_security_key = hashAdminSecurityKey(rawKey);
   }
 
-  // 4. Execute atomic batch write: Base identity + Subtype child profile
-  const collectionName = ROLE_COLLECTION_MAP[firestoreRole];
+  // 4. Execute atomic batch write: Base identity (Users) + Subtype child profile (prefixed ID only)
   const userRef = db.collection('Users').doc(uid);
-  const profileRef = db.collection(collectionName).doc(uid);
 
   const batch = db.batch();
   batch.set(userRef, userData);
-  batch.set(profileRef, profileData);
 
+  // Athlete: only write ONE document using the canonical ath_ prefixed ID
   if (firestoreRole === 'Athlete') {
     const athleteId = `ath_${uid}`;
-    const altProfileRef = db.collection('Athlete_Profiles').doc(athleteId);
-    batch.set(altProfileRef, profileData);
+    const profileRef = db.collection('Athlete_Profiles').doc(athleteId);
+    batch.set(profileRef, profileData);
   }
 
+  // Coach: only write ONE document using the canonical coach_ prefixed ID
   if (firestoreRole === 'Coach') {
     const coachId = `coach_${uid}`;
-    const altProfileRef = db.collection('Coach_Profiles').doc(coachId);
-    batch.set(altProfileRef, profileData);
+    const profileRef = db.collection('Coach_Profiles').doc(coachId);
+    batch.set(profileRef, profileData);
+  }
+
+  // Other roles: write using the raw uid
+  if (firestoreRole !== 'Athlete' && firestoreRole !== 'Coach') {
+    const collectionName = ROLE_COLLECTION_MAP[firestoreRole];
+    if (collectionName) {
+      const profileRef = db.collection(collectionName).doc(uid);
+      batch.set(profileRef, profileData);
+    }
   }
 
   // If role is Coach, also initialize Coach_Settings document atomically

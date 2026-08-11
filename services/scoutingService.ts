@@ -1,5 +1,7 @@
 import { db } from '../utils/firebaseAdmin';
 import { ServiceError } from '../validators/matchValidator';
+import { eventBus, EVENTS } from '../utils/eventBus';
+import { createNotification } from './notificationService';
 import crypto from 'crypto';
 
 export interface RegionalAthleteSearchResult {
@@ -310,6 +312,15 @@ export async function dispatchRecruitmentProposal(
   }
   const userData = userDoc.exists ? userDoc.data() : {};
   const athleteProfileData = athleteDoc.data() || {};
+
+  // Notify the athlete directly — write to Firestore immediately
+  const athleteUserId = athleteId.replace(/^ath_/, '');
+  await createNotification({
+    recipient_id: athleteUserId,
+    type: 'RECRUITMENT_INQUIRY',
+    title: 'New Recruitment Offer Received',
+    message: `A coach has sent you a formal recruitment proposal. Check your inquiry tracker for details.`,
+  });
 
   return {
     ...proposalData,

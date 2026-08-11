@@ -182,7 +182,16 @@ export async function submitRecruitmentInquiry(
     );
   }
 
-  // 4. Create new inquiry document in Scouting_Registry
+  // 4. Validate message length — max 1000 characters (~5 sentences / 1 paragraph)
+  const MAX_MESSAGE_LENGTH = 1000;
+  if (message && message.trim().length > MAX_MESSAGE_LENGTH) {
+    throw new ServiceError(
+      `Inquiry message is too long. Please keep it to 1 paragraph or 5 sentences (max ${MAX_MESSAGE_LENGTH} characters).`,
+      400,
+    );
+  }
+
+  // 5. Create new inquiry document in Scouting_Registry
   const scoutId = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
 
@@ -200,12 +209,12 @@ export async function submitRecruitmentInquiry(
 
   await db.collection('Scouting_Registry').doc(scoutId).set(inquiry);
 
-  // 5. Emit push notification event to coach (< 2s execution)
+  // 6. Emit push notification to coach with the full message
   eventBus.emit(EVENTS.PUSH_NOTIFICATION, {
     recipient_id: coachProfile.user_id,
     type: 'RECRUITMENT_INQUIRY',
     title: 'New Recruitment Inquiry Received',
-    message: `An athlete sent you a recruitment inquiry. Message: "${message ? message.slice(0, 50) + '...' : 'No message attached'}"`,
+    message: `An athlete sent you a recruitment inquiry. Message: "${message ? message.trim() : 'No message attached'}"`,
   });
 
   return inquiry;

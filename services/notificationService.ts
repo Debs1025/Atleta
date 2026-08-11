@@ -56,69 +56,22 @@ export async function createNotification(params: {
  * Fetch all notifications for a specific recipient user (athlete).
  */
 export async function getAthleteNotifications(recipientUserId: string): Promise<Notification[]> {
-  try {
-    const snapshot = await db
-      .collection('Notifications')
-      .where('recipient_id', '==', recipientUserId)
-      .get();
+  const snapshot = await db
+    .collection('Notifications')
+    .where('recipient_id', '==', recipientUserId)
+    .get();
 
-    if (snapshot.empty) {
-      // Fallback mock notifications for testing
-      return [
-        {
-          notification_id: 'n1',
-          recipient_id: recipientUserId,
-          sender_id: 'coach_101',
-          type: 'RECRUITMENT_INQUIRY',
-          title: 'New Recruitment Inquiry',
-          message: 'Coach Nash Racela from Adamson Falcons expressed interest in your profile.',
-          is_read: false,
-          action_url: '/recruitment/inquiries/n1',
-          created_at: new Date().toISOString(),
-        },
-        {
-          notification_id: 'n2',
-          recipient_id: recipientUserId,
-          type: 'ACTION_REQUIRED',
-          title: 'Document Upload Required',
-          message: 'Please upload your updated PSA Birth Certificate for league eligibility.',
-          is_read: true,
-          action_url: '/profile/documents',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-        },
-        {
-          notification_id: 'n3',
-          recipient_id: recipientUserId,
-          type: 'SYSTEM',
-          title: 'Match Certified',
-          message: 'Your recent match stats vs Ateneo Blue Eagles have been officialized.',
-          is_read: false,
-          action_url: '/matches/m1',
-          created_at: new Date(Date.now() - 172800000).toISOString(),
-        },
-      ];
-    }
-
-    const notifications: Notification[] = [];
-    snapshot.forEach((doc) => {
-      notifications.push(doc.data() as Notification);
-    });
-
-    // Sort descending by created_at
-    return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  } catch (err) {
-    return [
-      {
-        notification_id: 'n1',
-        recipient_id: recipientUserId,
-        type: 'RECRUITMENT_INQUIRY',
-        title: 'New Recruitment Inquiry',
-        message: 'Coach Nash Racela from Adamson Falcons expressed interest in your profile.',
-        is_read: false,
-        created_at: new Date().toISOString(),
-      },
-    ];
+  if (snapshot.empty) {
+    return []; // No notifications yet — return empty, not mocks
   }
+
+  const notifications: Notification[] = [];
+  snapshot.forEach((doc) => {
+    notifications.push(doc.data() as Notification);
+  });
+
+  // Sort descending by created_at
+  return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 /**
