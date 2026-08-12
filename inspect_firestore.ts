@@ -37,8 +37,10 @@ async function checkMatchOwner() {
       console.log(`  - Team ID: "${doc.id}" | Team Name: "${data.team_name}" | Coach ID: "${data.coach_id}"`);
     });
 
+    process.exit(0);
   } catch (err: any) {
     console.error('Error:', err);
+    process.exit(1);
   }
 }
 

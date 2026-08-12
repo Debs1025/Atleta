@@ -49,9 +49,14 @@ export interface CoachProfile {
   coach_id: string;
   user_id: string;
   professional_documents?: string[];
+  certification_license_num?: string | null;
   years_of_experience: number;
   current_institution: string;
-  athlete_managed?: string[];
+  quote?: string | null;
+  specialties?: string[];
+  sport_type?: string;
+  team_id?: string | null;
+  teams_managed?: string[];
   created_at: Date;
   updated_at: Date;
 }

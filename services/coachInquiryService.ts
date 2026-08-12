@@ -120,6 +120,8 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
     professional_documents: coachData.professional_documents || [],
     sport_type: coachData.sport_type || 'Basketball',
     avatar_url: coachData.avatar_url || null,
+    team_id: coachData.team_id || null,
+    teams_managed: coachData.teams_managed || [],
   };
 }
 

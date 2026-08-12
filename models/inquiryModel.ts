@@ -16,6 +16,8 @@ export interface CoachPublicProfile {
   professional_documents?: string[]; // Optional
   sport_type?: string;
   avatar_url?: string | null;
+  team_id?: string | null;
+  teams_managed?: string[];
 }
 
 // ─── Scouting Registry / Inquiry Entity ─────────────────────────────────────

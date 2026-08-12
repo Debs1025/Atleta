@@ -120,16 +120,18 @@ export async function searchRegionalAthletes(
     }
 
     // Search filter: matching first_name, last_name, email, or province
-    if (search) {
-      const searchLower = search.toLowerCase();
-      const matchName =
-        user.first_name.toLowerCase().includes(searchLower) ||
-        user.last_name.toLowerCase().includes(searchLower) ||
-        user.email.toLowerCase().includes(searchLower) ||
-        profile.province.toLowerCase().includes(searchLower);
+    if (search !== undefined && search !== null) {
+      const searchLower = String(search).trim().toLowerCase();
+      if (searchLower.length > 0) {
+        const matchName =
+          user.first_name.toLowerCase().includes(searchLower) ||
+          user.last_name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower) ||
+          profile.province.toLowerCase().includes(searchLower);
 
-      if (!matchName) {
-        continue;
+        if (!matchName) {
+          continue;
+        }
       }
     }
 

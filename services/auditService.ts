@@ -4,11 +4,14 @@ import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
 
 export interface OfficialAudit {
+  validation_id: string;
   audit_id: string;
   match_id: string;
+  requested_by_coach_id: string;
   requested_by: string;
   official_id: string | null;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Certify';
+  verification_status?: 'Pending' | 'Certify' | 'Reject';
   requested_at: string;
   certified_at?: string;
 }
@@ -54,19 +57,26 @@ export async function submitAuditRequest(
   const now = new Date().toISOString();
 
   const auditData: OfficialAudit = {
+    validation_id: auditId,
     audit_id: auditId,
     match_id: matchId,
+    requested_by_coach_id: coachId,
     requested_by: coachId,
     official_id: null,
     status: 'Pending',
+    verification_status: 'Pending',
     requested_at: now,
   };
 
   const batch = db.batch();
   const auditRef = db.collection('Official_Audits').doc(auditId);
+  const validationRef = db.collection('Official_Validations').doc(auditId);
+
   batch.set(auditRef, auditData);
+  batch.set(validationRef, auditData);
   batch.update(matchRef, {
     audit_status: 'Pending',
+    verification_status: 'Pending',
   });
 
   await batch.commit();

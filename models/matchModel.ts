@@ -8,12 +8,14 @@ export type ValidationStatus = 'Pending' | 'Approved' | 'Rejected';
 export interface MatchLog {
   match_id: string;               // Primary Key, Required
   team_id: string;                // Foreign Key -> Teams.team_id, Required
+  logged_by_coach_id?: string;    // Foreign Key -> Coach.coach_id, Required by manuscript
   sport_type: SportType;          // Required ("Basketball" | "Swimming" | "Track & Field")
-  match_type: string;             // Required (e.g. "Tournament", "Friendly", "Regular Season")
+  match_type: string;             // Required (e.g. "Unofficial", "Official", "Tournament")
   match_date: string;             // DateTime ISO string, Required
   location: string;               // Required
   opponent_team_name: string;     // Required
   game_result: GameResult;        // Required ("WIN" | "LOSS")
+  roster_athletes?: string[];     // Array of athlete IDs who played in the match
   notes?: string;                 // Text, Optional
   scoresheet_url?: string;        // Optional URL of uploaded scoresheet
   idempotency_key?: string;       // Optional idempotency key string

@@ -143,13 +143,15 @@ export async function submitMatchSession(
   const matchLog: MatchLog = {
     match_id: matchId,
     team_id: payload.team_id,
+    logged_by_coach_id: coachId,
     sport_type: payload.sport_type,
     match_type: payload.match_type.trim(),
     match_date: payload.match_date,
     location: payload.location.trim(),
     opponent_team_name: payload.opponent_team_name.trim(),
     game_result: payload.game_result,
-    notes: payload.notes ? payload.notes.trim() : undefined,
+    roster_athletes: (payload.player_stats || []).map((p) => p.athlete_id),
+    notes: payload.notes ? payload.notes.trim() : null,
     idempotency_key: key,
     timestamp: now,
   };
@@ -356,14 +358,74 @@ Important:
     // Strip markdown code fences if present (```json ... ```)
     const cleanContent = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const aiParsed = JSON.parse(cleanContent);
+    const playerSummary: any[] = aiParsed.player_summary || [];
 
+    // Save scoresheet_url to Match_Logs
     await db.collection('Match_Logs').doc(matchId).set({ scoresheet_url: scoresheetUrl }, { merge: true });
+
+    // Populate Performance_Metrics for matched roster athletes from OCR
+    const matchData = matchDoc.data()!;
+    const teamId = matchData.team_id;
+
+    if (teamId && playerSummary.length > 0) {
+      const teamDoc = await db.collection('Teams').doc(teamId).get();
+      if (teamDoc.exists) {
+        const roster = teamDoc.data()?.roster_list || [];
+        const batch = db.batch();
+        let metricCount = 0;
+
+        for (const item of playerSummary) {
+          const jerseyNum = Number(item.jersey_number);
+          const pName = String(item.player_name || '').toLowerCase();
+
+          // Find athlete in team roster matching jersey number or name
+          const matchedAthlete = roster.find((r: any) => {
+            if (jerseyNum > 0 && Number(r.jersey_number) === jerseyNum) return true;
+            const rName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
+            return pName.length > 0 && (rName.includes(pName) || pName.includes(rName));
+          });
+
+          if (matchedAthlete && matchedAthlete.athlete_id) {
+            const athleteId = matchedAthlete.athlete_id;
+            const metricId = `metric_${matchId}_${athleteId}`;
+
+            const rawStats = {
+              points: Number(item.points || 0),
+              assists: Number(item.assists || 0),
+              rebounds: Number(item.rebounds || 0),
+              fouls: Number(item.fouls || 0),
+            };
+
+            const computed = calculateBasketballMetrics(rawStats);
+            const metric: PerformanceMetric = {
+              metric_id: metricId,
+              athlete_id: athleteId,
+              match_id: matchId,
+              sport_category: matchData.sport_type || 'Basketball',
+              sport_stats: computed.enrichedStats,
+              calculated_player_efficiency: computed.efficiency,
+              timestamp: now,
+            };
+
+            const metricRef = db.collection('Performance_Metrics').doc(metricId);
+            batch.set(metricRef, metric);
+            metricCount++;
+          }
+        }
+
+        if (metricCount > 0) {
+          await batch.commit();
+          console.log(`✅ [OCR METRICS] Populated ${metricCount} player Performance_Metrics records from OCR.`);
+        }
+      }
+    }
+
     return {
       match_id: matchId,
       scoresheet_url: scoresheetUrl,
       parsed_tables: {
         team_scores: aiParsed.team_scores || [],
-        player_summary: aiParsed.player_summary || [],
+        player_summary: playerSummary,
       },
       raw_ocr_text: 'Processed via Google Gemini API (gemini-3.5-flash)',
       processed_at: now,

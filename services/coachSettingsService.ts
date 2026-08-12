@@ -94,41 +94,60 @@ export async function updateCoachProfile(
     first_name?: string;
     last_name?: string;
     sport_type?: string;
+    years_of_experience?: number;
+    current_institution?: string;
+    quote?: string | null;
+    specialties?: string[];
+    certification_license_num?: string | null;
     professional_documents?: string[];
   },
 ) {
   const now = new Date();
 
-  // 1. Update Users collection if first_name or last_name provided
+  // Clean canonical IDs
+  const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${coachId}`;
+  const rawUserId = userId.replace(/^coach_/, '');
+
+  // 1. Patch Users collection if first_name or last_name provided
   if (payload.first_name || payload.last_name) {
     const userUpdates: Record<string, any> = { updated_at: now };
     if (payload.first_name) userUpdates.first_name = payload.first_name.trim();
     if (payload.last_name) userUpdates.last_name = payload.last_name.trim();
 
-    await db.collection('Users').doc(userId).set(userUpdates, { merge: true });
+    await db.collection('Users').doc(rawUserId).set(userUpdates, { merge: true });
   }
 
-  // 2. Update Coach_Profiles collection using doc(userId)
+  // 2. Patch existing canonical Coach_Profiles document (doc ID is coach_<uid>)
   const coachUpdates: Record<string, any> = { updated_at: now };
   if (payload.first_name) coachUpdates.first_name = payload.first_name.trim();
   if (payload.last_name) coachUpdates.last_name = payload.last_name.trim();
   if (payload.sport_type) coachUpdates.sport_type = payload.sport_type.trim();
+  if (payload.years_of_experience !== undefined) coachUpdates.years_of_experience = Number(payload.years_of_experience);
+  if (payload.current_institution) coachUpdates.current_institution = payload.current_institution.trim();
+  if (payload.quote !== undefined) coachUpdates.quote = payload.quote ? payload.quote.trim() : null;
+  if (payload.certification_license_num !== undefined) coachUpdates.certification_license_num = payload.certification_license_num ? payload.certification_license_num.trim() : null;
+  if (Array.isArray(payload.specialties)) coachUpdates.specialties = payload.specialties;
   if (Array.isArray(payload.professional_documents)) {
     coachUpdates.professional_documents = payload.professional_documents.filter(
       (d) => typeof d === 'string' && d.trim().length > 0,
     );
   }
 
-  // Update primary Coach_Profiles document (doc ID is userId)
-  await db.collection('Coach_Profiles').doc(userId).set(coachUpdates, { merge: true });
+  // Patch canonical Coach_Profiles document
+  await db.collection('Coach_Profiles').doc(canonicalCoachId).set(coachUpdates, { merge: true });
 
-  // Fetch updated profile
-  const userDoc = await db.collection('Users').doc(userId).get();
-  const coachDoc = await db.collection('Coach_Profiles').doc(userId).get();
+  // Fetch updated profile documents
+  const userDoc = await db.collection('Users').doc(rawUserId).get();
+  const coachDoc = await db.collection('Coach_Profiles').doc(canonicalCoachId).get();
+
+  const userData = userDoc.exists ? userDoc.data()! : {};
+  const coachData = coachDoc.exists ? coachDoc.data()! : {};
 
   return {
-    ...(userDoc.data() || {}),
-    ...(coachDoc.data() || {}),
+    ...userData,
+    ...coachData,
+    coach_id: canonicalCoachId,
+    user_id: rawUserId,
   };
 }
 

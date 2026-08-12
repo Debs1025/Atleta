@@ -93,7 +93,7 @@ export async function updateRosterHandler(req: AuthRequest, res: Response): Prom
     const rawBody = req.body || {};
     const rosterItems = (Array.isArray(rawBody)
       ? rawBody
-      : (rawBody.roster || rawBody.roster_list || [])).map((item: any) => ({
+      : (rawBody.roster || rawBody.roster_list || rawBody.roster_updates || [])).map((item: any) => ({
         ...item,
         athlete_id: item.athlete_id || item.user_id,
       }));

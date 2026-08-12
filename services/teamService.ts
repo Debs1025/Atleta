@@ -88,10 +88,12 @@ async function enrichRoster(rosterList: (string | TeamRosterMember)[]): Promise<
       }
     }
 
-    const docs = Array.isArray(profileData.eligibility_documents)
-      ? profileData.eligibility_documents
-      : [];
-    const isVerified = docs.length > 0;
+    // eligibility_documents is now an object: { psa_verified, academic_check, proof_of_residency, document_urls }
+    const eligDocs = profileData.eligibility_documents;
+    const isVerified =
+      eligDocs && typeof eligDocs === 'object' && !Array.isArray(eligDocs)
+        ? eligDocs.psa_verified === true
+        : Array.isArray(eligDocs) && eligDocs.length > 0;
 
     roster.push({
       athlete_id: athleteId,
@@ -102,7 +104,7 @@ async function enrichRoster(rosterList: (string | TeamRosterMember)[]): Promise<
       jersey_number: jerseyOverride !== undefined ? jerseyOverride : (profileData.jersey_number ?? null),
       sport_type: profileData.sport_type || '',
       avatar_url: profileData.avatar_url || undefined,
-      eligibility_documents: docs,
+      eligibility_documents: eligDocs || [],
       is_eligibility_verified: isVerified,
     });
   }
@@ -136,6 +138,25 @@ export async function createTeam(coachId: string, payload: CreateTeamDto): Promi
   if (payload.mission_statement) newTeam.mission_statement = payload.mission_statement.trim();
 
   await db.collection('Teams').doc(teamId).set(newTeam);
+
+  // Link team to Coach_Profiles document (handles both coach_<uid> and raw uid)
+  const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${coachId}`;
+  const coachDocRef = db.collection('Coach_Profiles').doc(canonicalCoachId);
+  const coachDoc = await coachDocRef.get();
+
+  if (coachDoc.exists) {
+    const existingTeams = coachDoc.data()?.teams_managed || [];
+    const updatedTeams = Array.from(new Set([...existingTeams, teamId]));
+    await coachDocRef.set(
+      {
+        team_id: teamId,
+        teams_managed: updatedTeams,
+        updated_at: new Date(),
+      },
+      { merge: true },
+    );
+  }
+
   return newTeam as Team;
 }
 
@@ -311,11 +332,17 @@ export async function updateTeamRoster(
       }
     }
 
-    const docs = Array.isArray(profileData.eligibility_documents)
-      ? profileData.eligibility_documents
-      : [];
+    const eligDocs = profileData.eligibility_documents;
+    const isVerified =
+      eligDocs && typeof eligDocs === 'object' && !Array.isArray(eligDocs)
+        ? eligDocs.psa_verified === true
+        : Array.isArray(eligDocs) && eligDocs.length > 0;
 
-    if (docs.length === 0) {
+    const docs = Array.isArray(eligDocs)
+      ? eligDocs
+      : eligDocs?.document_urls || [];
+
+    if (!isVerified) {
       unverifiedAthletes.push(`${firstName} ${lastName}`.trim() || athleteId);
     }
 
@@ -329,7 +356,6 @@ export async function updateTeamRoster(
     }
 
     const userId = profileData.user_id || athleteId;
-    const isVerified = docs.length > 0;
 
     updatedRosterMembers.push({
       athlete_id: athleteId,

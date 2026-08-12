@@ -35,7 +35,7 @@ export function validateCreateTeam(data: Record<string, unknown>): ValidationErr
 export function validateUpdateRoster(data: Record<string, unknown> | any[]): ValidationError[] {
   const errors: ValidationError[] = [];
 
-  const roster = Array.isArray(data) ? data : (data.roster || data.roster_list);
+  const roster = Array.isArray(data) ? data : (data.roster || data.roster_list || data.roster_updates);
   if (!roster || !Array.isArray(roster)) {
     errors.push({ field: 'roster', message: 'Roster must be an array of player objects (or provided as {"roster": [...]} or {"roster_list": [...]}).' });
   } else {
