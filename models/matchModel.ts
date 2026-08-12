@@ -3,6 +3,7 @@
 
 export type SportType = 'Basketball' | 'Swimming' | 'Track & Field';
 export type GameResult = 'WIN' | 'LOSS';
+export type ValidationStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface MatchLog {
   match_id: string;               // Primary Key, Required
@@ -16,8 +17,31 @@ export interface MatchLog {
   notes?: string;                 // Text, Optional
   scoresheet_url?: string;        // Optional URL of uploaded scoresheet
   idempotency_key?: string;       // Optional idempotency key string
+  reference_id?: string;          // Optional reference ID for official match instances
+  home_team_id?: string;          // Optional home team ID
+  away_team_id?: string;          // Optional away team ID
+  assigned_coaches?: string[];    // Optional array of assigned coach IDs
+  is_certified?: boolean;         // Default: false, locked when true
+  is_locked?: boolean;            // Default: false, locked when true
+  is_invalidated?: boolean;       // Optional flag for disputed match records
   timestamp: string;              // DateTime ISO string, Required
 }
+
+// ─── Official Audit (Validation) Entity ────────────────────────────────────
+// Stored in Firestore "Official_Audits" collection.
+
+export interface OfficialAudit {
+  validation_id: string;          // Primary Key, UUID, Required
+  match_id: string;               // Foreign Key -> Match_Logs.match_id, Required
+  official_id: string;            // Foreign Key -> Official_Profiles.official_id, Required
+  status: ValidationStatus;       // Enum ("Pending" | "Approved" | "Rejected", Default: "Pending")
+  scoresheet_url?: string;        // Optional
+  context_notes?: string;         // Optional
+  certified_at?: string;          // Optional ISO DateTime
+  requested_by?: string;          // Optional coach_id or system
+  created_at: string;             // ISO DateTime, Required
+}
+
 
 // ─── Sport Specific Stats ───────────────────────────────────────────────────
 

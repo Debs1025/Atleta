@@ -10,6 +10,10 @@ import {
   submitAuditRequestController,
   exportMatchPdfController,
 } from '../controllers/auditController';
+import {
+  createOfficialMatchHandler,
+  deleteMatchHandler,
+} from '../controllers/validationController';
 
 const router = Router();
 
@@ -17,6 +21,9 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 30 * 1024 * 1024 }, // Allow multer to capture up to 30MB so validator can throw explicit 413 error
 });
+
+// POST /api/v1/matches/official – Create a new official match instance (Requires Idempotency-Key header)
+router.post('/official', authenticate, createOfficialMatchHandler);
 
 // POST /api/v1/matches – Submit complete live game log session and stats payload (Requires Idempotency-Key header)
 router.post('/', authenticate, submitMatch);
@@ -32,5 +39,8 @@ router.post('/:matchId/audit-request', authenticate, requireCoach, submitAuditRe
 
 // GET /api/v1/matches/:matchId/pdf – Compile and stream a certified PDF match report
 router.get('/:matchId/pdf', authenticate, requireCoach, exportMatchPdfController);
+
+// DELETE /api/v1/matches/:matchId – Remove or invalidate a disputed match record
+router.delete('/:matchId', authenticate, deleteMatchHandler);
 
 export default router;

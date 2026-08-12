@@ -9,6 +9,7 @@ import inquiryRoutes from './inquiryRoutes';
 import matchRoutes from './matchRoutes';
 import scoutingRoutes from './scoutingRoutes';
 import officialRoutes from './officialRoutes';
+import validationRoutes from './validationRoutes';
 
 const router = Router();
 
@@ -41,5 +42,8 @@ router.use('/matches', matchRoutes);
 
 // Mount scouting routes at /scouting (/api/v1/scouting)
 router.use('/scouting', scoutingRoutes);
+
+// Mount validation routes at /validations (/api/v1/validations)
+router.use('/validations', validationRoutes);
 
 export default router;
