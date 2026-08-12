@@ -42,6 +42,7 @@ import { SwimmingMatchScreen } from "../MultiLogging/swimmingMatch";
 import { TrackFieldMatchScreen } from "../MultiLogging/TrackFieldMatch";
 import { MatchDetailsScreen } from "../MultiLogging/MatchDetails";
 import { MatchSessionProvider } from "../MultiLogging/MatchSessionContext";
+import { OfficialMatchesPage } from "../ScoresheetRequest/officialMatchPage";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -69,7 +70,8 @@ type ViewState =
   | "basketball_match"
   | "swimming_match"
   | "track_field_match"
-  | "match_details";
+  | "match_details"
+  | "official_matches";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -508,7 +510,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           />
         )}
 
-        {/* MULTI-LOGGING MODULE (CREATE LOG, LIVE BOARDS, MATCH DETAILS) */}
+        {/* OFFICIAL MATCHES & AUDIT SCORESHEET REQUEST MODULE */}
+        {activeView === "official_matches" && (
+          <OfficialMatchesPage onBack={() => setActiveView("dashboard")} />
+        )}
+
+        {/* MULTI-LOGGING MODULE */}
         {(activeView === "create_log" ||
           activeView === "basketball_match" ||
           activeView === "swimming_match" ||
@@ -583,7 +590,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           activeView !== "basketball_match" &&
           activeView !== "swimming_match" &&
           activeView !== "track_field_match" &&
-          activeView !== "match_details" && (
+          activeView !== "match_details" &&
+          activeView !== "official_matches" && (
             <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
           )}
 
@@ -624,7 +632,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 style={styles.fabActionRow}
                 onPress={() => {
                   setShowFabOverlay(false);
-                  Alert.alert("Scoresheet Request", "Request official digital scoresheet verification.");
+                  setActiveView("official_matches");
                 }}
               >
                 <Ionicons name="copy-outline" size={18} color="#FFFFFF" />

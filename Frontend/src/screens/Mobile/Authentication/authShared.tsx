@@ -33,8 +33,8 @@ const runtime = globalThis as typeof globalThis & {
 };
 
 export const API_BASE = runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ?? "";
-export const AUTH_TOKEN_KEY = runtime.process?.env?.EXPO_PUBLIC_AUTH_TOKEN_KEY ?? "";
-export const AUTH_ROLE_KEY = runtime.process?.env?.EXPO_PUBLIC_AUTH_ROLE_KEY ?? "";
+export const AUTH_TOKEN_KEY = (runtime.process?.env?.EXPO_PUBLIC_AUTH_TOKEN_KEY ?? "").trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+export const AUTH_ROLE_KEY = (runtime.process?.env?.EXPO_PUBLIC_AUTH_ROLE_KEY ?? "").trim().replace(/[^a-zA-Z0-9._-]/g, "_");
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 15000;
 
