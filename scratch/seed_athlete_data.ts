@@ -89,6 +89,36 @@ async function seedAthleteData() {
   const athleteRawUid = athleteId.replace(/^ath_/, '');
   console.log(`→ Notification written to Firestore with recipient_id: ${athleteRawUid}`);
 
+  // 5. Seed Workload_Analysis document
+  console.log('Seeding Workload_Analysis document for athlete...');
+  const workloadId = `workload_${Date.now()}`;
+  await db.collection('Workload_Analysis').doc(workloadId).set({
+    entry_id: workloadId,
+    athlete_id: athleteId,
+    user_id: athleteRawUid,
+    acute_load: 450,
+    chronic_load: 400,
+    acwr: 1.125,
+    injury_risk_level: 'Optimal',
+    date_calculated: new Date().toISOString(),
+  });
+  console.log(`✅ Workload_Analysis record created with ID: ${workloadId}`);
+
+  // 6. Seed Anthropometric_Measurements document
+  console.log('Seeding Anthropometric_Measurements document for athlete...');
+  const anthroId = `anthro_${Date.now()}`;
+  await db.collection('Anthropometric_Measurements').doc(anthroId).set({
+    measurement_id: anthroId,
+    athlete_id: athleteId,
+    user_id: athleteRawUid,
+    height_cm: 188,
+    weight_kg: 85,
+    wingspan_cm: 195,
+    body_fat_percentage: 10.5,
+    recorded_at: new Date().toISOString(),
+  });
+  console.log(`✅ Anthropometric_Measurements record created with ID: ${anthroId}`);
+
   console.log('\n✅ [SEEDING ATHLETE DATA] Seeding completed successfully!');
   console.log(`Athlete Email: ${athleteEmail}`);
   console.log(`Athlete ID:    ${athleteId}`);

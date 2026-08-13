@@ -10,8 +10,12 @@ import matchRoutes from './matchRoutes';
 import scoutingRoutes from './scoutingRoutes';
 import officialRoutes from './officialRoutes';
 import validationRoutes from './validationRoutes';
+import adminRoutes from './adminRoutes';
 
 const router = Router();
+
+// Mount admin routes at /admin (/api/v1/admin)
+router.use('/admin', adminRoutes);
 
 // Mount user routes at /users (/api/v1/users)
 router.use('/users', userRoutes);

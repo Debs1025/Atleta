@@ -1,11 +1,12 @@
 // User roles enum
-export type UserRole = 'Athlete' | 'Coach' | 'Official' | 'System Admin';
+export type UserRole = 'Athlete' | 'Coach' | 'Official' | 'System Admin' | 'SystemAdmin';
 
 // Base user stored in the "Users" collection
 export interface User {
   user_id: string;
   first_name?: string;
   last_name?: string;
+  full_name?: string | null;
   full_legal_name?: string | null;
   email: string;
   contact_number?: string | null;
@@ -96,14 +97,31 @@ export interface UpdateOfficialSettingsDto {
   match_reminders?: boolean;
 }
 
-
-// Admin_Profiles Subtype
+// Admin_Profiles Subtype Entity
 export interface AdminProfile {
   admin_id: string;
   user_id: string;
-  admin_security_key: string; // Encrypted/Hashed
-  created_at: Date;
-  updated_at: Date;
+  clearance_level: number;
+  department_code: string;
+  is_active: boolean;
+  admin_security_key?: string;
+  created_at: Date | string;
+  updated_at?: Date | string;
+}
+
+// System Admin DTOs
+export interface RegisterAdminDto {
+  full_name: string;
+  email: string;
+  password: string;
+  department_code: string;
+  clearance_level?: number;
+  rbac_compliance_accepted: boolean;
+}
+
+export interface LoginAdminDto {
+  email: string;
+  password: string;
 }
 
 // Maps role to its Firestore collection name
@@ -112,6 +130,7 @@ export const ROLE_COLLECTION_MAP: Record<UserRole, string> = {
   'Coach': 'Coach_Profiles',
   'Official': 'Official_Profiles',
   'System Admin': 'Admin_Profiles',
+  'SystemAdmin': 'Admin_Profiles',
 };
 
 // Maps role to its granular permission scopes
@@ -120,6 +139,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, string[]> = {
   'Coach': ['read:profile', 'update:profile', 'manage:athletes', 'certify:matches'],
   'Official': ['read:profile', 'certify:matches', 'manage:tournaments'],
   'System Admin': ['*'],
+  'SystemAdmin': ['*'],
 };
 
 // Registration request body
