@@ -43,6 +43,7 @@ import { TrackFieldMatchScreen } from "../MultiLogging/TrackFieldMatch";
 import { MatchDetailsScreen } from "../MultiLogging/MatchDetails";
 import { MatchSessionProvider } from "../MultiLogging/MatchSessionContext";
 import { OfficialMatchesPage } from "../ScoresheetRequest/officialMatchPage";
+import { DiscoveryMain } from "../Discovery/discoveryMain";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -71,7 +72,8 @@ type ViewState =
   | "swimming_match"
   | "track_field_match"
   | "match_details"
-  | "official_matches";
+  | "official_matches"
+  | "discovery";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -142,6 +144,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [showFabOverlay, setShowFabOverlay] = useState(false);
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [hideDiscoveryNav, setHideDiscoveryNav] = useState(false);
   const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
   const [ocrPayload, setOcrPayload] = useState<RawOCRDetectedData | undefined>();
 
@@ -279,7 +282,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     } else if (tab === "Teams") {
       setActiveView("teams_list");
     } else if (tab === "Discovery") {
-      setShowTeamDetailsModal(true);
+      setActiveView("discovery");
     } else if (tab === "Performance") {
       Alert.alert("Performance Analytics", "View real-time team metrics & performance stats.");
     }
@@ -515,6 +518,15 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           <OfficialMatchesPage onBack={() => setActiveView("dashboard")} />
         )}
 
+        {/* DISCOVERY MODULE */}
+        {activeView === "discovery" && (
+          <DiscoveryMain
+            onSettingsPress={() => setActiveView("settings")}
+            onProfilePress={() => setShowProfileModal(true)}
+            onToggleBottomNav={(hide) => setHideDiscoveryNav(hide)}
+          />
+        )}
+
         {/* MULTI-LOGGING MODULE */}
         {(activeView === "create_log" ||
           activeView === "basketball_match" ||
@@ -591,7 +603,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           activeView !== "swimming_match" &&
           activeView !== "track_field_match" &&
           activeView !== "match_details" &&
-          activeView !== "official_matches" && (
+          activeView !== "official_matches" &&
+          !hideDiscoveryNav && (
             <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
           )}
 

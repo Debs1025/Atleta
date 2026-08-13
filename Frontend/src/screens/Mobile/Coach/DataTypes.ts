@@ -36,6 +36,7 @@ export interface CoachProfileState {
   last_updated: string; // e.g., "OCT 24, 2023"
 }
 
+// With sample datas
 export const DEFAULT_COACH_PROFILE: CoachProfileState = {
   coach_id: "coach_erick_001",
   user_id: "usr_coach_01",
@@ -180,7 +181,7 @@ export interface AthleteNotification {
   action_label: string;
 }
 
-// For testing only, remove when the backend is available
+// For testing only, replace after integrating the backend API
 export const MOCK_ATHLETE_ITEMS: AthleteItem[] = [
   {
     athlete_id: "ath_101",
