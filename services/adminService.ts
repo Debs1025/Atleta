@@ -3,8 +3,9 @@ import jwt from 'jsonwebtoken';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
-import { RegisterAdminDto, LoginAdminDto, AdminProfile, User } from '../models/userModel';
+import { RegisterAdminDto, LoginAdminDto, AdminProfile, User, CoachAccreditationAuditLog } from '../models/userModel';
 import { ServiceError } from '../validators/matchValidator';
+import { createNotification } from './notificationService';
 
 export interface AdminAuditLog {
   log_id: string;
@@ -74,7 +75,7 @@ export async function registerAdminService(
   clientIp: string = '127.0.0.1'
 ) {
   const email = data.email.trim().toLowerCase();
-  const fullName = data.fullName || data.full_name || '';
+  const fullName = (data as any).fullName || data.full_name || '';
   const nameParts = fullName.trim().split(' ');
   const firstName = nameParts[0] || 'Admin';
   const lastName = nameParts.slice(1).join(' ') || 'User';
@@ -324,3 +325,194 @@ export async function loginAdminService(
     token,
   };
 }
+
+/**
+ * Retrieve pending coach verification applications and uploaded document links.
+ */
+export async function getPendingCoachQueueService() {
+  const snapshot = await db.collection('Coach_Profiles').get();
+
+  const pendingCoaches: any[] = [];
+  const userIds: string[] = [];
+
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data();
+    const status = data.account_status || 'Pending';
+    if (status === 'Pending') {
+      pendingCoaches.push({
+        coach_id: data.coach_id || doc.id,
+        user_id: data.user_id,
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+        sport_type: data.sport_type || 'Unassigned',
+        years_of_experience: data.years_of_experience || 0,
+        current_institution: data.current_institution || 'N/A',
+        professional_documents: data.professional_documents || [],
+        account_status: 'Pending',
+        created_at: data.created_at || new Date().toISOString(),
+      });
+      if (data.user_id) userIds.push(data.user_id);
+    }
+  });
+
+  // Resolve user emails & names in parallel
+  if (userIds.length > 0) {
+    const uniqueUids = Array.from(new Set(userIds));
+    const userDocs = await Promise.all(uniqueUids.map((uid) => db.collection('Users').doc(uid).get()));
+    const userMap = new Map<string, any>();
+    userDocs.forEach((uDoc) => {
+      if (uDoc.exists) {
+        userMap.set(uDoc.id, uDoc.data());
+      }
+    });
+
+    pendingCoaches.forEach((item) => {
+      const uData = userMap.get(item.user_id);
+      if (uData) {
+        item.email = uData.email || '';
+        item.full_name = uData.full_name || `${uData.first_name || ''} ${uData.last_name || ''}`.trim();
+        item.first_name = uData.first_name || item.first_name;
+        item.last_name = uData.last_name || item.last_name;
+      }
+    });
+  }
+
+  return pendingCoaches;
+}
+
+/**
+ * Validate credentials, mark coach account as active, and grant full platform access (< 200ms).
+ */
+export async function approveCoachService(adminId: string, coachIdParam: string) {
+  const canonicalCoachId = coachIdParam.startsWith('coach_') ? coachIdParam : `coach_${coachIdParam}`;
+  const userId = coachIdParam.replace('coach_', '');
+
+  const coachRef = db.collection('Coach_Profiles').doc(canonicalCoachId);
+  const userRef = db.collection('Users').doc(userId);
+
+  // Fast direct primary key check
+  const coachSnap = await coachRef.get();
+  if (!coachSnap.exists) {
+    const querySnap = await db.collection('Coach_Profiles').where('coach_id', '==', coachIdParam).limit(1).get();
+    if (querySnap.empty) {
+      throw new ServiceError(`Coach application with ID '${coachIdParam}' not found.`, 404);
+    }
+  }
+
+  const now = new Date();
+
+  // Perform atomic batch update to update account_status to "Active" across Coach_Profiles and Users
+  const batch = db.batch();
+
+  batch.update(coachRef, {
+    account_status: 'Active',
+    updated_at: now,
+  });
+
+  batch.update(userRef, {
+    account_status: 'Active',
+    updated_at: now,
+  });
+
+  // Write Admin_Audit_Logs record for accreditation decision
+  const auditLogId = crypto.randomUUID();
+  const auditRef = db.collection('Admin_Audit_Logs').doc(auditLogId);
+  const auditData: CoachAccreditationAuditLog = {
+    audit_log_id: auditLogId,
+    admin_id: adminId,
+    coach_id: canonicalCoachId,
+    action: 'APPROVED',
+    timestamp: now.toISOString(),
+  };
+
+  batch.set(auditRef, auditData);
+
+  await batch.commit();
+
+  // Dispatch confirmation notification asynchronously (non-blocking for < 200ms SLA)
+  createNotification({
+    recipient_id: userId,
+    type: 'SYSTEM',
+    title: 'Coach Accreditation Approved',
+    message: 'Your coach accreditation application and professional certificates have been verified and approved. Your account is now active with full platform access.',
+  }).catch((err) => console.error('Failed to send coach approval notification:', err));
+
+  return {
+    message: 'Coach account approved and activated successfully.',
+    coach_id: canonicalCoachId,
+    account_status: 'Active',
+    audit_log_id: auditLogId,
+  };
+}
+
+/**
+ * Decline application, log rejection reasons, and notify applicant.
+ */
+export async function rejectCoachService(adminId: string, coachIdParam: string, rejectionReason: string) {
+  const reason = (rejectionReason || '').trim();
+  if (!reason) {
+    throw new ServiceError('Rejection reason is required when declining a coach application.', 400);
+  }
+
+  const canonicalCoachId = coachIdParam.startsWith('coach_') ? coachIdParam : `coach_${coachIdParam}`;
+  const userId = coachIdParam.replace('coach_', '');
+
+  const coachRef = db.collection('Coach_Profiles').doc(canonicalCoachId);
+  const userRef = db.collection('Users').doc(userId);
+
+  const coachSnap = await coachRef.get();
+  if (!coachSnap.exists) {
+    const querySnap = await db.collection('Coach_Profiles').where('coach_id', '==', coachIdParam).limit(1).get();
+    if (querySnap.empty) {
+      throw new ServiceError(`Coach application with ID '${coachIdParam}' not found.`, 404);
+    }
+  }
+
+  const now = new Date();
+
+  // Perform atomic batch update to update account_status to "Rejected" across Coach_Profiles and Users
+  const batch = db.batch();
+
+  batch.update(coachRef, {
+    account_status: 'Rejected',
+    updated_at: now,
+  });
+
+  batch.update(userRef, {
+    account_status: 'Rejected',
+    updated_at: now,
+  });
+
+  // Write Admin_Audit_Logs record with rejection reason
+  const auditLogId = crypto.randomUUID();
+  const auditRef = db.collection('Admin_Audit_Logs').doc(auditLogId);
+  const auditData: CoachAccreditationAuditLog = {
+    audit_log_id: auditLogId,
+    admin_id: adminId,
+    coach_id: canonicalCoachId,
+    action: 'REJECTED',
+    rejection_reason: reason,
+    timestamp: now.toISOString(),
+  };
+
+  batch.set(auditRef, auditData);
+
+  await batch.commit();
+
+  // Dispatch rejection notification asynchronously
+  createNotification({
+    recipient_id: userId,
+    type: 'SYSTEM',
+    title: 'Coach Accreditation Application Declined',
+    message: `Your coach accreditation application was declined. Reason: ${reason}`,
+  }).catch((err) => console.error('Failed to send coach rejection notification:', err));
+
+  return {
+    message: 'Coach application declined.',
+    coach_id: canonicalCoachId,
+    account_status: 'Rejected',
+    rejection_reason: reason,
+    audit_log_id: auditLogId,
+  };
+}
+

@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
 import { validateRegisterAdmin, validateLoginAdmin } from '../validators/adminValidator';
-import { registerAdminService, loginAdminService } from '../services/adminService';
+import {
+  registerAdminService,
+  loginAdminService,
+  getPendingCoachQueueService,
+  approveCoachService,
+  rejectCoachService,
+} from '../services/adminService';
 import { ServiceError } from '../validators/matchValidator';
 import { AdminAuthRequest } from '../middlewares/adminMiddleware';
 
@@ -79,3 +85,67 @@ export async function getAdminProfileHandler(req: AdminAuthRequest, res: Respons
     admin_profile: req.adminUser,
   });
 }
+
+/**
+ * GET /api/v1/admin/coach-queue – Retrieve pending coach verification applications and uploaded document links.
+ */
+export async function getCoachQueueHandler(req: AdminAuthRequest, res: Response): Promise<void> {
+  try {
+    const queue = await getPendingCoachQueueService();
+    res.status(200).json({
+      message: 'Pending coach accreditation queue retrieved successfully.',
+      total_pending: queue.length,
+      queue,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getCoachQueueHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * POST /api/v1/admin/coaches/:coachId/approve – Validate credentials, mark coach account as active, and grant full platform access.
+ * ACCEPTANCE CRITERIA: Approving a coach account updates account status in under 200ms and dispatches confirmation notifications.
+ */
+export async function approveCoachHandler(req: AdminAuthRequest, res: Response): Promise<void> {
+  const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
+  const coachIdParam = req.params.coachId;
+
+  try {
+    const result = await approveCoachService(adminId, coachIdParam);
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('approveCoachHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * POST /api/v1/admin/coaches/:coachId/reject – Decline application, log rejection reasons, and notify applicant.
+ */
+export async function rejectCoachHandler(req: AdminAuthRequest, res: Response): Promise<void> {
+  const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
+  const coachIdParam = req.params.coachId;
+  const { rejection_reason } = req.body || {};
+
+  try {
+    const result = await rejectCoachService(adminId, coachIdParam, rejection_reason);
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('rejectCoachHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+

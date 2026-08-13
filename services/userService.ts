@@ -78,6 +78,7 @@ export async function registerUserService(
     password,
     contact_number,
     role: firestoreRole,
+    account_status: firestoreRole === 'Coach' ? 'Pending' : 'Active',
     created_at: now,
     updated_at: now,
   };
@@ -143,6 +144,7 @@ export async function registerUserService(
     profileData.current_institution = String(data.current_institution || 'N/A').trim();
     profileData.professional_documents = Array.isArray(data.professional_documents) ? data.professional_documents : [];
     profileData.athlete_managed = Array.isArray(data.athlete_managed) ? data.athlete_managed : [];
+    profileData.account_status = 'Pending';
     if (file) {
       profileData.professional_documents = [
         ...(profileData.professional_documents as string[]),

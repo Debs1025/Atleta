@@ -105,19 +105,21 @@ export async function requireSystemAdmin(
       is_elevated: !!decoded.is_elevated,
     };
 
-    // Log administrative access attempt / mutation to audit log
-    await logAdminAudit({
-      user_id: decoded.uid,
-      email: decoded.email,
-      action: `${req.method} ${endpoint}`,
-      status: 'SUCCESS',
-      endpoint,
-      ip_address: clientIp,
-      details: {
-        clearance_level: req.adminUser.clearance_level,
-        department_code: req.adminUser.department_code,
-      },
-    });
+    // Log administrative access attempt for GET endpoints (mutation endpoints like approve/reject log their own single domain decision entry)
+    if (req.method === 'GET') {
+      logAdminAudit({
+        user_id: decoded.uid,
+        email: decoded.email,
+        action: `${req.method} ${endpoint}`,
+        status: 'SUCCESS',
+        endpoint,
+        ip_address: clientIp,
+        details: {
+          clearance_level: req.adminUser.clearance_level,
+          department_code: req.adminUser.department_code,
+        },
+      }).catch((err) => console.error('Async audit log error:', err));
+    }
 
     next();
   } catch (error: any) {

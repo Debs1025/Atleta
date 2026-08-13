@@ -1,6 +1,9 @@
 // User roles enum
 export type UserRole = 'Athlete' | 'Coach' | 'Official' | 'System Admin' | 'SystemAdmin';
 
+// Account status enum for coach accreditation and user approval
+export type UserAccountStatus = 'Pending' | 'Active' | 'Rejected';
+
 // Base user stored in the "Users" collection
 export interface User {
   user_id: string;
@@ -11,6 +14,7 @@ export interface User {
   email: string;
   contact_number?: string | null;
   role: UserRole;
+  account_status?: UserAccountStatus;
   created_at: Date;
   updated_at: Date;
 }
@@ -58,8 +62,23 @@ export interface CoachProfile {
   sport_type?: string;
   team_id?: string | null;
   teams_managed?: string[];
+  account_status?: UserAccountStatus;
   created_at: Date;
   updated_at: Date;
+}
+
+// Admin Audit Log entity for coach accreditation decision
+export interface CoachAccreditationAuditLog {
+  audit_log_id: string;
+  admin_id: string;
+  coach_id: string;
+  action: 'APPROVED' | 'REJECTED';
+  rejection_reason?: string;
+  timestamp: Date | string;
+}
+
+export interface RejectCoachDto {
+  rejection_reason: string;
 }
 
 // Official_Profiles Subtype
