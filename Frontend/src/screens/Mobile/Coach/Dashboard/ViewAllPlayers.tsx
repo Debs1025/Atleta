@@ -31,6 +31,7 @@ interface ViewAllPlayersProps {
   athletesPool: RosterAthlete[];
   teams: Team[];
   onBack: () => void;
+  onSelectAthlete?: (player: RosterAthlete) => void;
   onLogout?: () => void;
 }
 
@@ -38,6 +39,7 @@ export function ViewAllPlayers({
   athletesPool,
   teams,
   onBack,
+  onSelectAthlete,
 }: ViewAllPlayersProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
@@ -73,11 +75,15 @@ export function ViewAllPlayers({
   }, [athletesPool, activeCategory, searchQuery, athleteTeamMap]);
 
   const handleViewStats = useCallback((player: RosterAthlete) => {
-    Alert.alert(
-      "Player Profile & Stats",
-      `Viewing official performance stats for ${player.full_name} (${player.position} #${player.jersey_number})`
-    );
-  }, []);
+    if (onSelectAthlete) {
+      onSelectAthlete(player);
+    } else {
+      Alert.alert(
+        "Player Profile & Stats",
+        `Viewing official performance stats for ${player.full_name} (${player.position} #${player.jersey_number})`
+      );
+    }
+  }, [onSelectAthlete]);
 
   return (
     <View style={styles.container}>

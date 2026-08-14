@@ -44,6 +44,18 @@ import { MatchDetailsScreen } from "../MultiLogging/MatchDetails";
 import { MatchSessionProvider } from "../MultiLogging/MatchSessionContext";
 import { OfficialMatchesPage } from "../ScoresheetRequest/officialMatchPage";
 import { DiscoveryMain } from "../Discovery/discoveryMain";
+import { PerformancePage } from "../Performance/performancePage";
+import { AthletePortfolio } from "../Performance/athletePortfolio";
+import { AllStats } from "../Performance/allStats";
+import { MatchHistory } from "../Performance/matchHistory";
+import { TrackfieldMatchResult } from "../Performance/trackfieldMatchResult";
+import { SwimmingMatchResult } from "../Performance/swimmingMatchResult";
+import { BasketballMatchResult } from "../Performance/basketballMatchResult";
+import {
+  AthletePerformanceProfile,
+  MatchHistoryItem,
+  MOCK_PERFORMANCE_ATHLETES,
+} from "../DataTypes";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -73,7 +85,14 @@ type ViewState =
   | "track_field_match"
   | "match_details"
   | "official_matches"
-  | "discovery";
+  | "discovery"
+  | "performance"
+  | "athlete_portfolio"
+  | "all_stats"
+  | "match_history"
+  | "perf_trackfield_result"
+  | "perf_swimming_result"
+  | "perf_basketball_result";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
 type CoachMainPageProps = {
@@ -89,7 +108,7 @@ const PlayerRowItem = React.memo(
   }: {
     player: RosterAthlete;
     isLast: boolean;
-    onViewStats: (name: string) => void;
+    onViewStats: (player: RosterAthlete) => void;
   }) => {
     const formattedPos =
       player.position === "PG"
@@ -115,7 +134,7 @@ const PlayerRowItem = React.memo(
 
         <TouchableOpacity
           style={styles.viewStatsButton}
-          onPress={() => onViewStats(player.full_name)}
+          onPress={() => onViewStats(player)}
           activeOpacity={0.7}
         >
           <Text style={styles.viewStatsText}>View Stats</Text>
@@ -147,6 +166,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [hideDiscoveryNav, setHideDiscoveryNav] = useState(false);
   const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
   const [ocrPayload, setOcrPayload] = useState<RawOCRDetectedData | undefined>();
+
+  // Performance State
+  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>(MOCK_PERFORMANCE_ATHLETES);
+  const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile>(MOCK_PERFORMANCE_ATHLETES[0]);
+  const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
+  const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
 
   // Current Selected Team
   const currentTeam = useMemo(
@@ -284,13 +309,18 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     } else if (tab === "Discovery") {
       setActiveView("discovery");
     } else if (tab === "Performance") {
-      Alert.alert("Performance Analytics", "View real-time team metrics & performance stats.");
+      setActiveView("performance");
     }
   }, []);
 
-  const handleViewStats = useCallback((name: string) => {
-    Alert.alert("Player Stats", `Viewing official stats for ${name}`);
-  }, []);
+  const handleViewStats = useCallback((player: RosterAthlete) => {
+    const matched = perfAthletes.find(
+      (a) => a.full_name.toLowerCase() === player.full_name.toLowerCase()
+    ) || perfAthletes[0];
+    setSelectedPerfAthlete(matched);
+    setPreviousPortfolioView(activeView);
+    setActiveView("athlete_portfolio");
+  }, [perfAthletes, activeView]);
 
   const handleDeleteTeam = useCallback((teamId: string) => {
     setTeams((prev) => prev.filter((t) => t.team_id !== teamId));
@@ -509,6 +539,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             athletesPool={athletesPool}
             teams={teams}
             onBack={() => setActiveView("dashboard")}
+            onSelectAthlete={(player) => handleViewStats(player)}
             onLogout={onLogout}
           />
         )}
@@ -525,6 +556,86 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             onProfilePress={() => setShowProfileModal(true)}
             onToggleBottomNav={(hide) => setHideDiscoveryNav(hide)}
           />
+        )}
+
+        {/* PERFORMANCE MODULE (SCREENS 1 TO 7) */}
+        {activeView === "performance" && (
+          <PerformancePage
+            athletes={perfAthletes}
+            onSelectAthlete={(ath) => {
+              setSelectedPerfAthlete(ath);
+              setPreviousPortfolioView("performance");
+              setActiveView("athlete_portfolio");
+            }}
+            onSettingsPress={() => setActiveView("settings")}
+            onProfilePress={() => setShowProfileModal(true)}
+          />
+        )}
+
+        {activeView === "athlete_portfolio" && (
+          <AthletePortfolio
+            athlete={selectedPerfAthlete}
+            onClose={() => {
+              const returnView = previousPortfolioView || "performance";
+              setActiveView(returnView);
+              if (returnView === "performance") {
+                setActiveTab("Performance");
+              } else if (returnView === "dashboard" || returnView === "view_all_players") {
+                setActiveTab("Home");
+              }
+            }}
+            onViewAllStats={() => setActiveView("all_stats")}
+            onViewMatchHistory={() => setActiveView("match_history")}
+          />
+        )}
+
+        {activeView === "all_stats" && (
+          <AllStats
+            athlete={selectedPerfAthlete}
+            onClose={() => setActiveView("athlete_portfolio")}
+            onUpdateWorkload={(updatedWorkload) => {
+              setSelectedPerfAthlete((prev) => ({
+                ...prev,
+                workload_analytics: updatedWorkload,
+              }));
+              setPerfAthletes((prev) =>
+                prev.map((a) =>
+                  a.athlete_id === selectedPerfAthlete.athlete_id
+                    ? { ...a, workload_analytics: updatedWorkload }
+                    : a
+                )
+              );
+            }}
+          />
+        )}
+
+        {activeView === "match_history" && (
+          <MatchHistory
+            sportCategory={selectedPerfAthlete?.sport_category}
+            onClose={() => setActiveView("athlete_portfolio")}
+            onSelectMatchItem={(matchItem) => {
+              setSelectedMatchItem(matchItem);
+              if (matchItem.sport_category === "BASKETBALL") {
+                setActiveView("perf_basketball_result");
+              } else if (matchItem.sport_category === "SWIMMING") {
+                setActiveView("perf_swimming_result");
+              } else {
+                setActiveView("perf_trackfield_result");
+              }
+            }}
+          />
+        )}
+
+        {activeView === "perf_trackfield_result" && (
+          <TrackfieldMatchResult onBack={() => setActiveView("match_history")} />
+        )}
+
+        {activeView === "perf_swimming_result" && (
+          <SwimmingMatchResult onBack={() => setActiveView("match_history")} />
+        )}
+
+        {activeView === "perf_basketball_result" && (
+          <BasketballMatchResult onBack={() => setActiveView("match_history")} />
         )}
 
         {/* MULTI-LOGGING MODULE */}
@@ -599,6 +710,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           activeView !== "ocr_logging" &&
           activeView !== "ocr_output" &&
           activeView !== "create_log" &&
+          activeView !== "athlete_portfolio" &&
+          activeView !== "all_stats" &&
+          activeView !== "match_history" &&
+          activeView !== "perf_trackfield_result" &&
+          activeView !== "perf_swimming_result" &&
+          activeView !== "perf_basketball_result" &&
           activeView !== "basketball_match" &&
           activeView !== "swimming_match" &&
           activeView !== "track_field_match" &&
