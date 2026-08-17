@@ -67,6 +67,7 @@ function round(value: number, decimals: number = 2): number {
 
 /**
  * Log a daily sRPE entry to Firestore Workload_Analysis collection.
+ * Can be logged by the coach on behalf of the athlete or by the athlete themselves.
  * Computes daily_load = session_duration_mins × srpe_score.
  * Emits SRPE_LOGGED event to invalidate cache.
  */
@@ -75,6 +76,10 @@ export async function logSrpeEntry(params: {
   session_duration_mins: number;
   srpe_score: number;
   entry_date: string;
+  logged_by_coach_id?: string;
+  logged_by_name?: string;
+  notes?: string;
+  session_type?: string;
 }): Promise<WorkloadEntry> {
   const workloadId = `wl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const dailyLoad = params.session_duration_mins * params.srpe_score;
@@ -87,15 +92,24 @@ export async function logSrpeEntry(params: {
     srpe_score: params.srpe_score,
     daily_load: dailyLoad,
     entry_date: params.entry_date,
+    logged_by_coach_id: params.logged_by_coach_id || undefined,
+    logged_by_name: params.logged_by_name || undefined,
+    notes: params.notes || undefined,
+    session_type: params.session_type || 'Practice',
     created_at: now,
   };
 
-  await db.collection('Workload_Analysis').doc(workloadId).set(entry);
+  // Clean undefined properties before Firestore write
+  const cleanEntry = Object.fromEntries(
+    Object.entries(entry).filter(([_, v]) => v !== undefined)
+  );
 
-  // Emit event to invalidate cache
+  await db.collection('Workload_Analysis').doc(workloadId).set(cleanEntry);
+
+  // Emit event to invalidate all caches (workload, home summary, scouting profile)
   eventBus.emit(EVENTS.SRPE_LOGGED, { athlete_id: params.athlete_id });
 
-  console.log(`[WORKLOAD] Logged sRPE entry for athlete ${params.athlete_id}: duration=${params.session_duration_mins}min, sRPE=${params.srpe_score}, daily_load=${dailyLoad}`);
+  console.log(`[WORKLOAD] Logged sRPE entry for athlete ${params.athlete_id}: duration=${params.session_duration_mins}min, sRPE=${params.srpe_score}, daily_load=${dailyLoad}, logged_by=${params.logged_by_coach_id || 'self'}`);
 
   return entry;
 }
@@ -195,6 +209,7 @@ export async function getWorkloadAnalytics(athleteId: string): Promise<WorkloadA
     risk_description: risk.description,
     daily_loads_7d: loads7d,
     daily_loads_28d: loads28d,
+    recent_entries: sortedEntries.slice(0, 10),
     computed_at: new Date().toISOString(),
   };
 
@@ -203,3 +218,62 @@ export async function getWorkloadAnalytics(athleteId: string): Promise<WorkloadA
 
   return result;
 }
+
+/**
+ * Retrieve athlete workload summary & recent session logs.
+ * Accessible by both coach and athlete dashboards.
+ */
+export async function getAthleteWorkloadSummary(athleteId: string): Promise<any> {
+  // Parallel fetch athlete existence and entries
+  const [athleteCheck, snapshot] = await Promise.all([
+    db.collection('Athlete_Profiles').doc(athleteId).get().then(async (d) => {
+      if (d.exists) return true;
+      const u = await db.collection('Users').doc(athleteId).get();
+      return u.exists;
+    }),
+    db.collection('Workload_Analysis').where('athlete_id', '==', athleteId).get(),
+  ]);
+
+  if (!athleteCheck) {
+    const { ServiceError } = require('../validators/matchValidator');
+    throw new ServiceError(`Athlete with ID '${athleteId}' was not found.`, 404);
+  }
+
+  const entries: WorkloadEntry[] = [];
+  snapshot.forEach((doc) => {
+    entries.push(doc.data() as WorkloadEntry);
+  });
+
+  const sortedEntries = [...entries].sort(
+    (a, b) => new Date(b.entry_date || b.created_at).getTime() - new Date(a.entry_date || a.created_at).getTime()
+  );
+
+  const uniqueDates = new Set(entries.map((e) => e.entry_date));
+  const loads = sortedEntries.map((e) => Number(e.daily_load || 0));
+  const latestDailyLoad = loads[0] || 0;
+  const loads7d = loads.slice(0, 7);
+  const loads28d = loads.slice(0, 28);
+
+  const acuteLoad = loads7d.length > 0 ? round(mean(loads7d)) : 0;
+  const chronicLoad = loads28d.length > 0 ? round(mean(loads28d)) : (acuteLoad || 400);
+  const acwrRatio = chronicLoad > 0 ? round(acuteLoad / chronicLoad) : 1.0;
+  const risk = classifyRiskLevel(acwrRatio);
+
+  return {
+    athlete_id: athleteId,
+    total_entries_logged: entries.length,
+    unique_days_logged: uniqueDates.size,
+    has_28_day_baseline: uniqueDates.size >= 28,
+    days_until_baseline: Math.max(0, 28 - uniqueDates.size),
+    latest_daily_load: latestDailyLoad,
+    acute_load_7d: acuteLoad,
+    chronic_load_28d: chronicLoad,
+    acwr_ratio: acwrRatio,
+    risk_level: risk.level,
+    risk_description: risk.description,
+    daily_loads_7d: loads7d,
+    recent_entries: sortedEntries.slice(0, 15),
+    computed_at: new Date().toISOString(),
+  };
+}
+

@@ -5,6 +5,7 @@ import {
   getRankingsController,
   createProposalController,
   getProposalsController,
+  getScoutingAthleteProfileController,
 } from '../controllers/scoutingController';
 
 const router = Router();
@@ -12,6 +13,9 @@ const router = Router();
 // Protect all scouting endpoints with Bearer token authentication and Coach role restriction
 router.use(authenticate);
 router.use(requireCoach);
+
+// GET /api/v1/scouting/athletes/:athleteId – Retrieve complete athlete profile for coaching evaluation
+router.get('/athletes/:athleteId', getScoutingAthleteProfileController);
 
 // GET /api/v1/scouting/athletes – Search filtered regional athlete directory.
 router.get('/athletes', searchAthletesController);

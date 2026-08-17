@@ -5,6 +5,7 @@ import {
   getLeaderboardRankings,
   dispatchRecruitmentProposal,
   getRecruitmentProposals,
+  getFullScoutingAthleteProfile,
 } from '../services/scoutingService';
 import { validateProposalSubmission, validateScoutingParams } from '../validators/scoutingValidator';
 import { ServiceError } from '../validators/matchValidator';
@@ -107,6 +108,36 @@ export async function getProposalsController(req: AuthRequest, res: Response): P
       return;
     }
     console.error('getProposalsController error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * GET /api/v1/coaches/scouting/athletes/:athleteId & /api/v1/scouting/athletes/:athleteId
+ * Retrieve complete athlete profile for coaching evaluation: physical stats, radar chart metrics,
+ * workload trends, document verification status, and contact info.
+ *
+ * ACCEPTANCE CRITERIA:
+ * 1. Single payload responds in under 200ms.
+ * 2. Non-existent athlete ID returns HTTP 404 Not Found.
+ * 3. Sensitive raw document URLs remain redacted.
+ */
+export async function getScoutingAthleteProfileController(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    if (!athleteId) {
+      res.status(400).json({ error: 'Athlete ID parameter is required.' });
+      return;
+    }
+
+    const profile = await getFullScoutingAthleteProfile(athleteId);
+    res.status(200).json(profile);
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getScoutingAthleteProfileController error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

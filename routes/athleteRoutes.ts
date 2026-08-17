@@ -8,8 +8,11 @@ import {
   uploadDocument,
   searchAthletesHandler,
   registerAthlete,
+  getAthleteAllStatsHandler,
+  getAthleteMatchHistoryHandler,
 } from '../controllers/athleteController';
 import { getAthleteTeamHandler } from '../controllers/teamController';
+import { postSrpeLog, getAthleteWorkloadHandler } from '../controllers/workloadController';
 
 const router = Router();
 
@@ -30,6 +33,18 @@ router.get('/:athleteId/home', authenticate, getAthleteHome);
 
 // GET /api/v1/athletes/:athleteId/team – Retrieve athlete's current team, coach, and roster
 router.get('/:athleteId/team', authenticate, getAthleteTeamHandler);
+
+// GET /api/v1/athletes/:athleteId/stats/all – Retrieve expanded career statistics, shooting accuracy percentages, PER ratings, and games played
+router.get('/:athleteId/stats/all', authenticate, getAthleteAllStatsHandler);
+
+// GET /api/v1/athletes/:athleteId/matches – Fetch date-grouped match history logs with placements, scores, and sport badges
+router.get('/:athleteId/matches', authenticate, getAthleteMatchHistoryHandler);
+
+// GET /api/v1/athletes/:athleteId/workload – Retrieve athlete workload summary, fatigue meter, and recent coach logs
+router.get('/:athleteId/workload', authenticate, getAthleteWorkloadHandler);
+
+// POST /api/v1/athletes/:athleteId/workload – Log daily sRPE workout session
+router.post('/:athleteId/workload', authenticate, postSrpeLog);
 
 // GET /api/v1/athletes/:athleteId – Fetch full digital dashboard data
 router.get('/:athleteId', getAthlete);

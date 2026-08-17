@@ -181,3 +181,55 @@ export async function registerAthlete(req: Request, res: Response): Promise<void
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
+
+/**
+ * GET /api/v1/athletes/:athleteId/stats/all
+ * Retrieve expanded career statistics, shooting accuracy percentages, PER ratings, and games played.
+ */
+export async function getAthleteAllStatsHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    if (!athleteId) {
+      res.status(400).json({ error: 'Athlete ID is required.' });
+      return;
+    }
+
+    const { getAthleteExpandedCareerStats } = require('../services/athleteService');
+    const stats = await getAthleteExpandedCareerStats(athleteId);
+    res.status(200).json(stats);
+  } catch (error: any) {
+    const { ServiceError } = require('../validators/matchValidator');
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getAthleteAllStatsHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+/**
+ * GET /api/v1/athletes/:athleteId/matches
+ * Fetch date-grouped match history logs with placements, scores, and sport badges.
+ */
+export async function getAthleteMatchHistoryHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    if (!athleteId) {
+      res.status(400).json({ error: 'Athlete ID is required.' });
+      return;
+    }
+
+    const { getAthleteDateGroupedMatches } = require('../services/athleteService');
+    const matches = await getAthleteDateGroupedMatches(athleteId);
+    res.status(200).json(matches);
+  } catch (error: any) {
+    const { ServiceError } = require('../validators/matchValidator');
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getAthleteMatchHistoryHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}

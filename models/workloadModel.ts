@@ -8,6 +8,10 @@ export interface WorkloadEntry {
   srpe_score: number;           // Required, 1–10
   daily_load: number;           // Computed: session_duration_mins × srpe_score
   entry_date: string;           // ISO date string (YYYY-MM-DD)
+  logged_by_coach_id?: string;  // Optional: Coach who logged this entry
+  logged_by_name?: string;      // Optional: Name of coach or logger
+  notes?: string;               // Optional: Coach notes
+  session_type?: string;        // Optional: "Practice" | "Conditioning" | "Game" | "Recovery"
   created_at: string;           // ISO datetime
 }
 
@@ -37,6 +41,9 @@ export interface WorkloadAnalyticsResult {
   // Trend data for visualization
   daily_loads_7d: number[];
   daily_loads_28d: number[];
+
+  // Recent workout sessions
+  recent_entries?: WorkloadEntry[];
 
   computed_at: string; // ISO datetime
 }

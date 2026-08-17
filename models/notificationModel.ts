@@ -90,4 +90,13 @@ export interface AthleteHomeSummary {
   shooting_efficiency: ShootingEfficiency;
   five_game_trend: FiveGameTrendItem[];
   current_team_summary: CurrentTeamSummary | null; // Omitted (null) if no team assignment
+  workload_summary?: {
+    latest_daily_load: number;
+    acute_load_7d: number;
+    chronic_load_28d: number;
+    acwr_ratio: number;
+    risk_level: string;
+    risk_description: string;
+    days_logged: number;
+  };
 }

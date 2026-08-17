@@ -1,11 +1,11 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { validateSrpeInput } from '../validators/workloadValidator';
-import { logSrpeEntry, getWorkloadAnalytics } from '../services/workloadService';
+import { logSrpeEntry, getWorkloadAnalytics, getAthleteWorkloadSummary } from '../services/workloadService';
 
 /**
- * POST /api/v1/analytics/srpe
- * Log daily session duration and sRPE hardness rating.
+ * POST /api/v1/analytics/srpe, /api/v1/coaches/athletes/:athleteId/workload, /api/v1/athletes/:athleteId/workload
+ * Coach or Athlete logs daily session duration and sRPE hardness rating.
  *
  * ACCEPTANCE CRITERIA:
  * - sRPE values outside 1–10 return HTTP 400 Bad Request.
@@ -13,9 +13,16 @@ import { logSrpeEntry, getWorkloadAnalytics } from '../services/workloadService'
 export async function postSrpeLog(req: AuthRequest, res: Response): Promise<void> {
   try {
     const authenticatedUid = req.user?.uid;
+    const userRole = (req.user as any)?.role;
+
+    const athleteId = req.params.athleteId || req.body.athlete_id;
+    const payload = {
+      ...req.body,
+      athlete_id: athleteId,
+    };
 
     // Validate input
-    const errors = validateSrpeInput(req.body);
+    const errors = validateSrpeInput(payload);
     if (errors.length > 0) {
       res.status(400).json({
         error: 'Bad Request. Validation failed.',
@@ -24,14 +31,10 @@ export async function postSrpeLog(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { athlete_id, session_duration_mins, srpe_score, entry_date } = req.body;
+    const { session_duration_mins, srpe_score, entry_date, notes, session_type } = payload;
 
-    // Security: only the athlete themselves or their coach may submit
-    // For now, allow if authenticated user matches athlete_id
-    if (authenticatedUid && authenticatedUid !== athlete_id) {
-      // Check if the authenticated user is a coach for this athlete (future: coach roster lookup)
-      // For now, allow coaches by checking role in token claims
-      const userRole = (req.user as any)?.role;
+    // Security: only the athlete themselves, a coach, or an admin may submit
+    if (authenticatedUid && authenticatedUid !== athleteId) {
       if (userRole !== 'Coach' && userRole !== 'Admin') {
         res.status(403).json({
           error: 'Forbidden. Only the athlete or their verified coach may submit workload data.',
@@ -41,10 +44,13 @@ export async function postSrpeLog(req: AuthRequest, res: Response): Promise<void
     }
 
     const entry = await logSrpeEntry({
-      athlete_id,
+      athlete_id: athleteId,
       session_duration_mins: Number(session_duration_mins),
       srpe_score: Number(srpe_score),
       entry_date,
+      logged_by_coach_id: userRole === 'Coach' ? authenticatedUid : undefined,
+      notes: notes || undefined,
+      session_type: session_type || 'Practice',
     });
 
     res.status(201).json({
@@ -59,12 +65,7 @@ export async function postSrpeLog(req: AuthRequest, res: Response): Promise<void
 
 /**
  * GET /api/v1/analytics/:athleteId/workload
- * Retrieve calculated workload trends and safety metrics.
- *
- * ACCEPTANCE CRITERIA:
- * - Athletes with < 28 days of baseline data return HTTP 404 with explanation.
- * - Cached workload queries respond in < 100ms.
- * - Only the athlete or their verified coach may view workload data.
+ * Retrieve calculated workload trends and safety metrics (requires 28 days for full ACWR).
  */
 export async function getWorkload(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -72,6 +73,7 @@ export async function getWorkload(req: AuthRequest, res: Response): Promise<void
       ? req.params.athleteId[0]
       : req.params.athleteId;
     const authenticatedUid = req.user?.uid;
+    const userRole = (req.user as any)?.role;
 
     if (!athleteId) {
       res.status(400).json({ error: 'Athlete ID is required.' });
@@ -80,7 +82,6 @@ export async function getWorkload(req: AuthRequest, res: Response): Promise<void
 
     // Security: only the athlete themselves or their coach may view
     if (authenticatedUid && authenticatedUid !== athleteId) {
-      const userRole = (req.user as any)?.role;
       if (userRole !== 'Coach' && userRole !== 'Admin') {
         res.status(403).json({
           error: 'Forbidden. Only the athlete or their verified coach may view workload data.',
@@ -110,3 +111,44 @@ export async function getWorkload(req: AuthRequest, res: Response): Promise<void
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
+
+/**
+ * GET /api/v1/athletes/:athleteId/workload & /api/v1/coaches/athletes/:athleteId/workload
+ * Retrieve complete athlete workload summary and recent coach-logged sessions.
+ */
+export async function getAthleteWorkloadHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const athleteId = Array.isArray(req.params.athleteId)
+      ? req.params.athleteId[0]
+      : req.params.athleteId;
+    const authenticatedUid = req.user?.uid;
+    const userRole = (req.user as any)?.role;
+
+    if (!athleteId) {
+      res.status(400).json({ error: 'Athlete ID is required.' });
+      return;
+    }
+
+    // Security: only the athlete themselves or a coach/admin may view
+    if (authenticatedUid && authenticatedUid !== athleteId) {
+      if (userRole !== 'Coach' && userRole !== 'Admin') {
+        res.status(403).json({
+          error: 'Forbidden. You do not have permission to view this athlete\'s workload.',
+        });
+        return;
+      }
+    }
+
+    const summary = await getAthleteWorkloadSummary(athleteId);
+    res.status(200).json(summary);
+  } catch (error: any) {
+    const { ServiceError } = require('../validators/matchValidator');
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getAthleteWorkloadHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+

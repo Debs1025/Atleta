@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { authenticate } from '../middlewares/authMiddleware';
+import { authenticate, requireCoach } from '../middlewares/authMiddleware';
 import { authRateLimiter } from '../middlewares/rateLimitMiddleware';
 import { registerCoach, loginUser } from '../controllers/userController';
 import {
@@ -10,6 +10,8 @@ import {
   updateCoachProfileHandler,
   changeCoachPasswordHandler,
 } from '../controllers/coachInquiryController';
+import { getScoutingAthleteProfileController } from '../controllers/scoutingController';
+import { postSrpeLog, getAthleteWorkloadHandler } from '../controllers/workloadController';
 
 const router = Router();
 
@@ -36,6 +38,15 @@ router.put('/me/profile', authenticate, updateCoachProfileHandler);
 
 // PUT /api/v1/coaches/me/password – Change password requiring current password verification
 router.put('/me/password', authenticate, changeCoachPasswordHandler);
+
+// GET /api/v1/coaches/scouting/athletes/:athleteId – Retrieve complete athlete profile for coaching evaluation
+router.get('/scouting/athletes/:athleteId', authenticate, requireCoach, getScoutingAthleteProfileController);
+
+// POST /api/v1/coaches/athletes/:athleteId/workload – Coach logs athlete session duration, sRPE hardness & notes
+router.post('/athletes/:athleteId/workload', authenticate, requireCoach, postSrpeLog);
+
+// GET /api/v1/coaches/athletes/:athleteId/workload – Coach retrieves athlete workload trends and safety metrics
+router.get('/athletes/:athleteId/workload', authenticate, requireCoach, getAthleteWorkloadHandler);
 
 // GET /api/v1/coaches/:coachId – Retrieve public coach profile, quote, credentials, contact info
 router.get('/:coachId', getCoachProfileHandler);

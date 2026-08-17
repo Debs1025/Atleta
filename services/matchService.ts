@@ -549,3 +549,198 @@ export async function getMatchBoxscore(matchId: string): Promise<BoxscoreRespons
     player_metrics: playerMetrics,
   };
 }
+
+/**
+ * Retrieve sport-specific match result details (Track finish times, Swimming split times, or Basketball box scores).
+ * GET /api/v1/matches/:matchId/details
+ *
+ * ACCEPTANCE CRITERIA:
+ * 1. Requests referencing a non-existent match ID return HTTP 404 Not Found.
+ */
+export async function getMatchResultDetails(matchId: string): Promise<any> {
+  const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  if (!matchDoc.exists) {
+    throw new ServiceError(`Match with ID '${matchId}' was not found.`, 404);
+  }
+
+  const matchData = matchDoc.data() as any;
+
+  // Fetch team summary
+  let teamName = 'Home Team';
+  if (matchData.team_id) {
+    const teamDoc = await db.collection('Teams').doc(matchData.team_id).get();
+    if (teamDoc.exists) {
+      teamName = teamDoc.data()!.team_name || teamName;
+    }
+  }
+
+  // Fetch all player performance metrics for this match
+  const metricsSnapshot = await db
+    .collection('Performance_Metrics')
+    .where('match_id', '==', matchId)
+    .get();
+
+  const playerMetrics: any[] = [];
+  for (const doc of metricsSnapshot.docs) {
+    const data = doc.data() as any;
+    const athleteId = data.athlete_id;
+
+    const profileDoc = await db.collection('Athlete_Profiles').doc(athleteId).get();
+    const profileData = profileDoc.exists ? profileDoc.data()! : {};
+
+    let firstName = profileData.first_name || '';
+    let lastName = profileData.last_name || '';
+
+    if (!firstName || !lastName) {
+      const userDoc = await db.collection('Users').doc(profileData.user_id || athleteId).get();
+      if (userDoc.exists) {
+        const u = userDoc.data()!;
+        firstName = firstName || u.first_name || 'Athlete';
+        lastName = lastName || u.last_name || '';
+      }
+    }
+
+    playerMetrics.push({
+      metric_id: data.metric_id,
+      athlete_id: athleteId,
+      user_id: profileData.user_id || athleteId,
+      first_name: firstName || 'Athlete',
+      last_name: lastName || '',
+      position: profileData.position || 'Unassigned',
+      jersey_number: profileData.jersey_number ?? null,
+      sport_stats: data.sport_stats || {},
+      calculated_player_efficiency: data.calculated_player_efficiency || 0,
+    });
+  }
+
+  const sportType = matchData.sport_type || 'Basketball';
+  let sportSpecificDetails: any;
+
+  if (sportType === 'Basketball') {
+    let totalPts = 0;
+    let totalReb = 0;
+    let totalAst = 0;
+    let totalStl = 0;
+    let totalBlk = 0;
+    let totalTo = 0;
+    let totalFouls = 0;
+    let totalFgm = 0;
+    let totalFga = 0;
+
+    const boxScore = playerMetrics.map((p) => {
+      const s = p.sport_stats || {};
+      const pts = Number(s.points || 0);
+      const reb = Number((s.offensive_rebounds || 0) + (s.defensive_rebounds || 0) || s.rebounds || 0);
+      const ast = Number(s.assists || 0);
+      const stl = Number(s.steals || 0);
+      const blk = Number(s.blocks || 0);
+      const to = Number(s.turnovers || 0);
+      const fouls = Number(s.fouls || 0);
+      const fgm = Number(s.fg_made || 0);
+      const fga = Number(s.fg_attempted || 0);
+
+      totalPts += pts;
+      totalReb += reb;
+      totalAst += ast;
+      totalStl += stl;
+      totalBlk += blk;
+      totalTo += to;
+      totalFouls += fouls;
+      totalFgm += fgm;
+      totalFga += fga;
+
+      return {
+        athlete_id: p.athlete_id,
+        player_name: `${p.first_name} ${p.last_name}`.trim(),
+        jersey_number: p.jersey_number,
+        position: p.position,
+        points: pts,
+        rebounds: reb,
+        assists: ast,
+        steals: stl,
+        blocks: blk,
+        turnovers: to,
+        fouls: fouls,
+        fg_pct: fga > 0 ? parseFloat(((fgm / fga) * 100).toFixed(1)) : 0,
+        true_shooting_pct: s.true_shooting_pct || 0,
+        calculated_player_efficiency: p.calculated_player_efficiency,
+      };
+    });
+
+    sportSpecificDetails = {
+      sport_category: 'Basketball',
+      team_totals: {
+        points: totalPts,
+        rebounds: totalReb,
+        assists: totalAst,
+        steals: totalStl,
+        blocks: totalBlk,
+        turnovers: totalTo,
+        fouls: totalFouls,
+        field_goal_percentage: totalFga > 0 ? parseFloat(((totalFgm / totalFga) * 100).toFixed(1)) : 0,
+      },
+      box_score: boxScore,
+    };
+  } else if (sportType === 'Swimming' || sportType === 'Track & Field') {
+    const raceResults = playerMetrics.map((p, idx) => {
+      const s = p.sport_stats || {};
+      const timeMs = Number(s.finish_time_ms || 60000);
+      const mins = Math.floor(timeMs / 60000);
+      const secs = ((timeMs % 60000) / 1000).toFixed(2);
+      const formattedTime = `${mins > 0 ? mins + ':' : ''}${Number(secs) < 10 && mins > 0 ? '0' : ''}${secs}s`;
+
+      return {
+        athlete_id: p.athlete_id,
+        athlete_name: `${p.first_name} ${p.last_name}`.trim(),
+        placement_rank: s.placement_rank || (idx + 1),
+        distance_meters: s.distance_meters || 100,
+        finish_time_ms: timeMs,
+        formatted_finish_time: formattedTime,
+        split_times_ms: s.split_times_ms || [],
+        is_disqualified: Boolean(s.is_disqualified),
+        calculated_player_efficiency: p.calculated_player_efficiency,
+      };
+    });
+
+    sportSpecificDetails = {
+      sport_category: sportType,
+      event_name: matchData.event_name || (playerMetrics[0]?.sport_stats?.event_name) || '100m Final',
+      race_results: raceResults,
+    };
+  } else {
+    sportSpecificDetails = {
+      sport_category: sportType,
+      event_name: matchData.event_name || matchData.match_type || 'Match',
+      dynamic_stats_summary: playerMetrics.map((p) => ({
+        athlete_id: p.athlete_id,
+        athlete_name: `${p.first_name} ${p.last_name}`.trim(),
+        stats: p.sport_stats,
+        calculated_player_efficiency: p.calculated_player_efficiency,
+      })),
+    };
+  }
+
+  return {
+    match_id: matchId,
+    sport_type: sportType,
+    event_name: matchData.event_name || matchData.match_type || 'Match Event',
+    match_type: matchData.match_type || 'Tournament',
+    match_date: matchData.match_date,
+    location: matchData.location,
+    opponent_team_name: matchData.opponent_team_name,
+    game_result: matchData.game_result,
+    is_official: matchData.is_official !== false,
+    notes: matchData.notes ? (Array.isArray(matchData.notes) ? matchData.notes : [matchData.notes]) : [],
+    team_summary: {
+      team_id: matchData.team_id,
+      team_name: teamName,
+      opponent_team_name: matchData.opponent_team_name,
+      game_result: matchData.game_result,
+      match_date: matchData.match_date,
+      location: matchData.location,
+    },
+    sport_specific_details: sportSpecificDetails,
+    player_metrics: playerMetrics,
+  };
+}
+
