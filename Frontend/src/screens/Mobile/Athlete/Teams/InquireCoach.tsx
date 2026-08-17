@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/InquireCoach";
 import { Ionicons } from "@expo/vector-icons";
 import { CoachProfileSchema } from "./Teams";
@@ -23,6 +24,8 @@ export function InquireCoachScreen({
   onGoHome,
   onGoInquiries,
 }: InquireCoachProps) {
+  const insets = useSafeAreaInsets();
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
   const [modalVisible, setModalVisible] = useState(false);
 
   const handleSendInquiry = () => {
@@ -32,7 +35,7 @@ export function InquireCoachScreen({
   return (
     <View style={styles.container}>
       {/* Top Header Bar */}
-      <View style={styles.headerBar}>
+      <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
         <Pressable onPress={onBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </Pressable>

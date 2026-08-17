@@ -1,6 +1,7 @@
 import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/TeamDetails";
 import { TeamSchema } from "./Teams";
 
@@ -15,10 +16,13 @@ export function TeamDetailsScreen({
   onBack,
   onViewCoach,
 }: TeamDetailsProps) {
+  const insets = useSafeAreaInsets();
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
+
   return (
     <View style={styles.container}>
       {/* Top Header Bar */}
-      <View style={styles.headerBar}>
+      <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
         <Pressable onPress={onBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </Pressable>

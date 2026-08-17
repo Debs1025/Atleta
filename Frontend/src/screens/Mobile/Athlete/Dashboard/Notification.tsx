@@ -116,7 +116,7 @@ export function NotificationPage({
   onUploadDocumentSuccess,
 }: NotificationPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top + 10, 52);
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(
     externalNotifications || INITIAL_NOTIFICATIONS

@@ -114,14 +114,14 @@ const PlayerRowItem = React.memo(
       player.position === "PG"
         ? "POINT GUARD"
         : player.position === "SG"
-        ? "SHOOTING GUARD"
-        : player.position === "SF"
-        ? "SMALL FORWARD"
-        : player.position === "PF"
-        ? "POWER FORWARD"
-        : player.position === "C"
-        ? "CENTER"
-        : player.position;
+          ? "SHOOTING GUARD"
+          : player.position === "SF"
+            ? "SMALL FORWARD"
+            : player.position === "PF"
+              ? "POWER FORWARD"
+              : player.position === "C"
+                ? "CENTER"
+                : player.position;
 
     return (
       <View style={[styles.playerRow, !isLast && styles.playerRowBorder]}>
@@ -354,296 +354,296 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-        {/* SCREEN 5: COACH SETTINGS PAGE */}
-        {activeView === "settings" && (
-          <CoachSettings
-            onBack={() => setActiveView("dashboard")}
-            onLogout={onLogout}
-          />
-        )}
+      {/* SCREEN 5: COACH SETTINGS PAGE */}
+      {activeView === "settings" && (
+        <CoachSettings
+          onBack={() => setActiveView("dashboard")}
+          onLogout={onLogout}
+        />
+      )}
 
-        {/* OCR SCREEN 1: UPLOAD STATS & FILE PICKER */}
-        {activeView === "ocr_logging" && (
-          <OCRlogging
-            onBack={() => setActiveView("dashboard")}
-            onUploadSuccess={(data) => {
-              setOcrPayload(data);
-              setActiveView("ocr_output");
-            }}
-          />
-        )}
+      {/* OCR SCREEN 1: UPLOAD STATS & FILE PICKER */}
+      {activeView === "ocr_logging" && (
+        <OCRlogging
+          onBack={() => setActiveView("dashboard")}
+          onUploadSuccess={(data) => {
+            setOcrPayload(data);
+            setActiveView("ocr_output");
+          }}
+        />
+      )}
 
-        {/* OCR SCREEN 2: DETECTED RAW TEAM STATISTICS REVIEW & EDIT */}
-        {activeView === "ocr_output" && (
-          <OCRoutput
-            rawOCRData={ocrPayload}
-            onBack={() => setActiveView("ocr_logging")}
-            onConfirmSave={(finalData) => {
-              // Update roster athletes state with the confirmed OCR performance stats
-              setAthletesPool((prev: RosterAthlete[]) =>
-                prev.map((athlete: RosterAthlete) => {
+      {/* OCR SCREEN 2: DETECTED RAW TEAM STATISTICS REVIEW & EDIT */}
+      {activeView === "ocr_output" && (
+        <OCRoutput
+          rawOCRData={ocrPayload}
+          onBack={() => setActiveView("ocr_logging")}
+          onConfirmSave={(finalData) => {
+            // Update roster athletes state with the confirmed OCR performance stats
+            setAthletesPool((prev: RosterAthlete[]) =>
+              prev.map((athlete: RosterAthlete) => {
+                const matchedStat = finalData.athlete_overview.find(
+                  (s) => s.player_name.toLowerCase() === athlete.full_name.toLowerCase()
+                );
+                if (matchedStat) {
+                  return {
+                    ...athlete,
+                    event_distance: matchedStat.time ? matchedStat.time : athlete.event_distance,
+                  };
+                }
+                return athlete;
+              })
+            );
+            setTeams((prev: Team[]) =>
+              prev.map((t: Team) => ({
+                ...t,
+                roster_list: t.roster_list.map((p: RosterAthlete) => {
                   const matchedStat = finalData.athlete_overview.find(
-                    (s) => s.player_name.toLowerCase() === athlete.full_name.toLowerCase()
+                    (s) => s.player_name.toLowerCase() === p.full_name.toLowerCase()
                   );
                   if (matchedStat) {
                     return {
-                      ...athlete,
-                      event_distance: matchedStat.time ? matchedStat.time : athlete.event_distance,
+                      ...p,
+                      event_distance: matchedStat.time ? matchedStat.time : p.event_distance,
                     };
                   }
-                  return athlete;
-                })
-              );
-              setTeams((prev: Team[]) =>
-                prev.map((t: Team) => ({
-                  ...t,
-                  roster_list: t.roster_list.map((p: RosterAthlete) => {
-                    const matchedStat = finalData.athlete_overview.find(
-                      (s) => s.player_name.toLowerCase() === p.full_name.toLowerCase()
-                    );
-                    if (matchedStat) {
-                      return {
-                        ...p,
-                        event_distance: matchedStat.time ? matchedStat.time : p.event_distance,
-                      };
-                    }
-                    return p;
-                  }),
-                }))
-              );
-              setActiveView("dashboard");
-            }}
-          />
-        )}
+                  return p;
+                }),
+              }))
+            );
+            setActiveView("dashboard");
+          }}
+        />
+      )}
 
-        {/* SCREEN 1: COACH HOME DASHBOARD */}
-        {activeView === "dashboard" && (
-          <>
-            {/* FIXED HEADER BAR */}
-            <AtletaHeader
-              onSettingsPress={() => setActiveView("settings")}
-              onProfilePress={() => setShowProfileModal(true)}
-            />
-
-            {/* SCROLLABLE DASHBOARD BODY */}
-            <ScrollView
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
-              ]}
-              showsVerticalScrollIndicator={false}
-              overScrollMode="never"
-              scrollEventThrottle={16}
-            >
-              {/* Greeting Block */}
-              <View style={styles.greetingSection}>
-                <Text style={styles.greetingTitle}>Hi, {coach.first_name}!</Text>
-                <Text style={styles.greetingSubtitle}>
-                  Empower your athletes today. Ready to manage your elite teams?
-                </Text>
-              </View>
-
-              {/* Sports Categories Filter */}
-              <View style={styles.filterContainer}>
-                <Text style={styles.filterLabel}>SPORTS CATEGORIES</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
-                  {SPORT_CATEGORIES.map((category) => {
-                    const isActive = activeSportFilter === category;
-                    return (
-                      <TouchableOpacity
-                        key={category}
-                        onPress={() => setActiveSportFilter(category)}
-                        activeOpacity={0.8}
-                        style={[styles.pillButton, isActive ? styles.pillActive : styles.pillInactive]}
-                      >
-                        <Text style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}>
-                          {category}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* PLAYERS Section */}
-              <View style={styles.playersSection}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>PLAYERS</Text>
-                  <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
-                    <Text style={styles.viewAllText}>View All</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Player Rows */}
-                <View style={styles.playersList}>
-                  {filteredDashboardPlayers.slice(0, 4).map((player, index) => (
-                    <PlayerRowItem
-                      key={player.athlete_id}
-                      player={player}
-                      isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
-                      onViewStats={handleViewStats}
-                    />
-                  ))}
-                </View>
-              </View>
-
-              {/* TOTAL ATHLETES Card */}
-              <View style={styles.summaryTile}>
-                <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
-                <View style={styles.summaryPill}>
-                  <Text style={styles.summaryPillValue}>24</Text>
-                </View>
-              </View>
-            </ScrollView>
-          </>
-        )}
-
-        {/* SCREEN 3: MY TEAMS PAGE */}
-        {activeView === "teams_list" && (
-          <MyTeamsPage
-            teams={teams}
-            athletesPool={athletesPool}
-            onSelectTeam={(team) => {
-              setSelectedTeamId(team.team_id);
-              setActiveView("manage_team");
-            }}
-            onCreateTeam={handleCreateTeam}
-            onLogout={onLogout}
+      {/* SCREEN 1: COACH HOME DASHBOARD */}
+      {activeView === "dashboard" && (
+        <>
+          {/* FIXED HEADER BAR */}
+          <AtletaHeader
             onSettingsPress={() => setActiveView("settings")}
             onProfilePress={() => setShowProfileModal(true)}
           />
-        )}
 
-        {/* SCREEN 4: MANAGE TEAM SCREEN */}
-        {activeView === "manage_team" && currentTeam && (
-          <ManageTeamPage
-            team={currentTeam}
-            athletesPool={athletesPool}
-            onBack={() => {
-              setActiveView("teams_list");
-              setActiveTab("Teams");
-            }}
-            onDeleteTeam={handleDeleteTeam}
-            onUpdateTeamName={handleUpdateTeamName}
-            onUpdateTeamDetails={handleUpdateTeamDetails}
-            onUpdateRosterPlayer={handleUpdateRosterPlayer}
-            onUpdateRosterPlayerDetails={handleUpdateRosterPlayerDetails}
-            onRemovePlayer={handleRemovePlayer}
-            onAddPlayers={handleAddPlayersToTeam}
-          />
-        )}
+          {/* SCROLLABLE DASHBOARD BODY */}
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            overScrollMode="never"
+            scrollEventThrottle={16}
+          >
+            {/* Greeting Block */}
+            <View style={styles.greetingSection}>
+              <Text style={styles.greetingTitle}>Hi, {coach.first_name}!</Text>
+              <Text style={styles.greetingSubtitle}>
+                Empower your athletes today. Ready to manage your elite teams?
+              </Text>
+            </View>
 
-        {/* SCREEN 5: VIEW ALL PLAYERS PAGE */}
-        {activeView === "view_all_players" && (
-          <ViewAllPlayers
-            athletesPool={athletesPool}
-            teams={teams}
-            onBack={() => setActiveView("dashboard")}
-            onSelectAthlete={(player) => handleViewStats(player)}
-            onLogout={onLogout}
-          />
-        )}
+            {/* Sports Categories Filter */}
+            <View style={styles.filterContainer}>
+              <Text style={styles.filterLabel}>SPORTS CATEGORIES</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
+                {SPORT_CATEGORIES.map((category) => {
+                  const isActive = activeSportFilter === category;
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      onPress={() => setActiveSportFilter(category)}
+                      activeOpacity={0.8}
+                      style={[styles.pillButton, isActive ? styles.pillActive : styles.pillInactive]}
+                    >
+                      <Text style={[styles.pillText, isActive ? styles.pillTextActive : styles.pillTextInactive]}>
+                        {category}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
-        {/* OFFICIAL MATCHES & AUDIT SCORESHEET REQUEST MODULE */}
-        {activeView === "official_matches" && (
-          <OfficialMatchesPage onBack={() => setActiveView("dashboard")} />
-        )}
+            {/* PLAYERS Section */}
+            <View style={styles.playersSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>PLAYERS</Text>
+                <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
 
-        {/* DISCOVERY MODULE */}
-        {activeView === "discovery" && (
-          <DiscoveryMain
-            onSettingsPress={() => setActiveView("settings")}
-            onProfilePress={() => setShowProfileModal(true)}
-            onToggleBottomNav={(hide) => setHideDiscoveryNav(hide)}
-          />
-        )}
+              {/* Player Rows */}
+              <View style={styles.playersList}>
+                {filteredDashboardPlayers.slice(0, 4).map((player, index) => (
+                  <PlayerRowItem
+                    key={player.athlete_id}
+                    player={player}
+                    isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
+                    onViewStats={handleViewStats}
+                  />
+                ))}
+              </View>
+            </View>
 
-        {/* PERFORMANCE MODULE (SCREENS 1 TO 7) */}
-        {activeView === "performance" && (
-          <PerformancePage
-            athletes={perfAthletes}
-            onSelectAthlete={(ath) => {
-              setSelectedPerfAthlete(ath);
-              setPreviousPortfolioView("performance");
-              setActiveView("athlete_portfolio");
-            }}
-            onSettingsPress={() => setActiveView("settings")}
-            onProfilePress={() => setShowProfileModal(true)}
-          />
-        )}
+            {/* TOTAL ATHLETES Card */}
+            <View style={styles.summaryTile}>
+              <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
+              <View style={styles.summaryPill}>
+                <Text style={styles.summaryPillValue}>24</Text>
+              </View>
+            </View>
+          </ScrollView>
+        </>
+      )}
 
-        {activeView === "athlete_portfolio" && (
-          <AthletePortfolio
-            athlete={selectedPerfAthlete}
-            onClose={() => {
-              const returnView = previousPortfolioView || "performance";
-              setActiveView(returnView);
-              if (returnView === "performance") {
-                setActiveTab("Performance");
-              } else if (returnView === "dashboard" || returnView === "view_all_players") {
-                setActiveTab("Home");
-              }
-            }}
-            onViewAllStats={() => setActiveView("all_stats")}
-            onViewMatchHistory={() => setActiveView("match_history")}
-          />
-        )}
+      {/* SCREEN 3: MY TEAMS PAGE */}
+      {activeView === "teams_list" && (
+        <MyTeamsPage
+          teams={teams}
+          athletesPool={athletesPool}
+          onSelectTeam={(team) => {
+            setSelectedTeamId(team.team_id);
+            setActiveView("manage_team");
+          }}
+          onCreateTeam={handleCreateTeam}
+          onLogout={onLogout}
+          onSettingsPress={() => setActiveView("settings")}
+          onProfilePress={() => setShowProfileModal(true)}
+        />
+      )}
 
-        {activeView === "all_stats" && (
-          <AllStats
-            athlete={selectedPerfAthlete}
-            onClose={() => setActiveView("athlete_portfolio")}
-            onUpdateWorkload={(updatedWorkload) => {
-              setSelectedPerfAthlete((prev) => ({
-                ...prev,
-                workload_analytics: updatedWorkload,
-              }));
-              setPerfAthletes((prev) =>
-                prev.map((a) =>
-                  a.athlete_id === selectedPerfAthlete.athlete_id
-                    ? { ...a, workload_analytics: updatedWorkload }
-                    : a
-                )
-              );
-            }}
-          />
-        )}
+      {/* SCREEN 4: MANAGE TEAM SCREEN */}
+      {activeView === "manage_team" && currentTeam && (
+        <ManageTeamPage
+          team={currentTeam}
+          athletesPool={athletesPool}
+          onBack={() => {
+            setActiveView("teams_list");
+            setActiveTab("Teams");
+          }}
+          onDeleteTeam={handleDeleteTeam}
+          onUpdateTeamName={handleUpdateTeamName}
+          onUpdateTeamDetails={handleUpdateTeamDetails}
+          onUpdateRosterPlayer={handleUpdateRosterPlayer}
+          onUpdateRosterPlayerDetails={handleUpdateRosterPlayerDetails}
+          onRemovePlayer={handleRemovePlayer}
+          onAddPlayers={handleAddPlayersToTeam}
+        />
+      )}
 
-        {activeView === "match_history" && (
-          <MatchHistory
-            sportCategory={selectedPerfAthlete?.sport_category}
-            onClose={() => setActiveView("athlete_portfolio")}
-            onSelectMatchItem={(matchItem) => {
-              setSelectedMatchItem(matchItem);
-              if (matchItem.sport_category === "BASKETBALL") {
-                setActiveView("perf_basketball_result");
-              } else if (matchItem.sport_category === "SWIMMING") {
-                setActiveView("perf_swimming_result");
-              } else {
-                setActiveView("perf_trackfield_result");
-              }
-            }}
-          />
-        )}
+      {/* SCREEN 5: VIEW ALL PLAYERS PAGE */}
+      {activeView === "view_all_players" && (
+        <ViewAllPlayers
+          athletesPool={athletesPool}
+          teams={teams}
+          onBack={() => setActiveView("dashboard")}
+          onSelectAthlete={(player) => handleViewStats(player)}
+          onLogout={onLogout}
+        />
+      )}
 
-        {activeView === "perf_trackfield_result" && (
-          <TrackfieldMatchResult onBack={() => setActiveView("match_history")} />
-        )}
+      {/* OFFICIAL MATCHES & AUDIT SCORESHEET REQUEST MODULE */}
+      {activeView === "official_matches" && (
+        <OfficialMatchesPage onBack={() => setActiveView("dashboard")} />
+      )}
 
-        {activeView === "perf_swimming_result" && (
-          <SwimmingMatchResult onBack={() => setActiveView("match_history")} />
-        )}
+      {/* DISCOVERY MODULE */}
+      {activeView === "discovery" && (
+        <DiscoveryMain
+          onSettingsPress={() => setActiveView("settings")}
+          onProfilePress={() => setShowProfileModal(true)}
+          onToggleBottomNav={(hide) => setHideDiscoveryNav(hide)}
+        />
+      )}
 
-        {activeView === "perf_basketball_result" && (
-          <BasketballMatchResult onBack={() => setActiveView("match_history")} />
-        )}
+      {/* PERFORMANCE MODULE (SCREENS 1 TO 7) */}
+      {activeView === "performance" && (
+        <PerformancePage
+          athletes={perfAthletes}
+          onSelectAthlete={(ath) => {
+            setSelectedPerfAthlete(ath);
+            setPreviousPortfolioView("performance");
+            setActiveView("athlete_portfolio");
+          }}
+          onSettingsPress={() => setActiveView("settings")}
+          onProfilePress={() => setShowProfileModal(true)}
+        />
+      )}
 
-        {/* MULTI-LOGGING MODULE */}
-        {(activeView === "create_log" ||
-          activeView === "basketball_match" ||
-          activeView === "swimming_match" ||
-          activeView === "track_field_match" ||
-          activeView === "match_details") && (
+      {activeView === "athlete_portfolio" && (
+        <AthletePortfolio
+          athlete={selectedPerfAthlete}
+          onClose={() => {
+            const returnView = previousPortfolioView || "performance";
+            setActiveView(returnView);
+            if (returnView === "performance") {
+              setActiveTab("Performance");
+            } else if (returnView === "dashboard" || returnView === "view_all_players") {
+              setActiveTab("Home");
+            }
+          }}
+          onViewAllStats={() => setActiveView("all_stats")}
+          onViewMatchHistory={() => setActiveView("match_history")}
+        />
+      )}
+
+      {activeView === "all_stats" && (
+        <AllStats
+          athlete={selectedPerfAthlete}
+          onClose={() => setActiveView("athlete_portfolio")}
+          onUpdateWorkload={(updatedWorkload) => {
+            setSelectedPerfAthlete((prev) => ({
+              ...prev,
+              workload_analytics: updatedWorkload,
+            }));
+            setPerfAthletes((prev) =>
+              prev.map((a) =>
+                a.athlete_id === selectedPerfAthlete.athlete_id
+                  ? { ...a, workload_analytics: updatedWorkload }
+                  : a
+              )
+            );
+          }}
+        />
+      )}
+
+      {activeView === "match_history" && (
+        <MatchHistory
+          sportCategory={selectedPerfAthlete?.sport_category}
+          onClose={() => setActiveView("athlete_portfolio")}
+          onSelectMatchItem={(matchItem) => {
+            setSelectedMatchItem(matchItem);
+            if (matchItem.sport_category === "BASKETBALL") {
+              setActiveView("perf_basketball_result");
+            } else if (matchItem.sport_category === "SWIMMING") {
+              setActiveView("perf_swimming_result");
+            } else {
+              setActiveView("perf_trackfield_result");
+            }
+          }}
+        />
+      )}
+
+      {activeView === "perf_trackfield_result" && (
+        <TrackfieldMatchResult onBack={() => setActiveView("match_history")} />
+      )}
+
+      {activeView === "perf_swimming_result" && (
+        <SwimmingMatchResult onBack={() => setActiveView("match_history")} />
+      )}
+
+      {activeView === "perf_basketball_result" && (
+        <BasketballMatchResult onBack={() => setActiveView("match_history")} />
+      )}
+
+      {/* MULTI-LOGGING MODULE */}
+      {(activeView === "create_log" ||
+        activeView === "basketball_match" ||
+        activeView === "swimming_match" ||
+        activeView === "track_field_match" ||
+        activeView === "match_details") && (
           <MatchSessionProvider>
             {activeView === "create_log" && (
               <CreateLogScreen
@@ -691,50 +691,50 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           </MatchSessionProvider>
         )}
 
-        {/* FLOATING ACTION BUTTON */}
-        {activeView === "dashboard" && (
-          <TouchableOpacity
-            style={styles.floatingFabButton}
-            onPress={() => setShowFabOverlay(true)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add" size={28} color="#070D19" />
-          </TouchableOpacity>
+      {/* FLOATING ACTION BUTTON */}
+      {activeView === "dashboard" && (
+        <TouchableOpacity
+          style={styles.floatingFabButton}
+          onPress={() => setShowFabOverlay(true)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color="#070D19" />
+        </TouchableOpacity>
+      )}
+
+      {/* FIXED BOTTOM NAVIGATION BAR */}
+      {activeView !== "manage_team" &&
+        activeView !== "view_all_players" &&
+        activeView !== "settings" &&
+        activeView !== "edit_profile" &&
+        activeView !== "ocr_logging" &&
+        activeView !== "ocr_output" &&
+        activeView !== "create_log" &&
+        activeView !== "athlete_portfolio" &&
+        activeView !== "all_stats" &&
+        activeView !== "match_history" &&
+        activeView !== "perf_trackfield_result" &&
+        activeView !== "perf_swimming_result" &&
+        activeView !== "perf_basketball_result" &&
+        activeView !== "basketball_match" &&
+        activeView !== "swimming_match" &&
+        activeView !== "track_field_match" &&
+        activeView !== "match_details" &&
+        activeView !== "official_matches" &&
+        !hideDiscoveryNav && (
+          <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
         )}
 
-        {/* FIXED BOTTOM NAVIGATION BAR */}
-        {activeView !== "manage_team" &&
-          activeView !== "view_all_players" &&
-          activeView !== "settings" &&
-          activeView !== "edit_profile" &&
-          activeView !== "ocr_logging" &&
-          activeView !== "ocr_output" &&
-          activeView !== "create_log" &&
-          activeView !== "athlete_portfolio" &&
-          activeView !== "all_stats" &&
-          activeView !== "match_history" &&
-          activeView !== "perf_trackfield_result" &&
-          activeView !== "perf_swimming_result" &&
-          activeView !== "perf_basketball_result" &&
-          activeView !== "basketball_match" &&
-          activeView !== "swimming_match" &&
-          activeView !== "track_field_match" &&
-          activeView !== "match_details" &&
-          activeView !== "official_matches" &&
-          !hideDiscoveryNav && (
-            <AtletaNavbar activeTab={activeTab} onSelectTab={handleSelectTab} />
-          )}
-
-        {/* COACH PROFILE OVERVIEW MODAL */}
-        <CoachProfile
-          visible={showProfileModal}
-          profileData={coachProfile}
-          onClose={() => setShowProfileModal(false)}
-          onOpenEdit={() => {
-            setShowProfileModal(false);
-            setActiveView("edit_profile");
-          }}
-        />
+      {/* COACH PROFILE OVERVIEW MODAL */}
+      <CoachProfile
+        visible={showProfileModal}
+        profileData={coachProfile}
+        onClose={() => setShowProfileModal(false)}
+        onOpenEdit={() => {
+          setShowProfileModal(false);
+          setActiveView("edit_profile");
+        }}
+      />
 
       {/* SCREEN 2: FLOATING ACTION OVERLAY MENU */}
       <Modal transparent animationType="fade" visible={showFabOverlay} onRequestClose={() => setShowFabOverlay(false)}>

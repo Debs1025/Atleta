@@ -109,8 +109,8 @@ export function OCRoutput({
     onBack,
     onConfirmSave,
 }: OCRoutputProps) {
-  const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 16) + 12;
+    const insets = useSafeAreaInsets();
+    const headerTopPadding = Math.max(insets.top, 44) + 38;
 
     // Inline Editing Mode State
     const [isEditing, setIsEditing] = useState(false);
@@ -192,7 +192,7 @@ export function OCRoutput({
             <ScrollView
                 contentContainerStyle={[
                     styles.scrollContent,
-          { paddingTop: headerTopPadding + 54, paddingBottom: 16 },
+                    { paddingTop: headerTopPadding + 54, paddingBottom: 16 },
                 ]}
                 showsVerticalScrollIndicator={false}
             >

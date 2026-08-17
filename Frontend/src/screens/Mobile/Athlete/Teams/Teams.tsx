@@ -375,7 +375,7 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
                 selectedSport === "BASKETBALL" && styles.sportChipTextActive,
               ]}
             >
-              Basketball
+              BASKETBALL
             </Text>
           </Pressable>
 

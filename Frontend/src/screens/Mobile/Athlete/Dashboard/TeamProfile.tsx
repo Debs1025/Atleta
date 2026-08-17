@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/TeamProfile";
 import { Coach } from "../Teams/Teams";
 
@@ -65,6 +66,8 @@ export function TeamProfileScreen({
   onViewCoachProfile,
   onViewAllPlayers,
 }: TeamProfileProps) {
+  const insets = useSafeAreaInsets();
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
   const [showAllPlayers, setShowAllPlayers] = useState(false);
 
   const {
@@ -82,7 +85,7 @@ export function TeamProfileScreen({
   return (
     <View style={styles.container}>
       {/* Top Header Bar */}
-      <View style={styles.headerBar}>
+      <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
         <Pressable onPress={onBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </Pressable>

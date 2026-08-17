@@ -69,7 +69,7 @@ const formatFileSize = (bytes: number): string => {
 
 export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 16) + 12;
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
     // Uploaded Files State
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>(INITIAL_MOCK_FILES);

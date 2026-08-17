@@ -3,13 +3,13 @@ import { StyleSheet } from "react-native";
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
   },
   topHeaderBar: {
     paddingTop: 54,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -25,14 +25,14 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 18,
     paddingBottom: 24,
   },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
-    marginTop: 8,
+    marginTop: 12,
   },
   searchInputContainer: {
     flex: 1,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   viewTeamText: {
-    color: "#0B132B",
+    color: "#080F21",
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.5,
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
     borderTopWidth: 1,
     borderTopColor: "#1E293B",
     flexDirection: "row",

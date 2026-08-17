@@ -3,14 +3,14 @@ import { StyleSheet } from "react-native";
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
   },
 
   /* HEADER LAYOUT */
   topHeaderBar: {
     paddingBottom: 16,
     paddingHorizontal: 20,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   /* SCROLL FEED */
   scrollContainer: {
     flex: 1,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
   },
   scrollContent: {
     paddingHorizontal: 16,

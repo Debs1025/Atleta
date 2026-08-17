@@ -3,13 +3,13 @@ import { StyleSheet } from "react-native";
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
   },
   headerBar: {
     paddingTop: 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: -4,
     right: -4,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
     borderRadius: 12,
   },
   coachName: {

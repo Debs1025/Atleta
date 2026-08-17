@@ -3,13 +3,13 @@ import { StyleSheet } from "react-native";
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
   },
   headerBar: {
     paddingTop: 60,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    backgroundColor: "#0B132B",
+    backgroundColor: "#080F21",
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   viewCoachButtonText: {
-    color: "#0B132B",
+    color: "#080F21",
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.5,
