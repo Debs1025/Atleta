@@ -36,15 +36,10 @@ export function validateSubmitMatch(
     errors.push({ field: 'team_id', message: 'Team ID (team_id) is required.' });
   }
 
-  // sport_type (Required: Enum "Basketball" | "Swimming" | "Track & Field")
+  // sport_type (Required)
   const sportType = typeof data.sport_type === 'string' ? data.sport_type.trim() : '';
   if (!sportType) {
     errors.push({ field: 'sport_type', message: 'Sport category (sport_type) is required.' });
-  } else if (!VALID_SPORTS.includes(sportType)) {
-    errors.push({
-      field: 'sport_type',
-      message: `Invalid sport_type '${sportType}'. Must be one of: ${VALID_SPORTS.join(', ')}.`,
-    });
   }
 
   // match_type (Required, e.g., "Tournament", "Friendly")

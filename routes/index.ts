@@ -11,6 +11,7 @@ import scoutingRoutes from './scoutingRoutes';
 import officialRoutes from './officialRoutes';
 import validationRoutes from './validationRoutes';
 import adminRoutes from './adminRoutes';
+import sportRoutes from './sportRoutes';
 
 const router = Router();
 
@@ -49,5 +50,8 @@ router.use('/scouting', scoutingRoutes);
 
 // Mount validation routes at /validations (/api/v1/validations)
 router.use('/validations', validationRoutes);
+
+// Mount sports configuration routes at /sports (/api/v1/sports)
+router.use('/sports', sportRoutes);
 
 export default router;

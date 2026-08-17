@@ -113,6 +113,38 @@ export function calculateIndividualSportMetrics(stats: Record<string, any>): {
   return { efficiency, enrichedStats };
 }
 
+/**
+ * Calculates dynamic player efficiency for custom registered sports configurations.
+ */
+export function calculateDynamicSportMetrics(stats: Record<string, any>): {
+  efficiency: number;
+  enrichedStats: Record<string, any>;
+} {
+  let positiveScore = 0;
+  let negativeScore = 0;
+
+  for (const [key, value] of Object.entries(stats)) {
+    const num = Number(value);
+    if (!isNaN(num)) {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes('error') ||
+        lowerKey.includes('turnover') ||
+        lowerKey.includes('foul') ||
+        lowerKey.includes('miss') ||
+        lowerKey.includes('fault')
+      ) {
+        negativeScore += Math.abs(num);
+      } else {
+        positiveScore += num;
+      }
+    }
+  }
+
+  const efficiency = Number(Math.max(0, positiveScore - negativeScore).toFixed(2));
+  return { efficiency, enrichedStats: { ...stats } };
+}
+
 // ─── Service Core Functions ──────────────────────────────────────────────────
 
 /**
@@ -170,8 +202,12 @@ export async function submitMatchSession(
       const computed = calculateBasketballMetrics(rawStats);
       efficiency = computed.efficiency;
       enrichedStats = computed.enrichedStats;
-    } else {
+    } else if (payload.sport_type === 'Swimming' || payload.sport_type === 'Track & Field') {
       const computed = calculateIndividualSportMetrics(rawStats);
+      efficiency = computed.efficiency;
+      enrichedStats = computed.enrichedStats;
+    } else {
+      const computed = calculateDynamicSportMetrics(rawStats);
       efficiency = computed.efficiency;
       enrichedStats = computed.enrichedStats;
     }
@@ -237,7 +273,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
     try {
       const fs = require('fs');
       const path = require('path');
-      const scratchDir = 'C:/Users/gerar/.gemini/antigravity-ide/brain/7b779c5f-f90c-4713-965e-37bfdd03c975/scratch';
+      const scratchDir = path.resolve(__dirname, '..', 'scratch');
       if (!fs.existsSync(scratchDir)) {
         fs.mkdirSync(scratchDir, { recursive: true });
       }
