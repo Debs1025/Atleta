@@ -13,6 +13,7 @@ import {
 } from '../controllers/athleteController';
 import { getAthleteTeamHandler } from '../controllers/teamController';
 import { postSrpeLog, getAthleteWorkloadHandler } from '../controllers/workloadController';
+import { syncAthleteOfflineBatchHandler, getAthleteOfflineSnapshotHandler } from '../controllers/syncController';
 
 const router = Router();
 
@@ -45,6 +46,12 @@ router.get('/:athleteId/workload', authenticate, getAthleteWorkloadHandler);
 
 // POST /api/v1/athletes/:athleteId/workload – Log daily sRPE workout session
 router.post('/:athleteId/workload', authenticate, postSrpeLog);
+
+// POST /api/v1/athletes/:athleteId/sync-offline – Flush athlete offline queue (profile biometrics, self-logged workouts)
+router.post('/:athleteId/sync-offline', authenticate, syncAthleteOfflineBatchHandler);
+
+// GET /api/v1/athletes/:athleteId/offline-snapshot – Pre-fetch athlete offline digital portfolio package
+router.get('/:athleteId/offline-snapshot', authenticate, getAthleteOfflineSnapshotHandler);
 
 // GET /api/v1/athletes/:athleteId – Fetch full digital dashboard data
 router.get('/:athleteId', getAthlete);

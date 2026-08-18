@@ -136,17 +136,33 @@ export async function updateAthleteProfile(
     updated_at: new Date(),
   };
 
-  // Auto-package physical attributes if updated individually
-  if (payload.height_cm !== undefined || payload.weight_kg !== undefined || payload.wingspan_cm !== undefined) {
+  // Auto-package physical attributes and recompute sports science metrics (BMI & Ape Index)
+  if (payload.height_cm !== undefined || payload.weight_kg !== undefined || payload.wingspan_cm !== undefined || payload.vertical_cm !== undefined) {
     const existing = doc.exists ? (doc.data()?.physical_profile || {}) : {};
+    const height = payload.height_cm !== undefined ? Number(payload.height_cm) : (existing.height_cm || 188);
+    const weight = payload.weight_kg !== undefined ? Number(payload.weight_kg) : (existing.weight_kg || 85);
+    const wingspan = payload.wingspan_cm !== undefined ? Number(payload.wingspan_cm) : (existing.wingspan_cm || 195);
+    const vertical = payload.vertical_cm !== undefined ? Number(payload.vertical_cm) : (existing.vertical_cm || 85);
+
     payload.physical_profile = {
-      height_cm: payload.height_cm !== undefined ? Number(payload.height_cm) : (existing.height_cm || 188),
-      weight_kg: payload.weight_kg !== undefined ? Number(payload.weight_kg) : (existing.weight_kg || 85),
-      wingspan_cm: payload.wingspan_cm !== undefined ? Number(payload.wingspan_cm) : (existing.wingspan_cm || 195),
+      height_cm: height,
+      weight_kg: weight,
+      wingspan_cm: wingspan,
+      vertical_cm: vertical,
     };
+
+    const bmi = height > 0 ? parseFloat((weight / Math.pow(height / 100, 2)).toFixed(1)) : 22.5;
+    const apeIndex = height > 0 ? parseFloat((wingspan / height).toFixed(2)) : 1.02;
+
+    payload.computed_metrics = {
+      bmi,
+      ape_index: apeIndex,
+    };
+
     delete payload.height_cm;
     delete payload.weight_kg;
     delete payload.wingspan_cm;
+    delete payload.vertical_cm;
   }
 
   // Remove first_name, last_name, email from profile updates to avoid database duplication

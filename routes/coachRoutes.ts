@@ -12,6 +12,7 @@ import {
 } from '../controllers/coachInquiryController';
 import { getScoutingAthleteProfileController } from '../controllers/scoutingController';
 import { postSrpeLog, getAthleteWorkloadHandler } from '../controllers/workloadController';
+import { syncCoachOfflineBatchHandler, getCoachOfflineSnapshotHandler } from '../controllers/syncController';
 
 const router = Router();
 
@@ -47,6 +48,12 @@ router.post('/athletes/:athleteId/workload', authenticate, requireCoach, postSrp
 
 // GET /api/v1/coaches/athletes/:athleteId/workload – Coach retrieves athlete workload trends and safety metrics
 router.get('/athletes/:athleteId/workload', authenticate, requireCoach, getAthleteWorkloadHandler);
+
+// POST /api/v1/coaches/sync-offline – Flush coach offline match transaction and stat queue
+router.post('/sync-offline', authenticate, requireCoach, syncCoachOfflineBatchHandler);
+
+// GET /api/v1/coaches/offline-snapshot – Pre-fetch coach offline data package (teams, rosters, sport schemas)
+router.get('/offline-snapshot', authenticate, requireCoach, getCoachOfflineSnapshotHandler);
 
 // GET /api/v1/coaches/:coachId – Retrieve public coach profile, quote, credentials, contact info
 router.get('/:coachId', getCoachProfileHandler);

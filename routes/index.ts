@@ -12,6 +12,7 @@ import officialRoutes from './officialRoutes';
 import validationRoutes from './validationRoutes';
 import adminRoutes from './adminRoutes';
 import sportRoutes from './sportRoutes';
+import syncRoutes from './syncRoutes';
 
 const router = Router();
 
@@ -53,5 +54,8 @@ router.use('/validations', validationRoutes);
 
 // Mount sports configuration routes at /sports (/api/v1/sports)
 router.use('/sports', sportRoutes);
+
+// Mount offline sync routes at /sync (/api/v1/sync)
+router.use('/sync', syncRoutes);
 
 export default router;
