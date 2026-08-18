@@ -10,6 +10,7 @@ interface InquiriesProps {
   onBack: () => void;
 }
 
+// API Request: fetch athlete recruitment status & inquiries (GET /api/athlete/inquiries)
 export function InquiriesScreen({ inquiries, onBack }: InquiriesProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;

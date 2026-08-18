@@ -28,6 +28,7 @@ export function InquireCoachScreen({
   const headerTopPadding = Math.max(insets.top, 44) + 38;
   const [modalVisible, setModalVisible] = useState(false);
 
+  // API Request: send recruitment inquiry to coach (POST /api/athlete/inquiries)
   const handleSendInquiry = () => {
     setModalVisible(true);
   };
@@ -185,7 +186,7 @@ export function InquireCoachScreen({
         </Pressable>
       </ScrollView>
 
-      {/* SCREEN 4: INQUIRY SENT SUCCESS MODAL (image_067d57.jpg) */}
+      {/* SCREEN 4: INQUIRY SENT SUCCESS MODAL */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -194,7 +195,7 @@ export function InquireCoachScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Inquiry Sent ✓</Text>
+            <Text style={styles.modalTitle}>Inquiry Sent</Text>
             <Text style={styles.modalSubtitle}>
               You can view your inquiry to the inquiry page
             </Text>

@@ -144,6 +144,7 @@ const PlayerRowItem = React.memo(
   }
 );
 
+// API Request: fetch coach dashboard & team summary (GET /api/coach/dashboard)
 export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
@@ -416,7 +417,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-      {/* SCREEN 1: COACH HOME DASHBOARD */}
+      {/* COACH HOME DASHBOARD */}
       {activeView === "dashboard" && (
         <>
           {/* FIXED HEADER BAR */}
@@ -498,7 +499,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         </>
       )}
 
-      {/* SCREEN 3: MY TEAMS PAGE */}
+      {/* MY TEAMS PAGE */}
       {activeView === "teams_list" && (
         <MyTeamsPage
           teams={teams}
@@ -514,7 +515,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-      {/* SCREEN 4: MANAGE TEAM SCREEN */}
+      {/* MANAGE TEAM SCREEN */}
       {activeView === "manage_team" && currentTeam && (
         <ManageTeamPage
           team={currentTeam}
@@ -533,7 +534,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-      {/* SCREEN 5: VIEW ALL PLAYERS PAGE */}
+      {/* VIEW ALL PLAYERS PAGE */}
       {activeView === "view_all_players" && (
         <ViewAllPlayers
           athletesPool={athletesPool}
@@ -558,7 +559,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-      {/* PERFORMANCE MODULE (SCREENS 1 TO 7) */}
+      {/* PERFORMANCE MODULE  */}
       {activeView === "performance" && (
         <PerformancePage
           athletes={perfAthletes}
@@ -702,7 +703,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         </TouchableOpacity>
       )}
 
-      {/* FIXED BOTTOM NAVIGATION BAR */}
+      {/* NAVIGATIONS */}
       {activeView !== "manage_team" &&
         activeView !== "view_all_players" &&
         activeView !== "settings" &&
@@ -736,7 +737,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         }}
       />
 
-      {/* SCREEN 2: FLOATING ACTION OVERLAY MENU */}
+      {/* FLOATING ACTION OVERLAY MENU */}
       <Modal transparent animationType="fade" visible={showFabOverlay} onRequestClose={() => setShowFabOverlay(false)}>
         <TouchableOpacity
           style={styles.fabBackdrop}

@@ -11,6 +11,7 @@ interface TeamDetailsProps {
   onViewCoach: (coachId?: string) => void;
 }
 
+// API Request: fetch detailed team roster & coach info (GET /api/teams/:id)
 export function TeamDetailsScreen({
   team,
   onBack,

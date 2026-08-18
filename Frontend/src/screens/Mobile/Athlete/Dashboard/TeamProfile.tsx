@@ -24,7 +24,8 @@ export interface TeamProfileData {
   players: RosterPlayer[];
 }
 
-/* TEMPORARY MOCK DATA - BACKEND API READY */
+// Sample data for testing
+// API Request: fetch team profile data (GET /api/teams/:teamId)
 export const DEFAULT_TEAM_PROFILE: TeamProfileData = {
   team_id: "team_panthers_01",
   team_name: "Camarines Sur Panthers",

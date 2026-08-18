@@ -34,7 +34,8 @@ const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [
   },
 ];
 
-// Sample data to be used since mayo pang backend
+// Sample data with schemas
+// API Request: fetch athlete profile & analytics (GET /api/athlete/profile)
 export const initialAthleteProfile: AthleteProfile = {
   athlete_id: "ath_001",
   first_name: "ALEXANDER",
@@ -99,15 +100,14 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   }, [activeTab, dashboardScreen]);
 
   useEffect(() => {
-    // Skeleton Loader
+    // API Request: fetch profile and notifications on mount (GET /api/athlete/dashboard)
+    // Loading of profile and notifications with skeleton loader
     const timer = setTimeout(() => {
       setLoading(false);
     }, 600);
-
-    // Register device for push notifications
+    
     (async () => {
       try {
-        // Push notification registration service initialized for mobile device
       } catch (error) {
         console.log("Push notification initialization:", error);
       }

@@ -60,6 +60,7 @@ function InlineProfileSkeleton({ topPadding }: { topPadding: number }) {
   );
 }
 
+// API Request: fetch coach profile details (GET /api/coach/profile)
 export function CoachProfile({
   visible,
   onClose,

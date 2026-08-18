@@ -75,7 +75,7 @@ interface OCRoutputProps {
     onConfirmSave?: (finalData: RawOCRDetectedData) => void;
 }
 
-// Sample Default Basketball Raw OCR Output (1-to-1 with image_96e088.png)
+// Sample Default Basketball Raw OCR Output
 const DEFAULT_RAW_BASKETBALL_OCR: RawOCRDetectedData = {
     team_name: "CAMARINES SUR PANTHERS",
     sport_type: "BASKETBALL",
@@ -104,6 +104,7 @@ const DEFAULT_RAW_BASKETBALL_OCR: RawOCRDetectedData = {
     },
 };
 
+// API Request: submit verified OCR match statistics to backend (POST /api/ocr/save-stats)
 export function OCRoutput({
     rawOCRData = DEFAULT_RAW_BASKETBALL_OCR,
     onBack,
@@ -174,7 +175,7 @@ export function OCRoutput({
         <View style={styles.container}>
             <StatusBar style="light" />
 
-            {/* FIXED HEADER BAR WITH "OCR RESULT" BESIDE BACK BUTTON */}
+            {/* OCR RESULTS HEADER */}
             <View style={[styles.fixedHeader, { paddingTop: headerTopPadding }]}>
                 <View style={styles.headerRow}>
                     <TouchableOpacity
@@ -241,6 +242,7 @@ export function OCRoutput({
                                             ? "ATHLETE NAME"
                                             : "PLAYER NAME"}
                                 </Text>
+                                {/* Will make this dynamic when linked to backend */}
                                 {isBasketball && (
                                     <>
                                         <Text style={styles.tableHeaderColStat}>PTS</Text>
@@ -478,7 +480,7 @@ export function OCRoutput({
 
                 {/* ACTION BUTTONS STACK */}
                 <View style={styles.actionStack}>
-                    {/* PRIMARY CTA BUTTON: CONFIRM & SAVE */}
+                    {/* CONFIRM & SAVE */}
                     <TouchableOpacity
                         style={styles.confirmButton}
                         onPress={handleSave}
@@ -488,7 +490,7 @@ export function OCRoutput({
                         <Text style={styles.confirmButtonText}>CONFIRM & SAVE</Text>
                     </TouchableOpacity>
 
-                    {/* SECONDARY BUTTON: EDIT RAW SCORESHEET */}
+                    {/* EDIT RAW SCORESHEET */}
                     <TouchableOpacity
                         style={styles.editButton}
                         onPress={() => setIsEditing(!isEditing)}

@@ -26,6 +26,7 @@ export interface CoachEditProfileProps {
   onSave?: (updatedProfile: CoachProfileState) => void;
 }
 
+// API Request: update coach profile details (PUT /api/coach/profile)
 export function CoachEditProfile({
   onBack,
   profileData,
@@ -89,6 +90,7 @@ export function CoachEditProfile({
     );
   };
 
+  // API Request: upload coach profile image (POST /api/coach/avatar/upload)
   const handlePickAvatarImage = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -106,6 +108,7 @@ export function CoachEditProfile({
   };
 
   // Credentials Document Upload Handler
+  // API Request: upload credential document (POST /api/coach/documents/upload)
   const handleUploadCertification = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -157,6 +160,7 @@ export function CoachEditProfile({
   };
 
   // Submit Action Handler
+  // API Request: save coach profile changes (PUT /api/coach/profile)
   const handleSaveChanges = () => {
     if (!form.full_name.trim()) {
       Alert.alert("Validation Error", "Full Name cannot be empty.");

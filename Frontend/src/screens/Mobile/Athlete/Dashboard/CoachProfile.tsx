@@ -9,6 +9,7 @@ import { CoachProfileSchema } from "../Teams/Teams";
 export type CoachProfileData = CoachProfileSchema;
 
 // sample coach data for testing 
+// API Request: fetch coach profile (GET /api/coaches/:coachId)
 export const DEFAULT_COACH_PROFILE: CoachProfileData = {
   coach_id: "coach_erick_01",
   full_name: "COACH ERICK NATHANIEL",

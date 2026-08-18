@@ -62,6 +62,7 @@ export interface NotificationPageProps {
 }
 
 //sample notification from coach
+// API Request: fetch notifications (GET /api/athlete/notifications)
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: "notif_001",
@@ -288,7 +289,7 @@ export function NotificationPage({
     }, 800);
   };
 
-  // Helper to render body text with inline highlighted text
+  // Helper to render body text 
   const renderBodyWithHighlight = (item: NotificationItem) => {
     if (!item.highlighted_text || !item.message_body.includes(item.highlighted_text)) {
       return <Text style={styles.cardBodyText}>{item.message_body}</Text>;
@@ -397,7 +398,7 @@ export function NotificationPage({
                 >
                   <Text style={styles.inquiryActionText}>
                     {item.inquiry_details?.status === "ACCEPTED"
-                      ? "Inquiry Accepted ✓"
+                      ? "Inquiry Accepted "
                       : item.inquiry_details?.status === "DECLINED"
                         ? "Inquiry Declined"
                         : item.action_label}

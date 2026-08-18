@@ -61,6 +61,7 @@ const PasswordInputField = ({
   </>
 );
 
+// API Request: update coach settings & preferences (PUT /api/coach/settings)
 export function CoachSettings({
   settings = DEFAULT_COACH_SETTINGS,
   onUpdateSettings,

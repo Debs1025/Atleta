@@ -31,7 +31,8 @@ interface OCRloggingProps {
 }
 
 // Sample Initial Mock Files
-// BACKEND CONNECT NOTE: Remove initial mock array when linking to backend api
+// Remove initial mock datas when linking to backend api
+// API Request: fetch uploaded scoresheets & documents (GET /api/ocr/uploads)
 const INITIAL_MOCK_FILES: UploadedFileItem[] = [
     {
         upload_id: "upl_001",

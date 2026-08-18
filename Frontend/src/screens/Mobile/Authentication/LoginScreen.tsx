@@ -37,11 +37,19 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     defaultValues: { email: "", password: "" }
   });
 
+  // ============================================================================
+  // BACKEND API CONNECTION: LOGIN
+  // - API Endpoint: POST `${API_BASE}/api/auth/login`
+  // - Request Payload: { email: string, password: string }
+  // - Expected Response: { token: string, role?: "athlete" | "coach", user?: { id: string, role: string } }
+  // - Error Statuses: 400 (Validation), 401 (Invalid Credentials)
+  // ============================================================================
   const submit = form.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
+      // API call automatically routes to your backend when EXPO_PUBLIC_ATLETA_API is configured
       const result = await requestJson("/api/auth/login", values);
       const token = extractAuthToken(result);
       const role = extractAuthRole(result, values.email);
@@ -100,6 +108,12 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           <View style={authScreenStyles.divider} />
         </View>
 
+        {/* 
+          BACKEND OAUTH INTEGRATION PLACEHOLDER:
+          When connecting Google OAuth with your backend / Firebase Auth / Expo AuthSession:
+          1. Obtain idToken or accessToken from Google OAuth Provider SDK
+          2. Call requestJson("/api/auth/google", { idToken })
+        */}
         <Button
           label="Login with Google"
           variant="secondary"
@@ -107,6 +121,11 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           onPress={() => setFeedback({ tone: "info", message: "Google sign-in is ready for your backend or Firebase OAuth flow." })}
         />
         <View style={authScreenStyles.spacer} />
+        {/* 
+          BACKEND OAUTH INTEGRATION PLACEHOLDER:
+          When connecting Facebook OAuth with your backend:
+          1. Call requestJson("/api/auth/facebook", { accessToken })
+        */}
         <Button
           label="Login with Facebook"
           variant="secondary"

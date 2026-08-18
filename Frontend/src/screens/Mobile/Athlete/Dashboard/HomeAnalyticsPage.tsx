@@ -65,6 +65,7 @@ interface HomeAnalyticsPageProps {
   onNavigateToTeamProfile?: () => void;
 }
 
+// API Request: data comes from GET /api/athlete/analytics
 export function HomeAnalyticsPage({
   profile,
   loading = false,

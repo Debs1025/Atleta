@@ -69,6 +69,7 @@ export interface InquirySchema {
 }
 
 // Sample Data for teams 
+// API Request: fetch sports teams directory (GET /api/teams)
 export const MOCK_TEAMS: TeamSchema[] = [
   {
     team_id: "team_001",
@@ -131,6 +132,7 @@ export const MOCK_TEAMS: TeamSchema[] = [
 ];
 
 // Temporary Coach Data
+// API Request: fetch coach profile details (GET /api/coaches/:id)
 export const MOCK_COACH_PROFILES: Record<string, CoachProfileSchema> = {
   coach_erick_01: {
     coach_id: "coach_erick_01",
@@ -164,6 +166,7 @@ export const MOCK_COACH_PROFILES: Record<string, CoachProfileSchema> = {
 };
 
 // Temporary Athlete Inquiries
+// API Request: fetch athlete recruitment inquiries (GET /api/athlete/inquiries)
 export const MOCK_INQUIRIES: InquirySchema[] = [
   {
     inquiry_id: "inq_01",
@@ -221,6 +224,7 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
   }, [currentScreen, onScreenStateChange]);
 
   useEffect(() => {
+    // API Request: fetch teams & inquiries from backend on mount
     // Skeletal Loader
     const timer = setTimeout(() => {
       setLoading(false);

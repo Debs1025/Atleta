@@ -171,7 +171,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     if (valid) {
       setStep(3);
     } else {
-      setFeedback({ tone: "error", message: "Please complete the account information before continuing." });
+      setFeedback({ tone: "error", message: "Please fill in the required details before proceeding." });
     }
   };
 
@@ -202,6 +202,27 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     setFeedback({ tone: "success", message: `${nextDocument.name} attached.` });
   };
 
+  // ============================================================================
+  // BACKEND API CONNECTION: ATHLETE SIGNUP
+  // - API Endpoint: POST `${API_BASE}/api/auth/register`
+  // - Request Format: Content-Type: application/json
+  // - Request Payload Body:
+  //   {
+  //     role: "athlete",
+  //     first_name: string,
+  //     last_name: string,
+  //     email: string,
+  //     password: string,
+  //     contact_number: string,
+  //     birthdate: "YYYY-MM-DD",
+  //     gender: "Male" | "Female",
+  //     province: string,
+  //     sport_type: "Basketball" | "Swimming" | "Track and Field",
+  //     terms_accepted: true
+  //   }
+  // - Expected Response: 201 Created / 200 OK -> { message?: string, user?: object, token?: string }
+  // - Error Statuses: 400 (Validation Error), 409 (Email Already Registered)
+  // ============================================================================
   const submitAthlete = athleteForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
@@ -217,6 +238,15 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     }
   });
 
+  // ============================================================================
+  // BACKEND API CONNECTION: COACH SIGNUP
+  // - API Endpoint: POST `${API_BASE}/api/auth/register`
+  // - Request Format: Content-Type: multipart/form-data
+  // - Request Payload Fields:
+  //   role: "coach", first_name, last_name, email, password, contact_number,
+  //   certification_license_num, years_of_experience (string), current_institution,
+  //   eligible_documents: file binary / multipart blob
+  // ============================================================================
   const submitCoach = coachForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
@@ -300,6 +330,10 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
                 <View style={authScreenStyles.divider} />
               </View>
 
+              {/* 
+                BACKEND OAUTH INTEGRATION PLACEHOLDER:
+                Google Sign Up integration with backend / Firebase Auth
+              */}
               <Button
                 label="Sign Up with Google"
                 variant="secondary"
@@ -307,6 +341,10 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
                 onPress={() => setFeedback({ tone: "info", message: "Google sign-up is ready for your backend or Firebase OAuth flow." })}
               />
               <View style={authScreenStyles.spacer} />
+              {/* 
+                BACKEND OAUTH INTEGRATION PLACEHOLDER:
+                Facebook Sign Up integration with backend / Facebook Auth SDK
+              */}
               <Button
                 label="Sign Up with Facebook"
                 variant="secondary"

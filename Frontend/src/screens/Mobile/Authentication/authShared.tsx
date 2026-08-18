@@ -28,6 +28,12 @@ import { z } from "zod";
 
 
 // Configuration
+// ============================================================================
+// BACKEND INTEGRATION GUIDE:
+// 1. Set EXPO_PUBLIC_ATLETA_API in your .env file or environment (e.g. EXPO_PUBLIC_ATLETA_API=http://localhost:5000 or https://api.atleta.com).
+// 2. When EXPO_PUBLIC_ATLETA_API is empty, mockAuthResponse() handles request simulation locally.
+// 3. When EXPO_PUBLIC_ATLETA_API is populated, real HTTP network calls automatically route to `${API_BASE}${path}`.
+// ============================================================================
 const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
@@ -130,7 +136,7 @@ export type ResetValues = z.infer<typeof resetSchema>;
 
 // Error Handling
 const AUTH_ERROR_MAP: Record<number, string> = {
-  400: "Validation failed. Check the highlighted fields and try again.",
+  400: "Validation failed. Check if your details are correct and try again.",
   401: "Unauthorized. Please verify your email and password.",
   409: "An account already exists for that email address."
 };
@@ -172,6 +178,7 @@ export function extractAuthRole(payload: Record<string, unknown>, emailFallback?
 }
 
 // API Request (change this if backend api is ready)
+// For testing: mockAuthResponse returns dummy data when EXPO_PUBLIC_ATLETA_API is unset.
 function mockAuthResponse(path: string) {
   const isAuth = path.includes("login") || path.includes("register");
   return {
@@ -188,7 +195,7 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
     return await request(controller.signal);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("The API request timed out. Check your backend URL and try again.");
+      throw new Error("Request Timeout, Try Again Later.");
     }
     throw error;
   } finally {
@@ -214,7 +221,15 @@ async function fetchApi(path: string, options: RequestInit) {
   return payload;
 }
 
-// Handles json requests
+// ============================================================================
+// BACKEND CONTRACT HELPERS:
+// - requestJson(path, body): Sends JSON POST requests to `${API_BASE}${path}`
+//   Expected Backend Input: JSON stringified payload
+//   Expected Backend Response: { token?: string, role?: "athlete" | "coach", message?: string }
+// - requestMultipart(path, body): Sends multipart/form-data POST requests to `${API_BASE}${path}`
+//   Expected Backend Input: FormData instance (with file attachments)
+//   Expected Backend Response: { token?: string, role?: "athlete" | "coach", message?: string }
+// ============================================================================
 export function requestJson(path: string, body: unknown) {
   return fetchApi(path, {
     method: "POST",

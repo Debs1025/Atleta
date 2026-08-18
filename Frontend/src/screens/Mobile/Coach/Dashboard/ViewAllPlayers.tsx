@@ -35,6 +35,7 @@ interface ViewAllPlayersProps {
   onLogout?: () => void;
 }
 
+// API Request: fetch all roster athletes across managed teams (GET /api/coach/athletes)
 export function ViewAllPlayers({
   athletesPool,
   teams,

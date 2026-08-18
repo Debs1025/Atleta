@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Image,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -12,6 +11,13 @@ import styles from "./styles/AthleteProfilePage";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { AthleteProfile, EligibleDocument } from "../Dashboard/HomeAnalyticsPage";
+import {
+  WorkloadWarningModal,
+  AddDocumentModal,
+  CategoryPickerModal,
+  LogoutConfirmModal,
+  DatePickerModal,
+} from "./AthleteProfileModals";
 
 export interface DailySessionLog {
   date: string; // "YYYY-MM-DD"
@@ -223,6 +229,7 @@ export function AthleteProfilePage({
   const latestLog = workloadData.weekly_logs.find((l) => l.duration_minutes > 0) || workloadData.weekly_logs[0];
   const latestWorkoutScore = (latestLog?.duration_minutes || 0) * (latestLog?.srpe || 0);
 
+  // API Request: log daily workout session (POST /api/athlete/workload/log)
   const handleLogWorkout = () => {
     const duration = parseInt(logDuration, 10);
     if (isNaN(duration) || duration <= 0) {
@@ -279,6 +286,7 @@ export function AthleteProfilePage({
   }
 
   // Handler to replace/upload existing document file
+  // API Request: upload document (POST /api/athlete/documents/upload)
   const handlePickDocument = async (docId: string) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -330,6 +338,7 @@ export function AthleteProfilePage({
   };
 
   // Handler to save new document 
+  // API Request: save new document record (POST /api/athlete/documents)
   const handleSaveNewDocument = () => {
     if (!newDocTitle.trim()) {
       setAddDocError("Please enter a document name.");
@@ -398,6 +407,7 @@ export function AthleteProfilePage({
     setShowDatePickerModal(false);
   };
 
+  // API Request: update password (POST /api/auth/change-password)
   const handleChangePassword = async () => {
     if (!currentPassword) {
       setPasswordError("Please enter your current password.");
@@ -434,6 +444,7 @@ export function AthleteProfilePage({
     }
   };
 
+  // API Request: save profile updates (PUT /api/athlete/profile)
   const handleSave = () => {
     const updated: AthleteProfile = {
       ...profile,
@@ -1329,440 +1340,58 @@ export function AthleteProfilePage({
       </View>
 
       {/* Fatigue / Burnout Warning Alert Modal */}
-      <Modal
+      <WorkloadWarningModal
         visible={showWarningModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowWarningModal(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowWarningModal(false)}>
-          <Pressable style={[styles.modalCard, { borderColor: "#EF4444", borderWidth: 2 }]} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: "center", marginBottom: 12 }}>
-              <Ionicons name="alert-circle" size={48} color="#EF4444" />
-              <Text style={{ color: "#EF4444", fontSize: 16, fontWeight: "900", textAlign: "center", marginTop: 8 }}>
-                HIGH FATIGUE &amp; INJURY RISK DETECTED
-              </Text>
-            </View>
-
-            <Text style={{ color: "#E2E8F0", fontSize: 13, lineHeight: 19, textAlign: "center", marginBottom: 16 }}>
-              Your Fatigue Meter ({acwrRatio.toFixed(2)}) or Workout Routine Score ({routineScore}) has exceeded safe recovery limits (&gt; 1.50). Continued heavy training poses high risk of muscle strain, poor performance, or burnout.
-            </Text>
-
-            <Pressable
-              style={{ backgroundColor: "#EF4444", borderRadius: 10, paddingVertical: 12, alignItems: "center" }}
-              onPress={() => setShowWarningModal(false)}
-            >
-              <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "900", letterSpacing: 0.5 }}>I UNDERSTAND &amp; WILL REST</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowWarningModal(false)}
+      />
 
       {/* Add Document Modal */}
-      <Modal
+      <AddDocumentModal
         visible={showAddDocModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowAddDocModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowAddDocModal(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>ADD ELIGIBLE DOCUMENT</Text>
-              <Pressable onPress={() => setShowAddDocModal(false)}>
-                <Ionicons name="close" size={22} color="#94A3B8" />
-              </Pressable>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Input document name & upload official file before saving to profile
-            </Text>
-
-            {/* Document Name Input */}
-            <View style={styles.modalFieldGroup}>
-              <Text style={styles.fieldLabel}>DOCUMENT NAME</Text>
-              <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
-                <TextInput
-                  style={styles.textInput}
-                  value={newDocTitle}
-                  onChangeText={(val) => {
-                    setNewDocTitle(val);
-                    setAddDocError("");
-                  }}
-                  placeholder="e.g. PSA Birth Certificate, Medical Clearance"
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-            </View>
-
-            {/* Document File Picker Box */}
-            <View style={styles.modalFieldGroup}>
-              <Text style={styles.fieldLabel}>ATTACH FILE (PDF or IMAGE)</Text>
-              <Pressable
-                style={styles.filePickerBox}
-                onPress={handlePickModalDocument}
-              >
-                <Ionicons
-                  name={newDocAsset ? "document-attach" : "cloud-upload-outline"}
-                  size={24}
-                  color="#38BDF8"
-                />
-                <View style={styles.filePickerTextGroup}>
-                  <Text style={styles.filePickerMainText} numberOfLines={1}>
-                    {newDocAsset ? newDocAsset.name : "Tap to Select Document File"}
-                  </Text>
-                  <Text style={styles.filePickerSubText}>
-                    {newDocAsset ? "File attached cleanly" : "PDF, JPEG, or PNG formats"}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-
-            {/* Validation Error Message */}
-            {addDocError ? (
-              <Text style={styles.modalErrorText}>{addDocError}</Text>
-            ) : null}
-
-            {/* Modal Action Buttons */}
-            <View style={styles.modalActionRow}>
-              <Pressable
-                style={styles.modalSaveButton}
-                onPress={handleSaveNewDocument}
-              >
-                <Ionicons name="checkmark" size={16} color="#080F21" style={{ marginRight: 4 }} />
-                <Text style={styles.modalSaveButtonText}>Save Document</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.modalCancelButton}
-                onPress={() => setShowAddDocModal(false)}
-              >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-
+        onClose={() => setShowAddDocModal(false)}
+        newDocTitle={newDocTitle}
+        setNewDocTitle={setNewDocTitle}
+        newDocAsset={newDocAsset}
+        addDocError={addDocError}
+        setAddDocError={setAddDocError}
+        onPickDocument={handlePickModalDocument}
+        onSaveDocument={handleSaveNewDocument}
+      />
 
       {/* Category Selection Modal */}
-      <Modal
+      <CategoryPickerModal
         visible={showCategoryPicker}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowCategoryPicker(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowCategoryPicker(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>SELECT SPORT CATEGORY</Text>
-              <Pressable onPress={() => setShowCategoryPicker(false)}>
-                <Ionicons name="close" size={22} color="#94A3B8" />
-              </Pressable>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Choose your primary athletic division
-            </Text>
-
-            <View style={styles.categoryListGroup}>
-              {categoriesList.map((item) => {
-                const isSelected = item === category;
-                return (
-                  <Pressable
-                    key={item}
-                    style={[
-                      styles.categoryOptionCard,
-                      isSelected && styles.categoryOptionCardSelected,
-                    ]}
-                    onPress={() => selectCategoryOption(item)}
-                  >
-                    <View style={styles.categoryOptionLeft}>
-                      <Ionicons
-                        name={
-                          item === "BASKETBALL"
-                            ? "basketball-outline"
-                            : item === "SWIMMING"
-                              ? "water-outline"
-                              : "fitness-outline"
-                        }
-                        size={20}
-                        color={isSelected ? "#38BDF8" : "#94A3B8"}
-                      />
-                      <Text
-                        style={[
-                          styles.categoryOptionText,
-                          isSelected && styles.categoryOptionTextSelected,
-                        ]}
-                      >
-                        {item}
-                      </Text>
-                    </View>
-
-                    {isSelected && (
-                      <Ionicons name="checkmark-circle" size={20} color="#38BDF8" />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Pressable
-              style={styles.modalCloseButton}
-              onPress={() => setShowCategoryPicker(false)}
-            >
-              <Text style={styles.modalCloseButtonText}>Done</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowCategoryPicker(false)}
+        categoriesList={categoriesList}
+        category={category}
+        onSelectCategory={selectCategoryOption}
+      />
 
       {/* Logout Confirmation Modal */}
-      <Modal
+      <LogoutConfirmModal
         visible={showLogoutModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowLogoutModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowLogoutModal(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>CONFIRM LOGOUT</Text>
-              <Pressable onPress={() => setShowLogoutModal(false)}>
-                <Ionicons name="close" size={22} color="#94A3B8" />
-              </Pressable>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Are you sure you want to log out of your account?
-            </Text>
-
-            <View style={styles.modalActionRow}>
-              <Pressable
-                style={styles.logoutConfirmButton}
-                onPress={() => {
-                  setShowLogoutModal(false);
-                  onLogout?.();
-                }}
-              >
-                <Ionicons name="log-out-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.logoutConfirmButtonText}>LOG OUT</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.modalCancelButton}
-                onPress={() => setShowLogoutModal(false)}
-              >
-                <Text style={styles.modalCancelButtonText}>CANCEL</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowLogoutModal(false)}
+        onConfirmLogout={onLogout}
+      />
 
       {/* Birthdate Calendar Picker Modal */}
-      <Modal
+      <DatePickerModal
         visible={showDatePickerModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowDatePickerModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowDatePickerModal(false)}
-        >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>SELECT BIRTHDATE</Text>
-              <Pressable onPress={() => setShowDatePickerModal(false)}>
-                <Ionicons name="close" size={22} color="#94A3B8" />
-              </Pressable>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Tap Month or Year to quickly jump, or select day below
-            </Text>
-
-            {/* Calendar Header Bar (Prev, Month / Year Toggles, Next) */}
-            <View style={styles.calendarNavRow}>
-              <Pressable style={styles.calendarNavBtn} onPress={handlePrevMonth}>
-                <Ionicons name="chevron-back" size={18} color="#38BDF8" />
-              </Pressable>
-
-              <View style={styles.calendarNavTitleGroup}>
-                <Pressable
-                  style={[
-                    styles.calendarSelectorPill,
-                    calendarMode === "MONTHS" && styles.calendarSelectorPillActive,
-                  ]}
-                  onPress={() =>
-                    setCalendarMode(calendarMode === "MONTHS" ? "DAYS" : "MONTHS")
-                  }
-                >
-                  <Text style={styles.calendarSelectorText}>
-                    {MONTH_NAMES[pickerMonth]}
-                  </Text>
-                  <Ionicons name="chevron-down" size={12} color="#38BDF8" />
-                </Pressable>
-
-                <Pressable
-                  style={[
-                    styles.calendarSelectorPill,
-                    calendarMode === "YEARS" && styles.calendarSelectorPillActive,
-                  ]}
-                  onPress={() =>
-                    setCalendarMode(calendarMode === "YEARS" ? "DAYS" : "YEARS")
-                  }
-                >
-                  <Text style={styles.calendarSelectorText}>{pickerYear}</Text>
-                  <Ionicons name="chevron-down" size={12} color="#38BDF8" />
-                </Pressable>
-              </View>
-
-              <Pressable style={styles.calendarNavBtn} onPress={handleNextMonth}>
-                <Ionicons name="chevron-forward" size={18} color="#38BDF8" />
-              </Pressable>
-            </View>
-
-            {/* View Mode: DAYS */}
-            {calendarMode === "DAYS" && (
-              <View style={styles.calendarGridContainer}>
-                {/* Days of week header */}
-                <View style={styles.calendarWeekRow}>
-                  {DAYS_OF_WEEK.map((day, idx) => (
-                    <Text key={idx} style={styles.calendarWeekText}>
-                      {day}
-                    </Text>
-                  ))}
-                </View>
-
-                {/* Days grid */}
-                <View style={styles.calendarDaysGrid}>
-                  {Array.from(
-                    { length: new Date(pickerYear, pickerMonth, 1).getDay() },
-                    (_, i) => i
-                  ).map((_, i) => (
-                    <View key={`empty-${i}`} style={styles.calendarDayCell} />
-                  ))}
-                  {Array.from(
-                    { length: new Date(pickerYear, pickerMonth + 1, 0).getDate() },
-                    (_, i) => i + 1
-                  ).map((dayNum) => {
-                    const yyyy = pickerYear;
-                    const mm = String(pickerMonth + 1).padStart(2, "0");
-                    const dd = String(dayNum).padStart(2, "0");
-                    const dateStr = `${yyyy}-${mm}-${dd}`;
-                    const isSelected = birthdate === dateStr;
-
-                    return (
-                      <Pressable
-                        key={dayNum}
-                        style={[
-                          styles.calendarDayCell,
-                          isSelected && styles.calendarDayCellSelected,
-                        ]}
-                        onPress={() => handleSelectDay(dayNum)}
-                      >
-                        <Text
-                          style={[
-                            styles.calendarDayText,
-                            isSelected && styles.calendarDayTextSelected,
-                          ]}
-                        >
-                          {dayNum}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* View Mode: MONTHS */}
-            {calendarMode === "MONTHS" && (
-              <View style={styles.calendarMonthsGrid}>
-                {MONTH_NAMES.map((mName, mIdx) => {
-                  const isSelected = mIdx === pickerMonth;
-                  return (
-                    <Pressable
-                      key={mName}
-                      style={[
-                        styles.calendarMonthItem,
-                        isSelected && styles.calendarMonthItemSelected,
-                      ]}
-                      onPress={() => {
-                        setPickerMonth(mIdx);
-                        setCalendarMode("DAYS");
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.calendarMonthText,
-                          isSelected && styles.calendarMonthTextSelected,
-                        ]}
-                      >
-                        {mName.substring(0, 3)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-
-            {/* View Mode: YEARS */}
-            {calendarMode === "YEARS" && (
-              <ScrollView
-                style={styles.calendarYearsScrollView}
-                contentContainerStyle={styles.calendarYearsGrid}
-                showsVerticalScrollIndicator={true}
-              >
-                {YEARS_LIST.map((yr) => {
-                  const isSelected = yr === pickerYear;
-                  return (
-                    <Pressable
-                      key={yr}
-                      style={[
-                        styles.calendarYearItem,
-                        isSelected && styles.calendarYearItemSelected,
-                      ]}
-                      onPress={() => {
-                        setPickerYear(yr);
-                        setCalendarMode("DAYS");
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.calendarYearText,
-                          isSelected && styles.calendarYearTextSelected,
-                        ]}
-                      >
-                        {yr}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            <Pressable
-              style={styles.modalCancelButton}
-              onPress={() => setShowDatePickerModal(false)}
-            >
-              <Text style={styles.modalCancelButtonText}>Cancel</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowDatePickerModal(false)}
+        pickerYear={pickerYear}
+        pickerMonth={pickerMonth}
+        calendarMode={calendarMode}
+        setCalendarMode={setCalendarMode}
+        setPickerMonth={setPickerMonth}
+        setPickerYear={setPickerYear}
+        birthdate={birthdate}
+        onSelectDay={handleSelectDay}
+        monthNames={MONTH_NAMES}
+        daysOfWeek={DAYS_OF_WEEK}
+        yearsList={YEARS_LIST}
+        onPrevMonth={handlePrevMonth}
+        onNextMonth={handleNextMonth}
+      />
     </ScrollView>
   );
 }
