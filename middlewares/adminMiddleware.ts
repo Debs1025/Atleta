@@ -15,11 +15,6 @@ export interface AdminAuthRequest extends AuthRequest {
   };
 }
 
-/**
- * Middleware to enforce strict Role-Based Access Control (RBAC) across all administrative endpoints.
- * Restricts access strictly to accounts with the System Admin role and active status.
- * Logs all access attempts and administrative data mutations to audit logs.
- */
 export async function requireSystemAdmin(
   req: AdminAuthRequest,
   res: Response,
@@ -56,7 +51,6 @@ export async function requireSystemAdmin(
       is_elevated?: boolean;
     };
 
-    // Verify SystemAdmin role requirement
     if (decoded.role !== 'SystemAdmin' && decoded.role !== 'System Admin') {
       await logAdminAudit({
         user_id: decoded.uid || 'UNKNOWN',
@@ -71,7 +65,6 @@ export async function requireSystemAdmin(
       return;
     }
 
-    // Verify Admin_Profiles subtype active status
     const adminProfilesSnap = await db.collection('Admin_Profiles').where('user_id', '==', decoded.uid).limit(1).get();
     if (!adminProfilesSnap.empty) {
       const profile = adminProfilesSnap.docs[0].data();
@@ -90,7 +83,6 @@ export async function requireSystemAdmin(
       }
     }
 
-    // Attach decoded user info
     req.user = {
       uid: decoded.uid,
       email: decoded.email,
@@ -105,7 +97,6 @@ export async function requireSystemAdmin(
       is_elevated: !!decoded.is_elevated,
     };
 
-    // Log administrative access attempt for GET endpoints (mutation endpoints like approve/reject log their own single domain decision entry)
     if (req.method === 'GET') {
       logAdminAudit({
         user_id: decoded.uid,

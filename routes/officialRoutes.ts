@@ -11,16 +11,9 @@ import {
 
 const router = Router();
 
-// GET /api/v1/officials/dashboard – Retrieve headline metrics and new match audit queues
 router.get('/dashboard', authenticate, getDashboardHandler);
-
-// GET /api/v1/officials/schedules?month=&year= – Retrieve scheduled match assignments, venue logistics, court numbers
 router.get('/schedules', authenticate, getSchedulesHandler);
-
-// GET /api/v1/officials/me/settings – Fetch split-screen layout preferences, discrepancy flag presets, and notification toggles
 router.get('/me/settings', authenticate, getOfficialSettingsHandler);
-
-// PUT /api/v1/officials/me/settings – Update audit preferences and notification controls
 router.put('/me/settings', authenticate, updateOfficialSettingsHandler);
 
 export default router;

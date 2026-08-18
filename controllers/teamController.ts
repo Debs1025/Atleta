@@ -10,10 +10,6 @@ import {
 } from '../services/teamService';
 import { validateCreateTeam, validateUpdateRoster } from '../validators/teamValidator';
 
-/**
- * GET /api/v1/teams?sport=&search=&coachId=
- * Browse team directory filtered by sport, coachId, and/or name search.
- */
 export async function browseTeams(req: AuthRequest, res: Response): Promise<void> {
   try {
     const sport = req.query.sport as string | undefined;
@@ -36,10 +32,6 @@ export async function browseTeams(req: AuthRequest, res: Response): Promise<void
   }
 }
 
-/**
- * POST /api/v1/teams
- * Create a new team instance with name, sport category, and division.
- */
 export async function createTeamHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = req.user?.uid || 'coach_default';
@@ -51,7 +43,6 @@ export async function createTeamHandler(req: AuthRequest, res: Response): Promis
     }
 
     const team = await createTeam(coachId, req.body);
-
     res.status(201).json({
       message: 'Team instance created successfully.',
       team,
@@ -66,14 +57,6 @@ export async function createTeamHandler(req: AuthRequest, res: Response): Promis
   }
 }
 
-/**
- * PUT /api/v1/teams/:teamId/roster
- * Update roster positions, jersey numbers, or remove players with eligibility verification check.
- *
- * ACCEPTANCE CRITERIA:
- * 1. Require valid Bearer token; coaches may only edit teams they manage (403 Forbidden).
- * 2. Adding an athlete with unverified/missing documents flags an error and blocks roster confirmation unless override_unverified: true.
- */
 export async function updateRosterHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = req.user!.uid;
@@ -115,10 +98,6 @@ export async function updateRosterHandler(req: AuthRequest, res: Response): Prom
   }
 }
 
-/**
- * GET /api/v1/teams/:teamId
- * Retrieve specific team details, description, region, athlete count, coaching staff, and roster.
- */
 export async function getTeam(req: AuthRequest, res: Response): Promise<void> {
   try {
     const teamId = Array.isArray(req.params.teamId)
@@ -147,10 +126,6 @@ export async function getTeam(req: AuthRequest, res: Response): Promise<void> {
   }
 }
 
-/**
- * GET /api/v1/athletes/:athleteId/team
- * Retrieve the athlete's current team, coach reference, and full player roster with positions.
- */
 export async function getAthleteTeamHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId)

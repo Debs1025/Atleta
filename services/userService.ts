@@ -95,8 +95,7 @@ export async function registerUserService(
     profileData.athlete_id = athleteId;
     profileData.user_id = uid;
     
-    // Aligned schemas: first_name, last_name, email removed from profile to prevent duplication
-    profileData.birthdate = String(data.birthdate || '2001-01-01').trim();
+    profileData.birthdate = String(data.birthdate || data.date_of_birth || '2001-01-01').trim();
     profileData.gender = String(data.gender || 'Male').trim();
     profileData.province = String(data.province || 'Camarines Sur').trim();
     profileData.sport_type = String(data.sport_type || 'Basketball').trim();

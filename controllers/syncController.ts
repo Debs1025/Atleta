@@ -10,10 +10,6 @@ import {
   ServiceError,
 } from '../services/syncService';
 
-/**
- * POST /api/v1/sync/coach-offline-queue & /api/v1/sync/offline-queue
- * Flush and synchronize queued offline match transactions, metrics, and sRPE entries from Coach.
- */
 export async function syncCoachOfflineBatchHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const authenticatedUid = req.user!.uid;
@@ -48,10 +44,6 @@ export async function syncCoachOfflineBatchHandler(req: AuthRequest, res: Respon
   }
 }
 
-/**
- * POST /api/v1/sync/athlete-offline-queue
- * Flush and synchronize queued offline profile edits and self-logged workout entries from Athlete.
- */
 export async function syncAthleteOfflineBatchHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const authenticatedUid = req.user!.uid;
@@ -87,16 +79,11 @@ export async function syncAthleteOfflineBatchHandler(req: AuthRequest, res: Resp
   }
 }
 
-/**
- * GET /api/v1/sync/coach-snapshot
- * Pre-fetch complete offline package for Coach with HTTP 304 conditional validation.
- */
 export async function getCoachOfflineSnapshotHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = req.user!.uid;
     const snapshot = await getCoachOfflineSnapshotService(coachId);
 
-    // Conditional HTTP ETag Caching
     const clientEtag = req.headers['if-none-match'];
     if (clientEtag && clientEtag === snapshot.etag) {
       res.status(304).end();
@@ -113,10 +100,6 @@ export async function getCoachOfflineSnapshotHandler(req: AuthRequest, res: Resp
   }
 }
 
-/**
- * GET /api/v1/sync/athlete-snapshot/:athleteId
- * Pre-fetch complete offline package for Athlete with HTTP 304 conditional validation.
- */
 export async function getAthleteOfflineSnapshotHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const athleteId = req.params.athleteId || req.user!.uid;
@@ -138,10 +121,6 @@ export async function getAthleteOfflineSnapshotHandler(req: AuthRequest, res: Re
   }
 }
 
-/**
- * GET /api/v1/sync/status
- * Retrieve synchronization status and recent audit history.
- */
 export async function getOfflineSyncStatusHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.user!.uid;

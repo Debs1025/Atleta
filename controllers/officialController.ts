@@ -3,28 +3,21 @@ import { AuthRequest } from '../middlewares/authMiddleware';
 import { db } from '../utils/firebaseAdmin';
 import {
   validateRegisterOfficial,
-  validateUpdateOfficialSettings
+  validateUpdateOfficialSettings,
 } from '../validators/officialValidator';
-import {
-  validateLoginUser
-} from '../validators/userValidator';
+import { validateLoginUser } from '../validators/userValidator';
 import {
   registerOfficialService,
   loginOfficialService,
   getOfficialSettings,
   updateOfficialSettings,
-  ServiceError
+  ServiceError,
 } from '../services/officialService';
 
-/**
- * POST /api/v1/users/official
- * Register an official, check tournament registry, and provision official profile & settings.
- */
 export async function registerOfficialHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const data = req.body as Record<string, unknown>;
 
-    // Validate input payload
     const errors = validateRegisterOfficial(data);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -32,7 +25,6 @@ export async function registerOfficialHandler(req: AuthRequest, res: Response): 
     }
 
     const result = await registerOfficialService(data as any);
-
     res.status(201).json({
       message: 'Official registered successfully.',
       ...result,
@@ -51,13 +43,8 @@ export async function registerOfficialHandler(req: AuthRequest, res: Response): 
   }
 }
 
-/**
- * POST /api/v1/users/official/login
- * Validate credentials and return a Bearer token.
- */
 export async function loginOfficialHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    // Validate credentials using userValidator
     const errors = validateLoginUser(req.body);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -90,21 +77,14 @@ export async function loginOfficialHandler(req: AuthRequest, res: Response): Pro
   }
 }
 
-/**
- * GET /api/v1/officials/me/settings
- * Fetch settings preferences for the authenticated official.
- */
 export async function getOfficialSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    // Ensure the user has the Official role
     if (!req.user || req.user.role !== 'Official') {
       res.status(401).json({ error: 'Unauthorized. Official role required.' });
       return;
     }
 
     const uid = req.user.uid;
-
-    // Fetch official profile to get officialId
     const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
     if (!profileDoc.exists) {
       res.status(404).json({ error: 'Official profile not found.' });
@@ -121,19 +101,13 @@ export async function getOfficialSettingsHandler(req: AuthRequest, res: Response
   }
 }
 
-/**
- * PUT /api/v1/officials/me/settings
- * Update settings preferences for the authenticated official.
- */
 export async function updateOfficialSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    // Ensure the user has the Official role
     if (!req.user || req.user.role !== 'Official') {
       res.status(401).json({ error: 'Unauthorized. Official role required.' });
       return;
     }
 
-    // Validate body
     const errors = validateUpdateOfficialSettings(req.body);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -141,8 +115,6 @@ export async function updateOfficialSettingsHandler(req: AuthRequest, res: Respo
     }
 
     const uid = req.user.uid;
-
-    // Fetch official profile to get officialId
     const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
     if (!profileDoc.exists) {
       res.status(404).json({ error: 'Official profile not found.' });

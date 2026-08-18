@@ -6,13 +6,9 @@ interface RateLimitRecord {
 }
 
 const ipLimitMap = new Map<string, RateLimitRecord>();
-const WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS = 5;       // 5 requests per minute
+const WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS = 5;
 
-/**
- * Rate limiting middleware for authentication endpoints.
- * Limits to 5 requests per minute per IP address.
- */
 export function authRateLimiter(req: Request, res: Response, next: NextFunction): void {
   const clientIp = (req.headers['x-forwarded-for'] as string) || req.ip || req.socket.remoteAddress || '127.0.0.1';
   const now = Date.now();
@@ -40,9 +36,6 @@ export function authRateLimiter(req: Request, res: Response, next: NextFunction)
   next();
 }
 
-/**
- * Reset rate limit counter for a specific IP (useful for testing).
- */
 export function resetAuthRateLimiter(ip?: string): void {
   if (ip) {
     ipLimitMap.delete(ip);

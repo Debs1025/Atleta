@@ -10,15 +10,10 @@ import {
 import { ServiceError } from '../validators/matchValidator';
 import { AdminAuthRequest } from '../middlewares/adminMiddleware';
 
-/**
- * POST /api/v1/admin/register – Register a system admin account with institutional email and provision Admin_Profiles.
- * ACCEPTANCE CRITERIA: Registration attempts without accepting mandatory RBAC compliance return HTTP 400 Bad Request.
- */
 export async function registerAdminHandler(req: Request, res: Response): Promise<void> {
   try {
     const data = req.body as Record<string, unknown>;
 
-    // 1. Validate payload requirements and mandatory RBAC compliance
     const errors = validateRegisterAdmin(data);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -26,8 +21,6 @@ export async function registerAdminHandler(req: Request, res: Response): Promise
     }
 
     const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || '127.0.0.1';
-
-    // 2. Register system admin & provision Admin_Profiles
     const result = await registerAdminService(data as any, clientIp);
 
     res.status(201).json({
@@ -44,10 +37,6 @@ export async function registerAdminHandler(req: Request, res: Response): Promise
   }
 }
 
-/**
- * POST /api/v1/admin/login – Validate admin credentials and return an elevated Bearer JWT.
- * ACCEPTANCE CRITERIA: Authentication endpoints respond in under 500ms.
- */
 export async function loginAdminHandler(req: Request, res: Response): Promise<void> {
   try {
     const errors = validateLoginAdmin(req.body);
@@ -60,7 +49,6 @@ export async function loginAdminHandler(req: Request, res: Response): Promise<vo
     const clientIp = req.ip || (req.headers['x-forwarded-for'] as string) || '127.0.0.1';
 
     const result = await loginAdminService(email, password, clientIp);
-
     res.status(200).json({
       message: 'System Admin authenticated successfully.',
       ...result,
@@ -75,9 +63,6 @@ export async function loginAdminHandler(req: Request, res: Response): Promise<vo
   }
 }
 
-/**
- * GET /api/v1/admin/me – Get administrative profile (Protected with RBAC).
- */
 export async function getAdminProfileHandler(req: AdminAuthRequest, res: Response): Promise<void> {
   res.status(200).json({
     message: 'System Admin profile and active session retrieved.',
@@ -86,9 +71,6 @@ export async function getAdminProfileHandler(req: AdminAuthRequest, res: Respons
   });
 }
 
-/**
- * GET /api/v1/admin/coach-queue – Retrieve pending coach verification applications and uploaded document links.
- */
 export async function getCoachQueueHandler(req: AdminAuthRequest, res: Response): Promise<void> {
   try {
     const queue = await getPendingCoachQueueService();
@@ -107,10 +89,6 @@ export async function getCoachQueueHandler(req: AdminAuthRequest, res: Response)
   }
 }
 
-/**
- * POST /api/v1/admin/coaches/:coachId/approve – Validate credentials, mark coach account as active, and grant full platform access.
- * ACCEPTANCE CRITERIA: Approving a coach account updates account status in under 200ms and dispatches confirmation notifications.
- */
 export async function approveCoachHandler(req: AdminAuthRequest, res: Response): Promise<void> {
   const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
   const coachIdParam = req.params.coachId;
@@ -128,9 +106,6 @@ export async function approveCoachHandler(req: AdminAuthRequest, res: Response):
   }
 }
 
-/**
- * POST /api/v1/admin/coaches/:coachId/reject – Decline application, log rejection reasons, and notify applicant.
- */
 export async function rejectCoachHandler(req: AdminAuthRequest, res: Response): Promise<void> {
   const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
   const coachIdParam = req.params.coachId;
@@ -148,4 +123,3 @@ export async function rejectCoachHandler(req: AdminAuthRequest, res: Response): 
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
-

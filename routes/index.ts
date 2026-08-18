@@ -16,46 +16,19 @@ import syncRoutes from './syncRoutes';
 
 const router = Router();
 
-// Mount admin routes at /admin (/api/v1/admin)
 router.use('/admin', adminRoutes);
-
-// Mount user routes at /users (/api/v1/users)
 router.use('/users', userRoutes);
-
-// Mount athlete routes at /athletes (/api/v1/athletes)
 router.use('/athletes', athleteRoutes);
-
-// Mount notification routes at /notifications (/api/v1/notifications)
 router.use('/notifications', notificationRoutes);
-
-// Mount analytics routes at /analytics (/api/v1/analytics)
 router.use('/analytics', analyticsRoutes);
-
-// Mount team routes at /teams (/api/v1/teams)
 router.use('/teams', teamRoutes);
-
-// Mount coach routes at /coaches (/api/v1/coaches)
 router.use('/coaches', coachRoutes);
-
-// Mount official routes at /officials (/api/v1/officials)
 router.use('/officials', officialRoutes);
-
-// Mount inquiry routes at /inquiries (/api/v1/inquiries)
 router.use('/inquiries', inquiryRoutes);
-
-// Mount match routes at /matches (/api/v1/matches)
 router.use('/matches', matchRoutes);
-
-// Mount scouting routes at /scouting (/api/v1/scouting)
 router.use('/scouting', scoutingRoutes);
-
-// Mount validation routes at /validations (/api/v1/validations)
 router.use('/validations', validationRoutes);
-
-// Mount sports configuration routes at /sports (/api/v1/sports)
 router.use('/sports', sportRoutes);
-
-// Mount offline sync routes at /sync (/api/v1/sync)
 router.use('/sync', syncRoutes);
 
 export default router;

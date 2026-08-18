@@ -5,13 +5,14 @@ import {
   updateAthleteProfile,
   uploadAthleteDocument,
   getAthleteHomeSummary,
+  getAthleteExpandedCareerStats,
+  getAthleteDateGroupedMatches,
 } from '../services/athleteService';
+import { searchAthletes } from '../services/teamService';
+import { registerUserService } from '../services/userService';
+import { validateRegisterUser } from '../validators/userValidator';
+import { ServiceError } from '../validators/matchValidator';
 
-/**
- * GET /api/v1/athletes/:athleteId/home
- * Aggregate personal analytics, shooting efficiency, 5-game trend, and current team summary.
- * Returns Cache-Control: private, max-age=300
- */
 export async function getAthleteHome(req: AuthRequest, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
@@ -23,9 +24,6 @@ export async function getAthleteHome(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Access control:
-    // - Coaches and Admins can view any athlete's home summary
-    // - Athletes can only view their own (uid matches athleteId with or without ath_ prefix)
     if (authenticatedUid && authenticatedRole === 'Athlete') {
       const normalizedAthleteId = athleteId.replace(/^ath_/, '');
       const normalizedUid = authenticatedUid.replace(/^ath_/, '');
@@ -41,7 +39,6 @@ export async function getAthleteHome(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Set Cache-Control header: private, max-age=300
     res.set('Cache-Control', 'private, max-age=300');
     res.status(200).json(homeData);
   } catch (error: any) {
@@ -50,10 +47,6 @@ export async function getAthleteHome(req: AuthRequest, res: Response): Promise<v
   }
 }
 
-/**
- * GET /api/v1/athletes/:athleteId
- * Fetch full digital dashboard data for an athlete.
- */
 export async function getAthlete(req: Request, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
@@ -70,10 +63,6 @@ export async function getAthlete(req: Request, res: Response): Promise<void> {
   }
 }
 
-/**
- * PUT /api/v1/athletes/:athleteId
- * Update physical attributes, stats, or profile details.
- */
 export async function updateAthlete(req: Request, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
@@ -95,10 +84,6 @@ export async function updateAthlete(req: Request, res: Response): Promise<void> 
   }
 }
 
-/**
- * POST /api/v1/athletes/:athleteId/documents
- * Upload PSA Birth Certificate or Proof of Residency.
- */
 export async function uploadDocument(req: Request, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
@@ -127,15 +112,9 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
   }
 }
 
-/**
- * GET /api/v1/athletes/search?query=
- * Autocomplete search registered athletes by name, ID, or position, returning eligibility document status.
- */
 export async function searchAthletesHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const query = req.query.query as string | undefined;
-    const { searchAthletes } = require('../services/teamService');
-
     const athletes = await searchAthletes(query);
 
     res.status(200).json({
@@ -149,23 +128,17 @@ export async function searchAthletesHandler(req: AuthRequest, res: Response): Pr
   }
 }
 
-/**
- * POST /api/v1/athletes/register-athlete & /api/v1/athletes/register
- * Register a new athlete, provision Users and Athlete_Profiles documents.
- */
 export async function registerAthlete(req: Request, res: Response): Promise<void> {
   try {
     const data = req.body as Record<string, unknown>;
     const file = (req as any).file as Express.Multer.File | undefined;
 
-    const { validateRegisterUser } = require('../validators/userValidator');
     const errors = validateRegisterUser(data);
     if (errors.length > 0) {
       res.status(400).json({ errors });
       return;
     }
 
-    const { registerUserService } = require('../services/userService');
     const result = await registerUserService({ ...data, role: 'Athlete' }, file);
 
     res.status(201).json({
@@ -182,10 +155,6 @@ export async function registerAthlete(req: Request, res: Response): Promise<void
   }
 }
 
-/**
- * GET /api/v1/athletes/:athleteId/stats/all
- * Retrieve expanded career statistics, shooting accuracy percentages, PER ratings, and games played.
- */
 export async function getAthleteAllStatsHandler(req: Request, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
@@ -194,11 +163,9 @@ export async function getAthleteAllStatsHandler(req: Request, res: Response): Pr
       return;
     }
 
-    const { getAthleteExpandedCareerStats } = require('../services/athleteService');
     const stats = await getAthleteExpandedCareerStats(athleteId);
     res.status(200).json(stats);
   } catch (error: any) {
-    const { ServiceError } = require('../validators/matchValidator');
     if (error instanceof ServiceError) {
       res.status(error.statusCode).json({ error: error.message });
       return;
@@ -208,10 +175,6 @@ export async function getAthleteAllStatsHandler(req: Request, res: Response): Pr
   }
 }
 
-/**
- * GET /api/v1/athletes/:athleteId/matches
- * Fetch date-grouped match history logs with placements, scores, and sport badges.
- */
 export async function getAthleteMatchHistoryHandler(req: Request, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
@@ -220,11 +183,9 @@ export async function getAthleteMatchHistoryHandler(req: Request, res: Response)
       return;
     }
 
-    const { getAthleteDateGroupedMatches } = require('../services/athleteService');
     const matches = await getAthleteDateGroupedMatches(athleteId);
     res.status(200).json(matches);
   } catch (error: any) {
-    const { ServiceError } = require('../validators/matchValidator');
     if (error instanceof ServiceError) {
       res.status(error.statusCode).json({ error: error.message });
       return;

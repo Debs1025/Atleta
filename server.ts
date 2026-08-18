@@ -1,35 +1,40 @@
-import 'dotenv/config';
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import routes from './routes';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+import app from './app';
+import { db } from './utils/firebaseAdmin';
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const PORT = Number(process.env.PORT) || 5000;
 
-// API Routes
-app.use('/api/v1', routes);
+function startServer() {
+  try {
+    if (db) {
+      console.log('Firebase Firestore connection verified.');
+    }
 
-// Health check
-app.get('/', (req: Request, res: Response) => {
-  res.json({ message: 'Atleta API is running' });
-});
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
 
-// Global error handler
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (err instanceof SyntaxError && 'status' in err && err.status === 400 && 'body' in err) {
-    res.status(400).json({ error: 'Invalid JSON format in request body.' });
-    return;
+    server.on('error', (err) => {
+      console.error('Server error:', err);
+    });
+
+    return server;
+  } catch (err) {
+    console.error('Server initialization error:', err);
+    process.exit(1);
   }
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error.' });
+}
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
+const server = startServer();
+export default server;

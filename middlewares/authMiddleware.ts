@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-// Extend Express Request to include authenticated user data
 export interface AuthRequest extends Request {
   user?: {
     uid: string;
@@ -10,10 +9,6 @@ export interface AuthRequest extends Request {
   };
 }
 
-/**
- * Middleware to verify custom JWT from the Authorization header.
- * Expects: Authorization: Bearer <token>
- */
 export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
@@ -35,9 +30,6 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   }
 }
 
-/**
- * Middleware to require the Coach role.
- */
 export function requireCoach(req: AuthRequest, res: Response, next: NextFunction): void {
   if (!req.user || req.user.role !== 'Coach') {
     res.status(403).json({ error: 'Access denied. Coach role required.' });

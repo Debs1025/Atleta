@@ -1,17 +1,21 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import { validateInquirySubmission } from '../validators/inquiryValidator';
+import { validateUpdateCoachSettings, validateChangeCoachPassword } from '../validators/coachValidator';
 import {
   getPublicCoachProfile,
   submitRecruitmentInquiry,
   getAthleteInquiries,
+  respondToRecruitmentInquiry,
   ServiceError,
 } from '../services/coachInquiryService';
+import {
+  getCoachSettings,
+  updateCoachSettings,
+  updateCoachProfile,
+  changeCoachPassword,
+} from '../services/coachSettingsService';
 
-/**
- * GET /api/v1/coaches/:coachId
- * Retrieve public coach profile, philosophy quote, credentials, and contact info.
- */
 export async function getCoachProfileHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = Array.isArray(req.params.coachId)
@@ -24,7 +28,6 @@ export async function getCoachProfileHandler(req: AuthRequest, res: Response): P
     }
 
     const coach = await getPublicCoachProfile(coachId);
-
     if (!coach) {
       res.status(404).json({ error: `Coach with ID '${coachId}' was not found.` });
       return;
@@ -37,20 +40,10 @@ export async function getCoachProfileHandler(req: AuthRequest, res: Response): P
   }
 }
 
-/**
- * POST /api/v1/inquiries
- * Submit a recruitment inquiry to a coach.
- *
- * ACCEPTANCE CRITERIA:
- * - Duplicate active (Pending or Accepted) inquiry returns HTTP 400 Bad Request.
- * - Non-existent coach returns HTTP 404 Not Found.
- * - Rate-limited to 10 requests/day per athlete (returns 429 Too Many Requests).
- */
 export async function submitInquiryHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const athleteId = req.user!.uid;
 
-    // Validate request body
     const errors = validateInquirySubmission(req.body);
     if (errors.length > 0) {
       res.status(400).json({
@@ -61,7 +54,6 @@ export async function submitInquiryHandler(req: AuthRequest, res: Response): Pro
     }
 
     const { coach_id, message } = req.body;
-
     const inquiry = await submitRecruitmentInquiry(athleteId, coach_id, message);
 
     res.status(201).json({
@@ -78,11 +70,6 @@ export async function submitInquiryHandler(req: AuthRequest, res: Response): Pro
   }
 }
 
-/**
- * GET /api/v1/inquiries
- * Retrieve current athlete's sent inquiries and statuses for the Inquiry Tracker Page.
- * Responds in under 200ms.
- */
 export async function getAthleteInquiriesHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const athleteId = req.user!.uid;
@@ -103,15 +90,40 @@ export async function getAthleteInquiriesHandler(req: AuthRequest, res: Response
   }
 }
 
-/**
- * GET /api/v1/coaches/me/settings
- * Retrieve coach privacy, sync, and notification preferences.
- */
+export async function respondToInquiryHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const inquiryId = Array.isArray(req.params.inquiryId) ? req.params.inquiryId[0] : req.params.inquiryId;
+    const userId = req.user!.uid;
+    const { status, decline_reason } = req.body;
+
+    if (!inquiryId) {
+      res.status(400).json({ error: 'Inquiry ID is required.' });
+      return;
+    }
+
+    if (status !== 'Accepted' && status !== 'Declined') {
+      res.status(400).json({ error: 'Status must be either "Accepted" or "Declined".' });
+      return;
+    }
+
+    const updated = await respondToRecruitmentInquiry(inquiryId, userId, status, decline_reason);
+    res.status(200).json({
+      message: `Inquiry successfully ${status.toLowerCase()}.`,
+      inquiry: updated,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('respondToInquiryHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
 export async function getCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = `coach_${req.user!.uid}`;
-    const { getCoachSettings } = require('../services/coachSettingsService');
-
     const settings = await getCoachSettings(coachId);
     res.status(200).json(settings);
   } catch (error: any) {
@@ -120,23 +132,16 @@ export async function getCoachSettingsHandler(req: AuthRequest, res: Response): 
   }
 }
 
-/**
- * PUT /api/v1/coaches/me/settings
- * Update sync preferences and notification toggles (game_log_updates, recruitment_inquiries).
- */
 export async function updateCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = `coach_${req.user!.uid}`;
-    const { validateUpdateCoachSettings } = require('../validators/coachValidator');
     const errors = validateUpdateCoachSettings(req.body);
     if (errors.length > 0) {
       res.status(400).json({ errors });
       return;
     }
 
-    const { updateCoachSettings } = require('../services/coachSettingsService');
     const settings = await updateCoachSettings(coachId, req.body);
-
     res.status(200).json({
       message: 'Coach settings updated successfully.',
       settings,
@@ -147,16 +152,10 @@ export async function updateCoachSettingsHandler(req: AuthRequest, res: Response
   }
 }
 
-/**
- * PUT /api/v1/coaches/me/profile
- * Update coach full name, sport category, and uploaded certification document URLs.
- */
 export async function updateCoachProfileHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.user!.uid;
     const coachId = `coach_${userId}`;
-    const { updateCoachProfile } = require('../services/coachSettingsService');
-
     const updatedProfile = await updateCoachProfile(coachId, userId, req.body);
 
     res.status(200).json({
@@ -169,15 +168,9 @@ export async function updateCoachProfileHandler(req: AuthRequest, res: Response)
   }
 }
 
-/**
- * PUT /api/v1/coaches/me/password
- * Change password requiring current password verification.
- * ACCEPTANCE CRITERIA: Password changes without correct current password return HTTP 401 Unauthorized.
- */
 export async function changeCoachPasswordHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.user!.uid;
-    const { validateChangeCoachPassword } = require('../validators/coachValidator');
     const errors = validateChangeCoachPassword(req.body);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -185,8 +178,6 @@ export async function changeCoachPasswordHandler(req: AuthRequest, res: Response
     }
 
     const { current_password, new_password } = req.body;
-    const { changeCoachPassword, ServiceError: SettingsServiceError } = require('../services/coachSettingsService');
-
     const result = await changeCoachPassword(userId, current_password, new_password);
     res.status(200).json(result);
   } catch (error: any) {
@@ -198,4 +189,3 @@ export async function changeCoachPasswordHandler(req: AuthRequest, res: Response
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
-

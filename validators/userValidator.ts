@@ -81,7 +81,11 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
 
   // --- Subtype Child Profile Field Validations ---
   if (role === 'Athlete') {
-    const birthdate = typeof data.birthdate === 'string' ? data.birthdate.trim() : '';
+    const birthdate = typeof data.birthdate === 'string'
+      ? data.birthdate.trim()
+      : typeof data.date_of_birth === 'string'
+      ? data.date_of_birth.trim()
+      : '';
     if (!birthdate) {
       errors.push({ field: 'birthdate', message: 'Birthdate is required for Athlete profile.' });
     }

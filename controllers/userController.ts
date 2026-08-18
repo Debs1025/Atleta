@@ -7,8 +7,10 @@ import {
   validatePasswordResetConfirm,
   validateChangePassword,
 } from '../validators/userValidator';
+import { validateRegisterCoach } from '../validators/coachValidator';
 import {
   registerUserService,
+  registerCoachService,
   loginUserService,
   getUserProfileService,
   requestPasswordResetService,
@@ -17,16 +19,11 @@ import {
   socialLoginService,
 } from '../services/userService';
 
-/**
- * POST /api/v1/users & POST /api/v1/users/register
- * Register a new user and provision their role-specific profile in an atomic batch.
- */
 export async function registerUser(req: AuthRequest, res: Response): Promise<void> {
   try {
     const data = req.body as Record<string, unknown>;
     const file = (req as any).file as Express.Multer.File | undefined;
 
-    // Validate input
     const errors = validateRegisterUser(data, !!file);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -34,7 +31,6 @@ export async function registerUser(req: AuthRequest, res: Response): Promise<voi
     }
 
     const result = await registerUserService(data, file);
-
     res.status(201).json({
       message: 'User registered successfully.',
       ...result,
@@ -49,27 +45,18 @@ export async function registerUser(req: AuthRequest, res: Response): Promise<voi
   }
 }
 
-/**
- * POST /api/v1/users/coach
- * Register a new coach, handle certification uploads, and provision their Coach_Profiles entity.
- * ACCEPTANCE CRITERIA: Missing certification files block creation with 400 Bad Request.
- */
 export async function registerCoach(req: AuthRequest, res: Response): Promise<void> {
   try {
     const data = req.body as Record<string, unknown>;
     const file = (req as any).file as Express.Multer.File | undefined;
 
-    // Validate input
-    const { validateRegisterCoach } = require('../validators/coachValidator');
     const errors = validateRegisterCoach(data, !!file);
     if (errors.length > 0) {
       res.status(400).json({ errors });
       return;
     }
 
-    const { registerCoachService } = require('../services/userService');
     const result = await registerCoachService(data, file);
-
     res.status(201).json({
       message: 'Coach registered successfully with certification documents.',
       ...result,
@@ -88,10 +75,6 @@ export async function registerCoach(req: AuthRequest, res: Response): Promise<vo
   }
 }
 
-/**
- * POST /api/v1/users/login
- * Validate credentials and return a Bearer token.
- */
 export async function loginUser(req: AuthRequest, res: Response): Promise<void> {
   try {
     const errors = validateLoginUser(req.body);
@@ -125,10 +108,6 @@ export async function loginUser(req: AuthRequest, res: Response): Promise<void> 
   }
 }
 
-/**
- * POST /api/v1/users/social-login & /google-login & /facebook-login
- * Authenticate via Google or Facebook Firebase ID Token.
- */
 export async function socialLogin(req: Request, res: Response): Promise<void> {
   try {
     const body = (req.body || {}) as Record<string, any>;
@@ -157,15 +136,10 @@ export async function socialLogin(req: Request, res: Response): Promise<void> {
   }
 }
 
-/**
- * GET /api/v1/users/me
- * Retrieve profile, role, and permissions of currently authenticated user.
- */
 export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   try {
     const uid = req.user!.uid;
     const result = await getUserProfileService(uid);
-
     res.status(200).json(result);
   } catch (error: any) {
     if (error.code === 'USER_NOT_FOUND') {
@@ -177,10 +151,6 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   }
 }
 
-/**
- * POST /api/v1/users/password-reset
- * Send a secure recovery link to a registered email.
- */
 export async function requestPasswordReset(req: AuthRequest, res: Response): Promise<void> {
   try {
     const errors = validatePasswordResetRequest(req.body);
@@ -191,7 +161,6 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
 
     const { email } = req.body;
     const result = await requestPasswordResetService(email);
-
     res.status(200).json(result);
   } catch (error: any) {
     if (error.code === 'auth/user-not-found') {
@@ -205,10 +174,6 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
   }
 }
 
-/**
- * PUT /api/v1/users/password-reset & POST /api/v1/users/password-reset/:token
- * Confirm password reset using the token from the email link.
- */
 export async function resetPassword(req: AuthRequest, res: Response): Promise<void> {
   try {
     const token = (req.body.token || req.params.token || req.query.token) as string;
@@ -221,7 +186,6 @@ export async function resetPassword(req: AuthRequest, res: Response): Promise<vo
     }
 
     const result = await resetPasswordConfirmService(token, new_password);
-
     res.status(200).json(result);
   } catch (error: any) {
     if (error.code === 'INVALID_TOKEN') {
@@ -233,10 +197,6 @@ export async function resetPassword(req: AuthRequest, res: Response): Promise<vo
   }
 }
 
-/**
- * POST /api/v1/users/change-password
- * Set a new password for authenticated user.
- */
 export async function changePassword(req: AuthRequest, res: Response): Promise<void> {
   try {
     const errors = validateChangePassword(req.body);

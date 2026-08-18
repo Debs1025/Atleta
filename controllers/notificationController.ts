@@ -6,10 +6,6 @@ import {
   markAllNotificationsAsRead,
 } from '../services/notificationService';
 
-/**
- * GET /api/v1/notifications
- * Fetch notifications for current authenticated athlete.
- */
 export async function getNotifications(req: AuthRequest, res: Response): Promise<void> {
   try {
     const recipientId = req.user!.uid;
@@ -26,10 +22,6 @@ export async function getNotifications(req: AuthRequest, res: Response): Promise
   }
 }
 
-/**
- * PUT /api/v1/notifications/:notificationId/read
- * Mark a single notification as read.
- */
 export async function markAsRead(req: AuthRequest, res: Response): Promise<void> {
   try {
     const notificationId = Array.isArray(req.params.notificationId)
@@ -43,7 +35,6 @@ export async function markAsRead(req: AuthRequest, res: Response): Promise<void>
     }
 
     await markNotificationAsRead(notificationId, recipientId);
-
     res.status(200).json({
       message: 'Notification marked as read.',
       notification_id: notificationId,
@@ -54,10 +45,6 @@ export async function markAsRead(req: AuthRequest, res: Response): Promise<void>
   }
 }
 
-/**
- * PUT /api/v1/notifications/read-all
- * Mark all notifications as read for current authenticated athlete.
- */
 export async function markAllAsRead(req: AuthRequest, res: Response): Promise<void> {
   try {
     const recipientId = req.user!.uid;

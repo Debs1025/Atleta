@@ -10,10 +10,6 @@ import {
 import { validateProposalSubmission, validateScoutingParams } from '../validators/scoutingValidator';
 import { ServiceError } from '../validators/matchValidator';
 
-/**
- * GET /api/v1/scouting/athletes?sport=&minPER=&search=
- * Search filtered regional athlete directory.
- */
 export async function searchAthletesController(req: AuthRequest, res: Response): Promise<void> {
   try {
     const { sport, minPER, search } = req.query;
@@ -38,10 +34,6 @@ export async function searchAthletesController(req: AuthRequest, res: Response):
   }
 }
 
-/**
- * GET /api/v1/scouting/rankings?sport=&season=&region=
- * Retrieve top 10 player PER rankings.
- */
 export async function getRankingsController(req: AuthRequest, res: Response): Promise<void> {
   try {
     const { sport, season, region } = req.query;
@@ -63,10 +55,6 @@ export async function getRankingsController(req: AuthRequest, res: Response): Pr
   }
 }
 
-/**
- * POST /api/v1/scouting/proposals
- * Dispatch a formal recruitment proposal to an athlete.
- */
 export async function createProposalController(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = req.user?.uid || 'coach_default';
@@ -91,16 +79,11 @@ export async function createProposalController(req: AuthRequest, res: Response):
   }
 }
 
-/**
- * GET /api/v1/scouting/proposals
- * Retrieve sent recruitment proposals and active status updates for the Recruits tab.
- */
 export async function getProposalsController(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = req.user?.uid || 'coach_default';
 
     const proposals = await getRecruitmentProposals(coachId);
-
     res.status(200).json(proposals);
   } catch (error: any) {
     if (error instanceof ServiceError) {
@@ -112,16 +95,6 @@ export async function getProposalsController(req: AuthRequest, res: Response): P
   }
 }
 
-/**
- * GET /api/v1/coaches/scouting/athletes/:athleteId & /api/v1/scouting/athletes/:athleteId
- * Retrieve complete athlete profile for coaching evaluation: physical stats, radar chart metrics,
- * workload trends, document verification status, and contact info.
- *
- * ACCEPTANCE CRITERIA:
- * 1. Single payload responds in under 200ms.
- * 2. Non-existent athlete ID returns HTTP 404 Not Found.
- * 3. Sensitive raw document URLs remain redacted.
- */
 export async function getScoutingAthleteProfileController(req: AuthRequest, res: Response): Promise<void> {
   try {
     const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;

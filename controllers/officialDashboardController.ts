@@ -5,12 +5,9 @@ import {
   getOfficialDashboardMetrics,
   getOfficialSchedules,
   getOfficialNotifications,
-  markAllOfficialNotificationsAsRead
+  markAllOfficialNotificationsAsRead,
 } from '../services/officialDashboardService';
 
-/**
- * Helper to retrieve official_id from the authenticated user's profile.
- */
 async function getOfficialIdFromUid(uid: string): Promise<string | null> {
   const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
   if (!profileDoc.exists) {
@@ -19,11 +16,6 @@ async function getOfficialIdFromUid(uid: string): Promise<string | null> {
   return profileDoc.data()!.official_id;
 }
 
-/**
- * GET /api/v1/officials/dashboard
- * Retrieve headline metrics and the pending match audit queue.
- * Responds in under 200ms.
- */
 export async function getDashboardHandler(req: AuthRequest, res: Response): Promise<void> {
   const startTime = Date.now();
   try {
@@ -49,11 +41,6 @@ export async function getDashboardHandler(req: AuthRequest, res: Response): Prom
   }
 }
 
-/**
- * GET /api/v1/officials/schedules?month=&year=
- * Retrieve scheduled match assignments, venue logistics, assigned officials, and court numbers.
- * Responds in under 200ms.
- */
 export async function getSchedulesHandler(req: AuthRequest, res: Response): Promise<void> {
   const startTime = Date.now();
   try {
@@ -77,7 +64,7 @@ export async function getSchedulesHandler(req: AuthRequest, res: Response): Prom
     res.set('X-Response-Time-Ms', String(duration));
     res.status(200).json({
       official_id: officialId,
-      schedules
+      schedules,
     });
   } catch (error: any) {
     console.error('getSchedulesHandler error:', error);
@@ -85,10 +72,6 @@ export async function getSchedulesHandler(req: AuthRequest, res: Response): Prom
   }
 }
 
-/**
- * GET /api/v1/notifications/official
- * Fetch chronological notification logs for audit requests and schedule updates.
- */
 export async function getOfficialNotificationsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     if (!req.user || req.user.role !== 'Official') {
@@ -107,7 +90,7 @@ export async function getOfficialNotificationsHandler(req: AuthRequest, res: Res
     res.status(200).json({
       official_id: officialId,
       unread_count: notifications.filter(n => !n.is_read).length,
-      notifications
+      notifications,
     });
   } catch (error: any) {
     console.error('getOfficialNotificationsHandler error:', error);
@@ -115,10 +98,6 @@ export async function getOfficialNotificationsHandler(req: AuthRequest, res: Res
   }
 }
 
-/**
- * PUT /api/v1/notifications/read-all
- * Mark all official notifications as read.
- */
 export async function markAllOfficialNotificationsAsReadHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     if (!req.user || req.user.role !== 'Official') {
@@ -133,11 +112,9 @@ export async function markAllOfficialNotificationsAsReadHandler(req: AuthRequest
     }
 
     const count = await markAllOfficialNotificationsAsRead(officialId);
-
-    // Triggers immediate feedback
     res.status(200).json({
       message: 'All official notifications marked as read.',
-      updated_count: count
+      updated_count: count,
     });
   } catch (error: any) {
     console.error('markAllOfficialNotificationsAsReadHandler error:', error);

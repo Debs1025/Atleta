@@ -8,14 +8,6 @@ import {
 } from '../services/matchService';
 import { validateSubmitMatch, ServiceError } from '../validators/matchValidator';
 
-/**
- * POST /api/v1/matches
- * Submit complete live game log session and stats payload.
- *
- * ACCEPTANCE CRITERIA:
- * 1. Require Idempotency-Key header on POST submissions to prevent duplicate match creation.
- * 2. Duplicate match submissions with identical idempotency keys return the original recorded result.
- */
 export async function submitMatch(req: AuthRequest, res: Response): Promise<void> {
   try {
     const coachId = req.user?.uid || 'coach_default';
@@ -28,7 +20,6 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
     }
 
     const result = await submitMatchSession(coachId, req.body, idempotencyKey!);
-
     res.status(201).json(result);
   } catch (error: any) {
     if (error instanceof ServiceError) {
@@ -40,13 +31,6 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
   }
 }
 
-/**
- * POST /api/v1/matches/:matchId/scoresheet
- * Upload scoresheet image/PDF, run OCR processing, and return parsed JSON tables.
- *
- * ACCEPTANCE CRITERIA:
- * File uploads over 25MB return HTTP 413 Payload Too Large.
- */
 export async function uploadScoresheet(req: AuthRequest, res: Response): Promise<void> {
   try {
     const matchId = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -58,7 +42,6 @@ export async function uploadScoresheet(req: AuthRequest, res: Response): Promise
     }
 
     const parsedResult = await processScoresheetOCR(matchId, file);
-
     res.status(200).json({
       message: 'Scoresheet uploaded and OCR table parsing completed successfully.',
       ...parsedResult,
@@ -73,10 +56,6 @@ export async function uploadScoresheet(req: AuthRequest, res: Response): Promise
   }
 }
 
-/**
- * GET /api/v1/matches/:matchId/boxscore
- * Fetch compiled match stats and computed efficiency metrics.
- */
 export async function getBoxscore(req: AuthRequest, res: Response): Promise<void> {
   try {
     const matchId = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -87,7 +66,6 @@ export async function getBoxscore(req: AuthRequest, res: Response): Promise<void
     }
 
     const boxscore = await getMatchBoxscore(matchId);
-
     res.status(200).json(boxscore);
   } catch (error: any) {
     if (error instanceof ServiceError) {
@@ -99,13 +77,6 @@ export async function getBoxscore(req: AuthRequest, res: Response): Promise<void
   }
 }
 
-/**
- * GET /api/v1/matches/:matchId/details
- * Retrieve sport-specific match result details (Track finish times, Swimming split times, or Basketball box scores).
- *
- * ACCEPTANCE CRITERIA:
- * 1. Requests referencing a non-existent match ID return HTTP 404 Not Found.
- */
 export async function getMatchDetailsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const matchId = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
