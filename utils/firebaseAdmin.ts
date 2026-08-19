@@ -9,14 +9,32 @@ function getFirebaseCredential() {
   const envServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (envServiceAccount) {
     try {
-      const parsed = JSON.parse(envServiceAccount);
+      let parsed = typeof envServiceAccount === 'string' ? JSON.parse(envServiceAccount) : envServiceAccount;
+      if (parsed.private_key) {
+        parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+      }
       return cert(parsed);
-    } catch (e) {
-      console.warn('⚠️ Could not parse FIREBASE_SERVICE_ACCOUNT as JSON, checking fallback...');
+    } catch (e: any) {
+      console.warn('⚠️ Could not parse FIREBASE_SERVICE_ACCOUNT as JSON:', e.message);
     }
   }
 
-  // 2. Check for individual environment variables (Vercel standard)
+  // 2. Check for base64-encoded JSON in environment variable
+  const base64ServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (base64ServiceAccount) {
+    try {
+      const decoded = Buffer.from(base64ServiceAccount, 'base64').toString('utf-8');
+      const parsed = JSON.parse(decoded);
+      if (parsed.private_key) {
+        parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+      }
+      return cert(parsed);
+    } catch (e: any) {
+      console.warn('⚠️ Could not parse FIREBASE_SERVICE_ACCOUNT_BASE64:', e.message);
+    }
+  }
+
+  // 3. Check for individual environment variables
   if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
     const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
     return cert({
@@ -26,13 +44,13 @@ function getFirebaseCredential() {
     });
   }
 
-  // 3. Check for local serviceAccountKey.json file (Local development)
+  // 4. Check for local serviceAccountKey.json file (Local development)
   const serviceAccountPath = path.resolve(__dirname, '..', 'serviceAccountKey.json');
   if (fs.existsSync(serviceAccountPath)) {
     return cert(serviceAccountPath);
   }
 
-  console.warn('⚠️ No Firebase Admin credentials found! Ensure FIREBASE_SERVICE_ACCOUNT is set in Vercel.');
+  console.warn('⚠️ No Firebase Admin credentials found! Please configure FIREBASE_SERVICE_ACCOUNT in Vercel.');
   return undefined;
 }
 
@@ -44,7 +62,9 @@ if (!getApps().length) {
       credential,
     });
   } else {
-    initializeApp();
+    initializeApp({
+      projectId: process.env.FIREBASE_PROJECT_ID || 'atleta-v1',
+    });
   }
 }
 
