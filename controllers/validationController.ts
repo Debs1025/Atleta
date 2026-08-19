@@ -65,7 +65,7 @@ export async function certifyValidationHandler(req: AuthRequest, res: Response):
       return;
     }
 
-    const validationId = req.params.validationId;
+    const validationId = Array.isArray(req.params.validationId) ? req.params.validationId[0] : req.params.validationId;
     if (!validationId) {
       res.status(400).json({ error: 'Validation ID parameter is required.' });
       return;
@@ -96,7 +96,7 @@ export async function deleteMatchHandler(req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const matchId = req.params.matchId;
+    const matchId = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
     if (!matchId) {
       res.status(400).json({ error: 'Match ID parameter is required.' });
       return;

@@ -105,7 +105,8 @@ export async function getCoachOfflineSnapshotHandler(req: AuthRequest, res: Resp
 
 export async function getAthleteOfflineSnapshotHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const athleteId = req.params.athleteId || req.user!.uid;
+    const rawAthleteParam = req.params.athleteId;
+    const athleteId = (Array.isArray(rawAthleteParam) ? rawAthleteParam[0] : rawAthleteParam) || req.user!.uid;
     const snapshot = await getAthleteOfflineSnapshotService(athleteId);
 
     const clientEtag = req.headers['if-none-match'];

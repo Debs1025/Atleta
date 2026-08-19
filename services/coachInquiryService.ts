@@ -268,3 +268,35 @@ export async function getAthleteInquiries(athleteId: string): Promise<EnrichedIn
     (a, b) => new Date(b.date_initiated).getTime() - new Date(a.date_initiated).getTime(),
   );
 }
+
+/**
+ * Coach response to a recruitment inquiry.
+ */
+export async function respondToRecruitmentInquiry(
+  inquiryId: string,
+  coachId: string,
+  responseStatus: 'Accepted' | 'Declined' | 'In Review',
+  declineReason?: string
+) {
+  const docRef = db.collection('Scouting_Registry').doc(inquiryId);
+  const doc = await docRef.get();
+  if (!doc.exists) {
+    throw new ServiceError(`Inquiry '${inquiryId}' not found.`, 404);
+  }
+
+  const updates: Record<string, any> = {
+    offer_status: responseStatus,
+    decline_reason: declineReason || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  await docRef.set(updates, { merge: true });
+  return {
+    message: `Inquiry status updated to ${responseStatus}.`,
+    inquiry_id: inquiryId,
+    status: responseStatus,
+  };
+}
+
+export const respondToInquiry = respondToRecruitmentInquiry;
+

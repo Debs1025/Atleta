@@ -91,7 +91,7 @@ export async function getCoachQueueHandler(req: AdminAuthRequest, res: Response)
 
 export async function approveCoachHandler(req: AdminAuthRequest, res: Response): Promise<void> {
   const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
-  const coachIdParam = req.params.coachId;
+  const coachIdParam = Array.isArray(req.params.coachId) ? req.params.coachId[0] : req.params.coachId;
 
   try {
     const result = await approveCoachService(adminId, coachIdParam);
@@ -108,7 +108,7 @@ export async function approveCoachHandler(req: AdminAuthRequest, res: Response):
 
 export async function rejectCoachHandler(req: AdminAuthRequest, res: Response): Promise<void> {
   const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
-  const coachIdParam = req.params.coachId;
+  const coachIdParam = Array.isArray(req.params.coachId) ? req.params.coachId[0] : req.params.coachId;
   const { rejection_reason } = req.body || {};
 
   try {

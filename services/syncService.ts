@@ -165,7 +165,7 @@ export async function processCoachOfflineBatchService(
             }
           }
 
-          serverResult = { match_id: matchId, status: 'CREATED', ...matchLog };
+          serverResult = { status: 'CREATED', ...matchLog };
           break;
         }
 

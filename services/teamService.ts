@@ -414,12 +414,13 @@ export async function updateTeam(
     timestamp: new Date().toISOString(),
   };
 
-  if (data.team_name) updates.team_name = data.team_name.trim();
-  if (data.sport_type) updates.sport_type = data.sport_type.trim();
-  if (data.age_group) updates.age_group = data.age_group.trim();
-  if (data.gender) updates.gender = data.gender.trim();
-  if (data.institution_or_org) updates.institution_or_org = data.institution_or_org.trim();
-  if (data.organization) updates.institution_or_org = data.organization.trim();
+  const anyData = data as any;
+  if (anyData.team_name) updates.team_name = anyData.team_name.trim();
+  if (anyData.sport_type) updates.sport_type = anyData.sport_type.trim();
+  if (anyData.age_group) updates.age_group = anyData.age_group.trim();
+  if (anyData.gender) updates.gender = anyData.gender.trim();
+  if (anyData.institution_or_org) updates.institution_or_org = anyData.institution_or_org.trim();
+  if (anyData.organization) updates.institution_or_org = anyData.organization.trim();
 
   await db.collection('Teams').doc(teamId).set(updates, { merge: true });
 

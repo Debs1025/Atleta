@@ -15,7 +15,8 @@ import { ServiceError } from '../validators/matchValidator';
 
 export async function getAthleteHome(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const athleteId = req.params.athleteId || req.user?.uid;
+    const rawAthleteParam = req.params.athleteId;
+    const athleteId = (Array.isArray(rawAthleteParam) ? rawAthleteParam[0] : rawAthleteParam) || req.user?.uid;
     const authenticatedUid = req.user?.uid;
     const authenticatedRole = req.user?.role;
 

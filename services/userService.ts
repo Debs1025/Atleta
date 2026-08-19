@@ -365,7 +365,7 @@ export async function loginUserService(email: string, password: string) {
     userDoc = docRef as any;
   }
 
-  const userData = userDoc.data()!;
+  const userData = (userDoc as any).data()!;
   const role = userData.role as UserRole;
   const token = generateToken(uid, userData.email, role);
 

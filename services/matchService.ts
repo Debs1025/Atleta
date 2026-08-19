@@ -183,7 +183,7 @@ export async function submitMatchSession(
     opponent_team_name: payload.opponent_team_name.trim(),
     game_result: payload.game_result,
     roster_athletes: (payload.player_stats || []).map((p) => p.athlete_id),
-    notes: payload.notes ? payload.notes.trim() : null,
+    notes: payload.notes ? payload.notes.trim() : undefined,
     idempotency_key: key,
     timestamp: now,
   };

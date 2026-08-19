@@ -518,20 +518,20 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
 
   // SECURITY: Redact raw download URLs for sensitive documents (PSA Birth Certificate)
   const isPsaVerified = Boolean(
-    profileData.eligibility_documents?.psa_verified ??
-    profileData.documents?.psa_birth_certificate?.status === 'Verified' ??
-    profileData.is_eligibility_verified ??
-    true
+    profileData.eligibility_documents?.psa_verified ||
+    profileData.documents?.psa_birth_certificate?.status === 'Verified' ||
+    profileData.is_eligibility_verified ||
+    false
   );
   const isAcademicVerified = Boolean(
-    profileData.eligibility_documents?.academic_check ??
-    profileData.documents?.academic_transcript?.status === 'Verified' ??
-    true
+    profileData.eligibility_documents?.academic_check ||
+    profileData.documents?.academic_transcript?.status === 'Verified' ||
+    false
   );
   const isResidencyVerified = Boolean(
-    profileData.eligibility_documents?.proof_of_residency ??
-    profileData.documents?.proof_of_residency?.status === 'Verified' ??
-    true
+    profileData.eligibility_documents?.proof_of_residency ||
+    profileData.documents?.proof_of_residency?.status === 'Verified' ||
+    false
   );
 
   const documentStatus = {
