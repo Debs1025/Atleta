@@ -154,8 +154,8 @@ async function runTests() {
   const userDoc = await db.collection('Users').doc(userId).get();
   assert(userDoc.exists && userDoc.data()?.full_legal_name === testLegalName, 'Users document exists in Firestore');
 
-  const profileDoc = await db.collection('Official_Profiles').doc(userId).get();
-  assert(profileDoc.exists && profileDoc.data()?.official_id === officialId, 'Official_Profiles document exists in Firestore (indexed by user_id/uid)');
+  const profileDoc = await db.collection('Official_Profiles').doc(officialId).get();
+  assert(profileDoc.exists && profileDoc.data()?.official_id === officialId, 'Official_Profiles document exists in Firestore (indexed by official_id)');
 
   const settingsDoc = await db.collection('Official_Settings').doc(officialId).get();
   assert(settingsDoc.exists && settingsDoc.data()?.setting_id === settingId, 'Official_Settings document exists in Firestore (indexed by official_id)');

@@ -9,6 +9,7 @@ import { validateLoginUser } from '../validators/userValidator';
 import {
   registerOfficialService,
   loginOfficialService,
+  getOfficialProfile,
   getOfficialSettings,
   updateOfficialSettings,
   ServiceError,
@@ -85,14 +86,13 @@ export async function getOfficialSettingsHandler(req: AuthRequest, res: Response
     }
 
     const uid = req.user.uid;
-    const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
+    const officialId = `off_${uid}`;
+    let profileDoc = await db.collection('Official_Profiles').doc(officialId).get();
     if (!profileDoc.exists) {
-      res.status(404).json({ error: 'Official profile not found.' });
-      return;
+      profileDoc = await db.collection('Official_Profiles').doc(uid).get();
     }
-
-    const officialId = profileDoc.data()!.official_id;
-    const settings = await getOfficialSettings(officialId);
+    const resolvedOfficialId = profileDoc.exists ? (profileDoc.data()!.official_id || officialId) : officialId;
+    const settings = await getOfficialSettings(resolvedOfficialId);
 
     res.status(200).json(settings);
   } catch (error: any) {
@@ -115,14 +115,13 @@ export async function updateOfficialSettingsHandler(req: AuthRequest, res: Respo
     }
 
     const uid = req.user.uid;
-    const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
+    const officialId = `off_${uid}`;
+    let profileDoc = await db.collection('Official_Profiles').doc(officialId).get();
     if (!profileDoc.exists) {
-      res.status(404).json({ error: 'Official profile not found.' });
-      return;
+      profileDoc = await db.collection('Official_Profiles').doc(uid).get();
     }
-
-    const officialId = profileDoc.data()!.official_id;
-    const settings = await updateOfficialSettings(officialId, req.body);
+    const resolvedOfficialId = profileDoc.exists ? (profileDoc.data()!.official_id || officialId) : officialId;
+    const settings = await updateOfficialSettings(resolvedOfficialId, req.body);
 
     res.status(200).json({
       message: 'Official settings updated successfully.',
@@ -130,6 +129,22 @@ export async function updateOfficialSettingsHandler(req: AuthRequest, res: Respo
     });
   } catch (error: any) {
     console.error('Update official settings error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function getOfficialProfileHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user || req.user.role !== 'Official') {
+      res.status(401).json({ error: 'Unauthorized. Official role required.' });
+      return;
+    }
+
+    const uid = req.user.uid;
+    const profile = await getOfficialProfile(uid);
+    res.status(200).json(profile);
+  } catch (error: any) {
+    console.error('Get official profile error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

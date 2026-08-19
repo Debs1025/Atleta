@@ -42,11 +42,16 @@ export async function createOfficialMatchService(
   // 2. Fetch official profile to get official_id
   let officialId = data.official_id;
   if (!officialId) {
-    const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
+    const rawUid = uid.replace(/^off_/, '');
+    const canonicalOffId = `off_${rawUid}`;
+    let profileDoc = await db.collection('Official_Profiles').doc(canonicalOffId).get();
+    if (!profileDoc.exists) {
+      profileDoc = await db.collection('Official_Profiles').doc(rawUid).get();
+    }
     if (profileDoc.exists) {
-      officialId = profileDoc.data()?.official_id;
+      officialId = profileDoc.data()?.official_id || canonicalOffId;
     } else {
-      officialId = uid;
+      officialId = canonicalOffId;
     }
   }
 
@@ -184,9 +189,16 @@ export async function certifyValidationService(
 
   // Resolve official_id
   let officialId = auditData.official_id;
-  const profileDoc = await db.collection('Official_Profiles').doc(officialUid).get();
+  const rawOfficialUid = officialUid.replace(/^off_/, '');
+  const canonicalOffUid = `off_${rawOfficialUid}`;
+  let profileDoc = await db.collection('Official_Profiles').doc(canonicalOffUid).get();
+  if (!profileDoc.exists) {
+    profileDoc = await db.collection('Official_Profiles').doc(rawOfficialUid).get();
+  }
   if (profileDoc.exists) {
-    officialId = profileDoc.data()?.official_id || officialId;
+    officialId = profileDoc.data()?.official_id || canonicalOffUid;
+  } else {
+    officialId = canonicalOffUid;
   }
 
   const now = new Date().toISOString();

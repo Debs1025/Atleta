@@ -9,11 +9,20 @@ import {
 } from '../services/officialDashboardService';
 
 async function getOfficialIdFromUid(uid: string): Promise<string | null> {
-  const profileDoc = await db.collection('Official_Profiles').doc(uid).get();
-  if (!profileDoc.exists) {
-    return null;
+  const officialId = `off_${uid}`;
+  let profileDoc = await db.collection('Official_Profiles').doc(officialId).get();
+  if (profileDoc.exists) {
+    return profileDoc.data()!.official_id || officialId;
   }
-  return profileDoc.data()!.official_id;
+  profileDoc = await db.collection('Official_Profiles').doc(uid).get();
+  if (profileDoc.exists) {
+    return profileDoc.data()!.official_id || officialId;
+  }
+  const userDoc = await db.collection('Users').doc(uid).get();
+  if (userDoc.exists && userDoc.data()?.role === 'Official') {
+    return officialId;
+  }
+  return null;
 }
 
 export async function getDashboardHandler(req: AuthRequest, res: Response): Promise<void> {

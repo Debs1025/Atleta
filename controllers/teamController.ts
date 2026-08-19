@@ -5,6 +5,7 @@ import {
   getTeamDetails,
   getAthleteTeam,
   createTeam,
+  updateTeam,
   updateTeamRoster,
   ServiceError,
 } from '../services/teamService';
@@ -94,6 +95,36 @@ export async function updateRosterHandler(req: AuthRequest, res: Response): Prom
       return;
     }
     console.error('updateRosterHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function updateTeamHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const coachId = req.user!.uid;
+    const teamId = Array.isArray(req.params.teamId) ? req.params.teamId[0] : req.params.teamId;
+
+    if (!teamId) {
+      res.status(400).json({ error: 'Team ID is required.' });
+      return;
+    }
+
+    const rawBody = req.body || {};
+    if (Array.isArray(rawBody) || rawBody.roster_list || rawBody.roster_updates) {
+      return await updateRosterHandler(req, res);
+    }
+
+    const updated = await updateTeam(coachId, teamId, rawBody);
+    res.status(200).json({
+      message: 'Team updated successfully.',
+      team: updated,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('updateTeamHandler error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

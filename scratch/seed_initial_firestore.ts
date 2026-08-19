@@ -82,6 +82,28 @@ async function seedInitialFirestore() {
       status: 'Active',
       created_at: new Date(),
     },
+    {
+      org_id: 'org_bucal',
+      organization_name: 'BUCAL',
+      full_name: 'Bicol University Inter-Collegiate Athletic League (BUCAL)',
+      region: 'Region V - Bicol',
+      status: 'Active',
+      created_at: new Date(),
+    },
+    {
+      org_id: 'org_bucal_full',
+      organization_name: 'Bicol University Inter-Collegiate Athletic League (BUCAL)',
+      region: 'Region V - Bicol',
+      status: 'Active',
+      created_at: new Date(),
+    },
+    {
+      org_id: 'org_bucal_collegiate',
+      organization_name: 'Bicol University Collegiate Athletic League',
+      region: 'Region V - Bicol',
+      status: 'Active',
+      created_at: new Date(),
+    },
   ];
 
   for (const o of orgs) {

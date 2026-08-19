@@ -390,6 +390,46 @@ export async function updateTeamRoster(
   return getTeamDetails(teamId);
 }
 
+export async function updateTeam(
+  coachId: string,
+  teamId: string,
+  data: Partial<CreateTeamDto> & { roster?: UpdateRosterItem[]; override_unverified?: boolean; organization?: string },
+) {
+  const teamDoc = await db.collection('Teams').doc(teamId).get();
+  if (!teamDoc.exists) {
+    throw new ServiceError(`Team with ID '${teamId}' not found.`, 404);
+  }
+
+  const teamData = teamDoc.data() as Team;
+  const isOwner =
+    teamData.coach_id === coachId ||
+    teamData.coach_id === `coach_${coachId}` ||
+    teamData.coach_id.replace('coach_', '') === coachId;
+
+  if (!isOwner) {
+    throw new ServiceError('Unauthorized. Coaches may only edit teams they manage.', 403);
+  }
+
+  const updates: Record<string, any> = {
+    timestamp: new Date().toISOString(),
+  };
+
+  if (data.team_name) updates.team_name = data.team_name.trim();
+  if (data.sport_type) updates.sport_type = data.sport_type.trim();
+  if (data.age_group) updates.age_group = data.age_group.trim();
+  if (data.gender) updates.gender = data.gender.trim();
+  if (data.institution_or_org) updates.institution_or_org = data.institution_or_org.trim();
+  if (data.organization) updates.institution_or_org = data.organization.trim();
+
+  await db.collection('Teams').doc(teamId).set(updates, { merge: true });
+
+  if (data.roster && Array.isArray(data.roster)) {
+    return await updateTeamRoster(coachId, teamId, data.roster, !!data.override_unverified);
+  }
+
+  return await getTeamDetails(teamId);
+}
+
 /**
  * Autocomplete search registered athletes by name, ID, position, or email across Users, Athlete_Profiles, and Teams.roster_list collections.
  * GET /api/v1/athletes/search?query=

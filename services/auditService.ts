@@ -87,11 +87,10 @@ export async function submitAuditRequest(
 /**
  * Compile and stream a certified PDF match report containing box scores, coach notes, and official verification stamps.
  */
-export async function generateMatchPdf(
+export async function generateMatchPdfBuffer(
   coachId: string,
   matchId: string,
-  writeStream: NodeJS.WritableStream,
-): Promise<void> {
+): Promise<Buffer> {
   const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
 
   if (!matchDoc.exists) {
@@ -184,16 +183,15 @@ export async function generateMatchPdf(
     });
   }
 
-  // --- PDF Kit Generation ---
-  return new Promise<void>((resolve, reject) => {
+  // --- PDF Kit Generation into Buffer ---
+  return new Promise<Buffer>((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const chunks: Buffer[] = [];
 
-      writeStream.on('finish', () => resolve());
-      writeStream.on('error', (err) => reject(err));
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', (err) => reject(err));
-
-      doc.pipe(writeStream);
 
       // Header Banner
       doc.rect(0, 0, doc.page.width, 15).fill('#1E3A8A');
@@ -274,4 +272,14 @@ export async function generateMatchPdf(
       reject(err);
     }
   });
+}
+
+export async function generateMatchPdf(
+  coachId: string,
+  matchId: string,
+  writeStream: NodeJS.WritableStream,
+): Promise<void> {
+  const buffer = await generateMatchPdfBuffer(coachId, matchId);
+  writeStream.write(buffer);
+  writeStream.end();
 }

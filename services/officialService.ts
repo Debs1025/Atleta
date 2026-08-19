@@ -251,3 +251,34 @@ export async function updateOfficialSettings(
   await db.collection('Official_Settings').doc(rawUid).set(updatedSettings, { merge: true });
   return updatedSettings;
 }
+
+/**
+ * Retrieve official manager profile details.
+ */
+export async function getOfficialProfile(uid: string) {
+  const rawUid = uid.replace(/^off_/, '');
+  const officialId = `off_${rawUid}`;
+
+  const userDoc = await db.collection('Users').doc(rawUid).get();
+  let profileDoc = await db.collection('Official_Profiles').doc(officialId).get();
+  if (!profileDoc.exists) {
+    profileDoc = await db.collection('Official_Profiles').doc(rawUid).get();
+  }
+
+  const userData = userDoc.exists ? userDoc.data()! : {};
+  const profileData = profileDoc.exists ? profileDoc.data()! : {};
+
+  return {
+    official_id: officialId,
+    user_id: rawUid,
+    full_legal_name: userData.full_legal_name || userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+    email: userData.email,
+    role: 'Official',
+    organization_name: profileData.organization_name || userData.organization_name || userData.organization || 'General Tournament Association',
+    official_license_number: profileData.official_license_number || userData.official_license_number || 'OFF-LIC-2026',
+    assigned_tournaments: profileData.assigned_tournaments || userData.assigned_tournaments || [],
+    certification_status: profileData.certification_status || userData.certification_status || 'Certified',
+    is_active: userData.is_active !== undefined ? userData.is_active : true,
+    created_at: userData.created_at || new Date().toISOString(),
+  };
+}

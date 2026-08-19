@@ -4,6 +4,7 @@ import { authenticate, requireCoach } from '../middlewares/authMiddleware';
 import {
   submitMatch,
   uploadScoresheet,
+  scanStandaloneScoresheet,
   getBoxscore,
   getMatchDetailsHandler,
 } from '../controllers/matchController';
@@ -23,9 +24,15 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 },
 });
 
+// Standalone OCR Scoresheet Scanner (No match ID needed - accepts any field name)
+router.post('/scan-scoresheet', authenticate, upload.any(), scanStandaloneScoresheet);
+router.post('/ocr/scan', authenticate, upload.any(), scanStandaloneScoresheet);
+router.post('/scoresheet', authenticate, upload.any(), scanStandaloneScoresheet);
+
+// Match Endpoints
 router.post('/official', authenticate, createOfficialMatchHandler);
 router.post('/', authenticate, submitMatch);
-router.post('/:matchId/scoresheet', authenticate, upload.single('scoresheet'), uploadScoresheet);
+router.post('/:matchId/scoresheet', authenticate, upload.any(), uploadScoresheet);
 router.get('/:matchId/boxscore', authenticate, getBoxscore);
 router.get('/:matchId/details', authenticate, getMatchDetailsHandler);
 router.post('/:matchId/audit-request', authenticate, requireCoach, submitAuditRequestController);

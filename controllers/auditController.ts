@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
-import { submitAuditRequest, generateMatchPdf } from '../services/auditService';
+import { submitAuditRequest, generateMatchPdfBuffer } from '../services/auditService';
 import { checkPdfRateLimit } from '../validators/auditValidator';
 import { ServiceError } from '../validators/matchValidator';
 
@@ -31,16 +31,13 @@ export async function exportMatchPdfController(req: AuthRequest, res: Response):
   try {
     checkPdfRateLimit(coachId);
 
+    const pdfBuffer = await generateMatchPdfBuffer(coachId, matchId);
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=match_report_${matchId}.pdf`);
-
-    await generateMatchPdf(coachId, matchId, res);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.status(200).send(pdfBuffer);
   } catch (error: any) {
-    if (res.headersSent) {
-      console.error('exportMatchPdfController error after headers sent:', error);
-      return;
-    }
-
     if (error instanceof ServiceError) {
       res.status(error.statusCode).json({ error: error.message });
       return;
@@ -49,3 +46,4 @@ export async function exportMatchPdfController(req: AuthRequest, res: Response):
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
+

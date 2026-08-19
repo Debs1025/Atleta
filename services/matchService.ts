@@ -255,15 +255,135 @@ export async function submitMatchSession(
   return responsePayload;
 }
 
+function extractJsonFromAiText(content: string): any {
+  let clean = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  // Extract outer-most object if surrounded by markdown or commentary
+  const firstBrace = clean.indexOf('{');
+  const lastBrace = clean.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    clean = clean.substring(firstBrace, lastBrace + 1);
+  }
+
+  // 1. Direct parse attempt
+  try {
+    return JSON.parse(clean);
+  } catch (_) {}
+
+  // 2. Fix trailing commas before } or ]
+  clean = clean.replace(/,\s*([\}\]])/g, '$1');
+
+  // 3. Fix missing commas between objects
+  clean = clean.replace(/\}\s*\{/g, '},{');
+  clean = clean.replace(/\]\s*\[/g, '],[');
+
+  try {
+    return JSON.parse(clean);
+  } catch (_) {}
+
+  // 4. Auto-balance unclosed brackets / braces if truncated
+  let openBraces = (clean.match(/\{/g) || []).length;
+  let closeBraces = (clean.match(/\}/g) || []).length;
+  let openBrackets = (clean.match(/\[/g) || []).length;
+  let closeBrackets = (clean.match(/\]/g) || []).length;
+
+  let repaired = clean;
+  const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+  if (quoteCount % 2 !== 0) {
+    repaired += '"';
+  }
+
+  while (openBrackets > closeBrackets) {
+    repaired += ']';
+    closeBrackets++;
+  }
+  while (openBraces > closeBraces) {
+    repaired += '}';
+    closeBraces++;
+  }
+
+  try {
+    return JSON.parse(repaired);
+  } catch (err: any) {
+    // 5. Fallback: Extract player rows and team scores via regex pattern matching
+    const teamScores: any[] = [];
+    const playerSummary: any[] = [];
+
+    const playerRegex = /\{[^{}]*"player_name"[^{}]*\}/g;
+    let match;
+    while ((match = playerRegex.exec(content)) !== null) {
+      try {
+        playerSummary.push(JSON.parse(match[0].replace(/,\s*\}/g, '}')));
+      } catch (_) {}
+    }
+
+    const teamRegex = /\{[^{}]*"team"[^{}]*"score"[^{}]*\}/g;
+    while ((match = teamRegex.exec(content)) !== null) {
+      try {
+        teamScores.push(JSON.parse(match[0].replace(/,\s*\}/g, '}')));
+      } catch (_) {}
+    }
+
+    if (playerSummary.length > 0 || teamScores.length > 0) {
+      return {
+        match_info: {
+          sport_type: 'Basketball',
+          game_result: 'WIN',
+          final_score: teamScores.length >= 2 ? `${teamScores[0].score} - ${teamScores[1].score}` : '0 - 0',
+        },
+        team_scores: teamScores,
+        player_summary: playerSummary,
+      };
+    }
+
+    throw new Error(`Failed to parse AI JSON response: ${err.message}`);
+  }
+}
+
+const OCR_MODEL_WATERFALL = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-flash-latest',
+  'gemini-pro-latest',
+  'gemini-3.5-flash',
+];
+
+async function callGeminiWithWaterfall(requestBody: any, geminiKey: string): Promise<string> {
+  let lastErrorMsg = '';
+
+  for (const model of OCR_MODEL_WATERFALL) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: AbortSignal.timeout(45000),
+        }
+      );
+
+      if (response.ok) {
+        const jsonRes: any = await response.json();
+        const content = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (content) return content;
+      } else {
+        const errText = await response.text();
+        lastErrorMsg = `Model ${model} returned ${response.status}: ${errText.substring(0, 100)}`;
+        console.warn(`⚠️ [OCR WATERFALL] ${lastErrorMsg}. Retrying with next candidate model...`);
+      }
+    } catch (fetchErr: any) {
+      lastErrorMsg = `Model ${model} error: ${fetchErr.message}`;
+      console.warn(`⚠️ [OCR WATERFALL] ${lastErrorMsg}. Retrying with next candidate model...`);
+    }
+  }
+
+  throw new ServiceError(`All OCR Vision models exhausted or rate-limited. Details: ${lastErrorMsg}`, 502);
+}
+
 /**
  * Process scoresheet image/PDF upload via OCR.
  * POST /api/v1/matches/:matchId/scoresheet
- *
- * Strategy:
- *   1. PRIMARY: Google Gemini Vision API (gemini-3.5-flash) — reads handwritten paper scoresheets accurately.
- *   2. FALLBACK: sharp image preprocessing + Tesseract.js — for printed/typed scoresheets.
- *
- * ACCEPTANCE CRITERIA: File uploads over 25MB return HTTP 413 Payload Too Large.
  */
 export async function processScoresheetOCR(matchId: string, file?: Express.Multer.File): Promise<ParsedScoresheetResult> {
   validateScoresheetUpload(file);
@@ -332,7 +452,24 @@ Important:
         },
       };
     } else {
-      const base64Image = file.buffer.toString('base64');
+      let sendBuffer = file.buffer;
+      let sendMime = mimeType;
+
+      // Optimize and compress large camera photos before sending to AI (1200px max for instant transfer)
+      if (mimeType.startsWith('image/')) {
+        try {
+          const sharp = require('sharp');
+          sendBuffer = await sharp(file.buffer)
+            .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+          sendMime = 'image/jpeg';
+        } catch (sharpErr) {
+          console.warn('⚠️ [OCR] Sharp optimization skipped:', sharpErr);
+        }
+      }
+
+      const base64Image = sendBuffer.toString('base64');
       const promptText = `Look at this basketball scoresheet carefully. It has two teams with player rows containing jersey numbers (#), player names, quarter scores (Q1-Q4), field goals, free throws, and total points (PTS).
 
 Extract the data into this exact JSON format:
@@ -353,7 +490,7 @@ Important:
               { text: promptText },
               {
                 inlineData: {
-                  mimeType: mimeType,
+                  mimeType: sendMime,
                   data: base64Image,
                 },
               },
@@ -362,38 +499,16 @@ Important:
         ],
         generationConfig: {
           responseMimeType: 'application/json',
+          temperature: 0.1,
+          maxOutputTokens: 4096,
         },
       };
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      }
-    );
+    const content = await callGeminiWithWaterfall(requestBody, geminiKey);
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('❌ [OCR] Google Gemini API error:', response.status, response.statusText);
-      console.error('❌ [OCR] Error body:', errBody);
-      throw new ServiceError(`Google Gemini API error: ${response.statusText}`, 502);
-    }
-
-    const jsonRes: any = await response.json();
-    const content = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!content) {
-      throw new ServiceError('Google Gemini API returned an empty response.', 502);
-    }
-
-    // Strip markdown code fences if present (```json ... ```)
-    const cleanContent = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const aiParsed = JSON.parse(cleanContent);
+    // Parse AI output cleanly
+    const aiParsed = extractJsonFromAiText(content);
     const playerSummary: any[] = aiParsed.player_summary || [];
 
     // Save scoresheet_url to Match_Logs
@@ -473,6 +588,187 @@ Important:
     }
     throw new ServiceError(`OCR Processing failed: ${aiErr.message}`, 500);
   }
+}
+
+/**
+ * Standalone OCR Scanner: Parse a PNG, JPG, PDF, or CSV scoresheet without needing an existing match ID.
+ * POST /api/v1/matches/scan-scoresheet
+ */
+export async function scanScoresheetStandalone(file?: Express.Multer.File): Promise<any> {
+  validateScoresheetUpload(file);
+
+  if (!file || !file.buffer) {
+    throw new ServiceError('No scoresheet file uploaded.', 400);
+  }
+
+  require('dotenv').config();
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  if (!geminiKey) {
+    throw new ServiceError('GEMINI_API_KEY is not configured in .env', 500);
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const filename = file.originalname || 'scoresheet.png';
+  let requestBody: any;
+
+  if (mimeType === 'text/csv' || mimeType === 'application/vnd.ms-excel' || filename.endsWith('.csv')) {
+    const csvText = file.buffer.toString('utf-8');
+    const promptText = `Analyze the following basketball scoresheet CSV data:
+${csvText}
+
+Extract the data into this exact JSON format:
+{
+  "match_info": {
+    "sport_type": "Basketball",
+    "event_name": "Tournament / Game Event",
+    "opponent_team_name": "Opponent Team",
+    "home_team_name": "Home Team",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
+  },
+  "team_scores": [
+    {"team": "Team A", "score": 0},
+    {"team": "Team B", "score": 0}
+  ],
+  "player_summary": [
+    {
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
+      "blocks": 0,
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
+    }
+  ]
+}
+
+Important:
+- Return ONLY the JSON object, nothing else.`;
+
+    requestBody = {
+      contents: [{ parts: [{ text: promptText }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    };
+  } else {
+    let sendBuffer = file.buffer;
+    let sendMime = mimeType;
+
+    // Optimize and compress large camera photos before sending to AI
+    if (mimeType.startsWith('image/')) {
+      try {
+        const sharp = require('sharp');
+        sendBuffer = await sharp(file.buffer)
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+        sendMime = 'image/jpeg';
+      } catch (sharpErr) {
+        console.warn('⚠️ [OCR] Sharp optimization skipped:', sharpErr);
+      }
+    }
+
+    const base64Image = sendBuffer.toString('base64');
+    const promptText = `Analyze this basketball scoresheet carefully (image or PDF).
+Extract the match overview, final team scores, and individual player statistics into this exact JSON format:
+{
+  "match_info": {
+    "sport_type": "Basketball",
+    "event_name": "Tournament / League Name",
+    "opponent_team_name": "Opponent Team Name",
+    "home_team_name": "Home Team Name",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
+  },
+  "team_scores": [
+    {"team": "TeamName", "score": 0}
+  ],
+  "player_summary": [
+    {
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
+      "blocks": 0,
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
+    }
+  ]
+}
+
+Important:
+- Extract all players from both teams.
+- Compute player points, rebounds, assists, fouls, etc. accurately.
+- Return ONLY the JSON object.`;
+
+    requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            {
+              inlineData: {
+                mimeType: sendMime,
+                data: base64Image,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+        maxOutputTokens: 4096,
+      },
+    };
+  }
+
+  const content = await callGeminiWithWaterfall(requestBody, geminiKey);
+  const parsedData = extractJsonFromAiText(content);
+
+  if (Array.isArray(parsedData.player_summary)) {
+    parsedData.player_summary = parsedData.player_summary.map((p: any) => {
+      const computed = calculateBasketballMetrics({
+        points: Number(p.points || 0),
+        rebounds: Number(p.rebounds || 0),
+        assists: Number(p.assists || 0),
+        steals: Number(p.steals || 0),
+        blocks: Number(p.blocks || 0),
+        turnovers: Number(p.turnovers || 0),
+        fouls: Number(p.fouls || 0),
+        fg_made: Number(p.fg_made || 0),
+        fg_attempted: Number(p.fg_attempted || 0),
+        ft_made: Number(p.ft_made || 0),
+        ft_attempted: Number(p.ft_attempted || 0),
+      });
+
+      return {
+        ...p,
+        calculated_efficiency: computed.efficiency,
+        true_shooting_pct: computed.trueShootingPct,
+      };
+    });
+  }
+
+  return {
+    filename,
+    file_size_bytes: file.size,
+    parsed_at: new Date().toISOString(),
+    ...parsedData,
+  };
 }
 
 
