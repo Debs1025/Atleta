@@ -62,7 +62,10 @@ export async function syncAthleteOfflineBatchHandler(req: AuthRequest, res: Resp
       return;
     }
 
-    if (authenticatedUid !== athleteId && userRole !== 'Coach' && userRole !== 'Admin') {
+    const authUidNormalized = authenticatedUid ? authenticatedUid.replace(/^ath_/, '').replace(/^coach_/, '') : '';
+    const athleteIdNormalized = athleteId ? athleteId.replace(/^ath_/, '') : '';
+
+    if (authUidNormalized && athleteIdNormalized && authUidNormalized !== athleteIdNormalized && userRole !== 'Coach' && userRole !== 'Admin' && userRole !== 'System Admin') {
       res.status(403).json({ error: 'Forbidden. You do not have permission to sync this athlete queue.' });
       return;
     }

@@ -26,8 +26,18 @@ export function calculateApeIndex(wingspanCm: number, heightCm: number): number 
  * Get full athlete profile by athleteId (user_id).
  */
 export async function getAthleteProfile(athleteId: string): Promise<AthleteFullProfile> {
-  const userDoc = await db.collection('Users').doc(athleteId).get();
-  const profileDoc = await db.collection('Athlete_Profiles').doc(athleteId).get();
+  const rawUid = athleteId.replace(/^ath_/, '');
+  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+
+  let userDoc = await db.collection('Users').doc(rawUid).get();
+  if (!userDoc.exists) {
+    userDoc = await db.collection('Users').doc(canonicalAthleteId).get();
+  }
+
+  let profileDoc = await db.collection('Athlete_Profiles').doc(canonicalAthleteId).get();
+  if (!profileDoc.exists) {
+    profileDoc = await db.collection('Athlete_Profiles').doc(rawUid).get();
+  }
 
   const userData = userDoc.exists ? userDoc.data()! : {};
   const profileData = profileDoc.exists ? profileDoc.data()! : {};
@@ -45,8 +55,8 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
   const apeIndex = calculateApeIndex(wingspanCm, heightCm);
 
   return {
-    athlete_id: athleteId,
-    user_id: athleteId,
+    athlete_id: canonicalAthleteId,
+    user_id: rawUid,
     first_name: firstName,
     last_name: lastName,
     full_name: `${firstName} ${lastName}`,
@@ -262,31 +272,41 @@ export async function getAthleteHomeSummary(athleteId: string): Promise<AthleteH
     return null; // Signals 404 Not Found
   }
 
+  const rawUid = athleteId.replace(/^ath_/, '');
+  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+
   // 3. Check if user exists in Firestore Users / Athlete_Profiles collection or Auth
   let userExists = false;
   try {
-    const userDoc = await db.collection('Users').doc(athleteId).get();
+    const userDoc = await db.collection('Users').doc(rawUid).get();
     if (userDoc.exists) {
       userExists = true;
     } else {
-      const profileCheck = await db.collection('Athlete_Profiles').doc(athleteId).get();
+      const profileCheck = await db.collection('Athlete_Profiles').doc(canonicalAthleteId).get();
       if (profileCheck.exists) {
         userExists = true;
       } else {
-        const userRecord = await auth.getUser(athleteId);
-        if (userRecord) userExists = true;
+        const rawProfileCheck = await db.collection('Athlete_Profiles').doc(rawUid).get();
+        if (rawProfileCheck.exists) {
+          userExists = true;
+        } else {
+          const userRecord = await auth.getUser(rawUid).catch(() => null);
+          if (userRecord) userExists = true;
+        }
       }
     }
   } catch (err) {
-    // Default to true for dynamic IDs during testing/dev if no explicit error
     userExists = true;
   }
 
   if (!userExists) {
-    return null; // Signals 404 Not Found
+    return null;
   }
 
-  const profileDoc = await db.collection('Athlete_Profiles').doc(athleteId).get();
+  let profileDoc = await db.collection('Athlete_Profiles').doc(canonicalAthleteId).get();
+  if (!profileDoc.exists) {
+    profileDoc = await db.collection('Athlete_Profiles').doc(rawUid).get();
+  }
   const profileData = profileDoc.exists ? profileDoc.data()! : {};
 
   const sportCategory = profileData.sport_type || 'Basketball';

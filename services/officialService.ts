@@ -45,27 +45,43 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   const now = new Date();
   const nowStr = now.toISOString();
 
-  // Generate UUIDs for official_id and setting_id
-  const officialId = crypto.randomUUID();
+  const officialId = `off_${uid}`;
   const settingId = crypto.randomUUID();
+  const nameParts = full_legal_name.split(' ');
+  const firstName = nameParts[0] || 'Official';
+  const lastName = nameParts.slice(1).join(' ') || 'User';
+  const licenseNumber = (data as any).official_license_number || 'OFF-LIC-2026';
+  const assignedTournaments = (data as any).assigned_tournaments || [orgName];
 
-  // 3. Build Base Identity document (Users collection)
+  // 3. Build Base Identity document (Users collection) - COMPLETE DATA (NO PREFIX)
   const userData: any = {
     user_id: uid,
     full_legal_name,
+    full_name: full_legal_name,
+    first_name: firstName,
+    last_name: lastName,
     email,
-    password, // Consistent with general user creation pattern in this codebase for testing/fallback
+    password,
     role: 'Official',
+    organization_name: orgName,
+    organization: orgName,
+    official_license_number: licenseNumber,
+    assigned_tournaments: assignedTournaments,
+    certification_status: 'Pending',
+    is_active: true,
     created_at: now,
     updated_at: now,
   };
 
-  // 4. Build Subtype Child Profile document (Official_Profiles)
-  const profileData: OfficialProfile = {
+  // 4. Build Subtype Child Profile document (Official_Profiles) - MINIMAL DATA
+  const profileData: any = {
     official_id: officialId,
     user_id: uid,
     organization_name: orgName,
+    official_license_number: licenseNumber,
+    assigned_tournaments: assignedTournaments,
     certification_status: 'Pending',
+    is_active: true,
     created_at: now,
     updated_at: now,
   };
@@ -83,22 +99,12 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   // 6. Execute atomic batch write
   const batch = db.batch();
   
-  // Base identity
-  const userRef = db.collection('Users').doc(uid);
-  batch.set(userRef, userData);
+  batch.set(db.collection('Users').doc(uid), userData);
 
-  // Subtype profile (keyed by uid for fast lookup and official_id as primary key)
-  const profileRef = db.collection('Official_Profiles').doc(uid);
-  batch.set(profileRef, profileData);
+  batch.set(db.collection('Official_Profiles').doc(officialId), profileData);
 
-  // Also index profile by official_id if needed, or we can just fetch it by uid.
-  // To satisfy PK requirements, we also write to Official_Profiles collection with official_id as the document key.
-  const profileByOfficialIdRef = db.collection('Official_Profiles').doc(officialId);
-  batch.set(profileByOfficialIdRef, profileData);
-
-  // Settings document (keyed by official_id)
-  const settingsRef = db.collection('Official_Settings').doc(officialId);
-  batch.set(settingsRef, settingsData);
+  batch.set(db.collection('Official_Settings').doc(officialId), settingsData);
+  batch.set(db.collection('Official_Settings').doc(uid), settingsData);
 
   await batch.commit();
 
@@ -183,8 +189,16 @@ export async function loginOfficialService(email: string, password: string) {
  * Fetch settings for a specific official using their official_id.
  */
 export async function getOfficialSettings(officialId: string): Promise<OfficialSettings> {
-  const settingsRef = db.collection('Official_Settings').doc(officialId);
-  const doc = await settingsRef.get();
+  const rawUid = officialId.replace(/^off_/, '');
+  const canonicalOfficialId = officialId.startsWith('off_') ? officialId : `off_${officialId}`;
+
+  let doc = await db.collection('Official_Settings').doc(canonicalOfficialId).get();
+  if (!doc.exists) {
+    doc = await db.collection('Official_Settings').doc(rawUid).get();
+  }
+  if (!doc.exists) {
+    doc = await db.collection('Official_Settings').doc(officialId).get();
+  }
 
   const nowStr = new Date().toISOString();
 
@@ -192,7 +206,7 @@ export async function getOfficialSettings(officialId: string): Promise<OfficialS
     const data = doc.data()!;
     return {
       setting_id: data.setting_id || crypto.randomUUID(),
-      official_id: officialId,
+      official_id: canonicalOfficialId,
       split_screen_defaults: data.split_screen_defaults !== undefined ? data.split_screen_defaults : true,
       discrepancy_presets: data.discrepancy_presets !== undefined ? data.discrepancy_presets : true,
       match_reminders: data.match_reminders !== undefined ? data.match_reminders : true,
@@ -203,35 +217,37 @@ export async function getOfficialSettings(officialId: string): Promise<OfficialS
   // Fallback / default initializer if settings don't exist
   const defaultSettings: OfficialSettings = {
     setting_id: crypto.randomUUID(),
-    official_id: officialId,
+    official_id: canonicalOfficialId,
     split_screen_defaults: true,
     discrepancy_presets: true,
     match_reminders: true,
     updated_at: nowStr,
   };
 
-  await settingsRef.set(defaultSettings, { merge: true });
+  await db.collection('Official_Settings').doc(canonicalOfficialId).set(defaultSettings, { merge: true });
+  await db.collection('Official_Settings').doc(rawUid).set(defaultSettings, { merge: true });
   return defaultSettings;
 }
 
-/**
- * Update official settings preferences.
- */
 export async function updateOfficialSettings(
   officialId: string,
   payload: UpdateOfficialSettingsDto
 ): Promise<OfficialSettings> {
+  const rawUid = officialId.replace(/^off_/, '');
+  const canonicalOfficialId = officialId.startsWith('off_') ? officialId : `off_${officialId}`;
+
   const currentSettings = await getOfficialSettings(officialId);
 
   const updatedSettings: OfficialSettings = {
     setting_id: currentSettings.setting_id,
-    official_id: officialId,
+    official_id: canonicalOfficialId,
     split_screen_defaults: payload.split_screen_defaults !== undefined ? payload.split_screen_defaults : currentSettings.split_screen_defaults,
     discrepancy_presets: payload.discrepancy_presets !== undefined ? payload.discrepancy_presets : currentSettings.discrepancy_presets,
     match_reminders: payload.match_reminders !== undefined ? payload.match_reminders : currentSettings.match_reminders,
     updated_at: new Date().toISOString(),
   };
 
-  await db.collection('Official_Settings').doc(officialId).set(updatedSettings, { merge: true });
+  await db.collection('Official_Settings').doc(canonicalOfficialId).set(updatedSettings, { merge: true });
+  await db.collection('Official_Settings').doc(rawUid).set(updatedSettings, { merge: true });
   return updatedSettings;
 }

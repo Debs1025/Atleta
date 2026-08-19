@@ -26,8 +26,11 @@ export async function postSrpeLog(req: AuthRequest, res: Response): Promise<void
 
     const { session_duration_mins, srpe_score, entry_date, notes, session_type } = payload;
 
-    if (authenticatedUid && authenticatedUid !== athleteId) {
-      if (userRole !== 'Coach' && userRole !== 'Admin') {
+    const authUidNormalized = authenticatedUid ? authenticatedUid.replace(/^ath_/, '').replace(/^coach_/, '') : '';
+    const athleteIdNormalized = athleteId ? athleteId.replace(/^ath_/, '') : '';
+
+    if (authUidNormalized && athleteIdNormalized && authUidNormalized !== athleteIdNormalized) {
+      if (userRole !== 'Coach' && userRole !== 'Admin' && userRole !== 'System Admin') {
         res.status(403).json({
           error: 'Forbidden. Only the athlete or their verified coach may submit workload data.',
         });
@@ -68,8 +71,11 @@ export async function getWorkload(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    if (authenticatedUid && authenticatedUid !== athleteId) {
-      if (userRole !== 'Coach' && userRole !== 'Admin') {
+    const authUidNormalized = authenticatedUid ? authenticatedUid.replace(/^ath_/, '').replace(/^coach_/, '') : '';
+    const athleteIdNormalized = athleteId ? athleteId.replace(/^ath_/, '') : '';
+
+    if (authUidNormalized && athleteIdNormalized && authUidNormalized !== athleteIdNormalized) {
+      if (userRole !== 'Coach' && userRole !== 'Admin' && userRole !== 'System Admin') {
         res.status(403).json({
           error: 'Forbidden. Only the athlete or their verified coach may view workload data.',
         });
@@ -112,8 +118,11 @@ export async function getAthleteWorkloadHandler(req: AuthRequest, res: Response)
       return;
     }
 
-    if (authenticatedUid && authenticatedUid !== athleteId) {
-      if (userRole !== 'Coach' && userRole !== 'Admin') {
+    const authUidNormalized = authenticatedUid ? authenticatedUid.replace(/^ath_/, '').replace(/^coach_/, '') : '';
+    const athleteIdNormalized = athleteId ? athleteId.replace(/^ath_/, '') : '';
+
+    if (authUidNormalized && athleteIdNormalized && authUidNormalized !== athleteIdNormalized) {
+      if (userRole !== 'Coach' && userRole !== 'Admin' && userRole !== 'System Admin') {
         res.status(403).json({
           error: 'Forbidden. You do not have permission to view this athlete\'s workload.',
         });

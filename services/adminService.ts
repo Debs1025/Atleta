@@ -121,12 +121,13 @@ export async function registerAdminService(
   }
 
   const now = new Date();
-  const adminId = crypto.randomUUID();
+  const adminId = `admin_${uid}`;
   const clearanceLevel = data.clearance_level ? Number(data.clearance_level) : 4;
   const departmentCode = data.department_code.trim();
+  const institution = (data as any).institution || 'Ateneo de Naga University';
 
-  // 3. Provision Users Entity
-  const userData: User & { password?: string } = {
+  // 3. Provision Users Entity - COMPLETE DATA (NO PREFIX)
+  const userData: any = {
     user_id: uid,
     full_name: fullName,
     first_name: firstName,
@@ -134,28 +135,33 @@ export async function registerAdminService(
     email,
     password: data.password,
     role: 'SystemAdmin',
+    institution,
+    department_code: departmentCode,
+    clearance_level: clearanceLevel,
+    is_active: true,
+    is_elevated: true,
     created_at: now,
     updated_at: now,
   };
 
-  // 4. Provision Admin_Profiles Subtype Entity
-  const adminProfileData: AdminProfile = {
+  // 4. Provision Admin_Profiles Subtype Entity - MINIMAL DATA
+  const adminProfileData: any = {
     admin_id: adminId,
     user_id: uid,
-    clearance_level: clearanceLevel,
+    institution,
     department_code: departmentCode,
+    clearance_level: clearanceLevel,
     is_active: true,
+    is_elevated: true,
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
   };
 
   // 5. Commit atomic batch to Firestore
   const batch = db.batch();
-  const userRef = db.collection('Users').doc(uid);
-  const adminProfileRef = db.collection('Admin_Profiles').doc(adminId);
 
-  batch.set(userRef, userData);
-  batch.set(adminProfileRef, adminProfileData);
+  batch.set(db.collection('Users').doc(uid), userData);
+  batch.set(db.collection('Admin_Profiles').doc(adminId), adminProfileData);
 
   await batch.commit();
 
@@ -334,16 +340,20 @@ export async function getPendingCoachQueueService() {
 
   const pendingCoaches: any[] = [];
   const userIds: string[] = [];
+  const seenUserIds = new Set<string>();
 
   snapshot.docs.forEach((doc) => {
     const data = doc.data();
     const status = data.account_status || 'Pending';
-    if (status === 'Pending') {
+    const effectiveUserId = data.user_id || doc.id;
+    if (status === 'Pending' && !seenUserIds.has(effectiveUserId)) {
+      seenUserIds.add(effectiveUserId);
       pendingCoaches.push({
-        coach_id: data.coach_id || doc.id,
-        user_id: data.user_id,
+        coach_id: data.coach_id || (doc.id.startsWith('coach_') ? doc.id : `coach_${doc.id}`),
+        user_id: effectiveUserId,
         first_name: data.first_name || '',
         last_name: data.last_name || '',
+        full_name: data.full_name || `${data.first_name || ''} ${data.last_name || ''}`.trim(),
         sport_type: data.sport_type || 'Unassigned',
         years_of_experience: data.years_of_experience || 0,
         current_institution: data.current_institution || 'N/A',
@@ -351,7 +361,7 @@ export async function getPendingCoachQueueService() {
         account_status: 'Pending',
         created_at: data.created_at || new Date().toISOString(),
       });
-      if (data.user_id) userIds.push(data.user_id);
+      if (effectiveUserId) userIds.push(effectiveUserId);
     }
   });
 
@@ -366,13 +376,11 @@ export async function getPendingCoachQueueService() {
       }
     });
 
-    pendingCoaches.forEach((item) => {
-      const uData = userMap.get(item.user_id);
+    pendingCoaches.forEach((coach) => {
+      const uData = userMap.get(coach.user_id);
       if (uData) {
-        item.email = uData.email || '';
-        item.full_name = uData.full_name || `${uData.first_name || ''} ${uData.last_name || ''}`.trim();
-        item.first_name = uData.first_name || item.first_name;
-        item.last_name = uData.last_name || item.last_name;
+        coach.email = uData.email || '';
+        coach.full_name = coach.full_name || `${uData.first_name || ''} ${uData.last_name || ''}`.trim();
       }
     });
   }
@@ -388,14 +396,18 @@ export async function approveCoachService(adminId: string, coachIdParam: string)
   const userId = coachIdParam.replace('coach_', '');
 
   const coachRef = db.collection('Coach_Profiles').doc(canonicalCoachId);
+  const rawCoachRef = db.collection('Coach_Profiles').doc(userId);
   const userRef = db.collection('Users').doc(userId);
 
   // Fast direct primary key check
   const coachSnap = await coachRef.get();
   if (!coachSnap.exists) {
-    const querySnap = await db.collection('Coach_Profiles').where('coach_id', '==', coachIdParam).limit(1).get();
-    if (querySnap.empty) {
-      throw new ServiceError(`Coach application with ID '${coachIdParam}' not found.`, 404);
+    const rawSnap = await rawCoachRef.get();
+    if (!rawSnap.exists) {
+      const querySnap = await db.collection('Coach_Profiles').where('coach_id', '==', coachIdParam).limit(1).get();
+      if (querySnap.empty) {
+        throw new ServiceError(`Coach application with ID '${coachIdParam}' not found.`, 404);
+      }
     }
   }
 
@@ -404,15 +416,9 @@ export async function approveCoachService(adminId: string, coachIdParam: string)
   // Perform atomic batch update to update account_status to "Active" across Coach_Profiles and Users
   const batch = db.batch();
 
-  batch.update(coachRef, {
-    account_status: 'Active',
-    updated_at: now,
-  });
-
-  batch.update(userRef, {
-    account_status: 'Active',
-    updated_at: now,
-  });
+  batch.set(coachRef, { account_status: 'Active', updated_at: now }, { merge: true });
+  batch.set(rawCoachRef, { account_status: 'Active', updated_at: now }, { merge: true });
+  batch.set(userRef, { account_status: 'Active', updated_at: now }, { merge: true });
 
   // Write Admin_Audit_Logs record for accreditation decision
   const auditLogId = crypto.randomUUID();
@@ -458,13 +464,17 @@ export async function rejectCoachService(adminId: string, coachIdParam: string, 
   const userId = coachIdParam.replace('coach_', '');
 
   const coachRef = db.collection('Coach_Profiles').doc(canonicalCoachId);
+  const rawCoachRef = db.collection('Coach_Profiles').doc(userId);
   const userRef = db.collection('Users').doc(userId);
 
   const coachSnap = await coachRef.get();
   if (!coachSnap.exists) {
-    const querySnap = await db.collection('Coach_Profiles').where('coach_id', '==', coachIdParam).limit(1).get();
-    if (querySnap.empty) {
-      throw new ServiceError(`Coach application with ID '${coachIdParam}' not found.`, 404);
+    const rawSnap = await rawCoachRef.get();
+    if (!rawSnap.exists) {
+      const querySnap = await db.collection('Coach_Profiles').where('coach_id', '==', coachIdParam).limit(1).get();
+      if (querySnap.empty) {
+        throw new ServiceError(`Coach application with ID '${coachIdParam}' not found.`, 404);
+      }
     }
   }
 
@@ -473,15 +483,9 @@ export async function rejectCoachService(adminId: string, coachIdParam: string, 
   // Perform atomic batch update to update account_status to "Rejected" across Coach_Profiles and Users
   const batch = db.batch();
 
-  batch.update(coachRef, {
-    account_status: 'Rejected',
-    updated_at: now,
-  });
-
-  batch.update(userRef, {
-    account_status: 'Rejected',
-    updated_at: now,
-  });
+  batch.set(coachRef, { account_status: 'Rejected', updated_at: now }, { merge: true });
+  batch.set(rawCoachRef, { account_status: 'Rejected', updated_at: now }, { merge: true });
+  batch.set(userRef, { account_status: 'Rejected', updated_at: now }, { merge: true });
 
   // Write Admin_Audit_Logs record with rejection reason
   const auditLogId = crypto.randomUUID();

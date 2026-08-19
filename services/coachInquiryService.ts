@@ -25,8 +25,16 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
     return null;
   }
 
-  const coachRef = db.collection('Coach_Profiles').doc(coachId);
-  const coachDoc = await coachRef.get();
+  const rawUid = coachId.replace(/^coach_/, '');
+  const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${coachId}`;
+
+  let coachDoc = await db.collection('Coach_Profiles').doc(canonicalCoachId).get();
+  if (!coachDoc.exists) {
+    coachDoc = await db.collection('Coach_Profiles').doc(rawUid).get();
+  }
+  if (!coachDoc.exists) {
+    coachDoc = await db.collection('Coach_Profiles').doc(coachId).get();
+  }
 
   let coachData: Record<string, any> = {};
 
@@ -34,11 +42,14 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
     coachData = coachDoc.data()!;
   } else {
     // Check if coach exists in Users collection by coachId or user_id
-    const userDoc = await db.collection('Users').doc(coachId).get();
+    let userDoc = await db.collection('Users').doc(rawUid).get();
+    if (!userDoc.exists) {
+      userDoc = await db.collection('Users').doc(canonicalCoachId).get();
+    }
     if (userDoc.exists && userDoc.data()?.role === 'Coach') {
       coachData = {
-        coach_id: coachId,
-        user_id: coachId,
+        coach_id: canonicalCoachId,
+        user_id: rawUid,
         ...userDoc.data(),
       };
     } else {

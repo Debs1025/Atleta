@@ -22,9 +22,27 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
+// Registration & Search
 router.post('/register-athlete', upload.single('eligible_documents'), registerAthlete);
 router.post('/register', upload.single('eligible_documents'), registerAthlete);
 router.get('/search', authenticate, searchAthletesHandler);
+
+// Clean Token-Based Routes (No Athlete ID required in URL)
+router.get('/home', authenticate, getAthleteHome);
+router.get('/team', authenticate, getAthleteTeamHandler);
+router.get('/stats/all', authenticate, getAthleteAllStatsHandler);
+router.get('/matches', authenticate, getAthleteMatchHistoryHandler);
+router.get('/workload', authenticate, getAthleteWorkloadHandler);
+router.post('/workload', authenticate, postSrpeLog);
+router.post('/sync-offline', authenticate, syncAthleteOfflineBatchHandler);
+router.get('/offline-snapshot', authenticate, getAthleteOfflineSnapshotHandler);
+router.get('/profile', authenticate, getAthlete);
+router.get('/me', authenticate, getAthlete);
+router.put('/profile', authenticate, updateAthlete);
+router.put('/me', authenticate, updateAthlete);
+router.post('/documents', authenticate, upload.single('document'), uploadDocument);
+
+// Parameterized Routes (Backward-compatible and for Coach/Scouting queries)
 router.get('/:athleteId/home', authenticate, getAthleteHome);
 router.get('/:athleteId/team', authenticate, getAthleteTeamHandler);
 router.get('/:athleteId/stats/all', authenticate, getAthleteAllStatsHandler);

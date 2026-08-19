@@ -18,9 +18,7 @@ import {
 
 export async function getCoachProfileHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const coachId = Array.isArray(req.params.coachId)
-      ? req.params.coachId[0]
-      : req.params.coachId;
+    const coachId = req.params.coachId || req.user?.uid;
 
     if (!coachId) {
       res.status(400).json({ error: 'Coach ID is required.' });

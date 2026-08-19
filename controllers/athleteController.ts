@@ -15,7 +15,7 @@ import { ServiceError } from '../validators/matchValidator';
 
 export async function getAthleteHome(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    const athleteId = req.params.athleteId || req.user?.uid;
     const authenticatedUid = req.user?.uid;
     const authenticatedRole = req.user?.role;
 
@@ -49,7 +49,7 @@ export async function getAthleteHome(req: AuthRequest, res: Response): Promise<v
 
 export async function getAthlete(req: Request, res: Response): Promise<void> {
   try {
-    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    const athleteId = req.params.athleteId || (req as any).user?.uid;
     if (!athleteId) {
       res.status(400).json({ error: 'Athlete ID is required.' });
       return;
@@ -65,7 +65,7 @@ export async function getAthlete(req: Request, res: Response): Promise<void> {
 
 export async function updateAthlete(req: Request, res: Response): Promise<void> {
   try {
-    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    const athleteId = req.params.athleteId || (req as any).user?.uid;
     if (!athleteId) {
       res.status(400).json({ error: 'Athlete ID is required.' });
       return;
@@ -86,7 +86,7 @@ export async function updateAthlete(req: Request, res: Response): Promise<void> 
 
 export async function uploadDocument(req: Request, res: Response): Promise<void> {
   try {
-    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    const athleteId = req.params.athleteId || (req as any).user?.uid;
     const docType = req.body.doc_type || 'psa_birth_certificate';
     const file = (req as any).file as Express.Multer.File | undefined;
 
@@ -157,7 +157,7 @@ export async function registerAthlete(req: Request, res: Response): Promise<void
 
 export async function getAthleteAllStatsHandler(req: Request, res: Response): Promise<void> {
   try {
-    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    const athleteId = req.params.athleteId || (req as any).user?.uid;
     if (!athleteId) {
       res.status(400).json({ error: 'Athlete ID is required.' });
       return;
@@ -177,7 +177,7 @@ export async function getAthleteAllStatsHandler(req: Request, res: Response): Pr
 
 export async function getAthleteMatchHistoryHandler(req: Request, res: Response): Promise<void> {
   try {
-    const athleteId = Array.isArray(req.params.athleteId) ? req.params.athleteId[0] : req.params.athleteId;
+    const athleteId = req.params.athleteId || (req as any).user?.uid;
     if (!athleteId) {
       res.status(400).json({ error: 'Athlete ID is required.' });
       return;

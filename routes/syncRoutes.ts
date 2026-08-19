@@ -15,6 +15,7 @@ router.post('/offline-queue', authenticate, requireCoach, syncCoachOfflineBatchH
 router.post('/batch', authenticate, syncCoachOfflineBatchHandler);
 router.post('/athlete-offline-queue', authenticate, syncAthleteOfflineBatchHandler);
 router.get('/coach-snapshot', authenticate, requireCoach, getCoachOfflineSnapshotHandler);
+router.get('/athlete-snapshot', authenticate, getAthleteOfflineSnapshotHandler);
 router.get('/athlete-snapshot/:athleteId', authenticate, getAthleteOfflineSnapshotHandler);
 router.get('/status', authenticate, getOfflineSyncStatusHandler);
 
