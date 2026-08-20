@@ -38,8 +38,8 @@ router.post('/sync-offline', authenticate, syncAthleteOfflineBatchHandler);
 router.get('/offline-snapshot', authenticate, getAthleteOfflineSnapshotHandler);
 router.get('/profile', authenticate, getAthlete);
 router.get('/me', authenticate, getAthlete);
-router.put('/profile', authenticate, updateAthlete);
-router.put('/me', authenticate, updateAthlete);
+router.patch('/profile', authenticate, updateAthlete);
+router.patch('/me', authenticate, updateAthlete);
 router.post('/documents', authenticate, upload.single('document'), uploadDocument);
 
 // Parameterized Routes (Backward-compatible and for Coach/Scouting queries)
@@ -52,7 +52,7 @@ router.post('/:athleteId/workload', authenticate, postSrpeLog);
 router.post('/:athleteId/sync-offline', authenticate, syncAthleteOfflineBatchHandler);
 router.get('/:athleteId/offline-snapshot', authenticate, getAthleteOfflineSnapshotHandler);
 router.get('/:athleteId', getAthlete);
-router.put('/:athleteId', authenticate, updateAthlete);
+router.patch('/:athleteId', authenticate, updateAthlete);
 router.post('/:athleteId/documents', authenticate, upload.single('document'), uploadDocument);
 
 export default router;

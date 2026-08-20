@@ -37,10 +37,10 @@ router.post('/social-login', socialLogin as any);
 router.get('/me', authenticate, getMe);
 router.post('/password-reset', requestPasswordReset);
 router.post('/forgot-password', requestPasswordReset);
-router.put('/password-reset', resetPassword);
+router.patch('/password-reset', resetPassword);
 router.post('/password-reset', resetPassword);
 router.post('/password-reset/:token', resetPassword);
-router.put('/password-reset/:token', resetPassword);
+router.patch('/password-reset/:token', resetPassword);
 router.post('/change-password', authenticate, changePassword);
 
 export default router;

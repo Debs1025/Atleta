@@ -151,14 +151,14 @@ export async function createSportService(
   const trimmedShortId = payload.short_identifier.trim().toUpperCase();
 
   const nameConflict = existingSports.find(
-    (s) => s.sport_name.toLowerCase() === trimmedName.toLowerCase()
+    (s) => s?.sport_name && s.sport_name.toLowerCase() === trimmedName.toLowerCase()
   );
   if (nameConflict) {
     throw new ServiceError(`Sport with name '${trimmedName}' already exists.`, 400);
   }
 
   const shortIdConflict = existingSports.find(
-    (s) => s.short_identifier.toUpperCase() === trimmedShortId
+    (s) => s?.short_identifier && s.short_identifier.toUpperCase() === trimmedShortId
   );
   if (shortIdConflict) {
     throw new ServiceError(`Sport with short identifier '${trimmedShortId}' already exists.`, 400);
@@ -218,7 +218,7 @@ export async function createSportService(
 
 /**
  * Update dynamic stat schemas or measurement parameters.
- * PUT /api/v1/sports/:sportId
+ * PATCH /api/v1/sports/:sportId
  *
  * ACCEPTANCE CRITERIA:
  * 1. Require valid Bearer token with System Admin role.
@@ -242,7 +242,7 @@ export async function updateSportService(
   if (payload.sport_name) {
     const trimmedName = payload.sport_name.trim();
     const nameConflict = existingSports.find(
-      (s) => s.sport_id !== sportId && s.sport_name.toLowerCase() === trimmedName.toLowerCase()
+      (s) => s.sport_id !== sportId && s?.sport_name && s.sport_name.toLowerCase() === trimmedName.toLowerCase()
     );
     if (nameConflict) {
       throw new ServiceError(`Sport with name '${trimmedName}' already exists.`, 400);
@@ -252,7 +252,7 @@ export async function updateSportService(
   if (payload.short_identifier) {
     const trimmedShortId = payload.short_identifier.trim().toUpperCase();
     const shortIdConflict = existingSports.find(
-      (s) => s.sport_id !== sportId && s.short_identifier.toUpperCase() === trimmedShortId
+      (s) => s.sport_id !== sportId && s?.short_identifier && s.short_identifier.toUpperCase() === trimmedShortId
     );
     if (shortIdConflict) {
       throw new ServiceError(`Sport with short identifier '${trimmedShortId}' already exists.`, 400);
@@ -275,7 +275,7 @@ export async function updateSportService(
   logAdminAudit({
     user_id: adminUserId,
     email: 'admin@atleta.edu',
-    action: `PUT /api/v1/sports/${sportId}`,
+    action: `PATCH /api/v1/sports/${sportId}`,
     status: 'SUCCESS',
     endpoint: `/api/v1/sports/${sportId}`,
     ip_address: clientIp,

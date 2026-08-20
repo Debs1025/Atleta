@@ -97,7 +97,7 @@ function renderItemCard(
 }
 
 function renderRouteTable(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   endpoint: string,
   auth: string,
   purpose: string,
@@ -108,7 +108,7 @@ function renderRouteTable(
   const startY = doc.y;
   let methodBg = COLOR_ACCENT;
   if (method === 'POST') methodBg = COLOR_SUCCESS;
-  if (method === 'PUT') methodBg = COLOR_WARNING;
+  if (method === 'PUT' || method === 'PATCH') methodBg = COLOR_WARNING;
   if (method === 'DELETE') methodBg = COLOR_DANGER;
 
   doc.rect(36, startY, 523, 18).fill('#F1F5F9');
@@ -274,7 +274,7 @@ renderChapterHeader('3', 'Athlete Hub, Analytics & sRPE Engine', 'Career stats, 
 renderSubSection('routes/athleteRoutes.ts', 'ENDPOINTS (/api/v1/athletes)');
 renderRouteTable('GET', '/athletes/home', 'Auth: Athlete', 'Fetch athlete dashboard home summary feed', 'None', 'Returns recent matches, alerts, workload summary, and team banner');
 renderRouteTable('GET', '/athletes/profile', 'Auth: Athlete', 'Retrieve comprehensive profile and physical vitals', 'None', 'Returns height, weight, BMI, Ape index, jersey number, and sport attributes');
-renderRouteTable('PUT', '/athletes/profile', 'Auth: Athlete', 'Update athlete profile vitals and bio', 'JSON: { height, weight, jersey_number, bio, wingspan, primary_position }', 'Recalculates BMI and Ape Index automatically');
+renderRouteTable('PATCH', '/athletes/profile', 'Auth: Athlete', 'Update athlete profile vitals and bio', 'JSON: { height, weight, jersey_number, bio, wingspan, primary_position }', 'Recalculates BMI and Ape Index automatically');
 renderRouteTable('GET', '/athletes/stats/all', 'Auth: Athlete', 'Aggregate career performance statistics across matches', 'None', 'Calculates total games, points, averages, shooting %, sprint times, stamina scores');
 renderRouteTable('GET', '/athletes/matches', 'Auth: Athlete', 'Retrieve date-grouped match history with boxscores', 'Query: ?limit=20&sport=Basketball', 'Returns chronological match logs with official validation badges');
 renderRouteTable('GET', '/athletes/team', 'Auth: Athlete', 'Fetch athlete current team and teammate roster', 'None', 'Returns team details, coach contact, and active teammate list');
@@ -319,9 +319,8 @@ renderChapterHeader('4', 'Coach Hub, Scouting & Talent Discovery', 'Multi-attrib
 
 renderSubSection('routes/coachRoutes.ts & scoutingRoutes.ts', 'ENDPOINTS');
 renderRouteTable('GET', '/coaches/me', 'Auth: Coach', 'Get authenticated coach profile and verified credentials', 'None', 'Returns coach details, school/organization, and assigned sport');
-renderRouteTable('PUT', '/coaches/me/profile', 'Auth: Coach', 'Update coach profile and coaching philosophy bio', 'JSON: { experience_years, specialization, bio, phone_number }', 'Updates coach document in Firestore');
-renderRouteTable('GET', '/coaches/me/settings', 'Auth: Coach', 'Fetch coach notification & UI preferences', 'None', 'Returns alert thresholds, email toggles, and scouting filters');
-renderRouteTable('PUT', '/coaches/me/settings', 'Auth: Coach', 'Update coach preferences', 'JSON: { email_alerts, scouting_notifications, preferred_sports }', 'Persists settings to coachSettings collection');
+renderRouteTable('PATCH', '/coaches/me/profile', 'Auth: Coach', 'Update coach profile and coaching philosophy bio', 'JSON: { experience_years, specialization, bio, phone_number }', 'Updates coach document in Firestore');
+renderRouteTable('PATCH', '/coaches/me/settings', 'Auth: Coach', 'Update coach preferences', 'JSON: { email_alerts, scouting_notifications, preferred_sports }', 'Persists settings to coachSettings collection');
 renderRouteTable('GET', '/scouting/athletes', 'Auth: Coach', 'Search and filter regional prospect athletes', 'Query: ?sport=Basketball&position=Guard&min_height=180&min_ppg=15&page=1&limit=20', 'Returns paginated athlete search results with stat summaries');
 renderRouteTable('GET', '/scouting/athletes/:athleteId', 'Auth: Coach', 'Comprehensive scouting profile on specific athlete', 'None', 'Returns verified match logs, biometric radar stats, and injury risk');
 renderRouteTable('GET', '/scouting/rankings', 'Auth: Coach', 'Leaderboard rankings across athletes by metric', 'Query: ?sport=Basketball&metric=points (points | assists | rebounds | efficiency)', 'Returns sorted top performers in selected category');
@@ -380,7 +379,7 @@ renderSubSection('routes/officialRoutes.ts & validationRoutes.ts', 'ENDPOINTS');
 renderRouteTable('GET', '/officials/dashboard', 'Auth: Official', 'Official operations dashboard summary', 'None', 'Returns scheduled matches, pending validations, recent audits, and notifications');
 renderRouteTable('GET', '/officials/schedules', 'Auth: Official', 'Tournament match schedule and court/field assignments', 'Query: ?date=YYYY-MM-DD&sport=Basketball', 'Returns list of assigned matches');
 renderRouteTable('GET', '/officials/notifications', 'Auth: Official', 'Tournament alerts and stat audit inquiries', 'None', 'Returns list of official notifications');
-renderRouteTable('PUT', '/officials/notifications/read-all', 'Auth: Official', 'Mark all official notifications as read', 'None', 'Updates unread notifications count to 0');
+renderRouteTable('PATCH', '/officials/notifications/read-all', 'Auth: Official', 'Mark all official notifications as read', 'None', 'Updates unread notifications count to 0');
 renderRouteTable('GET', '/validations/pending', 'Auth: Official', 'Fetch pending match scoresheets awaiting certification', 'None', 'Returns list of uncertified matches with uploaded scoresheets');
 renderRouteTable('POST', '/validations/:validationId/certify', 'Auth: Official', 'Certify and seal official match results in Firestore', 'JSON: { context_notes, scoresheet_url }', 'Locks match data into official verified standings and invalidates leaderboard cache');
 
@@ -399,24 +398,24 @@ renderSubSection('routes/teamRoutes.ts', 'TEAMS & ROSTERS (/api/v1/teams)');
 renderRouteTable('GET', '/teams', 'Auth: Any', 'Browse registered sports teams & clubs', 'Query: ?sport=Basketball&search=Tigers', 'Returns list of teams matching query');
 renderRouteTable('POST', '/teams', 'Auth: Coach/Admin', 'Register a new team / squad', 'JSON: { name, sport_type, organization_school, division, logo_url }', 'Creates team document in Firestore and assigns creating coach');
 renderRouteTable('GET', '/teams/:teamId', 'Auth: Any', 'Get team details, coach info, and roster', 'None', 'Returns team profile and list of active athlete members');
-renderRouteTable('PUT', '/teams/:teamId', 'Auth: Coach/Admin', 'Update team profile metadata', 'JSON: { name, division, logo_url }', 'Updates team record');
-renderRouteTable('PUT', '/teams/:teamId/roster', 'Auth: Coach', 'Add or remove athletes from team roster', 'JSON: { athlete_ids: string[], action: "ADD" | "REMOVE" }', 'Updates team roster array and updates each athlete current_team_id');
+renderRouteTable('PATCH', '/teams/:teamId', 'Auth: Coach/Admin', 'Update team profile metadata', 'JSON: { name, division, logo_url }', 'Updates team record');
+renderRouteTable('PATCH', '/teams/:teamId/roster', 'Auth: Coach', 'Add or remove athletes from team roster', 'JSON: { athlete_ids: string[], action: "ADD" | "REMOVE" }', 'Updates team roster array and updates each athlete current_team_id');
 
 renderSubSection('routes/inquiryRoutes.ts', 'RECRUITMENT INQUIRIES (/api/v1/inquiries)');
 renderRouteTable('POST', '/inquiries', 'Auth: Coach/Athlete', 'Send recruitment inquiry / scouting message thread', 'JSON: { receiver_id, athlete_id, subject, message, contact_phone }', 'Creates inquiry thread and notifies receiver');
 renderRouteTable('GET', '/inquiries', 'Auth: Coach/Athlete', 'Fetch all inquiry threads for authenticated user', 'None', 'Returns list of active conversation threads with status');
-renderRouteTable('PUT', '/inquiries/:inquiryId/respond', 'Auth: Coach/Athlete', 'Respond to recruitment inquiry', 'JSON: { status: "ACCEPTED" | "DECLINED" | "IN_REVIEW", response_message }', 'Updates thread status and appends response message');
+renderRouteTable('PATCH', '/inquiries/:inquiryId/respond', 'Auth: Coach/Athlete', 'Respond to recruitment inquiry', 'JSON: { status: "ACCEPTED" | "DECLINED" | "IN_REVIEW", response_message }', 'Updates thread status and appends response message');
 
 renderSubSection('routes/sportRoutes.ts', 'SPORTS DIRECTORY (/api/v1/sports)');
 renderRouteTable('GET', '/sports', 'Auth: Any', 'List all supported sports, positions & metric schemas', 'Query: ?active_only=true', 'Returns sports catalog (Basketball, Swimming, Track & Field, etc.)');
 renderRouteTable('GET', '/sports/:sportId', 'Auth: Any', 'Get specific sport configuration and metric keys', 'None', 'Returns metric keys, scoring rules, and positions list');
 renderRouteTable('POST', '/sports', 'Auth: Admin', 'Add new sport category to system directory', 'JSON: { name, stat_schema, positions, scoring_rules }', 'Persists new sport configuration');
-renderRouteTable('PUT', '/sports/:sportId', 'Auth: Admin', 'Update sport rules and metric schema', 'JSON: { stat_schema, positions, active }', 'Updates existing sport schema');
+renderRouteTable('PATCH', '/sports/:sportId', 'Auth: Admin', 'Update sport rules and metric schema', 'JSON: { stat_schema, positions, active }', 'Updates existing sport schema');
 
 renderSubSection('routes/notificationRoutes.ts', 'NOTIFICATIONS (/api/v1/notifications)');
 renderRouteTable('GET', '/notifications', 'Auth: Any', 'Get user in-app notification inbox', 'Query: ?unread_only=true&limit=30', 'Returns array of notification objects with read status');
-renderRouteTable('PUT', '/notifications/read-all', 'Auth: Any', 'Mark all user notifications as read', 'None', 'Sets read = true on all unread notifications for current user');
-renderRouteTable('PUT', '/notifications/:notificationId/read', 'Auth: Any', 'Mark specific notification as read', 'None', 'Marks notification document as read');
+renderRouteTable('PATCH', '/notifications/read-all', 'Auth: Any', 'Mark all user notifications as read', 'None', 'Sets read = true on all unread notifications for current user');
+renderRouteTable('PATCH', '/notifications/:notificationId/read', 'Auth: Any', 'Mark specific notification as read', 'None', 'Marks notification document as read');
 
 // =========================================================================
 // CHAPTER 8: OFFLINE SYNC ENGINE & EVENT BUS

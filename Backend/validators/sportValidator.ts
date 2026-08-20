@@ -134,7 +134,7 @@ export function validateCreateSport(
 }
 
 /**
- * Validates sport update payload (PUT /api/v1/sports/:sportId).
+ * Validates sport update payload (PATCH /api/v1/sports/:sportId).
  */
 export function validateUpdateSport(data: Record<string, unknown>): ValidationError[] {
   const errors: ValidationError[] = [];

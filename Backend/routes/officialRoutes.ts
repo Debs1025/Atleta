@@ -24,11 +24,11 @@ router.get('/schedules', authenticate, getSchedulesHandler);
 
 // Tournament Official Notifications
 router.get('/notifications', authenticate, getOfficialNotificationsHandler);
-router.put('/notifications/read-all', authenticate, markAllOfficialNotificationsAsReadHandler);
-router.put('/notifications/read', authenticate, markAllOfficialNotificationsAsReadHandler);
+router.patch('/notifications/read-all', authenticate, markAllOfficialNotificationsAsReadHandler);
+router.patch('/notifications/read', authenticate, markAllOfficialNotificationsAsReadHandler);
 
 // Tournament Official Settings
 router.get('/me/settings', authenticate, getOfficialSettingsHandler);
-router.put('/me/settings', authenticate, updateOfficialSettingsHandler);
+router.patch('/me/settings', authenticate, updateOfficialSettingsHandler);
 
 export default router;

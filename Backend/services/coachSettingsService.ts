@@ -52,7 +52,7 @@ export async function getCoachSettings(coachId: string): Promise<CoachSettings> 
 }
 
 /**
- * Update coach settings preferences (PUT /api/v1/coaches/me/settings).
+ * Update coach settings preferences (PATCH /api/v1/coaches/me/settings).
  */
 export async function updateCoachSettings(
   coachId: string,
@@ -85,7 +85,7 @@ export async function updateCoachSettings(
 }
 
 /**
- * Update coach profile details & certification documents (PUT /api/v1/coaches/me/profile).
+ * Update coach profile details & certification documents (PATCH /api/v1/coaches/me/profile).
  */
 export async function updateCoachProfile(
   coachId: string,
@@ -152,7 +152,7 @@ export async function updateCoachProfile(
 }
 
 /**
- * Change coach password with current password verification (PUT /api/v1/coaches/me/password).
+ * Change coach password with current password verification (PATCH /api/v1/coaches/me/password).
  *
  * ACCEPTANCE CRITERIA:
  * Password changes without correct current password return HTTP 401 Unauthorized.

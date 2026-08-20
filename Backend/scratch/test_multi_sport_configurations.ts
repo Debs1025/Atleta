@@ -324,7 +324,7 @@ async function runTests() {
       assert(err.statusCode === 400 && err.message.includes('already exists'), 'Duplicate short_identifier returns HTTP 400 error');
     }
 
-    // 3d. Update sport configuration (PUT /api/v1/sports/:sportId)
+    // 3d. Update sport configuration (PATCH /api/v1/sports/:sportId)
     const updateResult = await updateSportService(
       createdSportId,
       {

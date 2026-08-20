@@ -62,7 +62,7 @@ export function validateRegisterCoach(data: Record<string, unknown>, hasFile: bo
 }
 
 /**
- * Validates coach settings update payload (PUT /api/v1/coaches/me/settings).
+ * Validates coach settings update payload (PATCH /api/v1/coaches/me/settings).
  */
 export function validateUpdateCoachSettings(data: Record<string, unknown>): ValidationError[] {
   const errors: ValidationError[] = [];
@@ -89,7 +89,7 @@ export function validateUpdateCoachSettings(data: Record<string, unknown>): Vali
 }
 
 /**
- * Validates change password payload (PUT /api/v1/coaches/me/password).
+ * Validates change password payload (PATCH /api/v1/coaches/me/password).
  */
 export function validateChangeCoachPassword(data: Record<string, unknown>): ValidationError[] {
   const errors: ValidationError[] = [];
