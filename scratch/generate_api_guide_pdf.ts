@@ -27,6 +27,7 @@ const BORDER_COLOR = '#E2E8F0'; // Slate 200
 const METHOD_GET = '#0284C7';
 const METHOD_POST = '#16A34A';
 const METHOD_PUT = '#D97706';
+const METHOD_PATCH = '#D97706';
 const METHOD_DELETE = '#DC2626';
 
 function drawHeader(title: string, category: string) {
@@ -59,6 +60,7 @@ function drawEndpoint(
   let methodColor = METHOD_GET;
   if (method === 'POST') methodColor = METHOD_POST;
   if (method === 'PUT') methodColor = METHOD_PUT;
+  if (method === 'PATCH') methodColor = METHOD_PATCH;
   if (method === 'DELETE') methodColor = METHOD_DELETE;
 
   // Background box
@@ -201,7 +203,7 @@ drawEndpoint('GET', '/athletes/home', 'Athlete Dashboard home feed & summary', '
 
 drawEndpoint('GET', '/athletes/profile', 'Get athlete profile details & vitals', 'Auth: Athlete', []);
 
-drawEndpoint('PUT', '/athletes/profile', 'Update athlete profile & bio', 'Auth: Athlete', [
+drawEndpoint('PATCH', '/athletes/profile', 'Update athlete profile & bio', 'Auth: Athlete', [
   'height', 'weight', 'jersey_number', 'bio', 'emergency_contact'
 ]);
 
@@ -232,17 +234,19 @@ drawSectionDivider('3. Coach Management & Scouting Hub (/api/v1/coaches)');
 
 drawEndpoint('GET', '/coaches/me', 'Get authenticated Coach profile and credentials', 'Auth: Coach', []);
 
-drawEndpoint('PUT', '/coaches/me/profile', 'Update coach profile and coaching bio', 'Auth: Coach', [
-  'experience_years', 'specialization', 'bio', 'phone_number'
+drawEndpoint('PATCH', '/coaches/me/profile', 'Update coach profile and coaching bio', 'Auth: Coach', [
+  'experience_years (number)',
+  'specialization (string)',
+  'bio (string)',
+  'phone_number (string)',
 ]);
 
-drawEndpoint('GET', '/coaches/me/settings', 'Fetch coach notification & UI preferences', 'Auth: Coach', []);
-
-drawEndpoint('PUT', '/coaches/me/settings', 'Update coach preferences & scouting alert filters', 'Auth: Coach', [
-  'email_alerts', 'scouting_notifications', 'preferred_sports'
+drawEndpoint('PATCH', '/coaches/me/settings', 'Update coach preferences & scouting alert filters', 'Auth: Coach', [
+  'data_sync_preference: "Manual" | "Automatic"',
+  'notification_preferences: { game_log_updates: boolean, recruitment_inquiries: boolean }',
 ]);
 
-drawEndpoint('PUT', '/coaches/me/password', 'Change coach password', 'Auth: Coach', [
+drawEndpoint('PATCH', '/coaches/me/password', 'Change coach password', 'Auth: Coach', [
   'current_password', 'new_password'
 ]);
 
@@ -300,7 +304,7 @@ drawEndpoint('GET', '/officials/schedules', 'Official tournament assignments and
 
 drawEndpoint('GET', '/officials/notifications', 'Official tournament alerts & audit inquiries', 'Auth: Official', []);
 
-drawEndpoint('PUT', '/officials/notifications/read-all', 'Mark all official notifications as read', 'Auth: Official', []);
+drawEndpoint('PATCH', '/officials/notifications/read-all', 'Mark all official notifications as read', 'Auth: Official', []);
 
 drawEndpoint('GET', '/validations/pending', 'Fetch pending match scoresheets awaiting certification', 'Auth: Official', []);
 
@@ -323,11 +327,13 @@ drawEndpoint('POST', '/teams', 'Register a new team / squad', 'Auth: Coach/Admin
 
 drawEndpoint('GET', '/teams/:teamId', 'Get team details, coach info, and roster list', 'Auth: Any', []);
 
-drawEndpoint('PUT', '/teams/:teamId', 'Update team profile & organizational metadata', 'Auth: Coach/Admin', [
-  'name', 'division', 'logo_url'
+drawEndpoint('PATCH', '/teams/:teamId', 'Update team profile & organizational metadata', 'Auth: Coach/Admin', [
+  'team_name?: string',
+  'division?: string',
+  'team_logo_url?: string',
 ]);
 
-drawEndpoint('PUT', '/teams/:teamId/roster', 'Add or remove athletes from team roster', 'Auth: Coach', [
+drawEndpoint('PATCH', '/teams/:teamId/roster', 'Add or remove athletes from team roster', 'Auth: Coach', [
   'athlete_ids (array)', 'action ("ADD" | "REMOVE")'
 ]);
 
@@ -363,7 +369,7 @@ drawEndpoint('POST', '/inquiries', 'Send recruitment inquiry / scouting message'
 
 drawEndpoint('GET', '/inquiries', 'Fetch inquiry threads for authenticated user', 'Auth: Coach/Athlete', []);
 
-drawEndpoint('PUT', '/inquiries/:inquiryId/respond', 'Accept, decline, or reply to recruitment inquiry', 'Auth: Coach/Athlete', [
+drawEndpoint('PATCH', '/inquiries/:inquiryId/respond', 'Accept, decline, or reply to recruitment inquiry', 'Auth: Coach/Athlete', [
   'status ("ACCEPTED" | "DECLINED" | "IN_REVIEW")', 'response_message'
 ]);
 
@@ -380,7 +386,7 @@ drawEndpoint('POST', '/sports', 'Add new sport category to system directory', 'A
   'name', 'stat_schema (metrics list)', 'positions (list)', 'scoring_rules'
 ]);
 
-drawEndpoint('PUT', '/sports/:sportId', 'Update sport rules and metric configuration', 'Auth: Admin', [
+drawEndpoint('PATCH', '/sports/:sportId', 'Update sport rules and metric configuration', 'Auth: Admin', [
   'stat_schema', 'positions', 'active'
 ]);
 
@@ -412,9 +418,9 @@ drawEndpoint('GET', '/notifications', 'Get in-app notification inbox', 'Auth: An
   'Query: ?unread_only=true&limit=30'
 ]);
 
-drawEndpoint('PUT', '/notifications/read-all', 'Mark all user notifications as read', 'Auth: Any', []);
+drawEndpoint('PATCH', '/notifications/read-all', 'Mark all user notifications as read', 'Auth: Any', []);
 
-drawEndpoint('PUT', '/notifications/:notificationId/read', 'Mark specific notification as read', 'Auth: Any', []);
+drawEndpoint('PATCH', '/notifications/:notificationId/read', 'Mark specific notification as read', 'Auth: Any', []);
 
 drawEndpoint('POST', '/admin/login', 'Admin authentication', 'Public', [
   'email', 'password'

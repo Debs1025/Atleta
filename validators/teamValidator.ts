@@ -30,7 +30,7 @@ export function validateCreateTeam(data: Record<string, unknown>): ValidationErr
 }
 
 /**
- * Validates squad roster update payload (PUT /api/v1/teams/:teamId/roster).
+ * Validates squad roster update payload (PATCH /api/v1/teams/:teamId/roster).
  */
 export function validateUpdateRoster(data: Record<string, unknown> | any[]): ValidationError[] {
   const errors: ValidationError[] = [];

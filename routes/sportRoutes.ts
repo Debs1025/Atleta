@@ -13,6 +13,6 @@ const router = Router();
 router.get('/', authenticate, getSportsHandler);
 router.get('/:sportId', authenticate, getSportByIdHandler);
 router.post('/', requireSystemAdmin, createSportHandler);
-router.put('/:sportId', requireSystemAdmin, updateSportHandler);
+router.patch('/:sportId', requireSystemAdmin, updateSportHandler);
 
 export default router;

@@ -278,7 +278,7 @@ export async function getTeamDetails(teamId: string): Promise<TeamDetailResponse
 
 /**
  * Update team squad roster, player positions, jersey numbers, and check athlete eligibility.
- * PUT /api/v1/teams/:teamId/roster
+ * PATCH /api/v1/teams/:teamId/roster
  *
  * ACCEPTANCE CRITERIA:
  * 1. Requires coach ownership authorization (403 Forbidden if not team manager).

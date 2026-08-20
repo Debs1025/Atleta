@@ -54,7 +54,7 @@ async function runTests() {
   }
 
   // 3. Mark Single Notification Read
-  console.log('--- TEST 3: PUT /api/v1/notifications/:id/read ---');
+  console.log('--- TEST 3: PATCH /api/v1/notifications/:id/read ---');
   const firstNotifId = notifications[0].notification_id;
   const readResult = await markNotificationAsRead(firstNotifId, TEST_ATHLETE_ID);
   console.log('Mark single read result:', readResult);
@@ -67,7 +67,7 @@ async function runTests() {
   }
 
   // 4. Mark All Read
-  console.log('--- TEST 4: PUT /api/v1/notifications/read-all ---');
+  console.log('--- TEST 4: PATCH /api/v1/notifications/read-all ---');
   const readAllResult = await markAllNotificationsAsRead(TEST_ATHLETE_ID);
   console.log('Mark all read result:', readAllResult);
   notifications = await getAthleteNotifications(TEST_ATHLETE_ID);

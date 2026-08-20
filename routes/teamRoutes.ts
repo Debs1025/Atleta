@@ -12,8 +12,8 @@ const router = Router();
 
 router.get('/', authenticate, browseTeams);
 router.post('/', authenticate, createTeamHandler);
-router.put('/:teamId', authenticate, updateTeamHandler);
-router.put('/:teamId/roster', authenticate, updateRosterHandler);
+router.patch('/:teamId', authenticate, updateTeamHandler);
+router.patch('/:teamId/roster', authenticate, updateRosterHandler);
 router.get('/:teamId', authenticate, getTeam);
 
 export default router;

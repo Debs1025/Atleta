@@ -10,6 +10,6 @@ const router = Router();
 
 router.post('/', authenticate, submitInquiryHandler);
 router.get('/', authenticate, getAthleteInquiriesHandler);
-router.put('/:inquiryId/respond', authenticate, respondToInquiryHandler);
+router.patch('/:inquiryId/respond', authenticate, respondToInquiryHandler);
 
 export default router;

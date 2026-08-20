@@ -29,9 +29,9 @@ router.post('/login', authRateLimiter, loginUser);
 router.get('/me', authenticate, getCoachProfileHandler);
 router.get('/profile', authenticate, getCoachProfileHandler);
 router.get('/me/settings', authenticate, getCoachSettingsHandler);
-router.put('/me/settings', authenticate, updateCoachSettingsHandler);
-router.put('/me/profile', authenticate, updateCoachProfileHandler);
-router.put('/me/password', authenticate, changeCoachPasswordHandler);
+router.patch('/me/settings', authenticate, updateCoachSettingsHandler);
+router.patch('/me/profile', authenticate, updateCoachProfileHandler);
+router.patch('/me/password', authenticate, changeCoachPasswordHandler);
 router.post('/sync-offline', authenticate, requireCoach, syncCoachOfflineBatchHandler);
 router.get('/offline-snapshot', authenticate, requireCoach, getCoachOfflineSnapshotHandler);
 
