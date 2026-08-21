@@ -42,19 +42,27 @@ router.get('/', (req, res) => {
 });
 
 router.use('/admin', adminRoutes);
+router.use('/auth', userRoutes);
 router.use('/users', userRoutes);
 router.use('/athletes', athleteRoutes);
+router.use('/athlete/inquiries', inquiryRoutes);
+router.use('/athlete/notifications', notificationRoutes);
+router.use('/athlete/workload', analyticsRoutes);
+router.use('/athlete', athleteRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/teams', teamRoutes);
 router.use('/coaches', coachRoutes);
+router.use('/coach', coachRoutes);
 router.use('/officials', officialRoutes);
 router.use('/inquiries', inquiryRoutes);
 router.use('/matches', matchRoutes);
+router.use('/ocr', matchRoutes);
 router.use('/scouting', scoutingRoutes);
 router.use('/validations', validationRoutes);
 router.use('/sports', sportRoutes);
 router.use('/sync', syncRoutes);
 
 export default router;
+
 

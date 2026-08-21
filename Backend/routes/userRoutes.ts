@@ -36,9 +36,12 @@ router.post('/register-official', authRateLimiter, registerOfficialHandler);
 // Authentication & OAuth
 router.post('/login', authRateLimiter, loginUser);
 router.post('/official/login', authRateLimiter, loginOfficialHandler);
+router.post('/google', socialLogin as any);
 router.post('/google-login', socialLogin as any);
+router.post('/facebook', socialLogin as any);
 router.post('/facebook-login', socialLogin as any);
 router.post('/social-login', socialLogin as any);
+
 
 // User Profile
 router.get('/profile', authenticate, getMe);
