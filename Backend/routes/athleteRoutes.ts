@@ -22,15 +22,19 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-// Registration & Search
+// Registration & Search (Named and Root Routes)
 router.post('/register-athlete', upload.single('eligible_documents'), registerAthlete);
 router.post('/register', upload.single('eligible_documents'), registerAthlete);
+router.post('/', upload.single('eligible_documents'), registerAthlete);
 router.get('/search', authenticate, searchAthletesHandler);
+router.get('/list', authenticate, searchAthletesHandler);
+router.get('/', authenticate, searchAthletesHandler);
 
 // Clean Token-Based Routes (No Athlete ID required in URL)
 router.get('/home', authenticate, getAthleteHome);
 router.get('/team', authenticate, getAthleteTeamHandler);
 router.get('/stats/all', authenticate, getAthleteAllStatsHandler);
+router.get('/stats', authenticate, getAthleteAllStatsHandler);
 router.get('/matches', authenticate, getAthleteMatchHistoryHandler);
 router.get('/workload', authenticate, getAthleteWorkloadHandler);
 router.post('/workload', authenticate, postSrpeLog);
@@ -46,6 +50,7 @@ router.post('/documents', authenticate, upload.single('document'), uploadDocumen
 router.get('/:athleteId/home', authenticate, getAthleteHome);
 router.get('/:athleteId/team', authenticate, getAthleteTeamHandler);
 router.get('/:athleteId/stats/all', authenticate, getAthleteAllStatsHandler);
+router.get('/:athleteId/stats', authenticate, getAthleteAllStatsHandler);
 router.get('/:athleteId/matches', authenticate, getAthleteMatchHistoryHandler);
 router.get('/:athleteId/workload', authenticate, getAthleteWorkloadHandler);
 router.post('/:athleteId/workload', authenticate, postSrpeLog);

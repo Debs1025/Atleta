@@ -16,6 +16,31 @@ import syncRoutes from './syncRoutes';
 
 const router = Router();
 
+// API v1 Root Information
+router.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Atleta Athletic Performance Monitoring & Scouting REST API v1',
+    version: '1.0',
+    endpoints: {
+      admin: '/api/v1/admin',
+      users: '/api/v1/users',
+      athletes: '/api/v1/athletes',
+      notifications: '/api/v1/notifications',
+      analytics: '/api/v1/analytics',
+      teams: '/api/v1/teams',
+      coaches: '/api/v1/coaches',
+      officials: '/api/v1/officials',
+      inquiries: '/api/v1/inquiries',
+      matches: '/api/v1/matches',
+      scouting: '/api/v1/scouting',
+      validations: '/api/v1/validations',
+      sports: '/api/v1/sports',
+      sync: '/api/v1/sync',
+    },
+  });
+});
+
 router.use('/admin', adminRoutes);
 router.use('/users', userRoutes);
 router.use('/athletes', athleteRoutes);
@@ -32,3 +57,4 @@ router.use('/sports', sportRoutes);
 router.use('/sync', syncRoutes);
 
 export default router;
+
