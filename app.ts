@@ -40,7 +40,7 @@ app.get(['/', '/api', '/api/v1'], (req: Request, res: Response) => {
 });
 
 
-app.get(['/health', '/api/health'], (req: Request, res: Response) => {
+app.get(['/health', '/api/health', '/api/v1/health'], (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     uptime: process.uptime(),
