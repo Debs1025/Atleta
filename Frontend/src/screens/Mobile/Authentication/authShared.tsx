@@ -143,7 +143,7 @@ const AUTH_ERROR_MAP: Record<number, string> = {
 
 export function sanitizeUserErrorMessage(message: string): string {
   if (!message) return "An unexpected error occurred. Please try again.";
-  
+
   if (
     message.includes("initializeApp") ||
     message.includes("Google OAuth2") ||

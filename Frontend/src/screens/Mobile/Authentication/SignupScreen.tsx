@@ -4,9 +4,14 @@ import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as DocumentPicker from "expo-document-picker";
-import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import * as Facebook from "expo-auth-session/providers/facebook";
+let NativeGoogleSignin: any = null;
+try {
+  NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
+} catch (e) {
+  // Native module not linked in current binary
+}
 import {
   AuthHeader,
   authScreenStyles,
@@ -23,8 +28,12 @@ import {
   athleteSignupSchema,
   coachSignupSchema,
   MAX_DOCUMENT_BYTES,
+  extractAuthRole,
+  extractAuthToken,
   requestJson,
   requestMultipart,
+  storeAuthRole,
+  storeAuthToken,
   type AthleteSignupValues,
   type AuthRole,
   type AuthStep,
@@ -147,25 +156,82 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
   const [socialToken, setSocialToken] = useState<{ provider: "google" | "facebook"; idToken: string } | null>(null);
 
+  const googleClientId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_CLIENT_ID") ?? "").trim();
   const googleAndroidId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_ANDROID_ID") ?? "").trim();
   const googleIosId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_IOS_ID") ?? "").trim();
+  const googleRedirectUri = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_REDIRECT_URI") ?? "").trim();
+
+  useEffect(() => {
+    if (googleClientId && NativeGoogleSignin) {
+      try {
+        NativeGoogleSignin.configure({
+          webClientId: googleClientId,
+          offlineAccess: true
+        });
+      } catch (e) {
+        // Native configuration catch
+      }
+    }
+  }, [googleClientId]);
 
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
-    androidClientId: googleAndroidId,
-    iosClientId: googleIosId
+    clientId: googleClientId || undefined,
+    androidClientId: googleAndroidId || undefined,
+    iosClientId: googleIosId || undefined,
+    webClientId: googleClientId || undefined,
+    redirectUri: googleRedirectUri || undefined
   });
 
   const [facebookRequest, facebookResponse, promptFacebookAsync] = Facebook.useAuthRequest({
     clientId: (runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID") ?? "").trim()
   });
 
+  const handleGoogleSignUpPress = async () => {
+    const hasGoogleId = !!(googleClientId || googleAndroidId || googleIosId);
+    if (!hasGoogleId) {
+      setFeedback({ tone: "error", message: "Google sign-in is currently unavailable on this device." });
+      return;
+    }
+
+    setLoading(true);
+    setFeedback(null);
+
+    try {
+      if (Platform.OS !== "web" && NativeGoogleSignin && typeof NativeGoogleSignin.hasPlayServices === "function") {
+        await NativeGoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        const signInResult = await NativeGoogleSignin.signIn();
+        const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+
+        if (idToken) {
+          setSocialToken({ provider: "google", idToken });
+          setFeedback({ tone: "info", message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.` });
+          setStep(3);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (nativeError: any) {
+      if (nativeError?.code === "SIGN_IN_CANCELLED" || nativeError?.code === "12501") {
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (googleRequest) {
+      promptGoogleAsync();
+    } else {
+      setFeedback({ tone: "error", message: "Google sign-up is currently unavailable." });
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (googleResponse?.type === "success") {
       const idToken = googleResponse.params?.id_token || googleResponse.authentication?.idToken;
       if (idToken) {
         setSocialToken({ provider: "google", idToken });
-        setFeedback({ tone: "info", message: "Google account connected! Please fill in your details and select your role below." });
-        setStep(2);
+        setFeedback({ tone: "info", message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.` });
+        setStep(3);
       }
     }
   }, [googleResponse]);
@@ -175,8 +241,8 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       const fbToken = facebookResponse.authentication?.accessToken || facebookResponse.params?.access_token;
       if (fbToken) {
         setSocialToken({ provider: "facebook", idToken: fbToken });
-        setFeedback({ tone: "info", message: "Facebook account connected! Please fill in your details and select your role below." });
-        setStep(2);
+        setFeedback({ tone: "info", message: `Facebook account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.` });
+        setStep(3);
       }
     }
   }, [facebookResponse]);
@@ -320,7 +386,96 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     }
   });
 
-  const submit = role === "athlete" ? submitAthlete : submitCoach;
+  const handleSocialSubmit = async () => {
+    if (!socialToken) return;
+
+    let currentToken = socialToken.idToken;
+    if (socialToken.provider === "google" && NativeGoogleSignin && typeof NativeGoogleSignin.getTokens === "function") {
+      try {
+        const tokens = await NativeGoogleSignin.getTokens();
+        if (tokens?.idToken) {
+          currentToken = tokens.idToken;
+        }
+      } catch (e) {
+        // Fall back to stored socialToken.idToken
+      }
+    }
+
+    if (role === "athlete") {
+      const valid = await athleteForm.trigger(["birthdate", "gender", "province", "sport_type", "terms_accepted"]);
+      if (!valid) {
+        setFeedback({ tone: "error", message: "Please fill in all required profile details and accept the terms." });
+        return;
+      }
+      const values = athleteForm.getValues();
+      setLoading(true);
+      setFeedback(null);
+      try {
+        const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
+        const result = await requestJson(endpoint, {
+          id_token: currentToken,
+          idToken: currentToken,
+          token: currentToken,
+          credential: currentToken,
+          provider: socialToken.provider,
+          role: "Athlete",
+          birthdate: values.birthdate,
+          gender: values.gender,
+          province: values.province,
+          sport_type: values.sport_type
+        });
+        const token = extractAuthToken(result);
+        const savedRole = extractAuthRole(result) || "athlete";
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(savedRole);
+        setAccountCreated(true);
+        athleteForm.reset();
+        setSocialToken(null);
+      } catch (error) {
+        setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      const valid = await coachForm.trigger(["years_of_experience", "current_institution", "terms_accepted"]);
+      if (!valid) {
+        setFeedback({ tone: "error", message: "Please fill in all required profile details and accept the terms." });
+        return;
+      }
+      const values = coachForm.getValues();
+      setLoading(true);
+      setFeedback(null);
+      try {
+        const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
+        const result = await requestJson(endpoint, {
+          id_token: currentToken,
+          idToken: currentToken,
+          token: currentToken,
+          credential: currentToken,
+          provider: socialToken.provider,
+          role: "Coach",
+          certification_license_num: values.certification_license_num,
+          years_of_experience: values.years_of_experience,
+          current_institution: values.current_institution
+        });
+        const token = extractAuthToken(result);
+        const savedRole = extractAuthRole(result) || "coach";
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(savedRole);
+        setAccountCreated(true);
+        coachForm.reset();
+        setSocialToken(null);
+      } catch (error) {
+        setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const submit = socialToken
+    ? handleSocialSubmit
+    : (role === "athlete" ? submitAthlete : submitCoach);
   const selectedGender = athleteForm.watch("gender");
   const selectedSport = athleteForm.watch("sport_type");
 
@@ -372,14 +527,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
                 label="Sign Up with Google"
                 variant="secondary"
                 icon={require("../../../assets/google.png")}
-                onPress={() => {
-                  const hasGoogleId = !!(googleAndroidId || googleIosId);
-                  if (googleRequest && hasGoogleId) {
-                    promptGoogleAsync();
-                  } else {
-                    setFeedback({ tone: "error", message: "Google sign-in is currently unavailable on this device." });
-                  }
-                }}
+                onPress={handleGoogleSignUpPress}
               />
               <View style={authScreenStyles.spacer} />
               <Button
@@ -429,7 +577,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               />
 
               <View style={styles.navRow}>
-                <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
+                <Button label="Back" variant="ghost" onPress={() => setStep(socialToken ? 1 : 2)} />
                 <View style={styles.navSpacer} />
                 <Button label="Sign Up" loading={loading} onPress={submit} />
               </View>
@@ -457,7 +605,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               />
 
               <View style={styles.navRow}>
-                <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
+                <Button label="Back" variant="ghost" onPress={() => setStep(socialToken ? 1 : 2)} />
                 <View style={styles.navSpacer} />
                 <Button label="Sign Up" loading={loading} onPress={submit} />
               </View>

@@ -3,7 +3,6 @@ import { Platform, ScrollView, Text, View } from "react-native";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import * as Facebook from "expo-auth-session/providers/facebook";
 import {
@@ -24,6 +23,12 @@ import {
   type BannerTone,
   type LoginValues
 } from "./authShared";
+let NativeGoogleSignin: any = null;
+try {
+  NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
+} catch (e) {
+  // Native module not linked in current binary
+}
 
 type LoginScreenProps = {
   onGoSignup: () => void;
@@ -40,12 +45,30 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     defaultValues: { email: "", password: "" }
   });
 
+  const googleClientId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_CLIENT_ID") ?? "").trim();
   const googleAndroidId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_ANDROID_ID") ?? "").trim();
   const googleIosId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_IOS_ID") ?? "").trim();
+  const googleRedirectUri = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_REDIRECT_URI") ?? "").trim();
+
+  useEffect(() => {
+    if (googleClientId && NativeGoogleSignin) {
+      try {
+        NativeGoogleSignin.configure({
+          webClientId: googleClientId,
+          offlineAccess: true
+        });
+      } catch (e) {
+        //
+      }
+    }
+  }, [googleClientId]);
 
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
-    androidClientId: googleAndroidId,
-    iosClientId: googleIosId
+    clientId: googleClientId || undefined,
+    androidClientId: googleAndroidId || undefined,
+    iosClientId: googleIosId || undefined,
+    webClientId: googleClientId || undefined,
+    redirectUri: googleRedirectUri || undefined
   });
 
   const [facebookRequest, facebookResponse, promptFacebookAsync] = Facebook.useAuthRequest({
@@ -57,20 +80,68 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     setFeedback(null);
     try {
       const endpoint = provider === "google" ? "/users/google-login" : "/users/facebook-login";
-      const result = await requestJson(endpoint, { id_token: idToken, idToken, provider, role: "Athlete" });
+      const payload = provider === "google"
+        ? { id_token: idToken, idToken, token: idToken, credential: idToken, provider }
+        : { access_token: idToken, accessToken: idToken, id_token: idToken, idToken, provider };
+
+      const result = await requestJson(endpoint, payload);
       const token = extractAuthToken(result);
-      const role = extractAuthRole(result);
+      const role = extractAuthRole(result) || "athlete";
 
       if (token) await storeAuthToken(token);
       await storeAuthRole(role);
 
       onAuthenticated?.(role);
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: getAuthErrorMessage(error, `Unable to authenticate with ${provider}.`)
-      });
+    } catch (error: any) {
+      const msg = getAuthErrorMessage(error, `Unable to authenticate with ${provider}.`);
+      if (msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("exist")) {
+        setFeedback({
+          tone: "info",
+          message: "No existing account found for this Google account. Please tap Sign Up to create your account."
+        });
+      } else {
+        setFeedback({
+          tone: "error",
+          message: msg
+        });
+      }
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignInPress = async () => {
+    const hasGoogleId = !!(googleClientId || googleAndroidId || googleIosId);
+    if (!hasGoogleId) {
+      setFeedback({ tone: "error", message: "Google sign-in is currently unavailable on this device." });
+      return;
+    }
+
+    setLoading(true);
+    setFeedback(null);
+
+    try {
+      if (Platform.OS !== "web" && NativeGoogleSignin && typeof NativeGoogleSignin.hasPlayServices === "function") {
+        await NativeGoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        const signInResult = await NativeGoogleSignin.signIn();
+        const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+
+        if (idToken) {
+          await handleSocialAuthWithToken("google", idToken);
+          return;
+        }
+      }
+    } catch (nativeError: any) {
+      if (nativeError?.code === "SIGN_IN_CANCELLED" || nativeError?.code === "12501") {
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (googleRequest) {
+      promptGoogleAsync();
+    } else {
+      setFeedback({ tone: "error", message: "Google sign-in is currently unavailable." });
       setLoading(false);
     }
   };
@@ -110,7 +181,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     } catch (error) {
       setFeedback({
         tone: "error",
-        message: getAuthErrorMessage(error, "Unable to sign in right now.")
+        message: getAuthErrorMessage(error, "Invalid login credentials.")
       });
     } finally {
       setLoading(false);
@@ -121,28 +192,11 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     <ScrollView contentContainerStyle={authScreenStyles.content} keyboardShouldPersistTaps="handled">
       <View style={authScreenStyles.shell}>
         <AuthHeader />
-        <SectionTitle title="Welcome back" subtitle="Sign in to access your personalized athlete and coach features." />
-        <Banner tone={feedback?.tone ?? "info"} message={feedback?.message ?? ""} />
+        <SectionTitle title="Log In" subtitle="Access your ATLETA dashboard using your credentials or social account." />
+        <Banner tone={feedback?.tone ?? "info"} message={feedback?.message} />
 
-        <FormField
-          control={form.control}
-          name="email"
-          label="E-mail"
-          placeholder="coach@gmail.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          error={form.formState.errors.email?.message}
-        />
-        <FormField
-          control={form.control}
-          name="password"
-          label="Password"
-          placeholder="Password"
-          secureTextEntry
-          textContentType="password"
-          error={form.formState.errors.password?.message}
-        />
+        <FormField control={form.control} name="email" label="Email Address" placeholder="athlete@domain.com" />
+        <FormField control={form.control} name="password" label="Password" placeholder="••••••••" secureTextEntry />
 
         <Button label="Login" loading={loading} onPress={submit} />
 
@@ -160,14 +214,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           label="Login with Google"
           variant="secondary"
           icon={require("../../../assets/google.png")}
-          onPress={() => {
-            const hasGoogleId = !!(googleAndroidId || googleIosId);
-            if (googleRequest && hasGoogleId) {
-              promptGoogleAsync();
-            } else {
-              setFeedback({ tone: "error", message: "Google sign-in is currently unavailable on this device." });
-            }
-          }}
+          onPress={handleGoogleSignInPress}
         />
         <View style={authScreenStyles.spacer} />
         <Button

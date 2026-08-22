@@ -36,7 +36,7 @@ export function AuthEntry() {
     (async () => {
       const [token, role] = await Promise.all([getStoredSessionToken(), getStoredAuthRole()]);
       if (mounted) {
-        if (token) setActiveRole(role ?? "athlete");
+        if (token && role) setActiveRole(role);
         setBooting(false);
       }
     })();
