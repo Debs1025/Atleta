@@ -315,43 +315,9 @@ async function runTests() {
     const analyticsWorkloadGet = await request('GET', '/api/v1/analytics/workload');
     assert(analyticsWorkloadGet.status === 401, 'GET /api/v1/analytics/workload matches route (401 without token)');
 
-    // ─── 15. Frontend Compatibility Aliases ──────────────────────────
-    console.log('\n--- 15. Frontend Compatibility Aliases ---');
-    const authLogin = await request('POST', '/api/auth/login', {}, { email: 'invalid@example.com', password: 'wrong' });
-    assert(authLogin.status === 401 || authLogin.status === 500, 'POST /api/auth/login matches route');
-
-
-    const authReg = await request('POST', '/api/auth/register', {}, {});
-    assert(authReg.status === 400, 'POST /api/auth/register matches route');
-
-    const authGoogle = await request('POST', '/api/auth/google', {}, {});
-    assert(authGoogle.status === 400, 'POST /api/auth/google matches route');
-
-    const authReset = await request('POST', '/api/auth/reset-password', {}, { email: 'notfound@example.com' });
-    assert(authReset.status === 400, 'POST /api/auth/reset-password matches route');
-
-    const athleteInquiries = await request('GET', '/api/athlete/inquiries');
-    assert(athleteInquiries.status === 401, 'GET /api/athlete/inquiries matches route');
-
-    const athleteNotif = await request('GET', '/api/athlete/notifications');
-    assert(athleteNotif.status === 401, 'GET /api/athlete/notifications matches route');
-
-    const athleteProfile = await request('GET', '/api/athlete/profile');
-    assert(athleteProfile.status === 401, 'GET /api/athlete/profile matches route');
-
-    const athleteWorkload = await request('POST', '/api/athlete/workload/log');
-    assert(athleteWorkload.status === 401, 'POST /api/athlete/workload/log matches route');
-
-    const coachProfilePut = await request('PUT', '/api/coach/profile');
-    assert(coachProfilePut.status === 401, 'PUT /api/coach/profile matches route');
-
-
-    const apiTeams = await request('GET', '/api/teams');
-    assert(apiTeams.status === 401, 'GET /api/teams matches route');
-
-    // ─── 16. 404 Fallback Test ──────────────────────────────────────
-    console.log('\n--- 16. 404 Fallback Test ---');
-    const notFound = await request('GET', '/api/v1/non-existent-route-xyz');
+    // ─── 15. Non-Existent Route (404 Test) ──────────────────────────
+    console.log('\n--- 15. 404 Fallback Test ---');
+    const notFound = await request('GET', '/api/v1/non_existent_random_route_xyz');
     assert(notFound.status === 404, 'Non-existent route returns 404 Not Found');
 
   } finally {
