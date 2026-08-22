@@ -25,20 +25,20 @@ import * as SecureStore from "expo-secure-store";
 import { type DocumentPickerAsset } from "expo-document-picker";
 import { useController, type Control, type FieldValues, type Path } from "react-hook-form";
 import { z } from "zod";
+import * as WebBrowser from "expo-web-browser";
 
+WebBrowser.maybeCompleteAuthSession();
 
-// Configuration
-// ============================================================================
-// BACKEND INTEGRATION GUIDE:
-// 1. Set EXPO_PUBLIC_ATLETA_API in your .env file or environment (e.g. EXPO_PUBLIC_ATLETA_API=http://localhost:5000 or https://api.atleta.com).
-// 2. When EXPO_PUBLIC_ATLETA_API is empty, mockAuthResponse() handles request simulation locally.
-// 3. When EXPO_PUBLIC_ATLETA_API is populated, real HTTP network calls automatically route to `${API_BASE}${path}`.
-// ============================================================================
 const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-export const API_BASE = runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ?? "";
+const rawApiBase = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ?? "").trim().replace(/\/+$/, "");
+export const API_BASE = rawApiBase
+  ? rawApiBase.endsWith("/api/v1")
+    ? rawApiBase
+    : `${rawApiBase}/api/v1`
+  : "";
 export const AUTH_TOKEN_KEY = (runtime.process?.env?.EXPO_PUBLIC_AUTH_TOKEN_KEY ?? "").trim().replace(/[^a-zA-Z0-9._-]/g, "_");
 export const AUTH_ROLE_KEY = (runtime.process?.env?.EXPO_PUBLIC_AUTH_ROLE_KEY ?? "").trim().replace(/[^a-zA-Z0-9._-]/g, "_");
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
@@ -141,14 +141,34 @@ const AUTH_ERROR_MAP: Record<number, string> = {
   409: "An account already exists for that email address."
 };
 
+export function sanitizeUserErrorMessage(message: string): string {
+  if (!message) return "An unexpected error occurred. Please try again.";
+  
+  if (
+    message.includes("initializeApp") ||
+    message.includes("Google OAuth2") ||
+    message.includes("default credentials") ||
+    message.includes("FIREBASE_SERVICE_ACCOUNT") ||
+    message.includes("EXPO_PUBLIC")
+  ) {
+    return "Authentication service is temporarily unavailable. Please try again later.";
+  }
+  if (message.includes("Internal server error")) {
+    return "Something went wrong on our server. Please try again later.";
+  }
+  return message;
+}
+
 export function authErrorMessage(status: number | undefined, fallback: string) {
   return (status && AUTH_ERROR_MAP[status]) || fallback;
 }
 
 export function getAuthErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message && error.message !== "Something went wrong.") {
+    return sanitizeUserErrorMessage(error.message);
+  }
   const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : undefined;
-  const message = error instanceof Error ? error.message : fallback;
-  return authErrorMessage(status, message);
+  return authErrorMessage(status, fallback);
 }
 
 // This lets users to stay logged in when reopenning the app
@@ -172,19 +192,13 @@ export function extractAuthToken(payload: Record<string, unknown>) {
 }
 
 export function extractAuthRole(payload: Record<string, unknown>, emailFallback?: string): AuthRole {
-  const role = payload.role ?? (payload.user as { role?: string } | undefined)?.role;
-  if (role === "athlete" || role === "coach") return role;
+  const rawRole = (payload.role ?? (payload.user as { role?: string } | undefined)?.role) as string | undefined;
+  if (typeof rawRole === "string") {
+    const lower = rawRole.toLowerCase();
+    if (lower === "coach") return "coach";
+    if (lower === "athlete") return "athlete";
+  }
   return emailFallback?.toLowerCase().includes("coach") ? "coach" : "athlete";
-}
-
-// API Request (change this if backend api is ready)
-// For testing: mockAuthResponse returns dummy data when EXPO_PUBLIC_ATLETA_API is unset.
-function mockAuthResponse(path: string) {
-  const isAuth = path.includes("login") || path.includes("register");
-  return {
-    ...(isAuth ? { token: "local-dev-token" } : {}),
-    message: "Local frontend auth mode. Set EXPO_PUBLIC_ATLETA_API to use the backend."
-  };
 }
 
 async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>) {
@@ -204,8 +218,6 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
 }
 
 async function fetchApi(path: string, options: RequestInit) {
-  if (!API_BASE) return mockAuthResponse(path);
-
   const response = await withRequestTimeout((signal) =>
     fetch(`${API_BASE}${path}`, { ...options, signal })
   );
@@ -213,7 +225,14 @@ async function fetchApi(path: string, options: RequestInit) {
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (!response.ok) {
-    const error = new Error((payload.message as string | undefined) ?? "Something went wrong.") as Error & { status?: number };
+    let serverMessage: string | undefined = typeof payload.error === "string" ? payload.error : typeof payload.message === "string" ? payload.message : undefined;
+    if (serverMessage === "Internal server error." && typeof payload.details === "string") {
+      serverMessage = `Internal server error: ${payload.details}`;
+    }
+    if (!serverMessage && Array.isArray(payload.errors) && payload.errors.length > 0) {
+      serverMessage = (payload.errors[0] as { message?: string }).message;
+    }
+    const error = new Error(serverMessage ?? "Something went wrong.") as Error & { status?: number };
     error.status = response.status;
     throw error;
   }
@@ -221,15 +240,28 @@ async function fetchApi(path: string, options: RequestInit) {
   return payload;
 }
 
-// ============================================================================
-// BACKEND CONTRACT HELPERS:
-// - requestJson(path, body): Sends JSON POST requests to `${API_BASE}${path}`
-//   Expected Backend Input: JSON stringified payload
-//   Expected Backend Response: { token?: string, role?: "athlete" | "coach", message?: string }
-// - requestMultipart(path, body): Sends multipart/form-data POST requests to `${API_BASE}${path}`
-//   Expected Backend Input: FormData instance (with file attachments)
-//   Expected Backend Response: { token?: string, role?: "athlete" | "coach", message?: string }
-// ============================================================================
+
+export async function getStoredAuthToken(): Promise<string | null> {
+  return await SecureStore.getItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+}
+
+// Handles authenticated JSON requests with Authorization Bearer header
+export async function requestAuthenticatedJson(path: string, method: string = "GET", body?: unknown) {
+  const token = await getStoredAuthToken();
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  return fetchApi(path, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+  });
+}
+
 export function requestJson(path: string, body: unknown) {
   return fetchApi(path, {
     method: "POST",

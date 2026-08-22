@@ -46,11 +46,6 @@ export function AuthEntry() {
     };
   }, []);
 
-  // ============================================================================
-  // BACKEND LOGOUT:
-  // - Clears stored tokens in SecureStore.
-  // - OPTIONAL: Send POST `/api/auth/logout` to invalidate session/JWT on backend.
-  // ============================================================================
   const handleLogout = async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),

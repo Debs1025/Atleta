@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Platform, ScrollView, Text, View } from "react-native";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import * as AuthSession from "expo-auth-session";
+import * as Google from "expo-auth-session/providers/google";
+import * as Facebook from "expo-auth-session/providers/facebook";
 import {
   AuthHeader,
   authScreenStyles,
@@ -37,20 +40,65 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     defaultValues: { email: "", password: "" }
   });
 
-  // ============================================================================
-  // BACKEND API CONNECTION: LOGIN
-  // - API Endpoint: POST `${API_BASE}/api/auth/login`
-  // - Request Payload: { email: string, password: string }
-  // - Expected Response: { token: string, role?: "athlete" | "coach", user?: { id: string, role: string } }
-  // - Error Statuses: 400 (Validation), 401 (Invalid Credentials)
-  // ============================================================================
+  const googleAndroidId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_ANDROID_ID") ?? "").trim();
+  const googleIosId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_IOS_ID") ?? "").trim();
+
+  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
+    androidClientId: googleAndroidId,
+    iosClientId: googleIosId
+  });
+
+  const [facebookRequest, facebookResponse, promptFacebookAsync] = Facebook.useAuthRequest({
+    clientId: (runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID") ?? "").trim()
+  });
+
+  const handleSocialAuthWithToken = async (provider: "google" | "facebook", idToken: string) => {
+    setLoading(true);
+    setFeedback(null);
+    try {
+      const endpoint = provider === "google" ? "/users/google-login" : "/users/facebook-login";
+      const result = await requestJson(endpoint, { id_token: idToken, idToken, provider, role: "Athlete" });
+      const token = extractAuthToken(result);
+      const role = extractAuthRole(result);
+
+      if (token) await storeAuthToken(token);
+      await storeAuthRole(role);
+
+      onAuthenticated?.(role);
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message: getAuthErrorMessage(error, `Unable to authenticate with ${provider}.`)
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (googleResponse?.type === "success") {
+      const idToken = googleResponse.params?.id_token || googleResponse.authentication?.idToken;
+      if (idToken) {
+        handleSocialAuthWithToken("google", idToken);
+      }
+    }
+  }, [googleResponse]);
+
+  useEffect(() => {
+    if (facebookResponse?.type === "success") {
+      const fbToken = facebookResponse.authentication?.accessToken || facebookResponse.params?.access_token;
+      if (fbToken) {
+        handleSocialAuthWithToken("facebook", fbToken);
+      }
+    }
+  }, [facebookResponse]);
+
   const submit = form.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
-      // API call automatically routes to your backend when EXPO_PUBLIC_ATLETA_API is configured
-      const result = await requestJson("/api/auth/login", values);
+      const result = await requestJson("/users/login", values);
       const token = extractAuthToken(result);
       const role = extractAuthRole(result, values.email);
 
@@ -108,29 +156,32 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           <View style={authScreenStyles.divider} />
         </View>
 
-        {/* 
-          BACKEND OAUTH INTEGRATION PLACEHOLDER:
-          When connecting Google OAuth with your backend / Firebase Auth / Expo AuthSession:
-          1. Obtain idToken or accessToken from Google OAuth Provider SDK
-          2. Call requestJson("/api/auth/google", { idToken })
-        */}
         <Button
           label="Login with Google"
           variant="secondary"
           icon={require("../../../assets/google.png")}
-          onPress={() => setFeedback({ tone: "info", message: "Google sign-in is ready for your backend or Firebase OAuth flow." })}
+          onPress={() => {
+            const hasGoogleId = !!(googleAndroidId || googleIosId);
+            if (googleRequest && hasGoogleId) {
+              promptGoogleAsync();
+            } else {
+              setFeedback({ tone: "error", message: "Google sign-in is currently unavailable on this device." });
+            }
+          }}
         />
         <View style={authScreenStyles.spacer} />
-        {/* 
-          BACKEND OAUTH INTEGRATION PLACEHOLDER:
-          When connecting Facebook OAuth with your backend:
-          1. Call requestJson("/api/auth/facebook", { accessToken })
-        */}
         <Button
           label="Login with Facebook"
           variant="secondary"
           icon={require("../../../assets/facebook.png")}
-          onPress={() => setFeedback({ tone: "info", message: "Facebook sign-in can be connected to your auth provider later." })}
+          onPress={() => {
+            const hasFacebookId = !!runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID")?.trim();
+            if (facebookRequest && hasFacebookId) {
+              promptFacebookAsync();
+            } else {
+              setFeedback({ tone: "error", message: "Facebook sign-in is currently unavailable on this device." });
+            }
+          }}
         />
 
         <Text style={authScreenStyles.footer}>
@@ -139,6 +190,11 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       </View>
     </ScrollView>
   );
+}
+
+function runtimeProcessEnv(key: string): string | undefined {
+  const runtime = globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } };
+  return runtime.process?.env?.[key];
 }
 
 

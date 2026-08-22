@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as DocumentPicker from "expo-document-picker";
+import * as AuthSession from "expo-auth-session";
+import * as Google from "expo-auth-session/providers/google";
+import * as Facebook from "expo-auth-session/providers/facebook";
 import {
   AuthHeader,
   authScreenStyles,
@@ -142,6 +145,42 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const [documentFile, setDocumentFile] = useState<StoredUpload | null>(null);
   const [accountCreated, setAccountCreated] = useState(false);
 
+  const [socialToken, setSocialToken] = useState<{ provider: "google" | "facebook"; idToken: string } | null>(null);
+
+  const googleAndroidId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_ANDROID_ID") ?? "").trim();
+  const googleIosId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_IOS_ID") ?? "").trim();
+
+  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
+    androidClientId: googleAndroidId,
+    iosClientId: googleIosId
+  });
+
+  const [facebookRequest, facebookResponse, promptFacebookAsync] = Facebook.useAuthRequest({
+    clientId: (runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID") ?? "").trim()
+  });
+
+  useEffect(() => {
+    if (googleResponse?.type === "success") {
+      const idToken = googleResponse.params?.id_token || googleResponse.authentication?.idToken;
+      if (idToken) {
+        setSocialToken({ provider: "google", idToken });
+        setFeedback({ tone: "info", message: "Google account connected! Please fill in your details and select your role below." });
+        setStep(2);
+      }
+    }
+  }, [googleResponse]);
+
+  useEffect(() => {
+    if (facebookResponse?.type === "success") {
+      const fbToken = facebookResponse.authentication?.accessToken || facebookResponse.params?.access_token;
+      if (fbToken) {
+        setSocialToken({ provider: "facebook", idToken: fbToken });
+        setFeedback({ tone: "info", message: "Facebook account connected! Please fill in your details and select your role below." });
+        setStep(2);
+      }
+    }
+  }, [facebookResponse]);
+
   const athleteForm = useForm<AthleteSignupValues>({
     resolver: zodResolver(athleteSignupSchema),
     defaultValues: DEFAULT_ATHLETE_VALUES
@@ -202,35 +241,27 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     setFeedback({ tone: "success", message: `${nextDocument.name} attached.` });
   };
 
-  // ============================================================================
-  // BACKEND API CONNECTION: ATHLETE SIGNUP
-  // - API Endpoint: POST `${API_BASE}/api/auth/register`
-  // - Request Format: Content-Type: application/json
-  // - Request Payload Body:
-  //   {
-  //     role: "athlete",
-  //     first_name: string,
-  //     last_name: string,
-  //     email: string,
-  //     password: string,
-  //     contact_number: string,
-  //     birthdate: "YYYY-MM-DD",
-  //     gender: "Male" | "Female",
-  //     province: string,
-  //     sport_type: "Basketball" | "Swimming" | "Track and Field",
-  //     terms_accepted: true
-  //   }
-  // - Expected Response: 201 Created / 200 OK -> { message?: string, user?: object, token?: string }
-  // - Error Statuses: 400 (Validation Error), 409 (Email Already Registered)
-  // ============================================================================
   const submitAthlete = athleteForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
-      await requestJson("/api/auth/register", values);
+      if (socialToken) {
+        const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
+        const { role: _r, ...restValues } = values;
+        await requestJson(endpoint, {
+          id_token: socialToken.idToken,
+          idToken: socialToken.idToken,
+          provider: socialToken.provider,
+          role: "Athlete",
+          ...restValues
+        });
+      } else {
+        await requestJson("/users/register", { ...values, role: "Athlete" });
+      }
       setAccountCreated(true);
       athleteForm.reset();
+      setSocialToken(null);
     } catch (error) {
       setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
     } finally {
@@ -238,43 +269,50 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     }
   });
 
-  // ============================================================================
-  // BACKEND API CONNECTION: COACH SIGNUP
-  // - API Endpoint: POST `${API_BASE}/api/auth/register`
-  // - Request Format: Content-Type: multipart/form-data
-  // - Request Payload Fields:
-  //   role: "coach", first_name, last_name, email, password, contact_number,
-  //   certification_license_num, years_of_experience (string), current_institution,
-  //   eligible_documents: file binary / multipart blob
-  // ============================================================================
   const submitCoach = coachForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
-      const body = new FormData();
-      body.append("role", values.role);
-      body.append("first_name", values.first_name);
-      body.append("last_name", values.last_name);
-      body.append("email", values.email);
-      body.append("password", values.password);
-      if (values.contact_number) body.append("contact_number", values.contact_number);
-      if (values.certification_license_num) body.append("certification_license_num", values.certification_license_num);
-      body.append("years_of_experience", String(values.years_of_experience));
-      body.append("current_institution", values.current_institution);
+      if (socialToken) {
+        const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
+        const { role: _r, ...restValues } = values;
+        await requestJson(endpoint, {
+          id_token: socialToken.idToken,
+          idToken: socialToken.idToken,
+          provider: socialToken.provider,
+          role: "Coach",
+          ...restValues
+        });
+      } else {
+        const body = new FormData();
+        body.append("role", "Coach");
+        body.append("first_name", values.first_name);
+        body.append("last_name", values.last_name);
+        body.append("email", values.email);
+        body.append("password", values.password);
+        if (values.contact_number) body.append("contact_number", values.contact_number);
+        if (values.certification_license_num) body.append("certification_license_num", values.certification_license_num);
+        body.append("years_of_experience", String(values.years_of_experience));
+        body.append("current_institution", values.current_institution);
 
-      if (documentFile) {
-        body.append("eligible_documents", {
-          uri: documentFile.uri,
-          name: documentFile.name,
-          type: documentFile.mimeType
-        } as never);
+        if (documentFile) {
+          const docIdentifier = documentFile.name || documentFile.uri || "eligible-document.png";
+          body.append("professional_documents", {
+            uri: documentFile.uri,
+            name: docIdentifier,
+            type: documentFile.mimeType ?? "application/octet-stream"
+          } as never);
+          body.append("professional_documents", docIdentifier);
+          body.append("professional_documents", docIdentifier);
+        }
+
+        await requestMultipart("/users/coach", body);
       }
-
-      await requestMultipart("/api/auth/register", body);
       setAccountCreated(true);
       coachForm.reset();
       setDocumentFile(null);
+      setSocialToken(null);
     } catch (error) {
       setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
     } finally {
@@ -330,26 +368,32 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
                 <View style={authScreenStyles.divider} />
               </View>
 
-              {/* 
-                BACKEND OAUTH INTEGRATION PLACEHOLDER:
-                Google Sign Up integration with backend / Firebase Auth
-              */}
               <Button
                 label="Sign Up with Google"
                 variant="secondary"
                 icon={require("../../../assets/google.png")}
-                onPress={() => setFeedback({ tone: "info", message: "Google sign-up is ready for your backend or Firebase OAuth flow." })}
+                onPress={() => {
+                  const hasGoogleId = !!(googleAndroidId || googleIosId);
+                  if (googleRequest && hasGoogleId) {
+                    promptGoogleAsync();
+                  } else {
+                    setFeedback({ tone: "error", message: "Google sign-in is currently unavailable on this device." });
+                  }
+                }}
               />
               <View style={authScreenStyles.spacer} />
-              {/* 
-                BACKEND OAUTH INTEGRATION PLACEHOLDER:
-                Facebook Sign Up integration with backend / Facebook Auth SDK
-              */}
               <Button
                 label="Sign Up with Facebook"
                 variant="secondary"
                 icon={require("../../../assets/facebook.png")}
-                onPress={() => setFeedback({ tone: "info", message: "Facebook sign-up can be connected to your auth provider later." })}
+                onPress={() => {
+                  const hasFacebookId = !!runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID")?.trim();
+                  if (facebookRequest && hasFacebookId) {
+                    promptFacebookAsync();
+                  } else {
+                    setFeedback({ tone: "error", message: "Facebook sign-in is currently unavailable on this device." });
+                  }
+                }}
               />
             </View>
           ) : null}
@@ -427,6 +471,11 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       </ScrollView>
     </View>
   );
+}
+
+function runtimeProcessEnv(key: string): string | undefined {
+  const runtime = globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } };
+  return runtime.process?.env?.[key];
 }
 
 

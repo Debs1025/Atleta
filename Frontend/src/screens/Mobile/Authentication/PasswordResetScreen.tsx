@@ -50,19 +50,12 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
     defaultValues: { password: "", confirmPassword: "" }
   });
 
-  // ============================================================================
-  // BACKEND API CONNECTION: PASSWORD RESET REQUEST
-  // - API Endpoint: POST `${API_BASE}/api/auth/reset-password`
-  // - Request Format: Content-Type: application/json
-  // - Request Payload: { email: string }
-  // - Expected Response: { message: "Recovery email sent" }
-  // ============================================================================
   const handleRequestReset = requestForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
-      await requestJson("/api/auth/reset-password", values);
+      await requestJson("/users/password-reset", values);
       setFeedback({ tone: "success", message: "A recovery link was sent! Proceed to set your new password." });
       setStep("change");
     } catch (error) {
@@ -75,19 +68,12 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
     }
   });
 
-  // ============================================================================
-  // BACKEND API CONNECTION: CHANGE PASSWORD
-  // - API Endpoint: POST `${API_BASE}/api/auth/change-password`
-  // - Request Format: Content-Type: application/json
-  // - Request Payload: { password: string }
-  // - Expected Response: { message: "Password updated successfully" }
-  // ============================================================================
   const handleChangePassword = changeForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
-      await requestJson("/api/auth/change-password", { password: values.password });
+      await requestJson("/users/password-reset", { token: "direct-reset", new_password: values.password });
       setFeedback({ tone: "success", message: "Password updated successfully!" });
       setStep("success");
     } catch (error) {
