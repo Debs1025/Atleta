@@ -262,9 +262,9 @@ export async function requestAuthenticatedJson(path: string, method: string = "G
   });
 }
 
-export function requestJson(path: string, body: unknown) {
+export function requestJson(path: string, body: unknown, method: string = "POST") {
   return fetchApi(path, {
-    method: "POST",
+    method,
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });

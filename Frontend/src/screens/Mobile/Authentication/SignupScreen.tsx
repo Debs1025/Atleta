@@ -439,7 +439,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     } else {
       const valid = await coachForm.trigger(["years_of_experience", "current_institution", "terms_accepted"]);
       if (!valid) {
-        setFeedback({ tone: "error", message: "Please fill in all required profile details and accept the terms." });
+        setFeedback({ tone: "error", message: "Please fill in all required profile details." });
         return;
       }
       const values = coachForm.getValues();

@@ -55,9 +55,8 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
     setFeedback(null);
 
     try {
-      await requestJson("/users/password-reset", values);
-      setFeedback({ tone: "success", message: "A recovery link was sent! Proceed to set your new password." });
-      setStep("change");
+      await requestJson("/users/forgot-password", values);
+      setFeedback({ tone: "success", message: "A password recovery link has been sent to your email address." });
     } catch (error) {
       setFeedback({
         tone: "error",
@@ -73,7 +72,7 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
     setFeedback(null);
 
     try {
-      await requestJson("/users/password-reset", { token: "direct-reset", new_password: values.password });
+      await requestJson("/users/password-reset", { new_password: values.password }, "PATCH");
       setFeedback({ tone: "success", message: "Password updated successfully!" });
       setStep("success");
     } catch (error) {
@@ -108,9 +107,6 @@ export function PasswordResetScreen({ onGoLogin }: PasswordResetScreenProps) {
                 error={requestForm.formState.errors.email?.message}
               />
               <Button label="Send Recovery Link" loading={loading} onPress={handleRequestReset} />
-              <View style={{ marginTop: 10 }}>
-                <Button variant="ghost" label="Preview Change Password Screen →" onPress={() => setStep("change")} />
-              </View>
             </View>
           </>
         )}
