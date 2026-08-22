@@ -11,7 +11,9 @@ import {
 } from '../models/userModel';
 import { sendPasswordResetEmailService } from './emailService';
 
-const googleOAuthClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleOAuthClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_ANDROID_CLIENT_ID
+);
 
 /**
  * Maps lowercase or mixed case role string to canonical UserRole enum value.
@@ -419,9 +421,15 @@ export async function socialLoginService(
     } catch (err: any) {
       if (provider === 'google') {
         try {
+          const audiences = [
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_ANDROID_CLIENT_ID,
+            process.env.GOOGLE_IOS_CLIENT_ID,
+          ].filter(Boolean) as string[];
+
           const ticket = await googleOAuthClient.verifyIdToken({
             idToken: idToken,
-            audience: process.env.GOOGLE_CLIENT_ID,
+            audience: audiences.length > 0 ? audiences : undefined,
           });
           const payload = ticket.getPayload();
           if (!payload) throw new Error('Invalid Google payload');
