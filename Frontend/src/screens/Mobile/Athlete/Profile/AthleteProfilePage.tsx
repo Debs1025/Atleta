@@ -18,6 +18,8 @@ import {
   LogoutConfirmModal,
   DatePickerModal,
 } from "./AthleteProfileModals";
+import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
+import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
 
 export interface DailySessionLog {
   date: string; // "YYYY-MM-DD"
@@ -47,17 +49,9 @@ const DEFAULT_CATEGORIES: Array<AthleteProfile["category"]> = [
 ];
 
 const DEFAULT_WORKLOAD_DATA: WorkloadAnalyticsData = {
-  acute_load_7day_avg: 420,
-  chronic_load_28day_avg: 380,
-  weekly_logs: [
-    { date: "MON", duration_minutes: 75, srpe: 7 },
-    { date: "TUE", duration_minutes: 60, srpe: 6 },
-    { date: "WED", duration_minutes: 90, srpe: 8 },
-    { date: "THU", duration_minutes: 45, srpe: 5 },
-    { date: "FRI", duration_minutes: 80, srpe: 7 },
-    { date: "SAT", duration_minutes: 60, srpe: 6 },
-    { date: "SUN", duration_minutes: 0, srpe: 0 },
-  ],
+  acute_load_7day_avg: 0,
+  chronic_load_28day_avg: 0,
+  weekly_logs: [],
 };
 
 const MONTH_NAMES = [
@@ -78,31 +72,7 @@ const MONTH_NAMES = [
 const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 const YEARS_LIST = Array.from({ length: 57 }, (_, i) => 1970 + i);
 
-//sample documents for testing
-const DEFAULT_DOCUMENTS: EligibleDocument[] = [
-  {
-    id: "doc_01",
-    title: "PSA / NSO Birth Certificate",
-    category: "BIRTH_CERTIFICATE",
-    fileName: "psa_birth_certificate_vance.pdf",
-    status: "VERIFIED",
-    uploadedAt: "JAN 12, 2026",
-  },
-  {
-    id: "doc_02",
-    title: "Medical Fitness Clearance",
-    category: "MEDICAL_CLEARANCE",
-    fileName: "medical_clearance_2026.pdf",
-    status: "UPLOADED",
-    uploadedAt: "FEB 04, 2026",
-  },
-  {
-    id: "doc_03",
-    title: "School / Student ID Verification",
-    category: "SCHOOL_ID",
-    status: "PENDING",
-  },
-];
+const DEFAULT_DOCUMENTS: EligibleDocument[] = [];
 
 export function AthleteProfilePage({
   profile,
@@ -119,8 +89,8 @@ export function AthleteProfilePage({
   const [firstName, setFirstName] = useState(profile.first_name);
   const [lastName, setLastName] = useState(profile.last_name);
   const [birthdate, setBirthdate] = useState(profile.birthdate);
-  const [gender, setGender] = useState(profile.gender || "MALE");
-  const [province, setProvince] = useState(profile.province || "CAMARINES SUR");
+  const [gender, setGender] = useState(profile.gender || "");
+  const [province, setProvince] = useState(profile.province || "");
   const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
   const [heightCm, setHeightCm] = useState(profile.height_cm);
   const [weightKg, setWeightKg] = useState(profile.weight_kg);
@@ -128,14 +98,24 @@ export function AthleteProfilePage({
 
   // Eligible documents state
   const [documents, setDocuments] = useState<EligibleDocument[]>(
-    profile.eligible_documents || DEFAULT_DOCUMENTS
+    profile.eligible_documents || []
   );
 
   React.useEffect(() => {
+    if (isEditing) return;
+    setFirstName(profile.first_name);
+    setLastName(profile.last_name);
+    setBirthdate(profile.birthdate);
+    setGender(profile.gender || "");
+    setProvince(profile.province || "");
+    if (profile.category) setCategory(profile.category);
+    setHeightCm(profile.height_cm);
+    setWeightKg(profile.weight_kg);
+    setWingspanCm(profile.wingspan_cm);
     if (profile.eligible_documents) {
       setDocuments(profile.eligible_documents);
     }
-  }, [profile.eligible_documents]);
+  }, [profile, isEditing]);
 
   // UI state
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -209,16 +189,17 @@ export function AthleteProfilePage({
   // Dynamic Client-side Formulas for Workload Indicators:
   // Session Load (Arbitrary Units AU) = duration_minutes * sRPE (scale 1-10)
   // Acute Load = Total 7-day session load sum
-  const acuteLoadSum = workloadData.weekly_logs.reduce(
-    (acc, log) => acc + log.duration_minutes * log.srpe,
+  const logsList = workloadData?.weekly_logs || [];
+  const acuteLoadSum = logsList.reduce(
+    (acc, log) => acc + (log?.duration_minutes || 0) * (log?.srpe || 0),
     0
   );
-  const chronicLoad = workloadData.chronic_load_28day_avg || 380;
+  const chronicLoad = workloadData?.chronic_load_28day_avg || 380;
   // ACWR (Acute:Chronic Workload Ratio) = Acute Load / Chronic Load
   const acwrRatio = chronicLoad > 0 ? acuteLoadSum / chronicLoad : 1.0;
 
   // Workout Routine Score (Monotony) & Total Body Stress (Strain)
-  const dailyLoads = workloadData.weekly_logs.map((l) => l.duration_minutes * l.srpe);
+  const dailyLoads = logsList.map((l) => (l?.duration_minutes || 0) * (l?.srpe || 0));
   const meanDailyLoad = dailyLoads.reduce((a, b) => a + b, 0) / (dailyLoads.length || 1);
   const variance = dailyLoads.reduce((sq, n) => sq + Math.pow(n - meanDailyLoad, 2), 0) / (dailyLoads.length || 1);
   const stdDevLoad = Math.sqrt(variance);
@@ -226,7 +207,7 @@ export function AthleteProfilePage({
   const totalBodyStress = Math.round(acuteLoadSum * routineScore);
 
   // Latest workout score
-  const latestLog = workloadData.weekly_logs.find((l) => l.duration_minutes > 0) || workloadData.weekly_logs[0];
+  const latestLog = logsList.find((l) => l && l.duration_minutes > 0) || logsList[0];
   const latestWorkoutScore = (latestLog?.duration_minutes || 0) * (latestLog?.srpe || 0);
 
   // API Request: log daily workout session (POST /api/athlete/workload/log)
@@ -236,21 +217,32 @@ export function AthleteProfilePage({
       return;
     }
 
-    const updatedLogs = [...workloadData.weekly_logs];
-    const targetIndex = updatedLogs.findIndex((l) => l.duration_minutes === 0) !== -1
-      ? updatedLogs.findIndex((l) => l.duration_minutes === 0)
-      : updatedLogs.length - 1;
+    const updatedLogs = [...logsList];
+    const targetIndex = updatedLogs.findIndex((l) => !l || l.duration_minutes === 0) !== -1
+      ? updatedLogs.findIndex((l) => !l || l.duration_minutes === 0)
+      : updatedLogs.length > 0 ? updatedLogs.length - 1 : 0;
 
-    updatedLogs[targetIndex] = {
-      ...updatedLogs[targetIndex],
-      duration_minutes: duration,
-      srpe: logHardness,
-    };
+    if (updatedLogs[targetIndex]) {
+      updatedLogs[targetIndex] = {
+        ...updatedLogs[targetIndex],
+        duration_minutes: duration,
+        srpe: logHardness,
+      };
+    } else {
+      updatedLogs.push({ date: "TODAY", duration_minutes: duration, srpe: logHardness });
+    }
 
     setWorkloadData({
       ...workloadData,
       weekly_logs: updatedLogs,
     });
+
+    // API Request: persist workload session (POST /api/v1/athletes/workload)
+    requestAuthenticatedJson("/athletes/workload", "POST", {
+      session_duration_mins: duration,
+      srpe_score: logHardness,
+      entry_date: new Date().toISOString().split("T")[0],
+    }).catch(() => null);
 
     setLogSuccessToast(`Logged ${duration} mins | Intensity ${logHardness}/10!`);
     setTimeout(() => setLogSuccessToast(""), 3000);
@@ -286,7 +278,7 @@ export function AthleteProfilePage({
   }
 
   // Handler to replace/upload existing document file
-  // API Request: upload document (POST /api/athlete/documents/upload)
+  // API Request: upload document (POST /api/v1/athletes/documents/upload)
   const handlePickDocument = async (docId: string) => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -313,6 +305,17 @@ export function AthleteProfilePage({
               : doc
           )
         );
+
+        if (asset.uri) {
+          const formData = new FormData();
+          formData.append("document", {
+            uri: asset.uri,
+            name: asset.name || "document.pdf",
+            type: asset.mimeType || "application/pdf",
+          } as any);
+          formData.append("doc_type", "psa_birth_certificate");
+          requestMultipart("/athletes/documents", formData).catch(() => null);
+        }
       }
     } catch (error) {
       console.log("Error picking document:", error);
@@ -338,7 +341,7 @@ export function AthleteProfilePage({
   };
 
   // Handler to save new document 
-  // API Request: save new document record (POST /api/athlete/documents)
+  // API Request: save new document record (POST /api/v1/athletes/documents)
   const handleSaveNewDocument = () => {
     if (!newDocTitle.trim()) {
       setAddDocError("Please enter a document name.");
@@ -362,6 +365,18 @@ export function AthleteProfilePage({
     };
 
     setDocuments((prev) => [...prev, newDoc]);
+
+    if (newDocAsset?.uri) {
+      const formData = new FormData();
+      formData.append("document", {
+        uri: newDocAsset.uri,
+        name: newDocAsset.name || "document.pdf",
+        type: "application/pdf",
+      } as any);
+      formData.append("doc_type", "psa_birth_certificate");
+      requestMultipart("/athletes/documents", formData).catch(() => null);
+    }
+
     setNewDocTitle("");
     setNewDocAsset(null);
     setAddDocError("");
@@ -407,17 +422,8 @@ export function AthleteProfilePage({
     setShowDatePickerModal(false);
   };
 
-  // API Request: update password (POST /api/auth/change-password)
   const handleChangePassword = async () => {
-    if (!currentPassword) {
-      setPasswordError("Please enter your current password.");
-      return;
-    }
-    if (!newPassword) {
-      setPasswordError("Please enter a new password.");
-      return;
-    }
-    if (newPassword.length < 6) {
+    if (!newPassword || newPassword.length < 6) {
       setPasswordError("New password must be at least 6 characters.");
       return;
     }
@@ -431,6 +437,8 @@ export function AthleteProfilePage({
       setPasswordError("");
       if (onChangePassword) {
         await onChangePassword(currentPassword, newPassword);
+      } else {
+        await requestAuthenticatedJson("/users/change-password", "POST", { password: newPassword });
       }
       setPasswordSuccessMsg("Password changed successfully!");
       setCurrentPassword("");
@@ -444,8 +452,8 @@ export function AthleteProfilePage({
     }
   };
 
-  // API Request: save profile updates (PUT /api/athlete/profile)
-  const handleSave = () => {
+  // API Request: save profile updates (PATCH /api/v1/athletes/profile)
+  const handleSave = async () => {
     const updated: AthleteProfile = {
       ...profile,
       first_name: firstName,
@@ -463,6 +471,21 @@ export function AthleteProfilePage({
     setIsEditing(false);
     setSaveSuccessMsg(true);
     setTimeout(() => setSaveSuccessMsg(false), 2500);
+
+    try {
+      await requestAuthenticatedJson("/athletes/profile", "PATCH", {
+        height_cm: Number(heightCm) || profile.height_cm,
+        weight_kg: Number(weightKg) || profile.weight_kg,
+        wingspan_cm: Number(wingspanCm) || profile.wingspan_cm,
+        position: category,
+        sport_type: category,
+        gender: gender,
+        province: province,
+        birthdate: birthdate,
+      });
+    } catch (e) {
+      // Non-blocking background sync catch
+    }
   };
 
   const handleCancelEdit = () => {
@@ -879,7 +902,7 @@ export function AthleteProfilePage({
                   <View style={{ flex: 1, minWidth: "45%", backgroundColor: "#16233E", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#223354" }}>
                     <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>WORKOUT SCORE</Text>
                     <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "900", marginTop: 4 }}>{latestWorkoutScore} pts</Text>
-                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>{latestLog.duration_minutes}m | Intensity {latestLog.srpe}/10</Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 2 }}>{latestLog?.duration_minutes || 0}m | Intensity {latestLog?.srpe || 0}/10</Text>
                   </View>
 
                   <View style={{ flex: 1, minWidth: "45%", backgroundColor: "#16233E", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#223354" }}>
@@ -1022,35 +1045,9 @@ export function AthleteProfilePage({
             )}
           </View>
 
-          {/* Verify Athlete Profile Action Button */}
-          <Pressable
-            style={{
-              backgroundColor: "#16233E",
-              borderColor: "#38BDF8",
-              borderWidth: 1,
-              borderRadius: 12,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              marginTop: 10
-            }}
-            onPress={() => {
-              setDocsDrawerOpen(true);
-              setNewDocTitle("");
-              setNewDocAsset(null);
-              setAddDocError("");
-              setShowAddDocModal(true);
-            }}
-          >
-            <Ionicons name="shield-checkmark-outline" size={18} color="#38BDF8" />
-            <Text style={{ color: "#38BDF8", fontSize: 12, fontWeight: "800", letterSpacing: 0.5 }}>VERIFY ATHLETE PROFILE</Text>
-          </Pressable>
         </View>
 
-        {/* Upload Eligible Documents Drawer (Expandable, Collapsed by Default) */}
+        {/* Upload Eligible Documents */}
         <View style={styles.drawerContainer}>
           <Pressable
             style={styles.drawerHeader}
@@ -1397,16 +1394,7 @@ export function AthleteProfilePage({
 }
 
 function ProfileSkeletonLoader() {
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.skeletonPill, { width: 140, height: 32 }]} />
-      <View style={[styles.profileMainCard, { height: 500, opacity: 0.6 }]} />
-    </ScrollView>
-  );
+  return <AthleteProfilePageSkeleton />;
 }
 
 

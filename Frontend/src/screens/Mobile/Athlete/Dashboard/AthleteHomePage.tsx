@@ -9,49 +9,28 @@ import { NotificationPage, NotificationItem } from "./Notification";
 import { Teams } from "../Teams/Teams";
 import { TeamProfileScreen } from "./TeamProfile";
 import { CoachProfileScreen } from "./CoachProfile";
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
 
-//eligible docs with sample data for testing
-const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [
-  {
-    id: "doc_01",
-    title: "PSA / NSO Birth Certificate",
-    category: "BIRTH_CERTIFICATE",
-    status: "PENDING",
-  },
-  {
-    id: "doc_02",
-    title: "Medical Fitness Clearance",
-    category: "MEDICAL_CLEARANCE",
-    fileName: "medical_clearance_2026.pdf",
-    status: "UPLOADED",
-    uploadedAt: "FEB 04, 2026",
-  },
-  {
-    id: "doc_03",
-    title: "School / Student ID Verification",
-    category: "SCHOOL_ID",
-    status: "PENDING",
-  },
-];
+const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [];
 
-// Sample data with schemas
-// API Request: fetch athlete profile & analytics (GET /api/athlete/profile)
+// Athlete Data Structure
 export const initialAthleteProfile: AthleteProfile = {
-  athlete_id: "ath_001",
-  first_name: "ALEXANDER",
-  last_name: "VANCE",
-  birthdate: "OCT 14, 1998",
+  athlete_id: "",
+  first_name: "",
+  last_name: "",
+  birthdate: "",
   gender: "MALE",
-  province: "CAMARINES SUR",
+  province: "",
   category: "BASKETBALL",
-  height_cm: 188,
-  weight_kg: 82,
-  wingspan_cm: 194,
+  height_cm: 0,
+  weight_kg: 0,
+  wingspan_cm: 0,
   current_affiliation: {
     team_id: "",
     team_name: "Unassigned Team",
     sport_type: "BASKETBALL",
-    division: "Division 1",
+    division: "",
     head_coach: {
       coach_id: "",
       full_name: "No Coach Assigned",
@@ -61,16 +40,15 @@ export const initialAthleteProfile: AthleteProfile = {
     },
     is_verified: false,
   },
-  // sample data for testing of formulas
   analytics: {
-    points_per_game: 22.4,
-    assists_per_game: 8.1,
-    rebounds_per_game: 5.5,
-    field_goal_percentage: 48,
-    free_throw_percentage: 82,
-    last_5_games_scores: [14, 18, 30, 16, 24],
+    points_per_game: 0,
+    assists_per_game: 0,
+    rebounds_per_game: 0,
+    field_goal_percentage: 0,
+    free_throw_percentage: 0,
+    last_5_games_scores: [],
   },
-  eligible_documents: DEFAULT_ELIGIBLE_DOCS,
+  eligible_documents: [],
 };
 
 type TabType = "HOME" | "COACHES" | "PROFILE";
@@ -100,20 +78,82 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   }, [activeTab, dashboardScreen]);
 
   useEffect(() => {
-    // API Request: fetch profile and notifications on mount (GET /api/athlete/dashboard)
-    // Loading of profile and notifications with skeleton loader
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 600);
-    
-    (async () => {
+    let isMounted = true;
+    const fetchAthleteHomeData = async () => {
       try {
-      } catch (error) {
-        console.log("Push notification initialization:", error);
-      }
-    })();
+        const [homeRes, profileRes, statsRes, workloadRes]: [any, any, any, any] = await Promise.all([
+          requestAuthenticatedJson("/athletes/home").catch(() => null),
+          requestAuthenticatedJson("/athletes/profile").catch(() => null),
+          requestAuthenticatedJson("/athletes/stats/all").catch(() => null),
+          requestAuthenticatedJson("/athletes/workload").catch(() => null),
+        ]);
 
-    return () => clearTimeout(timer);
+        if (isMounted && (homeRes || profileRes || statsRes || workloadRes)) {
+          const raw = { ...(homeRes || {}), ...(profileRes || {}), ...(statsRes || {}) };
+          const stats = raw.stats || raw.analytics || raw;
+          const phys = raw.physical_attributes || raw.physical_profile || raw;
+
+          const mappedProfile: AthleteProfile = {
+            athlete_id: raw.athlete_id || raw.user_id || "ath_me",
+            first_name: (raw.first_name || raw.user?.first_name || "").toUpperCase(),
+            last_name: (raw.last_name || raw.user?.last_name || "").toUpperCase(),
+            birthdate: raw.birthdate || raw.birth_date || raw.user?.birthdate || "",
+            gender: (raw.gender || raw.user?.gender || "").toUpperCase(),
+            province: (raw.province || raw.location || raw.user?.province || "").toUpperCase(),
+            category: (raw.sport_type || raw.category || raw.sport || "BASKETBALL").toUpperCase() as any,
+            height_cm: Number(phys.height_cm || phys.height || raw.height_cm || raw.height || 0),
+            weight_kg: Number(phys.weight_kg || phys.weight || raw.weight_kg || raw.weight || 0),
+            wingspan_cm: Number(phys.wingspan_cm || phys.wingspan || raw.wingspan_cm || raw.wingspan || 0),
+            recruitment_status: raw.recruitment_status || "AVAILABLE",
+            leaderboard_rank: raw.leaderboard_rank || "N/A",
+            current_affiliation: {
+              team_id: raw.current_affiliation?.team_id || raw.team_id || "",
+              team_name: raw.current_affiliation?.team_name || raw.team_name || (raw.team_id ? "Assigned Team" : "Unassigned Team"),
+              sport_type: (raw.current_affiliation?.sport_type || raw.sport_type || raw.category || "BASKETBALL").toUpperCase() as any,
+              division: raw.current_affiliation?.division || raw.division || "",
+              head_coach: raw.current_affiliation?.head_coach || raw.head_coach || {
+                coach_id: "",
+                full_name: "No Coach Assigned",
+                role_title: "Head Coach",
+                years_experience: "0 Years",
+                quote: "",
+              },
+              is_verified: Boolean(raw.current_affiliation?.is_verified ?? raw.is_verified),
+            },
+            analytics: {
+              points_per_game: Number(stats.points_per_game ?? stats.ppg ?? stats.points ?? 0),
+              assists_per_game: Number(stats.assists_per_game ?? stats.apg ?? stats.assists ?? 0),
+              rebounds_per_game: Number(stats.rebounds_per_game ?? stats.rpg ?? stats.rebounds ?? 0),
+              field_goal_percentage: Number(stats.field_goal_percentage ?? stats.fg_pct ?? stats.fg_percentage ?? 0),
+              free_throw_percentage: Number(stats.free_throw_percentage ?? stats.ft_pct ?? stats.ft_percentage ?? 0),
+              last_5_games_scores: stats.last_5_games_scores || stats.last_games || stats.recent_scores || [],
+            },
+            workload_analytics: workloadRes ? {
+              acute_load_7day_avg: workloadRes.acute_load_7d || workloadRes.acute_load || 0,
+              chronic_load_28day_avg: workloadRes.chronic_load_28d || workloadRes.chronic_load || 380,
+              weekly_logs: (workloadRes.recent_entries && workloadRes.recent_entries.length > 0)
+                ? workloadRes.recent_entries.slice(0, 7).map((entry: any) => ({
+                    date: entry.entry_date ? String(entry.entry_date).slice(5) : "DAY",
+                    duration_minutes: Number(entry.session_duration_mins || entry.duration_minutes || 0),
+                    srpe: Number(entry.srpe_score || entry.srpe || 0),
+                  }))
+                : (workloadRes.weekly_logs || []),
+            } : raw.workload_analytics || raw.workload || undefined,
+            eligible_documents: raw.eligible_documents || raw.documents || [],
+          };
+          setProfile(mappedProfile);
+        }
+      } catch (error) {
+        // Token authentication fallback
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchAthleteHomeData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleUpdateProfile = (updatedProfile: AthleteProfile) => {
@@ -193,6 +233,10 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     );
   }
 
+  if (loading) {
+    return <AthleteHomePageSkeleton />;
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -236,6 +280,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
                 setHideParentBars(true);
               }}
             />
+          ) : loading ? (
+            <AthleteHomePageSkeleton />
           ) : (
             <HomeAnalyticsPage
               profile={profile}

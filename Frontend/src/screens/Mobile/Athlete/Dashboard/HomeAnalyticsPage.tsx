@@ -54,6 +54,7 @@ export interface AthleteProfile {
   achievements?: string[];
   current_affiliation: TeamAffiliation;
   analytics?: AthleteAnalytics;
+  workload_analytics?: any;
   eligible_documents?: EligibleDocument[];
 }
 
