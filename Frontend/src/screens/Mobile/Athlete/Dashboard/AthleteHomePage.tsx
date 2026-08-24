@@ -93,13 +93,61 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           const stats = raw.stats || raw.analytics || raw;
           const phys = raw.physical_attributes || raw.physical_profile || raw;
 
+          let finalWorkloadRes: any = workloadRes;
+          if (!finalWorkloadRes || (!finalWorkloadRes.recent_entries?.length && !finalWorkloadRes.weekly_logs?.length)) {
+            const targetId = raw.athlete_id || raw.user_id || raw.user?.uid;
+            if (targetId) {
+              const specificWl: any = await requestAuthenticatedJson(`/athletes/${targetId}/workload`).catch(() => null);
+              if (specificWl && (specificWl.recent_entries?.length > 0 || specificWl.weekly_logs?.length > 0)) {
+                finalWorkloadRes = specificWl;
+              }
+            }
+          }
+
+          const rawWorkload: any = (finalWorkloadRes && (finalWorkloadRes.recent_entries?.length > 0 || finalWorkloadRes.weekly_logs?.length > 0))
+            ? finalWorkloadRes
+            : (profileRes?.workload_analytics || profileRes?.workload || homeRes?.workload_summary || homeRes?.workload || finalWorkloadRes || {});
+          
+          const entriesList = rawWorkload.recent_entries || rawWorkload.weekly_logs || [];
+          
+          // Group multiple workout logs on the same date: sum total minutes, keep max intensity
+          const groupedByDateMap = new Map<string, { date: string; duration_minutes: number; srpe: number }>();
+
+          if (Array.isArray(entriesList)) {
+            entriesList.forEach((entry: any) => {
+              const dateStr = entry.entry_date ? String(entry.entry_date).slice(5) : (entry.date || "DAY");
+              const duration = Number(entry.session_duration_mins || entry.duration_minutes || 0);
+              const intensity = Number(entry.srpe_score || entry.srpe || 0);
+
+              if (groupedByDateMap.has(dateStr)) {
+                const existing = groupedByDateMap.get(dateStr)!;
+                existing.duration_minutes += duration;
+                existing.srpe = Math.max(existing.srpe, intensity);
+              } else {
+                groupedByDateMap.set(dateStr, {
+                  date: dateStr,
+                  duration_minutes: duration,
+                  srpe: intensity,
+                });
+              }
+            });
+          }
+
+          const weeklyLogsGrouped = Array.from(groupedByDateMap.values()).slice(0, 7);
+
+          const workloadAnalyticsObj = {
+            acute_load_7day_avg: rawWorkload.acute_load_7d || rawWorkload.acute_load || rawWorkload.acute_load_7day_avg || 0,
+            chronic_load_28day_avg: rawWorkload.chronic_load_28d || rawWorkload.chronic_load || rawWorkload.chronic_load_28day_avg || 380,
+            weekly_logs: weeklyLogsGrouped,
+          };
+
           const mappedProfile: AthleteProfile = {
             athlete_id: raw.athlete_id || raw.user_id || "ath_me",
             first_name: (raw.first_name || raw.user?.first_name || "").toUpperCase(),
             last_name: (raw.last_name || raw.user?.last_name || "").toUpperCase(),
             birthdate: raw.birthdate || raw.birth_date || raw.user?.birthdate || "",
             gender: (raw.gender || raw.user?.gender || "").toUpperCase(),
-            province: (raw.province || raw.location || raw.user?.province || "").toUpperCase(),
+            province: (raw.province || raw.location || raw.user?.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase(),
             category: (raw.sport_type || raw.category || raw.sport || "BASKETBALL").toUpperCase() as any,
             height_cm: Number(phys.height_cm || phys.height || raw.height_cm || raw.height || 0),
             weight_kg: Number(phys.weight_kg || phys.weight || raw.weight_kg || raw.weight || 0),
@@ -128,17 +176,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               free_throw_percentage: Number(stats.free_throw_percentage ?? stats.ft_pct ?? stats.ft_percentage ?? 0),
               last_5_games_scores: stats.last_5_games_scores || stats.last_games || stats.recent_scores || [],
             },
-            workload_analytics: workloadRes ? {
-              acute_load_7day_avg: workloadRes.acute_load_7d || workloadRes.acute_load || 0,
-              chronic_load_28day_avg: workloadRes.chronic_load_28d || workloadRes.chronic_load || 380,
-              weekly_logs: (workloadRes.recent_entries && workloadRes.recent_entries.length > 0)
-                ? workloadRes.recent_entries.slice(0, 7).map((entry: any) => ({
-                    date: entry.entry_date ? String(entry.entry_date).slice(5) : "DAY",
-                    duration_minutes: Number(entry.session_duration_mins || entry.duration_minutes || 0),
-                    srpe: Number(entry.srpe_score || entry.srpe || 0),
-                  }))
-                : (workloadRes.weekly_logs || []),
-            } : raw.workload_analytics || raw.workload || undefined,
+            workload_analytics: workloadAnalyticsObj,
             eligible_documents: raw.eligible_documents || raw.documents || [],
           };
           setProfile(mappedProfile);

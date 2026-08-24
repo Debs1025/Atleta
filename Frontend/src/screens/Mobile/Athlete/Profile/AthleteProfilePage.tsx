@@ -72,7 +72,37 @@ const MONTH_NAMES = [
 const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 const YEARS_LIST = Array.from({ length: 57 }, (_, i) => 1970 + i);
 
-const DEFAULT_DOCUMENTS: EligibleDocument[] = [];
+function normalizeDocuments(input: any): EligibleDocument[] {
+  if (Array.isArray(input)) {
+    return input.map((item: any, idx: number) => ({
+      id: item.id || `doc_${idx}`,
+      title: item.title || item.name || "Uploaded Document",
+      category: item.category || "OTHER",
+      fileName: item.name || item.fileName || item.file_name,
+      fileUri: item.url || item.fileUri || item.uri,
+      status: String(item.status || "PENDING").toUpperCase() as any,
+      uploadedAt: item.uploaded_at || item.uploadedAt,
+    }));
+  }
+  if (input && typeof input === "object") {
+    const keys = Object.keys(input);
+    if (keys.length > 0) {
+      return keys.map((key) => {
+        const item = input[key] || {};
+        return {
+          id: item.id || `doc_${key}`,
+          title: item.title || (key === "psa_birth_certificate" ? "PSA Birth Certificate" : key === "proof_of_residency" ? "Proof of Residency" : String(key).replace(/_/g, " ").toUpperCase()),
+          category: item.category || (key === "psa_birth_certificate" ? "BIRTH_CERTIFICATE" : "OTHER"),
+          fileName: item.name || item.fileName || item.file_name,
+          fileUri: item.url || item.fileUri || item.uri,
+          status: String(item.status || "PENDING").toUpperCase() as any,
+          uploadedAt: item.uploaded_at || item.uploadedAt,
+        };
+      });
+    }
+  }
+  return [];
+}
 
 export function AthleteProfilePage({
   profile,
@@ -90,7 +120,7 @@ export function AthleteProfilePage({
   const [lastName, setLastName] = useState(profile.last_name);
   const [birthdate, setBirthdate] = useState(profile.birthdate);
   const [gender, setGender] = useState(profile.gender || "");
-  const [province, setProvince] = useState(profile.province || "");
+  const [province, setProvince] = useState((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
   const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
   const [heightCm, setHeightCm] = useState(profile.height_cm);
   const [weightKg, setWeightKg] = useState(profile.weight_kg);
@@ -98,7 +128,7 @@ export function AthleteProfilePage({
 
   // Eligible documents state
   const [documents, setDocuments] = useState<EligibleDocument[]>(
-    profile.eligible_documents || []
+    normalizeDocuments(profile.eligible_documents || (profile as any).documents)
   );
 
   React.useEffect(() => {
@@ -107,14 +137,12 @@ export function AthleteProfilePage({
     setLastName(profile.last_name);
     setBirthdate(profile.birthdate);
     setGender(profile.gender || "");
-    setProvince(profile.province || "");
+    setProvince((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
     if (profile.category) setCategory(profile.category);
     setHeightCm(profile.height_cm);
     setWeightKg(profile.weight_kg);
     setWingspanCm(profile.wingspan_cm);
-    if (profile.eligible_documents) {
-      setDocuments(profile.eligible_documents);
-    }
+    setDocuments(normalizeDocuments(profile.eligible_documents || (profile as any).documents));
   }, [profile, isEditing]);
 
   // UI state
@@ -217,19 +245,18 @@ export function AthleteProfilePage({
       return;
     }
 
+    const todayStr = new Date().toISOString().split("T")[0].slice(5);
     const updatedLogs = [...logsList];
-    const targetIndex = updatedLogs.findIndex((l) => !l || l.duration_minutes === 0) !== -1
-      ? updatedLogs.findIndex((l) => !l || l.duration_minutes === 0)
-      : updatedLogs.length > 0 ? updatedLogs.length - 1 : 0;
+    const existingIndex = updatedLogs.findIndex((l) => l && (l.date === todayStr || l.date === "TODAY"));
 
-    if (updatedLogs[targetIndex]) {
-      updatedLogs[targetIndex] = {
-        ...updatedLogs[targetIndex],
-        duration_minutes: duration,
-        srpe: logHardness,
+    if (existingIndex !== -1) {
+      updatedLogs[existingIndex] = {
+        ...updatedLogs[existingIndex],
+        duration_minutes: (updatedLogs[existingIndex].duration_minutes || 0) + duration,
+        srpe: Math.max(updatedLogs[existingIndex].srpe || 0, logHardness),
       };
     } else {
-      updatedLogs.push({ date: "TODAY", duration_minutes: duration, srpe: logHardness });
+      updatedLogs.push({ date: todayStr, duration_minutes: duration, srpe: logHardness });
     }
 
     setWorkloadData({
@@ -238,7 +265,9 @@ export function AthleteProfilePage({
     });
 
     // API Request: persist workload session (POST /api/v1/athletes/workload)
+    const targetAthleteId = profile.athlete_id || (profile as any).user_id;
     requestAuthenticatedJson("/athletes/workload", "POST", {
+      athlete_id: targetAthleteId,
       session_duration_mins: duration,
       srpe_score: logHardness,
       entry_date: new Date().toISOString().split("T")[0],
@@ -488,18 +517,18 @@ export function AthleteProfilePage({
     }
   };
 
+  // Cancel Edit
   const handleCancelEdit = () => {
-    // Cancel Edit Profile
     setFirstName(profile.first_name);
     setLastName(profile.last_name);
     setBirthdate(profile.birthdate);
-    setGender(profile.gender || "MALE");
-    setProvince(profile.province || "CAMARINES SUR");
+    setGender(profile.gender || "");
+    setProvince(profile.province || "");
     setCategory(profile.category);
     setHeightCm(profile.height_cm);
     setWeightKg(profile.weight_kg);
     setWingspanCm(profile.wingspan_cm);
-    setDocuments(profile.eligible_documents || DEFAULT_DOCUMENTS);
+    setDocuments(normalizeDocuments(profile.eligible_documents || (profile as any).documents));
     setIsEditing(false);
   };
 
@@ -993,8 +1022,8 @@ export function AthleteProfilePage({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.dailyLogsScrollContent}
                 >
-                  {workloadData.weekly_logs.map((log, index) => {
-                    const sessionLoad = log.duration_minutes * log.srpe;
+                  {(workloadData?.weekly_logs || []).map((log, index) => {
+                    const sessionLoad = (log?.duration_minutes || 0) * (log?.srpe || 0);
                     return (
                       <View key={index} style={styles.dailyLogCard}>
                         <Text style={styles.dailyLogDate}>{log.date}</Text>
@@ -1056,7 +1085,7 @@ export function AthleteProfilePage({
             <View style={styles.drawerTitleRow}>
               <Ionicons name="folder-open-outline" size={16} color="#38BDF8" />
               <Text style={styles.drawerTitleText}>
-                Eligible Documents ({documents.length} Files)
+                Eligible Documents ({(documents || []).length} Files)
               </Text>
             </View>
             <Ionicons
@@ -1087,90 +1116,99 @@ export function AthleteProfilePage({
               </View>
 
               <View style={styles.documentsCardList}>
-                {documents.map((doc) => (
-                  <View key={doc.id} style={styles.documentItemCard}>
-                    <View style={styles.docHeaderRow}>
-                      <View style={styles.docTitleGroup}>
-                        <Ionicons
-                          name={
-                            doc.category === "BIRTH_CERTIFICATE"
-                              ? "ribbon-outline"
-                              : doc.category === "MEDICAL_CLEARANCE"
-                                ? "medical-outline"
-                                : doc.category === "SCHOOL_ID"
-                                  ? "card-outline"
-                                  : "document-text-outline"
-                          }
-                          size={18}
-                          color="#38BDF8"
-                        />
-                        {/* Editable Document Title */}
-                        <TextInput
-                          style={styles.docTitleInput}
-                          value={doc.title}
-                          onChangeText={(newTitle) => {
-                            setDocuments((prevDocs) =>
-                              prevDocs.map((d) =>
-                                d.id === doc.id ? { ...d, title: newTitle } : d
-                              )
-                            );
-                          }}
-                          placeholder="Enter document name (e.g. PSA Birth Certificate)"
-                          placeholderTextColor="#64748B"
-                        />
-                        <Ionicons name="pencil-sharp" size={12} color="#38BDF8" />
+                {(documents || []).length === 0 ? (
+                  <View style={{ padding: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#0F172A", borderRadius: 12, borderWidth: 1, borderColor: "#1E293B" }}>
+                    <Ionicons name="cloud-upload-outline" size={28} color="#64748B" />
+                    <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 8, fontWeight: "700", letterSpacing: 0.3 }}>
+                      No File Uploaded Yet
+                    </Text>
+                  </View>
+                ) : (
+                  (documents || []).map((doc) => (
+                    <View key={doc.id} style={styles.documentItemCard}>
+                      <View style={styles.docHeaderRow}>
+                        <View style={styles.docTitleGroup}>
+                          <Ionicons
+                            name={
+                              doc.category === "BIRTH_CERTIFICATE"
+                                ? "ribbon-outline"
+                                : doc.category === "MEDICAL_CLEARANCE"
+                                  ? "medical-outline"
+                                  : doc.category === "SCHOOL_ID"
+                                    ? "card-outline"
+                                    : "document-text-outline"
+                            }
+                            size={18}
+                            color="#38BDF8"
+                          />
+                          {/* Editable Document Title */}
+                          <TextInput
+                            style={styles.docTitleInput}
+                            value={doc.title}
+                            onChangeText={(newTitle) => {
+                              setDocuments((prevDocs) =>
+                                (prevDocs || []).map((d) =>
+                                  d.id === doc.id ? { ...d, title: newTitle } : d
+                                )
+                              );
+                            }}
+                            placeholder="Enter document name (e.g. PSA Birth Certificate)"
+                            placeholderTextColor="#64748B"
+                          />
+                          <Ionicons name="pencil-sharp" size={12} color="#38BDF8" />
+                        </View>
+
+                        {/* Delete Button */}
+                        {(documents || []).length > 1 && (
+                          <Pressable
+                            style={styles.deleteDocButton}
+                            onPress={() => {
+                              setDocuments((prevDocs) =>
+                                (prevDocs || []).filter((d) => d.id !== doc.id)
+                              );
+                            }}
+                          >
+                            <Ionicons name="trash-outline" size={15} color="#FF4D4D" />
+                          </Pressable>
+                        )}
                       </View>
 
-                      {/* Delete Button */}
-                      {documents.length > 1 && (
-                        <Pressable
-                          style={styles.deleteDocButton}
-                          onPress={() => {
-                            setDocuments((prevDocs) =>
-                              prevDocs.filter((d) => d.id !== doc.id)
-                            );
-                          }}
-                        >
-                          <Ionicons name="trash-outline" size={15} color="#FF4D4D" />
-                        </Pressable>
-                      )}
-                    </View>
-
-                    {/* File Detail Row */}
-                    <View style={styles.docFileDetailsRow}>
-                      {doc.fileName ? (
-                        <View style={styles.docFileMeta}>
-                          <Ionicons name="document-attach" size={14} color="#64748B" />
-                          <Text style={styles.docFileNameText} numberOfLines={1}>
-                            {doc.fileName}
+                      {/* File Detail Row */}
+                      <View style={styles.docFileDetailsRow}>
+                        {doc.fileName ? (
+                          <View style={styles.docFileMeta}>
+                            <Ionicons name="document-attach" size={14} color="#64748B" />
+                            <Text style={styles.docFileNameText} numberOfLines={1}>
+                              {doc.fileName}
+                            </Text>
+                            {doc.uploadedAt && (
+                              <Text style={styles.docUploadedAtText}>• {doc.uploadedAt}</Text>
+                            )}
+                          </View>
+                        ) : (
+                          <Text style={styles.docNoFileText}>
+                            No File Uploaded Yet
                           </Text>
-                          {doc.uploadedAt && (
-                            <Text style={styles.docUploadedAtText}>• {doc.uploadedAt}</Text>
-                          )}
-                        </View>
-                      ) : (
-                        <Text style={styles.docNoFileText}>
-                          No document uploaded yet
-                        </Text>
-                      )}
+                        )}
 
-                      {/* Upload / Replace Action Button */}
-                      <Pressable
-                        style={styles.uploadDocActionButton}
-                        onPress={() => handlePickDocument(doc.id)}
-                      >
-                        <Ionicons
-                          name={doc.fileName ? "refresh-outline" : "cloud-upload-outline"}
-                          size={14}
-                          color="#38BDF8"
-                        />
-                        <Text style={styles.uploadDocActionButtonText}>
-                          {doc.fileName ? "Replace" : "Upload"}
-                        </Text>
-                      </Pressable>
+                        {/* Upload / Replace Action Button */}
+                        <Pressable
+                          style={styles.uploadDocActionButton}
+                          onPress={() => handlePickDocument(doc.id)}
+                        >
+                          <Ionicons
+                            name={doc.fileName ? "refresh-outline" : "cloud-upload-outline"}
+                            size={14}
+                            color="#38BDF8"
+                          />
+                          <Text style={styles.uploadDocActionButtonText}>
+                            {doc.fileName ? "Replace" : "Upload"}
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  ))
+                )}
               </View>
             </View>
           )}
