@@ -1233,105 +1233,128 @@ export function AthleteProfilePage({
 
           {passwordDrawerOpen && (
             <View style={styles.drawerContent}>
-              {/* Current Password Field */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>CURRENT PASSWORD</Text>
-                <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
-                  <TextInput
-                    style={styles.textInput}
-                    value={currentPassword}
-                    onChangeText={(val) => {
-                      setCurrentPassword(val);
-                      setPasswordError("");
-                    }}
-                    secureTextEntry={!showCurrentPassword}
-                    placeholder="Enter current password"
-                    placeholderTextColor="#64748B"
-                  />
-                  <Pressable onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
-                    <Ionicons
-                      name={showCurrentPassword ? "eye-off" : "eye"}
-                      size={16}
-                      color="#38BDF8"
-                    />
-                  </Pressable>
-                </View>
-              </View>
+              {(() => {
+                const providerStr = String(profile.auth_provider || (profile as any).provider || "").toLowerCase();
+                const isSocialUser = providerStr === "google" || providerStr === "facebook";
 
-              {/* New Password Field */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
-                <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
-                  <TextInput
-                    style={styles.textInput}
-                    value={newPassword}
-                    onChangeText={(val) => {
-                      setNewPassword(val);
-                      setPasswordError("");
-                    }}
-                    secureTextEntry={!showNewPassword}
-                    placeholder="Enter new password"
-                    placeholderTextColor="#64748B"
-                  />
-                  <Pressable onPress={() => setShowNewPassword(!showNewPassword)}>
-                    <Ionicons
-                      name={showNewPassword ? "eye-off" : "eye"}
-                      size={16}
-                      color="#38BDF8"
-                    />
-                  </Pressable>
-                </View>
-              </View>
+                if (isSocialUser) {
+                  return (
+                    <View style={{ backgroundColor: "#0F172A", padding: 18, borderRadius: 12, borderWidth: 1, borderColor: "#1E293B", alignItems: "center" }}>
+                      <Ionicons name={providerStr.includes("facebook") ? "logo-facebook" : "logo-google"} size={26} color="#38BDF8" style={{ marginBottom: 6 }} />
+                      <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "700", textAlign: "center", marginBottom: 6 }}>
+                        Signed in via {providerStr.includes("facebook") ? "Facebook" : "Google"}
+                      </Text>
+                      <Text style={{ color: "#94A3B8", fontSize: 12, textAlign: "center", lineHeight: 18 }}>
+                        Password management is handled directly by your OAuth provider. Password changes for social accounts cannot be performed inside the app.
+                      </Text>
+                    </View>
+                  );
+                }
 
-              {/* Confirm New Password Field */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>CONFIRM NEW PASSWORD</Text>
-                <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
-                  <TextInput
-                    style={styles.textInput}
-                    value={confirmPassword}
-                    onChangeText={(val) => {
-                      setConfirmPassword(val);
-                      setPasswordError("");
-                    }}
-                    secureTextEntry={!showConfirmPassword}
-                    placeholder="Re-enter new password"
-                    placeholderTextColor="#64748B"
-                  />
-                  <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                    <Ionicons
-                      name={showConfirmPassword ? "eye-off" : "eye"}
-                      size={16}
-                      color="#38BDF8"
-                    />
-                  </Pressable>
-                </View>
-              </View>
+                return (
+                  <>
+                    {/* Current Password Field */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>CURRENT PASSWORD</Text>
+                      <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
+                        <TextInput
+                          style={styles.textInput}
+                          value={currentPassword}
+                          onChangeText={(val) => {
+                            setCurrentPassword(val);
+                            setPasswordError("");
+                          }}
+                          secureTextEntry={!showCurrentPassword}
+                          placeholder="Enter current password"
+                          placeholderTextColor="#64748B"
+                        />
+                        <Pressable onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
+                          <Ionicons
+                            name={showCurrentPassword ? "eye-off" : "eye"}
+                            size={16}
+                            color="#38BDF8"
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
 
-              {/* Password Validation Error */}
-              {passwordError ? (
-                <Text style={styles.modalErrorText}>{passwordError}</Text>
-              ) : null}
+                    {/* New Password Field */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
+                      <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
+                        <TextInput
+                          style={styles.textInput}
+                          value={newPassword}
+                          onChangeText={(val) => {
+                            setNewPassword(val);
+                            setPasswordError("");
+                          }}
+                          secureTextEntry={!showNewPassword}
+                          placeholder="Enter new password"
+                          placeholderTextColor="#64748B"
+                        />
+                        <Pressable onPress={() => setShowNewPassword(!showNewPassword)}>
+                          <Ionicons
+                            name={showNewPassword ? "eye-off" : "eye"}
+                            size={16}
+                            color="#38BDF8"
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
 
-              {/* Password Success Toast */}
-              {passwordSuccessMsg ? (
-                <View style={styles.successToast}>
-                  <Ionicons name="checkmark-done-circle" size={18} color="#080F21" />
-                  <Text style={styles.successToastText}>{passwordSuccessMsg}</Text>
-                </View>
-              ) : null}
+                    {/* Confirm New Password Field */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>CONFIRM NEW PASSWORD</Text>
+                      <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
+                        <TextInput
+                          style={styles.textInput}
+                          value={confirmPassword}
+                          onChangeText={(val) => {
+                            setConfirmPassword(val);
+                            setPasswordError("");
+                          }}
+                          secureTextEntry={!showConfirmPassword}
+                          placeholder="Re-enter new password"
+                          placeholderTextColor="#64748B"
+                        />
+                        <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                          <Ionicons
+                            name={showConfirmPassword ? "eye-off" : "eye"}
+                            size={16}
+                            color="#38BDF8"
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
 
-              {/* Submit Button */}
-              <Pressable
-                style={styles.updatePasswordButton}
-                onPress={handleChangePassword}
-                disabled={passwordLoading}
-              >
-                <Ionicons name="key-outline" size={16} color="#080F21" style={{ marginRight: 6 }} />
-                <Text style={styles.updatePasswordButtonText}>
-                  {passwordLoading ? "UPDATING..." : "UPDATE PASSWORD"}
-                </Text>
-              </Pressable>
+                    {/* Password Validation Error */}
+                    {passwordError ? (
+                      <Text style={styles.modalErrorText}>{passwordError}</Text>
+                    ) : null}
+
+                    {/* Password Success Toast */}
+                    {passwordSuccessMsg ? (
+                      <View style={styles.successToast}>
+                        <Ionicons name="checkmark-done-circle" size={18} color="#080F21" />
+                        <Text style={styles.successToastText}>{passwordSuccessMsg}</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Submit Button */}
+                    <Pressable
+                      style={styles.updatePasswordButton}
+                      onPress={handleChangePassword}
+                      disabled={passwordLoading}
+                    >
+                      <Ionicons name="key-outline" size={16} color="#080F21" style={{ marginRight: 6 }} />
+                      <Text style={styles.updatePasswordButtonText}>
+                        {passwordLoading ? "UPDATING..." : "UPDATE PASSWORD"}
+                      </Text>
+                    </Pressable>
+                  </>
+                );
+              })()}
             </View>
           )}
         </View>

@@ -178,6 +178,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             },
             workload_analytics: workloadAnalyticsObj,
             eligible_documents: raw.eligible_documents || raw.documents || [],
+            auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
           };
           setProfile(mappedProfile);
         }

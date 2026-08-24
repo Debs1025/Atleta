@@ -56,6 +56,7 @@ export interface AthleteProfile {
   analytics?: AthleteAnalytics;
   workload_analytics?: any;
   eligible_documents?: EligibleDocument[];
+  auth_provider?: string;
 }
 
 interface HomeAnalyticsPageProps {
