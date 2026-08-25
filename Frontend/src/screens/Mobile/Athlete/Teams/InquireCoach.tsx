@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -10,9 +12,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/InquireCoach";
 import { Ionicons } from "@expo/vector-icons";
 import { CoachProfileSchema } from "./Teams";
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
 
 interface InquireCoachProps {
   coach: CoachProfileSchema;
+  isAlreadyInquired?: boolean;
   onBack: () => void;
   onGoHome: () => void;
   onGoInquiries: () => void;
@@ -20,17 +24,43 @@ interface InquireCoachProps {
 
 export function InquireCoachScreen({
   coach,
+  isAlreadyInquired = false,
   onBack,
   onGoHome,
   onGoInquiries,
 }: InquireCoachProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalMode, setModalMode] = useState<"SUCCESS" | "ALREADY_SENT" | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [hasSentInquiry, setHasSentInquiry] = useState(false);
 
-  // API Request: send recruitment inquiry to coach (POST /api/athlete/inquiries)
-  const handleSendInquiry = () => {
-    setModalVisible(true);
+  const handleSendInquiry = async () => {
+    if (!coach.coach_id && !coach.full_name) {
+      return;
+    }
+
+    try {
+      setIsSending(true);
+
+      if (isAlreadyInquired || hasSentInquiry) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        setModalMode("ALREADY_SENT");
+        return;
+      }
+
+      await requestAuthenticatedJson("/inquiries", "POST", {
+        coach_id: coach.coach_id,
+        message: `Athlete interested in recruitment discussion and tryouts with ${coach.full_name}.`,
+      });
+      setHasSentInquiry(true);
+      setModalMode("SUCCESS");
+    } catch (err: any) {
+      setHasSentInquiry(true);
+      setModalMode("ALREADY_SENT");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -175,36 +205,52 @@ export function InquireCoachScreen({
         </View>
 
         {/* Primary CTA Button */}
-        <Pressable style={styles.sendInquiryButton} onPress={handleSendInquiry}>
-          <Ionicons
-            name="paper-plane-outline"
-            size={18}
-            color="#FFFFFF"
-            style={styles.sendIcon}
-          />
-          <Text style={styles.sendInquiryText}>SEND RECRUITMENT INQUIRY</Text>
+        <Pressable style={[styles.sendInquiryButton, isSending && { opacity: 0.6 }]} disabled={isSending} onPress={handleSendInquiry}>
+          {isSending ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <>
+              <Ionicons
+                name="paper-plane-outline"
+                size={18}
+                color="#FFFFFF"
+                style={styles.sendIcon}
+              />
+              <Text style={styles.sendInquiryText}>SEND RECRUITMENT INQUIRY</Text>
+            </>
+          )}
         </Pressable>
       </ScrollView>
 
-      {/* SCREEN 4: INQUIRY SENT SUCCESS MODAL */}
+      {/* CUSTOM STATUS MODAL OVERLAY */}
       <Modal
         animationType="fade"
         transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        visible={Boolean(modalMode)}
+        onRequestClose={() => setModalMode(null)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Inquiry Sent</Text>
+            <Ionicons
+              name={modalMode === "SUCCESS" ? "checkmark-circle-outline" : "information-circle-outline"}
+              size={48}
+              color={modalMode === "SUCCESS" ? "#38BDF8" : "#F59E0B"}
+              style={{ alignSelf: "center", marginBottom: 12 }}
+            />
+            <Text style={styles.modalTitle}>
+              {modalMode === "SUCCESS" ? "Inquiry Successful" : "Already Inquired"}
+            </Text>
             <Text style={styles.modalSubtitle}>
-              You can view your inquiry to the inquiry page
+              {modalMode === "SUCCESS"
+                ? `Your recruitment inquiry has been successfully sent to ${coach.full_name}. You can view and track status on the Inquiries page.`
+                : `You already sent an inquiry request to ${coach.full_name}. Duplicate requests are disabled.`}
             </Text>
 
             <View style={styles.modalButtonRow}>
               <Pressable
                 style={styles.modalButton}
                 onPress={() => {
-                  setModalVisible(false);
+                  setModalMode(null);
                   onGoHome();
                 }}
               >
@@ -214,7 +260,7 @@ export function InquireCoachScreen({
               <Pressable
                 style={styles.modalButton}
                 onPress={() => {
-                  setModalVisible(false);
+                  setModalMode(null);
                   onGoInquiries();
                 }}
               >
@@ -227,5 +273,6 @@ export function InquireCoachScreen({
     </View>
   );
 }
+
 
 

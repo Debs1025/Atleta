@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -13,6 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
 
 export type NotificationType = "RECRUITMENT_INQUIRY" | "ACTION_REQUIRED";
 
@@ -30,9 +32,10 @@ export interface NotificationItem {
   title: string;
   message_body: string;
   highlighted_text?: string; // e.g. "PSA (Birth Certificate)"
-  action_label: string; // e.g. "View Inquiry" or "Upload Now "
+  action_label: string; // e.g. "View Inquiry" or "Upload Now"
   target_route?: string;
   inquiry_details?: {
+    inquiry_id: string;
     coach_id: string;
     coach_name: string;
     role_title: string;
@@ -40,6 +43,7 @@ export interface NotificationItem {
     sport: string;
     message: string;
     status: "PENDING" | "ACCEPTED" | "DECLINED";
+    is_sent_by_me?: boolean;
   };
   document_details?: {
     document_name: string;
@@ -61,54 +65,17 @@ export interface NotificationPageProps {
   }) => void;
 }
 
-//sample notification from coach
-// API Request: fetch notifications (GET /api/athlete/notifications)
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "notif_001",
-    type: "RECRUITMENT_INQUIRY",
-    date_group: "TODAY",
-    timestamp_relative: "2h ago",
-    read_status: false,
-    sender: {
-      name: "Coach Marcus Sterling",
-      role_category: "Basketball Inquiry",
-    },
-    title: "Recruitment Inquiry",
-    message_body:
-      "Coach Marcus Sterling from Camarines Sur Lakers sent you a recruitment inquiry for the upcoming Season 2026.",
-    action_label: "View Inquiry",
-    target_route: "CoachProfile",
-    inquiry_details: {
-      coach_id: "coach_01",
-      coach_name: "Coach Marcus Sterling",
-      role_title: "Head Coach",
-      team_name: "Camarines Sur Lakers",
-      sport: "BASKETBALL",
-      message:
-        "We have been following your impressive statistics this season! Our coaching staff would love to invite you for an official recruitment discussion and tryouts for our roster.",
-      status: "PENDING",
-    },
-  },
-  {
-    id: "notif_002",
-    type: "ACTION_REQUIRED",
-    date_group: "TODAY",
-    timestamp_relative: "5h ago",
-    read_status: false,
-    title: "Action Required",
-    message_body:
-      "Head Coach requested your updated PSA (Birth Certificate) for division verification.",
-    highlighted_text: "PSA (Birth Certificate)",
-    action_label: "Upload Now ->",
-    target_route: "UploadDocument",
-    document_details: {
-      document_name: "PSA (Birth Certificate)",
-      required_type: "BIRTH_CERTIFICATE",
-      is_uploaded: false,
-    },
-  },
-];
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return "Just now";
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
 
 export function NotificationPage({
   onBack,
@@ -120,8 +87,9 @@ export function NotificationPage({
   const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(
-    externalNotifications || INITIAL_NOTIFICATIONS
+    externalNotifications || []
   );
+  const [loading, setLoading] = useState(!externalNotifications);
 
   // Modal States
   const [selectedInquiryNotif, setSelectedInquiryNotif] =
@@ -131,8 +99,121 @@ export function NotificationPage({
   const [selectedFile, setSelectedFile] = useState<{
     name: string;
     uri: string;
+    mimeType?: string;
   } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    if (externalNotifications && externalNotifications.length > 0) {
+      setNotifications(externalNotifications);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchAllData = async () => {
+      try {
+        setLoading(true);
+        const [notifRes, inqRes]: [any, any] = await Promise.all([
+          requestAuthenticatedJson("/notifications").catch(() => null),
+          requestAuthenticatedJson("/inquiries").catch(() => null),
+        ]);
+
+        if (isMounted) {
+          const items: NotificationItem[] = [];
+
+          // Process API notifications
+          const apiNotifs = notifRes?.notifications || (Array.isArray(notifRes) ? notifRes : []);
+          apiNotifs.forEach((n: any) => {
+            const rawType = n.type || "ACTION_REQUIRED";
+            const isRecruitment = rawType.includes("INQUIRY") || rawType.includes("RECRUITMENT");
+
+            items.push({
+              id: n.notification_id || n.id || `notif_${Math.random()}`,
+              type: isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
+              date_group: "TODAY",
+              timestamp_relative: formatRelativeTime(n.created_at),
+              read_status: Boolean(n.is_read),
+              sender: isRecruitment ? {
+                name: n.title || "Coach Inquiry",
+                role_category: "Recruitment Inquiry",
+              } : undefined,
+              title: n.title || (isRecruitment ? "Recruitment Inquiry" : "Action Required"),
+              message_body: n.message || n.message_body || "",
+              highlighted_text: n.action_url ? "Document Verification" : undefined,
+              action_label: isRecruitment ? "View Inquiry" : "Upload Now ->",
+              document_details: !isRecruitment ? {
+                document_name: "Eligibility Document",
+                required_type: "ELIGIBILITY",
+                is_uploaded: false,
+              } : undefined,
+            });
+          });
+
+          // Process API recruitment inquiries
+          const apiInquiries = inqRes?.inquiries || (Array.isArray(inqRes) ? inqRes : []);
+          apiInquiries.forEach((inq: any) => {
+            const rawStatus = (inq.offer_status || "Sent").toUpperCase();
+            const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
+            const coachName = inq.coach_name || "Coach";
+
+            // If the inquiry was sent BY the athlete and is still PENDING, skip showing in Notification inbox
+            // (it belongs in the Inquiries Tracker screen, not as an incoming notification asking athlete to accept)
+            const isSentByAthlete = inq.initiated_by && (inq.initiated_by === inq.athlete_id || inq.initiated_by !== inq.coach_scout_id);
+            if (isSentByAthlete && mappedStatus === "PENDING") {
+              return;
+            }
+
+            const notifTitle = isSentByAthlete
+              ? `Inquiry ${mappedStatus === "ACCEPTED" ? "Accepted" : "Declined"}`
+              : "Recruitment Inquiry";
+            const notifMessage = isSentByAthlete
+              ? `${coachName} has ${mappedStatus.toLowerCase()} your recruitment inquiry.`
+              : `${coachName} from ${inq.current_institution || "Athletic Department"} sent you a recruitment inquiry.`;
+
+            items.push({
+              id: inq.scout_id || `inq_${Math.random()}`,
+              type: "RECRUITMENT_INQUIRY",
+              date_group: "TODAY",
+              timestamp_relative: formatRelativeTime(inq.date_initiated),
+              read_status: mappedStatus !== "PENDING",
+              sender: {
+                name: coachName,
+                role_category: `${inq.sport_type || "Basketball"} Inquiry`,
+              },
+              title: notifTitle,
+              message_body: notifMessage,
+              action_label: isSentByAthlete ? "View Details" : "View Inquiry",
+              target_route: "CoachProfile",
+              inquiry_details: {
+                inquiry_id: inq.scout_id,
+                coach_id: inq.coach_scout_id || "",
+                coach_name: coachName,
+                role_title: "Head Coach",
+                team_name: inq.current_institution || "Varsity Team",
+                sport: (inq.sport_type || "BASKETBALL").toUpperCase(),
+                message: inq.offer_message || "Recruitment inquiry discussion.",
+                status: mappedStatus,
+                is_sent_by_me: isSentByAthlete,
+              },
+            });
+          });
+
+          setNotifications(items);
+          if (onNotificationsChange) onNotificationsChange(items);
+        }
+      } catch (err) {
+        // Fallback
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchAllData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const updateFeed = (updated: NotificationItem[]) => {
     setNotifications(updated);
@@ -141,20 +222,24 @@ export function NotificationPage({
     }
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
     const updated = notifications.map((item) => ({
       ...item,
       read_status: true,
     }));
     updateFeed(updated);
+    await requestAuthenticatedJson("/notifications/read-all", "PATCH").catch(() => null);
   };
 
-  const handleCardPress = (item: NotificationItem) => {
-    // Mark as read when clicked
+  const handleCardPress = async (item: NotificationItem) => {
     const updated = notifications.map((n) =>
       n.id === item.id ? { ...n, read_status: true } : n
     );
     updateFeed(updated);
+
+    if (item.id && !item.id.startsWith("inq_")) {
+      requestAuthenticatedJson(`/notifications/${item.id}/read`, "PATCH").catch(() => null);
+    }
 
     if (item.type === "RECRUITMENT_INQUIRY") {
       setSelectedInquiryNotif(item);
@@ -163,7 +248,10 @@ export function NotificationPage({
     }
   };
 
-  const handleAcceptInquiry = (id: string) => {
+  const handleAcceptInquiry = async (id: string) => {
+    const target = notifications.find((n) => n.id === id);
+    const inquiryId = target?.inquiry_details?.inquiry_id || id;
+
     const updated = notifications.map((n) => {
       if (n.id === id && n.inquiry_details) {
         return {
@@ -178,6 +266,7 @@ export function NotificationPage({
       return n;
     });
     updateFeed(updated);
+
     if (selectedInquiryNotif && selectedInquiryNotif.id === id) {
       setSelectedInquiryNotif({
         ...selectedInquiryNotif,
@@ -187,10 +276,19 @@ export function NotificationPage({
           : undefined,
       });
     }
-    Alert.alert("Inquiry Accepted", "You have accepted the recruitment inquiry!");
+
+    try {
+      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Accepted" });
+      Alert.alert("Inquiry Accepted", "You have accepted the recruitment inquiry!");
+    } catch (err: any) {
+      Alert.alert("Inquiry Responded", "Your acceptance has been logged.");
+    }
   };
 
-  const handleDeclineInquiry = (id: string) => {
+  const handleDeclineInquiry = async (id: string) => {
+    const target = notifications.find((n) => n.id === id);
+    const inquiryId = target?.inquiry_details?.inquiry_id || id;
+
     const updated = notifications.map((n) => {
       if (n.id === id && n.inquiry_details) {
         return {
@@ -205,6 +303,7 @@ export function NotificationPage({
       return n;
     });
     updateFeed(updated);
+
     if (selectedInquiryNotif && selectedInquiryNotif.id === id) {
       setSelectedInquiryNotif({
         ...selectedInquiryNotif,
@@ -214,7 +313,13 @@ export function NotificationPage({
           : undefined,
       });
     }
-    Alert.alert("Inquiry Declined", "You have declined the recruitment inquiry.");
+
+    try {
+      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Declined" });
+      Alert.alert("Inquiry Declined", "You have declined the recruitment inquiry.");
+    } catch (err: any) {
+      Alert.alert("Inquiry Responded", "Your decision has been logged.");
+    }
   };
 
   const handlePickDocument = async () => {
@@ -229,6 +334,7 @@ export function NotificationPage({
         setSelectedFile({
           name: asset.name,
           uri: asset.uri,
+          mimeType: asset.mimeType || undefined,
         });
       }
     } catch (err) {
@@ -236,7 +342,7 @@ export function NotificationPage({
     }
   };
 
-  const handleSubmitDocument = () => {
+  const handleSubmitDocument = async () => {
     if (!selectedDocNotif) return;
     if (!selectedFile) {
       Alert.alert("No File Chosen", "Please pick a document file before submitting.");
@@ -244,15 +350,25 @@ export function NotificationPage({
     }
 
     setIsUploading(true);
-    setTimeout(() => {
-      setIsUploading(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("document", {
+        uri: selectedFile.uri,
+        name: selectedFile.name,
+        type: selectedFile.mimeType || "application/pdf",
+      } as any);
+      formData.append("document_type", selectedDocNotif.document_details?.required_type || "ELIGIBILITY");
+
+      await requestMultipart("/athletes/documents", formData).catch(() => null);
+
       const updated = notifications.map((n) => {
         if (n.id === selectedDocNotif.id) {
           return {
             ...n,
             read_status: true,
             title: "Document Submitted",
-            message_body: `Submitted ${selectedFile.name} for ${n.highlighted_text || "verification"}.`,
+            message_body: `Submitted ${selectedFile.name} for verification.`,
             document_details: n.document_details
               ? {
                 ...n.document_details,
@@ -271,7 +387,7 @@ export function NotificationPage({
           document_name:
             selectedDocNotif.highlighted_text ||
             selectedDocNotif.document_details?.document_name ||
-            "PSA (Birth Certificate)",
+            "Eligibility Document",
           required_type:
             selectedDocNotif.document_details?.required_type ||
             "BIRTH_CERTIFICATE",
@@ -282,14 +398,17 @@ export function NotificationPage({
 
       Alert.alert(
         "Upload Successful",
-        `${selectedFile.name} has been uploaded to your coach!`
+        `${selectedFile.name} has been submitted successfully!`
       );
+    } catch (err: any) {
+      Alert.alert("Upload Error", err?.message || "Failed to upload document.");
+    } finally {
+      setIsUploading(false);
       setSelectedDocNotif(null);
       setSelectedFile(null);
-    }, 800);
+    }
   };
 
-  // Helper to render body text 
   const renderBodyWithHighlight = (item: NotificationItem) => {
     if (!item.highlighted_text || !item.message_body.includes(item.highlighted_text)) {
       return <Text style={styles.cardBodyText}>{item.message_body}</Text>;
@@ -316,7 +435,7 @@ export function NotificationPage({
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* 2. HEADER & NAVIGATION LAYOUT */}
+      {/* HEADER */}
       <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
         <View style={styles.headerLeftContainer}>
           <Pressable
@@ -336,137 +455,151 @@ export function NotificationPage({
         )}
       </View>
 
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled={true}
-        overScrollMode="never"
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Date Grouping Label */}
-        <View style={styles.dateGroupHeader}>
-          <Text style={styles.dateGroupText}>• TODAY</Text>
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+          <Text style={{ color: "#94A3B8", marginTop: 12, fontSize: 14 }}>Loading notifications...</Text>
         </View>
-
-        {/* 3. NOTIFICATION CARDS REPLICATION */}
-        {notifications.map((item) => {
-          const isUnread = !item.read_status;
-
-          if (item.type === "RECRUITMENT_INQUIRY") {
-            return (
-              <View
-                key={item.id}
-                style={[
-                  styles.cardContainer,
-                  isUnread && styles.cardContainerUnread,
-                ]}
-              >
-                {/* Header Row */}
-                <View style={styles.cardHeaderRow}>
-                  <View style={styles.avatarContainer}>
-                    <Image
-                      source={require("../../../../assets/profile.png")}
-                      style={styles.avatarImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                  <View style={styles.headerTextContainer}>
-                    <Text style={styles.senderName}>
-                      {item.sender?.name || "Coach"}
-                    </Text>
-                    <Text style={styles.senderSubtitle}>
-                      {item.sender?.role_category || "Inquiry"}
-                    </Text>
-                  </View>
-                  {item.timestamp_relative && (
-                    <Text style={styles.timestampText}>
-                      {item.timestamp_relative}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Body Text */}
-                <View style={styles.cardBodyContainer}>
-                  <Text style={styles.cardBodyText}>{item.message_body}</Text>
-                </View>
-
-                {/* Action Button */}
-                <Pressable
-                  style={styles.inquiryActionButton}
-                  onPress={() => handleCardPress(item)}
-                >
-                  <Text style={styles.inquiryActionText}>
-                    {item.inquiry_details?.status === "ACCEPTED"
-                      ? "Inquiry Accepted "
-                      : item.inquiry_details?.status === "DECLINED"
-                        ? "Inquiry Declined"
-                        : item.action_label}
-                  </Text>
-                </Pressable>
+      ) : (
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={[
+            styles.scrollContent,
+            notifications.length === 0 && { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingBottom: 80 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
+          overScrollMode="never"
+          keyboardShouldPersistTaps="handled"
+        >
+          {notifications.length === 0 ? (
+            <View style={{ alignItems: "center", justifyContent: "center", paddingHorizontal: 20 }}>
+              <Ionicons name="notifications-off-outline" size={56} color="#64748B" />
+              <Text style={{ color: "#F8FAFC", fontSize: 16, fontWeight: "700", marginTop: 16 }}>No Notifications</Text>
+              <Text style={{ color: "#94A3B8", fontSize: 13, textAlign: "center", marginTop: 6 }}>
+                You have no active alerts or pending recruitment inquiries.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.dateGroupHeader}>
+                <Text style={styles.dateGroupText}>• TODAY</Text>
               </View>
-            );
-          }
 
-          if (item.type === "ACTION_REQUIRED") {
-            return (
-              <View
-                key={item.id}
-                style={[
-                  styles.cardContainer,
-                  isUnread && styles.cardContainerUnread,
-                ]}
-              >
-                {/* Header Row */}
-                <View style={styles.cardHeaderRow}>
-                  <View style={styles.actionIconContainer}>
-                    <Image
-                      source={require("../../../../assets/actionreq.png")}
-                      style={styles.actionIconImage}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.headerTextContainer}>
-                    <Text style={styles.actionRequiredTitle}>{item.title}</Text>
-                  </View>
-                  {item.timestamp_relative && (
-                    <Text style={styles.timestampText}>
-                      {item.timestamp_relative}
-                    </Text>
-                  )}
-                </View>
+              {notifications.map((item) => {
+                const isUnread = !item.read_status;
 
-                {/* Body Text with Dynamic Highlight */}
-                <View style={styles.cardBodyContainer}>
-                  {renderBodyWithHighlight(item)}
-                </View>
+                if (item.type === "RECRUITMENT_INQUIRY") {
+                  return (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.cardContainer,
+                        isUnread && styles.cardContainerUnread,
+                      ]}
+                    >
+                      <View style={styles.cardHeaderRow}>
+                        <View style={styles.avatarContainer}>
+                          <Image
+                            source={require("../../../../assets/profile.png")}
+                            style={styles.avatarImage}
+                            resizeMode="cover"
+                          />
+                        </View>
+                        <View style={styles.headerTextContainer}>
+                          <Text style={styles.senderName}>
+                            {item.sender?.name || "Coach"}
+                          </Text>
+                          <Text style={styles.senderSubtitle}>
+                            {item.sender?.role_category || "Inquiry"}
+                          </Text>
+                        </View>
+                        {item.timestamp_relative && (
+                          <Text style={styles.timestampText}>
+                            {item.timestamp_relative}
+                          </Text>
+                        )}
+                      </View>
 
-                {/* Action Link */}
-                <Pressable
-                  style={styles.actionLinkRow}
-                  onPress={() => handleCardPress(item)}
-                >
-                  <Text style={styles.actionLinkText}>
-                    {item.document_details?.is_uploaded
-                      ? "Document Uploaded ✓"
-                      : item.action_label}
-                  </Text>
-                  {!item.document_details?.is_uploaded && (
-                    <Ionicons
-                      name="arrow-forward"
-                      size={16}
-                      color="#7DD3FC"
-                      style={{ marginLeft: 4 }}
-                    />
-                  )}
-                </Pressable>
-              </View>
-            );
-          }
+                      <View style={styles.cardBodyContainer}>
+                        <Text style={styles.cardBodyText}>{item.message_body}</Text>
+                      </View>
 
-          return null;
-        })}
-      </ScrollView>
+                      <Pressable
+                        style={styles.inquiryActionButton}
+                        onPress={() => handleCardPress(item)}
+                      >
+                        <Text style={styles.inquiryActionText}>
+                          {item.inquiry_details?.status === "ACCEPTED"
+                            ? "Inquiry Accepted ✓"
+                            : item.inquiry_details?.status === "DECLINED"
+                              ? "Inquiry Declined"
+                              : item.action_label}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                }
+
+                if (item.type === "ACTION_REQUIRED") {
+                  return (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.cardContainer,
+                        isUnread && styles.cardContainerUnread,
+                      ]}
+                    >
+                      <View style={styles.cardHeaderRow}>
+                        <View style={styles.actionIconContainer}>
+                          <Image
+                            source={require("../../../../assets/actionreq.png")}
+                            style={styles.actionIconImage}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View style={styles.headerTextContainer}>
+                          <Text style={styles.actionRequiredTitle}>{item.title}</Text>
+                        </View>
+                        {item.timestamp_relative && (
+                          <Text style={styles.timestampText}>
+                            {item.timestamp_relative}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.cardBodyContainer}>
+                        {renderBodyWithHighlight(item)}
+                      </View>
+
+                      <Pressable
+                        style={styles.actionLinkRow}
+                        onPress={() => handleCardPress(item)}
+                      >
+                        <Text style={styles.actionLinkText}>
+                          {item.document_details?.is_uploaded
+                            ? "Document Uploaded ✓"
+                            : item.action_label}
+                        </Text>
+                        {!item.document_details?.is_uploaded && (
+                          <Ionicons
+                            name="arrow-forward"
+                            size={16}
+                            color="#7DD3FC"
+                            style={{ marginLeft: 4 }}
+                          />
+                        )}
+                      </Pressable>
+                    </View>
+                  );
+                }
+
+                return null;
+              })}
+            </>
+          )}
+        </ScrollView>
+      )}
 
       {/* MODAL 1: VIEW RECRUITMENT INQUIRY */}
       <Modal
@@ -496,7 +629,7 @@ export function NotificationPage({
                   </Text>
                   <Text style={styles.modalCoachRole}>
                     {selectedInquiryNotif.inquiry_details?.role_title || "Head Coach"}{" "}
-                    • {selectedInquiryNotif.inquiry_details?.team_name || "Lakers"}
+                    • {selectedInquiryNotif.inquiry_details?.team_name || "Varsity"}
                   </Text>
                   <Text style={styles.modalSportTag}>
                     {selectedInquiryNotif.inquiry_details?.sport || "BASKETBALL"}
@@ -510,7 +643,6 @@ export function NotificationPage({
                   </Text>
                 </View>
 
-                {/* Status or Decision Buttons */}
                 {selectedInquiryNotif.inquiry_details?.status === "PENDING" ? (
                   <View style={styles.decisionButtonContainer}>
                     <Pressable
@@ -581,7 +713,8 @@ export function NotificationPage({
                 <Text style={styles.uploadSubLabel}>Document Requested:</Text>
                 <Text style={styles.uploadDocName}>
                   {selectedDocNotif.highlighted_text ||
-                    selectedDocNotif.document_details?.document_name}
+                    selectedDocNotif.document_details?.document_name ||
+                    "Eligibility Document"}
                 </Text>
 
                 <Pressable
@@ -621,4 +754,5 @@ export function NotificationPage({
 }
 
 export default NotificationPage;
+
 

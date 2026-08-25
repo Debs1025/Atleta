@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { TeamDetailsScreen } from "./TeamDetails";
 import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
-
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
 
 //schemas
 export interface Coach {
@@ -68,137 +68,6 @@ export interface InquirySchema {
   sub_note?: string; // e.g. "Roster Full"
 }
 
-// Sample Data for teams 
-// API Request: fetch sports teams directory (GET /api/teams)
-export const MOCK_TEAMS: TeamSchema[] = [
-  {
-    team_id: "team_001",
-    team_name: "Camarines Sur Lakers",
-    sport_type: "BASKETBALL",
-    managed_by_coach_id: "coach_erick_01",
-    created_at: "2024-01-15T00:00:00Z",
-    roster_athletes: Array(48).fill("ath_uuid"),
-    program_type_tag: "ELITE VARSITY PROGRAM",
-    description:
-      "Dedicated to cultivating elite athletic performance through disciplined training, academic excellence, and technical mastery in regional competition. Our mission is to forge resilient student-athletes ready for national recruitment.",
-    region: "Bicol",
-    head_coach: {
-      coach_id: "coach_erick_01",
-      full_name: "Coach Marcus Sterling",
-      role_title: "Elite Performance Director",
-      years_experience: "12 Years Experience",
-      quote:
-        "Focused on developing fundamental movement patterns and high-stakes mental resilience.",
-    },
-  },
-  {
-    team_id: "team_002",
-    team_name: "Bicol Velocity Track",
-    sport_type: "TRACK AND FIELD",
-    managed_by_coach_id: "coach_david_02",
-    created_at: "2024-02-01T00:00:00Z",
-    roster_athletes: Array(32).fill("ath_uuid"),
-    program_type_tag: "HIGH PERFORMANCE PROGRAM",
-    description: "Specializing in Track and Field around Naga City.",
-    region: "Naga City",
-    head_coach: {
-      coach_id: "coach_david_02",
-      full_name: "Joseph Alaba",
-      role_title: "Sprint & Track Lead",
-      years_experience: "10 Years Experience",
-      quote:
-        "Speed is forged through technical precision and consistent recovery.",
-    },
-  },
-  {
-    team_id: "team_003",
-    team_name: "Naga City Swimmers",
-    sport_type: "SWIMMING",
-    managed_by_coach_id: "coach_elena_03",
-    created_at: "2024-03-10T00:00:00Z",
-    roster_athletes: Array(24).fill("ath_uuid"),
-    program_type_tag: "AQUATICS VARSITY PROGRAM",
-    description: "Specialize in skills and form in swimming.",
-    region: "Naga City",
-    head_coach: {
-      coach_id: "coach_elena_03",
-      full_name: "David Brunson",
-      role_title: "Head Aquatics Director",
-      years_experience: "8 Years Experience",
-      quote:
-        "Mastering stroke efficiency and aerobic conditioning for peak competitive racing.",
-    },
-  },
-];
-
-// Temporary Coach Data
-// API Request: fetch coach profile details (GET /api/coaches/:id)
-export const MOCK_COACH_PROFILES: Record<string, CoachProfileSchema> = {
-  coach_erick_01: {
-    coach_id: "coach_erick_01",
-    full_name: "COACH ERICK NATHANIEL",
-    institution: "Albay National High School",
-    role_title: "Head of Basketball Operations",
-    tags: ["VARSITY", "RECRUITER", "ACTIVE SCOUTING"],
-    years_experience: "15+",
-    core_specialties: [
-      "Basketball Strategy",
-      "Strength & Conditioning",
-      "Player Development",
-    ],
-    success_rate: "94%",
-    recruits_placed: "80+ Recruits Placed",
-    philosophy:
-      "Coach Erick Nathaniel brings over a decade of high-stakes experience to Albay National High School. His approach centers on the \"Total Athlete\" concept—integrating rigorous tactical basketball training with advanced physiological conditioning and academic excellence.",
-    quote:
-      "We don't just build players; we build professionals. My goal is to bridge the gap between high school potential and collegiate readiness by instilling discipline, tactical intelligence, and a relentless work ethic from day one.",
-    certificates: [
-      "Professional Basketball",
-      "Certified Athlete Coach",
-      "Certified Basketball Trainer",
-    ],
-    contact_info: {
-      email: "coach@gmail.com",
-      facebook: "Gerard Pelonio",
-      phone: "+67000",
-    },
-  },
-};
-
-// Temporary Athlete Inquiries
-// API Request: fetch athlete recruitment inquiries (GET /api/athlete/inquiries)
-export const MOCK_INQUIRIES: InquirySchema[] = [
-  {
-    inquiry_id: "inq_01",
-    coach_name: "Coach Marcus Sterling",
-    institution_sport: "Stanford University • Basketball",
-    status: "ACCEPTED",
-    updated_at_relative: "Last update: 2h ago",
-  },
-  {
-    inquiry_id: "inq_02",
-    coach_name: "Coach Sarah Jenkins",
-    institution_sport: "University of Virginia • Soccer",
-    status: "PENDING",
-    updated_at_relative: "Sent: Oct 24, 2025",
-  },
-  {
-    inquiry_id: "inq_03",
-    coach_name: "Coach David Chen",
-    institution_sport: "Oregon State • Track & Field",
-    status: "DECLINED",
-    updated_at_relative: "Sent: Oct 22, 2025",
-    sub_note: "Roster Full",
-  },
-  {
-    inquiry_id: "inq_04",
-    coach_name: "Coach Elena Rodriguez",
-    institution_sport: "Duke University • Swimming",
-    status: "PENDING",
-    updated_at_relative: "Sent: Oct 20, 2025",
-  },
-];
-
 type ScreenState = "DIRECTORY" | "TEAM_DETAILS" | "COACH_PROFILE" | "INQUIRIES";
 
 interface TeamsProps {
@@ -208,10 +77,10 @@ interface TeamsProps {
 
 export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>("DIRECTORY");
-  const [selectedTeam, setSelectedTeam] = useState<TeamSchema>(MOCK_TEAMS[0]);
-  const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema>(
-    MOCK_COACH_PROFILES["coach_erick_01"]
-  );
+  const [teams, setTeams] = useState<TeamSchema[]>([]);
+  const [inquiries, setInquiries] = useState<InquirySchema[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
+  const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState<string>("BASKETBALL");
   const [loading, setLoading] = useState(true);
@@ -224,12 +93,66 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
   }, [currentScreen, onScreenStateChange]);
 
   useEffect(() => {
-    // API Request: fetch teams & inquiries from backend on mount
-    // Skeletal Loader
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
+    let isMounted = true;
+    const fetchDirectoryAndInquiries = async () => {
+      try {
+        setLoading(true);
+        const [teamsRes, inquiriesRes]: [any, any] = await Promise.all([
+          requestAuthenticatedJson("/teams").catch(() => null),
+          requestAuthenticatedJson("/inquiries").catch(() => null),
+        ]);
+
+        if (isMounted) {
+          const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+          const mappedTeams: TeamSchema[] = rawTeams.map((t: any, idx: number) => ({
+            team_id: t.team_id || `team_${idx}`,
+            team_name: t.team_name || "Varsity Team",
+            sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
+            managed_by_coach_id: t.coach_id || "",
+            created_at: t.timestamp || new Date().toISOString(),
+            roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
+            program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
+            description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
+            region: t.region || "NCR",
+            head_coach: {
+              coach_id: t.coach_id || "",
+              full_name: (t.coach_name || "Head Coach").toUpperCase(),
+              role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
+              years_experience: "Experienced Coach",
+              quote: "Focused on developing fundamental athletic resilience and performance.",
+            },
+          }));
+          setTeams(mappedTeams);
+
+          const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
+          const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {
+            const rawStatus = (inq.offer_status || "PENDING").toUpperCase();
+            const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
+            return {
+              inquiry_id: inq.scout_id || `inq_${idx}`,
+              coach_name: inq.coach_name || "Coach",
+              institution_sport: `${inq.current_institution || "Varsity"} • ${inq.sport_type || "Basketball"}`,
+              status: mappedStatus as any,
+              updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
+              sub_note: inq.decline_reason || undefined,
+            };
+          });
+          setInquiries(mappedInquiries);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setTeams([]);
+          setInquiries([]);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchDirectoryAndInquiries();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -253,20 +176,70 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     }
   }, [loading, pulseAnim]);
 
-  const handleOpenTeam = (team: TeamSchema) => {
+  const handleOpenTeam = async (team: TeamSchema) => {
     setSelectedTeam(team);
     setCurrentScreen("TEAM_DETAILS");
+
+    if (team.team_id) {
+      const detailed: any = await requestAuthenticatedJson(`/teams/${team.team_id}`).catch(() => null);
+      if (detailed) {
+        const rawCoach = detailed.coach || detailed.head_coach || {};
+        setSelectedTeam({
+          ...team,
+          description: detailed.description || detailed.mission_statement || team.description,
+          region: detailed.region || team.region,
+          roster_athletes: Array.isArray(detailed.roster) ? detailed.roster.map((r: any) => r.athlete_id) : team.roster_athletes,
+          head_coach: {
+            coach_id: rawCoach.coach_id || team.head_coach.coach_id,
+            full_name: (rawCoach.full_name || team.head_coach.full_name).toUpperCase(),
+            role_title: (rawCoach.role_title || rawCoach.current_institution || team.head_coach.role_title).toUpperCase(),
+            years_experience: rawCoach.years_of_experience ? `${rawCoach.years_of_experience} Years` : team.head_coach.years_experience,
+            quote: rawCoach.quote || team.head_coach.quote,
+          },
+        });
+      }
+    }
   };
 
-  const handleOpenCoach = (coachId?: string) => {
-    const targetCoach =
-      (coachId && MOCK_COACH_PROFILES[coachId]) ||
-      MOCK_COACH_PROFILES["coach_erick_01"];
-    setSelectedCoach(targetCoach);
+  const handleOpenCoach = async (coachId?: string) => {
+    const targetId = coachId || selectedTeam?.head_coach.coach_id;
+    if (!targetId) return;
+
+    setSelectedCoach(null);
     setCurrentScreen("COACH_PROFILE");
+
+    const res: any = await requestAuthenticatedJson(`/coaches/${targetId}`).catch(() => null);
+    if (res) {
+      const c = res.profile || res.coach || res;
+      const firstName = c.first_name || "";
+      const lastName = c.last_name || "";
+      const fullName = c.full_name || `${firstName} ${lastName}`.trim() || "Coach Profile";
+      const inst = c.current_institution || c.institution || "Athletic Program";
+      const sport = (c.sport_type || "Basketball").toUpperCase();
+
+      setSelectedCoach({
+        coach_id: c.coach_id || targetId,
+        full_name: fullName.toUpperCase(),
+        institution: inst,
+        role_title: c.role_title || `${sport} HEAD COACH`,
+        tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
+        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience}+` : "5+",
+        core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) ? c.core_specialties : ["Tactical Strategy", "Physical Conditioning", "Talent Scouting"],
+        success_rate: c.success_rate ? `${c.success_rate}%` : "90%",
+        recruits_placed: c.recruits_placed || "Certified Athletic Staff",
+        philosophy: c.philosophy || c.bio || `${fullName} brings extensive athletic experience and tactical discipline. The coaching approach focuses on athlete development and high performance.`,
+        quote: c.quote || "Discipline and consistent effort drive championship execution.",
+        certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : ["Professional Coaching Certification"],
+        contact_info: {
+          email: c.email || "coach@atleta.com",
+          facebook: c.facebook || fullName,
+          phone: c.contact_number || c.phone || "Contact via App",
+        },
+      });
+    }
   };
 
-  const filteredTeams = MOCK_TEAMS.filter((team) => {
+  const filteredTeams = teams.filter((team) => {
     const matchesSearch =
       team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -278,7 +251,7 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
   });
 
   // SCREEN ROUTING RENDER
-  if (currentScreen === "TEAM_DETAILS") {
+  if (currentScreen === "TEAM_DETAILS" && selectedTeam) {
     return (
       <TeamDetailsScreen
         team={selectedTeam}
@@ -288,10 +261,17 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     );
   }
 
-  if (currentScreen === "COACH_PROFILE") {
+  if (currentScreen === "COACH_PROFILE" && selectedCoach) {
+    const isAlreadyInquired = inquiries.some((inq) => {
+      const inqName = (inq.coach_name || "").toLowerCase().replace(/^coach\s+/, "").trim();
+      const selName = (selectedCoach.full_name || "").toLowerCase().replace(/^coach\s+/, "").trim();
+      return inqName && selName && (inqName.includes(selName) || selName.includes(inqName));
+    });
+
     return (
       <InquireCoachScreen
         coach={selectedCoach}
+        isAlreadyInquired={isAlreadyInquired}
         onBack={() => setCurrentScreen("TEAM_DETAILS")}
         onGoHome={() => setCurrentScreen("DIRECTORY")}
         onGoInquiries={() => setCurrentScreen("INQUIRIES")}
@@ -302,7 +282,7 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
   if (currentScreen === "INQUIRIES") {
     return (
       <InquiriesScreen
-        inquiries={MOCK_INQUIRIES}
+        inquiries={inquiries}
         onBack={() => setCurrentScreen("DIRECTORY")}
       />
     );
@@ -455,6 +435,12 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
               />
             ))}
           </View>
+        ) : filteredTeams.length === 0 ? (
+          <View style={{ paddingVertical: 40, alignItems: "center" }}>
+            <Ionicons name="shield-outline" size={48} color="#64748B" />
+            <Text style={{ color: "#F8FAFC", fontSize: 16, fontWeight: "700", marginTop: 12 }}>No Sports Teams Found</Text>
+            <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No teams match the current filter.</Text>
+          </View>
         ) : (
           filteredTeams.map((team) => (
             <View key={team.team_id} style={styles.teamCard}>
@@ -487,5 +473,6 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     </View>
   );
 }
+
 
 

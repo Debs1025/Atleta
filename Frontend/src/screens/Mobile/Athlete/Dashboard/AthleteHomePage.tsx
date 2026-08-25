@@ -62,6 +62,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   const [dashboardScreen, setDashboardScreen] = useState<
     "HOME_MAIN" | "TEAM_PROFILE" | "COACH_PROFILE"
   >("HOME_MAIN");
+  const [selectedCoachId, setSelectedCoachId] = useState<string | undefined>(undefined);
   const [profile, setProfile] = useState<AthleteProfile>(initialAthleteProfile);
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -307,13 +308,15 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
                 setDashboardScreen("HOME_MAIN");
                 setHideParentBars(false);
               }}
-              onViewCoachProfile={() => {
+              onViewCoachProfile={(coachId) => {
+                if (coachId) setSelectedCoachId(coachId);
                 setDashboardScreen("COACH_PROFILE");
                 setHideParentBars(true);
               }}
             />
           ) : dashboardScreen === "COACH_PROFILE" ? (
             <CoachProfileScreen
+              coachId={selectedCoachId || profile.current_affiliation?.head_coach?.coach_id}
               onBack={() => {
                 setDashboardScreen("TEAM_PROFILE");
                 setHideParentBars(true);
@@ -406,11 +409,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           onPress={() => setActiveTab("PROFILE")}
         >
           <Image
-            source={
-              activeTab === "PROFILE"
-                ? require("../../../../assets/profilepage.png")
-                : require("../../../../assets/profile.png")
-            }
+            source={require("../../../../assets/profile.png")}
             style={[
               styles.tabIcon,
               activeTab === "PROFILE" ? styles.tabIconActive : styles.tabIconInactive,
