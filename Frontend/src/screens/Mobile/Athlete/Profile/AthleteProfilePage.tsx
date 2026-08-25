@@ -1387,11 +1387,9 @@ export function AthleteProfilePage({
                 <Text style={styles.updateButtonText}>EDIT ATHLETE PROFILE</Text>
               </Pressable>
 
-              {onLogout && (
-                <Pressable style={styles.logoutButton} onPress={() => setShowLogoutModal(true)}>
-                  <Text style={styles.logoutButtonText}>LOGOUT</Text>
-                </Pressable>
-              )}
+              <Pressable style={styles.logoutButton} onPress={() => setShowLogoutModal(true)}>
+                <Text style={styles.logoutButtonText}>LOGOUT</Text>
+              </Pressable>
             </>
           )}
         </View>

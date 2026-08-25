@@ -3,6 +3,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -25,8 +26,9 @@ export function WorkloadWarningModal({ visible, onClose }: WorkloadWarningModalP
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: "#EF4444" }]}>
               OVERTRAINING RISK WARNING
@@ -48,8 +50,8 @@ export function WorkloadWarningModal({ visible, onClose }: WorkloadWarningModalP
               I UNDERSTAND &amp; WILL REST
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -85,8 +87,9 @@ export function AddDocumentModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>ADD ELIGIBLE DOCUMENT</Text>
             <Pressable onPress={onClose}>
@@ -151,8 +154,8 @@ export function AddDocumentModal({
               <Text style={styles.modalCancelButtonText}>Cancel</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -180,8 +183,9 @@ export function CategoryPickerModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>SELECT SPORT CATEGORY</Text>
             <Pressable onPress={onClose}>
@@ -238,8 +242,8 @@ export function CategoryPickerModal({
           <Pressable style={styles.modalCloseButton} onPress={onClose}>
             <Text style={styles.modalCloseButtonText}>Done</Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -263,11 +267,15 @@ export function LogoutConfirmModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalOverlay}>
+        <Pressable
+          style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
+          onPress={onClose}
+        />
+        <View style={[styles.modalCard, { zIndex: 10, elevation: 10 }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>CONFIRM LOGOUT</Text>
-            <Pressable onPress={onClose}>
+            <Pressable onPress={onClose} hitSlop={10}>
               <Ionicons name="close" size={22} color="#94A3B8" />
             </Pressable>
           </View>
@@ -292,8 +300,8 @@ export function LogoutConfirmModal({
               <Text style={styles.modalCancelButtonText}>CANCEL</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -341,8 +349,9 @@ export function DatePickerModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>SELECT BIRTHDATE</Text>
             <Pressable onPress={onClose}>
@@ -516,8 +525,8 @@ export function DatePickerModal({
           <Pressable style={styles.modalCancelButton} onPress={onClose}>
             <Text style={styles.modalCancelButtonText}>Cancel</Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

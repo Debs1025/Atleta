@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Animated, ScrollView, StyleSheet, View } from "react-native";
 
 const sharedOpacity = new Animated.Value(0.3);
 let isPulsing = false;
@@ -45,7 +45,7 @@ export const SkeletonBox = React.memo(function SkeletonBox({
           width: width as any,
           height: height as any,
           borderRadius,
-          backgroundColor: "#cbd5e1",
+          backgroundColor: "#16233E",
           opacity: sharedOpacity,
         },
         style,
@@ -56,44 +56,115 @@ export const SkeletonBox = React.memo(function SkeletonBox({
 
 export function AthleteHomePageSkeleton() {
   return (
-    <View style={skeletonStyles.container}>
-      {/* Header Banner Skeleton */}
-      <View style={skeletonStyles.headerCard}>
-        <View style={skeletonStyles.headerRow}>
-          <SkeletonBox width={64} height={64} borderRadius={32} />
-          <View style={skeletonStyles.headerTextWrap}>
-            <SkeletonBox width="60%" height={20} borderRadius={4} style={{ marginBottom: 8 }} />
-            <SkeletonBox width="40%" height={14} borderRadius={4} />
+    <ScrollView
+      style={skeletonStyles.container}
+      contentContainerStyle={skeletonStyles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Category Badge Skeleton */}
+      <SkeletonBox width={110} height={28} borderRadius={8} />
+
+      {/* Section Title & Underline Skeleton */}
+      <View style={{ marginTop: 18, marginBottom: 20 }}>
+        <SkeletonBox width={220} height={32} borderRadius={6} />
+        <SkeletonBox width={60} height={4} borderRadius={2} style={{ marginTop: 6 }} />
+      </View>
+
+      {/* Metrics Grid Row Skeleton (POINTS / GAME & ASSISTS) */}
+      <View style={skeletonStyles.metricsGridRow}>
+        <View style={skeletonStyles.metricCard}>
+          <SkeletonBox width="60%" height={12} borderRadius={4} style={{ marginBottom: 10 }} />
+          <SkeletonBox width="45%" height={34} borderRadius={6} />
+        </View>
+        <View style={skeletonStyles.metricCard}>
+          <SkeletonBox width="60%" height={12} borderRadius={4} style={{ marginBottom: 10 }} />
+          <SkeletonBox width="45%" height={34} borderRadius={6} />
+        </View>
+      </View>
+
+      {/* Secondary Metric Card Skeleton (REBOUNDS AVG) */}
+      <View style={skeletonStyles.secondaryMetricCard}>
+        <View style={{ justifyContent: "center" }}>
+          <SkeletonBox width={100} height={12} borderRadius={4} style={{ marginBottom: 8 }} />
+          <SkeletonBox width={70} height={26} borderRadius={6} />
+        </View>
+        <View style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
+          {[1, 2, 3, 4].map((i) => (
+            <SkeletonBox key={i} width={6} height={24} borderRadius={3} />
+          ))}
+        </View>
+      </View>
+
+      {/* Shooting Efficiency Section Skeleton */}
+      <View style={{ marginBottom: 24 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+          <SkeletonBox width={3} height={16} borderRadius={2} style={{ marginRight: 8 }} />
+          <SkeletonBox width={160} height={14} borderRadius={4} />
+        </View>
+        <View style={{ marginBottom: 14 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+            <SkeletonBox width={90} height={14} borderRadius={4} />
+            <SkeletonBox width={40} height={14} borderRadius={4} />
           </View>
+          <SkeletonBox width="100%" height={10} borderRadius={5} />
         </View>
-        <View style={{ marginTop: 16 }}>
-          <SkeletonBox width="100%" height={36} borderRadius={8} />
-        </View>
-      </View>
-
-      {/* Analytics Card Skeleton */}
-      <View style={skeletonStyles.card}>
-        <SkeletonBox width="40%" height={18} borderRadius={4} style={{ marginBottom: 16 }} />
-        <View style={skeletonStyles.grid}>
-          <SkeletonBox width="48%" height={70} borderRadius={10} />
-          <SkeletonBox width="48%" height={70} borderRadius={10} />
-          <SkeletonBox width="48%" height={70} borderRadius={10} style={{ marginTop: 12 }} />
-          <SkeletonBox width="48%" height={70} borderRadius={10} style={{ marginTop: 12 }} />
+        <View style={{ marginBottom: 14 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+            <SkeletonBox width={90} height={14} borderRadius={4} />
+            <SkeletonBox width={40} height={14} borderRadius={4} />
+          </View>
+          <SkeletonBox width="100%" height={10} borderRadius={5} />
         </View>
       </View>
 
-      {/* Team Card Skeleton */}
-      <View style={skeletonStyles.card}>
-        <SkeletonBox width="50%" height={18} borderRadius={4} style={{ marginBottom: 12 }} />
-        <SkeletonBox width="100%" height={90} borderRadius={12} />
+      {/* Last Games Graph Card Skeleton */}
+      <View style={skeletonStyles.graphCard}>
+        <SkeletonBox width={90} height={12} borderRadius={4} style={{ alignSelf: "center", marginBottom: 20 }} />
+        <View style={skeletonStyles.barsContainer}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={skeletonStyles.barColumn}>
+              <SkeletonBox width={34} height={i === 5 ? 75 : 45} borderRadius={17} />
+              <SkeletonBox width={20} height={12} borderRadius={4} style={{ marginTop: 10 }} />
+            </View>
+          ))}
+        </View>
       </View>
-    </View>
+
+      {/* My Team Section Skeleton */}
+      <View style={{ marginBottom: 24 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+          <SkeletonBox width={3} height={16} borderRadius={2} style={{ marginRight: 8 }} />
+          <SkeletonBox width={80} height={14} borderRadius={4} />
+        </View>
+        <View style={skeletonStyles.teamCardContainer}>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+            <SkeletonBox width={44} height={44} borderRadius={12} style={{ marginRight: 14 }} />
+            <SkeletonBox width={140} height={20} borderRadius={6} />
+          </View>
+          <View style={{ marginBottom: 18 }}>
+            <SkeletonBox width={50} height={12} borderRadius={4} style={{ marginBottom: 8 }} />
+            <View style={skeletonStyles.coachInnerCard}>
+              <SkeletonBox width={40} height={40} borderRadius={20} style={{ marginRight: 12 }} />
+              <View>
+                <SkeletonBox width={120} height={14} borderRadius={4} style={{ marginBottom: 6 }} />
+                <SkeletonBox width={80} height={12} borderRadius={4} />
+              </View>
+            </View>
+          </View>
+          <SkeletonBox width="100%" height={46} borderRadius={14} />
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 export function AthleteProfilePageSkeleton() {
   return (
-    <View style={skeletonStyles.container}>
+    <ScrollView
+      style={skeletonStyles.container}
+      contentContainerStyle={skeletonStyles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Profile Header Skeleton */}
       <View style={[skeletonStyles.card, { alignItems: "center", paddingTop: 28 }]}>
         <SkeletonBox width={90} height={90} borderRadius={45} style={{ marginBottom: 14 }} />
@@ -114,39 +185,88 @@ export function AthleteProfilePageSkeleton() {
         <SkeletonBox width="45%" height={18} borderRadius={4} style={{ marginBottom: 14 }} />
         <SkeletonBox width="100%" height={120} borderRadius={12} />
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const skeletonStyles = StyleSheet.create({
   container: {
-    padding: 16,
-    backgroundColor: "#f8fafc",
     flex: 1,
+    backgroundColor: "#080F21",
   },
-  headerCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  metricsGridRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginBottom: 14,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: "#111C35",
+    borderRadius: 18,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#1E2C4A",
   },
-  headerRow: {
+  secondaryMetricCard: {
+    backgroundColor: "#111C35",
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#1E2C4A",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  graphCard: {
+    backgroundColor: "#111C35",
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#1E2C4A",
+    marginBottom: 26,
+  },
+  barsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    height: 120,
+    paddingHorizontal: 8,
+  },
+  barColumn: {
+    alignItems: "center",
+    flex: 1,
+    height: "100%",
+    justifyContent: "flex-end",
+  },
+  teamCardContainer: {
+    backgroundColor: "#111C35",
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#1E2C4A",
+  },
+  coachInnerCard: {
+    backgroundColor: "#0B1327",
+    borderRadius: 14,
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
-  },
-  headerTextWrap: {
-    marginLeft: 16,
-    flex: 1,
+    borderWidth: 1,
+    borderColor: "#182542",
   },
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    backgroundColor: "#111C35",
+    borderRadius: 18,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#1E2C4A",
   },
   grid: {
     flexDirection: "row",

@@ -7,8 +7,8 @@ import {
   View,
 } from "react-native";
 import styles from "./styles/HomeAnalyticsPage";
-
 import { Coach } from "../Teams/Teams";
+import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
 
 export interface TeamAffiliation {
   team_id: string;
@@ -334,25 +334,7 @@ export function HomeAnalyticsPage({
 }
 
 function HomeSkeletonLoader() {
-  return (
-    <ScrollView
-      style={styles.dashboardContainer}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.skeletonPill, { width: 110, height: 28 }]} />
-      <View style={[styles.skeletonPill, { width: 220, height: 32, marginTop: 16 }]} />
-      <View style={[styles.skeletonPill, { width: 60, height: 4, marginTop: 6, marginBottom: 20 }]} />
-
-      <View style={styles.metricsGridRow}>
-        <View style={[styles.metricCard, styles.skeletonCard]} />
-        <View style={[styles.metricCard, styles.skeletonCard]} />
-      </View>
-      <View style={[styles.secondaryMetricCard, styles.skeletonCard, { height: 74, marginTop: 12 }]} />
-      <View style={[styles.graphCard, styles.skeletonCard, { height: 180, marginTop: 24 }]} />
-      <View style={[styles.teamCardContainer, styles.skeletonCard, { height: 200, marginTop: 24 }]} />
-    </ScrollView>
-  );
+  return <AthleteHomePageSkeleton />;
 }
 
 export const AthleteHomePage = HomeAnalyticsPage;

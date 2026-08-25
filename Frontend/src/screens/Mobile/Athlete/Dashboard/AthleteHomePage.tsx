@@ -273,10 +273,6 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     );
   }
 
-  if (loading) {
-    return <AthleteHomePageSkeleton />;
-  }
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
