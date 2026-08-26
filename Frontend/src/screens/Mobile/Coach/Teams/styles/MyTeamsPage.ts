@@ -2,7 +2,7 @@ import { Platform, StyleSheet } from "react-native";
 
 const fontBoldPlatform = Platform.select({
   ios: "System",
-  android: "sans-serif-black",
+  android: "sans-serif-medium",
   default: "sans-serif",
 });
 

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const fontBoldPlatform = Platform.select({
   ios: "System",
-  android: "sans-serif-black",
+  android: "sans-serif-medium",
   default: "sans-serif",
 });
 
