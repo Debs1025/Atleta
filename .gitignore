@@ -30,11 +30,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# OS Files
+# Editor & OS files
 .DS_Store
-Thumbs.db
-
-# Output artifacts
-*.pdf
-Backend/scratch/last_uploaded.jpg
-Backend/Atleta_Backend_Comprehensive_Guide.pdf
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
