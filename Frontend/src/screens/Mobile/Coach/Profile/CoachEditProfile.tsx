@@ -180,9 +180,19 @@ export function CoachEditProfile({
       })
       .toUpperCase();
 
-    const nameParts = form.full_name.trim().split(" ");
-    const firstName = nameParts[0] || currentProfile.first_name;
-    const lastName = nameParts.slice(1).join(" ") || currentProfile.last_name;
+    const nameParts = form.full_name.trim().split(/\s+/);
+    let firstName = currentProfile.first_name || "";
+    let lastName = currentProfile.last_name || "";
+
+    if (nameParts.length === 1) {
+      firstName = nameParts[0];
+      lastName = "";
+    } else if (nameParts.length > 1) {
+      // The last word is the surname/last name (e.g., "Pelonio")
+      // All preceding words form the first name (e.g., "Gerard Francis")
+      firstName = nameParts.slice(0, -1).join(" ");
+      lastName = nameParts[nameParts.length - 1];
+    }
     const updatedRoleTitle = `${form.sports_focus} COACH`;
 
     const docCredentials: CredentialItem[] = documents.map((doc) => ({
