@@ -1,0 +1,191 @@
+import { Platform, StyleSheet } from "react-native";
+
+const fontPlatform = Platform.select({
+  ios: "System",
+  android: "sans-serif-medium",
+  default: "sans-serif",
+});
+
+const fontBoldPlatform = Platform.select({
+  ios: "System",
+  android: "sans-serif-black",
+  default: "sans-serif",
+});
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#070D19",
+  },
+  fixedHeaderContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "#070D19",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 1,
+    fontFamily: fontBoldPlatform,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 120,
+  },
+  heroBannerCard: {
+    backgroundColor: "#0F172A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    padding: 20,
+    marginBottom: 28,
+    overflow: "hidden",
+  },
+  heroTagBadge: {
+    backgroundColor: "#0B132B",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
+  heroTagText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1,
+    fontFamily: fontBoldPlatform,
+  },
+  heroDescriptionText: {
+    color: "#94A3B8",
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: fontPlatform,
+  },
+  fieldGroup: {
+    marginBottom: 24,
+  },
+  fieldLabel: {
+    color: "#FFFFFF",
+    fontSize: 12.5,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    fontFamily: fontPlatform,
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  textInput: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
+    color: "#0F172A",
+    fontSize: 16,
+    fontWeight: "500",
+    fontFamily: fontPlatform,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 52,
+  },
+  fieldHint: {
+    color: "#64748B",
+    fontSize: 12,
+    marginTop: 8,
+    fontFamily: fontPlatform,
+  },
+  dropdownTrigger: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 52,
+  },
+  dropdownValueText: {
+    color: "#0F172A",
+    fontSize: 16,
+    fontWeight: "600",
+    fontFamily: fontPlatform,
+  },
+  dropdownPlaceholderText: {
+    color: "#64748B",
+    fontSize: 16,
+    fontFamily: fontPlatform,
+  },
+  dropdownMenu: {
+    backgroundColor: "#0F172A",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  dropdownOptionItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1E293B",
+  },
+  dropdownOptionSelected: {
+    backgroundColor: "#111C35",
+  },
+  dropdownOptionText: {
+    color: "#94A3B8",
+    fontSize: 14.5,
+    fontWeight: "700",
+    fontFamily: fontPlatform,
+  },
+  dropdownOptionTextSelected: {
+    color: "#00C8FF",
+    fontWeight: "900",
+  },
+  fixedBottomContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    backgroundColor: "#070D19",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+  },
+  primaryCtaButton: {
+    backgroundColor: "#0B132B",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    borderRadius: 8,
+    paddingVertical: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  primaryCtaDisabled: {
+    opacity: 0.5,
+  },
+  primaryCtaText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    fontFamily: fontBoldPlatform,
+  },
+});
+
+export default styles;

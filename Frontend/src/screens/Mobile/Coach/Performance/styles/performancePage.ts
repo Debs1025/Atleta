@@ -1,0 +1,212 @@
+import { StyleSheet, Platform } from "react-native";
+
+const fontPlatform = Platform.select({
+  ios: "System",
+  android: "sans-serif-medium",
+  default: "sans-serif",
+});
+
+const fontBoldPlatform = Platform.select({
+  ios: "System",
+  android: "sans-serif-black",
+  default: "sans-serif",
+});
+
+export const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#070D19",
+  },
+  headerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: "#070D19",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+  },
+  logoText: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 2,
+    fontFamily: fontBoldPlatform,
+  },
+  headerIconsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#00C8FF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 120,
+  },
+  pageTitle: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    fontFamily: fontBoldPlatform,
+  },
+  pageSubtitle: {
+    fontSize: 13,
+    color: "#94A3B8",
+    marginTop: 4,
+    marginBottom: 20,
+    fontFamily: fontPlatform,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0F172A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    paddingHorizontal: 14,
+    height: 48,
+    marginBottom: 16,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 14,
+    marginLeft: 10,
+    fontFamily: fontPlatform,
+  },
+  tabsScroll: {
+    marginBottom: 16,
+  },
+  tabsScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 16,
+  },
+  tabButton: {
+    marginRight: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  tabButtonActive: {
+    backgroundColor: "#00C8FF",
+    borderColor: "#00C8FF",
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+    fontFamily: fontPlatform,
+  },
+  tabTextActive: {
+    color: "#070D19",
+    fontWeight: "900",
+  },
+  athleteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0D192E",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0, 200, 255, 0.12)",
+  },
+  avatarBox: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: "#162238",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  cardCenter: {
+    flex: 1,
+    marginLeft: 14,
+    marginRight: 10,
+  },
+  athleteName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    fontFamily: fontBoldPlatform,
+  },
+  athleteSubline: {
+    fontSize: 12,
+    color: "#94A3B8",
+    marginTop: 2,
+    fontFamily: fontPlatform,
+  },
+  progressTrack: {
+    height: 4,
+    backgroundColor: "#162238",
+    borderRadius: 2,
+    marginTop: 10,
+    overflow: "hidden",
+    width: "80%",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#00C8FF",
+    borderRadius: 2,
+  },
+  cardRight: {
+    alignItems: "flex-end",
+  },
+  ratingValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    fontFamily: fontBoldPlatform,
+  },
+  ratingLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748B",
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+  seeMoreButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  seeMoreText: {
+    color: "#00C8FF",
+    fontWeight: "800",
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+});
+
+export default styles;
