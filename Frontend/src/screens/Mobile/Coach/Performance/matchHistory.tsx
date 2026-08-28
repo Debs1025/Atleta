@@ -7,7 +7,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MatchHistoryItem, MOCK_MATCH_HISTORY } from "../DataTypes";
+import { MatchHistoryItem } from "../DataTypes";
 import { styles } from "./styles/matchHistory";
 
 interface MatchHistoryProps {
@@ -20,7 +20,7 @@ interface MatchHistoryProps {
 export const MatchHistory: React.FC<MatchHistoryProps> = ({
   onClose,
   onSelectMatchItem,
-  historyItems = MOCK_MATCH_HISTORY,
+  historyItems = [],
   sportCategory,
 }) => {
   const insets = useSafeAreaInsets();

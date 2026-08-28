@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,95 +9,46 @@ import {
   Modal,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/createLog";
 import { SportCategory, AthleteRosterItem, MatchLogSessionState } from "./types";
 import { useMatchSession } from "./MatchSessionContext";
-
-// Sample Data
-const COACH_AVAILABLE_ROSTER: AthleteRosterItem[] = [
-  {
-    athlete_id: "ath_103",
-    jersey_number: "08",
-    last_name: "VILLAMOR",
-    full_name: "JAVI VILLAMOR",
-    position_or_event: "Power Forward",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
-    basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-  },
-  {
-    athlete_id: "ath_104",
-    jersey_number: "11",
-    last_name: "MENDOZA",
-    full_name: "ARIS MENDOZA",
-    position_or_event: "Point Guard",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150",
-    basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-  },
-  {
-    athlete_id: "ath_105",
-    jersey_number: "05",
-    last_name: "SANTOS",
-    full_name: "M. SANTOS",
-    position_or_event: "Center",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150",
-    basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-  },
-  {
-    athlete_id: "ath_106",
-    jersey_number: "10",
-    last_name: "PELONIO",
-    full_name: "G. PELONIO",
-    position_or_event: "Center",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
-    basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-  },
-  {
-    athlete_id: "ath_sw_01",
-    jersey_number: "01",
-    last_name: "CRUZ",
-    full_name: "DIEGO CRUZ",
-    position_or_event: "50m Freestyle",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150",
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false },
-  },
-  {
-    athlete_id: "ath_sw_02",
-    jersey_number: "04",
-    last_name: "REYES",
-    full_name: "SIENNA REYES",
-    position_or_event: "100m Butterfly",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-  },
-  {
-    athlete_id: "ath_tf_01",
-    jersey_number: "07",
-    last_name: "SANTOS",
-    full_name: "GABRIEL SANTOS",
-    position_or_event: "100m Sprint",
-    is_active_on_field: false,
-    avatar_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
-    timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-  },
-];
+import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
 
 interface CreateLogProps {
   onBack?: () => void;
   onStartLogging?: (session: MatchLogSessionState) => void;
 }
+
+const matchesSport = (athleteSport?: string, athletePosition?: string, targetSport?: string): boolean => {
+  if (!targetSport || targetSport.toUpperCase() === "ALL") return true;
+  const target = targetSport.toUpperCase().trim();
+  const sport = (athleteSport || "").toUpperCase().trim();
+  const pos = (athletePosition || "").toUpperCase().trim();
+
+  if (target.includes("BASKET")) {
+    if (sport.includes("BASKET")) return true;
+    if (["POINT GUARD", "SHOOTING GUARD", "SMALL FORWARD", "POWER FORWARD", "CENTER", "GUARD", "FORWARD"].some((p) => pos.includes(p))) return true;
+    return !sport;
+  }
+
+  if (target.includes("SWIM")) {
+    if (sport.includes("SWIM")) return true;
+    if (["FREESTYLE", "BUTTERFLY", "BREASTSTROKE", "BACKSTROKE", "MEDLEY", "SWIMMER", "50M", "100M", "200M"].some((p) => pos.includes(p))) return true;
+    return false;
+  }
+
+  if (target.includes("TRACK") || target.includes("FIELD")) {
+    if (sport.includes("TRACK") || sport.includes("FIELD")) return true;
+    if (["SPRINT", "HURDLES", "RELAY", "LONG JUMP", "HIGH JUMP", "JAVELIN", "SHOT PUT", "DISCUS", "RUNNER", "100M SPRINT"].some((p) => pos.includes(p))) return true;
+    return false;
+  }
+
+  return sport === target;
+};
 
 export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
   const insets = useSafeAreaInsets();
@@ -109,6 +60,8 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
     removeAthleteFromRoster,
   } = useMatchSession();
 
+  const [dbAthletes, setDbAthletes] = useState<AthleteRosterItem[]>([]);
+  const [loadingAthletes, setLoadingAthletes] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionDate, setSessionDate] = useState("");
   const [sessionTime, setSessionTime] = useState("");
@@ -118,8 +71,105 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [missingItems, setMissingItems] = useState<string[]>([]);
 
+  // Fetch sport-specific athletes from database
+  const fetchAthletesFromDb = useCallback(async (sport: SportCategory) => {
+    try {
+      setLoadingAthletes(true);
+      const token = await getStoredAuthToken();
+      const res = await fetch(`${API_BASE}/athletes?sport=${encodeURIComponent(sport)}`, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const rawList: any[] = Array.isArray(data.athletes)
+          ? data.athletes
+          : Array.isArray(data)
+          ? data
+          : [];
+
+        if (rawList.length > 0) {
+          const mapped: AthleteRosterItem[] = rawList
+            .filter((a) => matchesSport(a.sport_type, a.position || a.position_or_event, sport))
+            .map((a) => {
+              const fName = a.first_name || "";
+              const lName = a.last_name || "";
+              const fullName = a.full_name || `${fName} ${lName}`.trim() || "Athlete";
+              return {
+                athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}_${Math.random()}`,
+                jersey_number: String(a.jersey_number ?? "00"),
+                last_name: lName || fullName.split(" ").slice(-1)[0] || "",
+                full_name: fullName.toUpperCase(),
+                position_or_event:
+                  a.position ||
+                  a.position_or_event ||
+                  (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : "100m"),
+                is_active_on_field: false,
+                avatar_url: a.avatar_url,
+                sport_type: a.sport_type || sport,
+                basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
+                timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
+              };
+            });
+
+          setDbAthletes(mapped);
+          return;
+        }
+      }
+
+      // Fallback to scouting endpoint
+      const scoutRes = await fetch(`${API_BASE}/scouting/athletes?sport=${encodeURIComponent(sport)}`, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+      if (Array.isArray(scoutRes) && scoutRes.length > 0) {
+        const mapped: AthleteRosterItem[] = scoutRes
+          .filter((a) => matchesSport(a.sport_type, a.position || a.position_or_event, sport))
+          .map((a) => {
+            const fName = a.first_name || "";
+            const lName = a.last_name || "";
+            const fullName = `${fName} ${lName}`.trim() || "Athlete";
+            return {
+              athlete_id: a.athlete_id || `ath_${Date.now()}_${Math.random()}`,
+              jersey_number: "00",
+              last_name: lName,
+              full_name: fullName.toUpperCase(),
+              position_or_event: a.position || (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : "100m"),
+              is_active_on_field: false,
+              sport_type: a.sport_type || sport,
+              basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
+              timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
+            };
+          });
+        setDbAthletes(mapped);
+      } else {
+        setDbAthletes([]);
+      }
+    } catch (err) {
+      console.warn("Could not fetch sport athletes from database:", err);
+      setDbAthletes([]);
+    } finally {
+      setLoadingAthletes(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAthletesFromDb(session.sport_type);
+  }, [session.sport_type, fetchAthletesFromDb]);
+
   const handleSelectSport = (sport: SportCategory) => {
     setSportCategory(sport);
+    // Filter active roster to only include athletes matching newly selected sport
+    const retainedRoster = session.active_roster.filter((a) =>
+      matchesSport(a.sport_type, a.position_or_event, sport)
+    );
+    setSessionDetails({ active_roster: retainedRoster });
   };
 
   const handleUpdateDate = (dateVal: string) => {
@@ -138,7 +188,7 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
     const missing: string[] = [];
 
     if (session.active_roster.length === 0) {
-      missing.push("Select at least 1 athlete for the roster");
+      missing.push(`Select at least 1 ${session.sport_type.toLowerCase()} athlete for the roster`);
     }
     if (!sessionDate.trim()) {
       missing.push("Date schedule (mm/dd/yyyy)");
@@ -179,11 +229,19 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
     setShowSuccessModal(true);
   };
 
-  const filteredPool = COACH_AVAILABLE_ROSTER.filter(
-    (a) =>
-      !session.active_roster.some((item) => item.athlete_id === a.athlete_id) &&
-      a.full_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPool = useMemo(() => {
+    return dbAthletes.filter((a) => {
+      const alreadySelected = session.active_roster.some((item) => item.athlete_id === a.athlete_id);
+      if (alreadySelected) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        a.full_name.toLowerCase().includes(q) ||
+        a.position_or_event.toLowerCase().includes(q) ||
+        String(a.jersey_number).includes(q)
+      );
+    });
+  }, [dbAthletes, session.active_roster, searchQuery]);
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 28) + 44 }]}>
@@ -294,7 +352,13 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
               if (text.length > 0) setShowAddModal(true);
             }}
           />
-          <Ionicons name="person-add-outline" size={20} color="#5C6B82" style={styles.searchIcon} />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchIcon} activeOpacity={0.7}>
+              <Ionicons name="close-circle" size={20} color="#8E9BAE" />
+            </TouchableOpacity>
+          ) : (
+            <Ionicons name="person-add-outline" size={20} color="#5C6B82" style={styles.searchIcon} />
+          )}
         </View>
 
         {/* Selected Athletes Cards List */}
@@ -448,13 +512,38 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Available Athletes Under Coach</Text>
+              <Text style={styles.modalTitle}>Available {session.sport_type} Athletes</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
-            {filteredPool.length > 0 ? (
+            {/* In-Modal Search Input */}
+            <View style={[styles.searchContainer, { marginBottom: 14 }]}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder={`Search ${session.sport_type.toLowerCase()} athlete...`}
+                placeholderTextColor="#5C6B82"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchIcon} activeOpacity={0.7}>
+                  <Ionicons name="close-circle" size={20} color="#8E9BAE" />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons name="search-outline" size={20} color="#5C6B82" style={styles.searchIcon} />
+              )}
+            </View>
+
+            {loadingAthletes ? (
+              <View style={{ paddingVertical: 32, alignItems: "center" }}>
+                <ActivityIndicator size="large" color="#00D2FF" />
+                <Text style={{ color: "#8E9BAE", fontSize: 13, marginTop: 10 }}>
+                  Fetching {session.sport_type.toLowerCase()} athletes from database...
+                </Text>
+              </View>
+            ) : filteredPool.length > 0 ? (
               <ScrollView style={{ maxHeight: 320 }} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                 {filteredPool.map((item) => (
                   <TouchableOpacity
@@ -477,9 +566,12 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
                 ))}
               </ScrollView>
             ) : (
-              <View style={{ paddingVertical: 20, alignItems: "center" }}>
-                <Text style={{ color: "#8E9BAE", fontSize: 14 }}>
-                  {searchQuery ? "No matching athletes found." : "All registered team athletes are already added to roster."}
+              <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                <Ionicons name="people-outline" size={32} color="#64748B" />
+                <Text style={{ color: "#8E9BAE", fontSize: 14, marginTop: 8, textAlign: "center" }}>
+                  {searchQuery
+                    ? `No ${session.sport_type} athletes match "${searchQuery}".`
+                    : `No registered ${session.sport_type} athletes found in database.`}
                 </Text>
               </View>
             )}

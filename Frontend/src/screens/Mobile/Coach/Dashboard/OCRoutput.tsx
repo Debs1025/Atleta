@@ -14,9 +14,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/OCRoutput";
 
 // Client State Schema Models
+export interface TeamScoreItem {
+    team: string;
+    score: number;
+}
+
 export interface DetectedAthleteStat {
     athlete_id: string;
     player_name: string;
+    team_name?: string;
+    jersey_number?: number;
     // Dynamic metrics per sport
     pts?: number;
     ast?: number;
@@ -64,6 +71,11 @@ export interface ExpandedPerformanceMetrics {
 
 export interface RawOCRDetectedData {
     team_name: string;
+    opponent_team_name?: string;
+    final_score?: string;
+    game_result?: string;
+    team_scores?: TeamScoreItem[];
+    teams?: string[];
     sport_type: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD";
     athlete_overview: DetectedAthleteStat[];
     expanded_metrics: ExpandedPerformanceMetrics;
@@ -78,13 +90,19 @@ interface OCRoutputProps {
 // Sample Default Basketball Raw OCR Output
 const DEFAULT_RAW_BASKETBALL_OCR: RawOCRDetectedData = {
     team_name: "CAMARINES SUR PANTHERS",
+    opponent_team_name: "NAGA CITY WARRIORS",
     sport_type: "BASKETBALL",
+    teams: ["CAMARINES SUR PANTHERS", "NAGA CITY WARRIORS"],
+    team_scores: [
+        { team: "CAMARINES SUR PANTHERS", score: 85 },
+        { team: "NAGA CITY WARRIORS", score: 78 },
+    ],
     athlete_overview: [
-        { athlete_id: "ath_1", player_name: "MARCUS V. STEPHENS", pts: 24, ast: 4, to: 8, reb: 11, stl: 3, blk: 2, min: 32, fg_pct: "52%" },
-        { athlete_id: "ath_2", player_name: "JAKE L. RODRIGUEZ", pts: 18, ast: 6, to: 2, reb: 5, stl: 2, blk: 0, min: 28, fg_pct: "48%" },
-        { athlete_id: "ath_3", player_name: "CHEN W. ZHAO", pts: 12, ast: 2, to: 0, reb: 7, stl: 1, blk: 1, min: 24, fg_pct: "60%" },
-        { athlete_id: "ath_4", player_name: "TYSON K. REED", pts: 9, ast: 1, to: 3, reb: 4, stl: 0, blk: 0, min: 18, fg_pct: "41%" },
-        { athlete_id: "ath_5", player_name: "OMAR AL-FADIL", pts: 7, ast: 3, to: 1, reb: 2, stl: 1, blk: 0, min: 15, fg_pct: "38%" },
+        { athlete_id: "ath_1", player_name: "MARCUS V. STEPHENS", team_name: "CAMARINES SUR PANTHERS", pts: 24, ast: 4, to: 8, reb: 11, stl: 3, blk: 2, min: 32, fg_pct: "52%" },
+        { athlete_id: "ath_2", player_name: "JAKE L. RODRIGUEZ", team_name: "CAMARINES SUR PANTHERS", pts: 18, ast: 6, to: 2, reb: 5, stl: 2, blk: 0, min: 28, fg_pct: "48%" },
+        { athlete_id: "ath_3", player_name: "CHEN W. ZHAO", team_name: "CAMARINES SUR PANTHERS", pts: 12, ast: 2, to: 0, reb: 7, stl: 1, blk: 1, min: 24, fg_pct: "60%" },
+        { athlete_id: "ath_4", player_name: "TYSON K. REED", team_name: "NAGA CITY WARRIORS", pts: 19, ast: 4, to: 3, reb: 8, stl: 1, blk: 1, min: 26, fg_pct: "46%" },
+        { athlete_id: "ath_5", player_name: "OMAR AL-FADIL", team_name: "NAGA CITY WARRIORS", pts: 15, ast: 5, to: 2, reb: 4, stl: 2, blk: 0, min: 22, fg_pct: "44%" },
     ],
     expanded_metrics: {
         shooting_efficiency: {
@@ -116,15 +134,41 @@ export function OCRoutput({
     // Inline Editing Mode State
     const [isEditing, setIsEditing] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>("ALL");
 
     // Dynamic Editable Athletes Data State
     const [athleteStats, setAthleteStats] = useState<DetectedAthleteStat[]>(
         rawOCRData.athlete_overview
     );
 
-    // Dynamic Totals Calculation
+    // List of all detected unique teams
+    const teamList = useMemo(() => {
+        const set = new Set<string>();
+        if (rawOCRData.teams && Array.isArray(rawOCRData.teams)) {
+            rawOCRData.teams.forEach((t) => set.add(String(t).trim()));
+        }
+        if (rawOCRData.team_scores && Array.isArray(rawOCRData.team_scores)) {
+            rawOCRData.team_scores.forEach((t) => set.add(String(t.team).trim()));
+        }
+        if (rawOCRData.team_name) set.add(String(rawOCRData.team_name).trim());
+        if (rawOCRData.opponent_team_name) set.add(String(rawOCRData.opponent_team_name).trim());
+        athleteStats.forEach((a) => {
+            if (a.team_name) set.add(String(a.team_name).trim());
+        });
+        return Array.from(set).filter((t) => t.length > 0);
+    }, [rawOCRData, athleteStats]);
+
+    // Filtered athlete list based on active team filter tab
+    const visibleAthletes = useMemo(() => {
+        if (selectedTeamFilter === "ALL") return athleteStats;
+        return athleteStats.filter(
+            (a) => (a.team_name || "").toUpperCase() === selectedTeamFilter.toUpperCase()
+        );
+    }, [athleteStats, selectedTeamFilter]);
+
+    // Dynamic Totals Calculation based on visible athletes
     const totals = useMemo(() => {
-        return athleteStats.reduce(
+        return visibleAthletes.reduce(
             (acc, curr) => {
                 acc.pts += curr.pts || 0;
                 acc.ast += curr.ast || 0;
@@ -137,17 +181,19 @@ export function OCRoutput({
             },
             { pts: 0, ast: 0, to: 0, reb: 0, stl: 0, blk: 0, min: 0 }
         );
-    }, [athleteStats]);
+    }, [visibleAthletes]);
 
     // Stat Cell Edit Handler
     const handleStatChange = useCallback(
-        (index: number, field: keyof DetectedAthleteStat, value: string) => {
+        (targetAthleteId: string, field: keyof DetectedAthleteStat, value: string) => {
             setAthleteStats((prev) => {
                 const updated = [...prev];
+                const itemIdx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
+                if (itemIdx === -1) return prev;
                 const numVal = parseInt(value, 10);
-                updated[index] = {
-                    ...updated[index],
-                    [field]: isNaN(numVal) ? value : numVal,
+                updated[itemIdx] = {
+                    ...updated[itemIdx],
+                    [field]: isNaN(numVal) ? 0 : numVal,
                 };
                 return updated;
             });
@@ -155,17 +201,37 @@ export function OCRoutput({
         []
     );
 
+    // Team Toggle Handler: Switch athlete between Home and Away team with 1 tap
+    const handleToggleTeam = useCallback(
+        (targetAthleteId: string) => {
+            setAthleteStats((prev) => {
+                const updated = [...prev];
+                const itemIdx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
+                if (itemIdx === -1) return prev;
+                const current = (updated[itemIdx].team_name || "").toUpperCase();
+                const home = (rawOCRData.team_name || "HOME").toUpperCase();
+                const away = (rawOCRData.opponent_team_name || "AWAY").toUpperCase();
+                const nextTeam = current === home ? away : home;
+                updated[itemIdx] = {
+                    ...updated[itemIdx],
+                    team_name: nextTeam,
+                };
+                return updated;
+            });
+        },
+        [rawOCRData]
+    );
+
     // Confirm & Save Action Handler
     const handleSave = useCallback(() => {
-        /* 
-         =============================================================================
-         [BACKEND API INTEGRATION POINT]:
-         Replace this with remote API sync if needed:
-         await fetch('YOUR_BACKEND_API_URL/ocr/confirm-stats', ...);
-         =============================================================================
-        */
+        if (onConfirmSave) {
+            onConfirmSave({
+                ...rawOCRData,
+                athlete_overview: athleteStats,
+            });
+        }
         setShowSuccessModal(true);
-    }, []);
+    }, [rawOCRData, athleteStats, onConfirmSave]);
 
     const isBasketball = rawOCRData.sport_type === "BASKETBALL";
     const isSwimming = rawOCRData.sport_type === "SWIMMING";
@@ -199,29 +265,90 @@ export function OCRoutput({
             >
                 {/* TITLE SECTION WITH UNDERLINE */}
                 <View style={styles.topTitleSection}>
-                    <Text style={styles.screenTitle}>DETECTED TEAM STATISTICS (RAW)</Text>
+                    <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
                     <View style={styles.accentUnderline} />
                 </View>
 
+                {/* DUAL TEAM SCOREBOARD */}
+                {teamList.length > 1 && (
+                    <View style={styles.scoreboardCard}>
+                        <View style={styles.scoreboardHeader}>
+                            <Text style={styles.scoreboardTitle}>MATCH SCOREBOARD</Text>
+                            {rawOCRData.final_score ? (
+                                <Text style={{ color: "#00C8FF", fontSize: 12, fontWeight: "800" }}>
+                                    FINAL: {rawOCRData.final_score}
+                                </Text>
+                            ) : null}
+                        </View>
+                        <View style={styles.scoreboardMatchScore}>
+                            <View style={styles.teamScoreBox}>
+                                <Text style={styles.teamScoreName} numberOfLines={1}>{teamList[0]}</Text>
+                                <Text style={styles.teamScoreNum}>
+                                    {rawOCRData.team_scores?.find((t) => t.team.toUpperCase() === teamList[0].toUpperCase())?.score ??
+                                        athleteStats.filter((a) => (a.team_name || "").toUpperCase() === teamList[0].toUpperCase()).reduce((s, p) => s + (p.pts || 0), 0)} PTS
+                                </Text>
+                            </View>
+                            <Text style={styles.vsText}>VS</Text>
+                            <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
+                                <Text style={styles.teamScoreName} numberOfLines={1}>{teamList[1]}</Text>
+                                <Text style={styles.teamScoreNum}>
+                                    {rawOCRData.team_scores?.find((t) => t.team.toUpperCase() === teamList[1].toUpperCase())?.score ??
+                                        athleteStats.filter((a) => (a.team_name || "").toUpperCase() === teamList[1].toUpperCase()).reduce((s, p) => s + (p.pts || 0), 0)} PTS
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                )}
+
                 {/* TEAM IDENTITY CARD */}
                 <View style={styles.cardSection}>
-                    <Text style={styles.subLabel}>TEAM IDENTITY</Text>
+                    <Text style={styles.subLabel}>MATCH IDENTITY</Text>
                     <View style={styles.cardDivider} />
                     <View style={styles.twoColumnGrid}>
                         <View style={styles.identityCol}>
-                            <Text style={styles.identityLabel}>TEAM_NAME:</Text>
+                            <Text style={styles.identityLabel}>HOME_TEAM:</Text>
                             <Text style={styles.identityValue}>{rawOCRData.team_name}</Text>
                         </View>
                         <View style={styles.identityCol}>
-                            <Text style={styles.identityLabel}>SPORT:</Text>
-                            <Text style={styles.identityValue}>{rawOCRData.sport_type}</Text>
+                            <Text style={styles.identityLabel}>OPPONENT:</Text>
+                            <Text style={styles.identityValue}>{rawOCRData.opponent_team_name || "N/A"}</Text>
                         </View>
                     </View>
                 </View>
 
+                {/* TEAM SELECTOR FILTER TABS */}
+                {teamList.length > 1 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                        <View style={styles.teamFilterRow}>
+                            <TouchableOpacity
+                                style={[styles.teamFilterChip, selectedTeamFilter === "ALL" && styles.teamFilterChipActive]}
+                                onPress={() => setSelectedTeamFilter("ALL")}
+                            >
+                                <Text style={[styles.teamFilterText, selectedTeamFilter === "ALL" && styles.teamFilterTextActive]}>
+                                    ALL PLAYERS ({athleteStats.length})
+                                </Text>
+                            </TouchableOpacity>
+                            {teamList.map((tName) => {
+                                const count = athleteStats.filter((a) => (a.team_name || "").toUpperCase() === tName.toUpperCase()).length;
+                                return (
+                                    <TouchableOpacity
+                                        key={tName}
+                                        style={[styles.teamFilterChip, selectedTeamFilter === tName && styles.teamFilterChipActive]}
+                                        onPress={() => setSelectedTeamFilter(tName)}
+                                    >
+                                        <Text style={[styles.teamFilterText, selectedTeamFilter === tName && styles.teamFilterTextActive]}>
+                                            {tName} ({count})
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </ScrollView>
+                )}
+
                 {/* PERFORMANCE METRICS HEADER */}
                 <View style={styles.subLabelHeaderRow}>
-                    <Text style={styles.subLabel}>PERFORMANCE METRICS (ATHLETE OVERVIEW)</Text>
+                    <Text style={styles.subLabel}>PERFORMANCE METRICS ({selectedTeamFilter})</Text>
                     <Text style={styles.swipeHintText}>Swipe right →</Text>
                 </View>
 
@@ -278,11 +405,35 @@ export function OCRoutput({
                             </View>
 
                             {/* Table Data Rows */}
-                            {athleteStats.map((item, idx) => (
-                                <View key={item.athlete_id || idx} style={styles.tableDataRow}>
-                                    <Text style={styles.cellNameText} numberOfLines={1}>
-                                        {item.player_name}
-                                    </Text>
+                            {visibleAthletes.map((item) => (
+                                <View key={item.athlete_id} style={styles.tableDataRow}>
+                                    <View style={{ width: 150 }}>
+                                        <Text style={styles.cellNameText} numberOfLines={1}>
+                                            {item.player_name}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={() => handleToggleTeam(item.athlete_id)}
+                                            activeOpacity={0.7}
+                                            style={[
+                                                styles.playerTeamBadge,
+                                                (item.team_name || "").toUpperCase() === (rawOCRData.team_name || "").toUpperCase()
+                                                    ? { borderColor: "#00C8FF", backgroundColor: "rgba(0, 200, 255, 0.12)" }
+                                                    : { borderColor: "#F59E0B", backgroundColor: "rgba(245, 158, 11, 0.12)" }
+                                            ]}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.playerTeamText,
+                                                    (item.team_name || "").toUpperCase() === (rawOCRData.team_name || "").toUpperCase()
+                                                        ? { color: "#00C8FF" }
+                                                        : { color: "#F59E0B" }
+                                                ]}
+                                                numberOfLines={1}
+                                            >
+                                                {item.team_name || "ASSIGN"} ⇄
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
 
                                     {isBasketball && (
                                         <>
@@ -292,43 +443,43 @@ export function OCRoutput({
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.pts ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "pts", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "pts", val)}
                                                     />
                                                     <TextInput
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.ast ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "ast", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "ast", val)}
                                                     />
                                                     <TextInput
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.to ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "to", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "to", val)}
                                                     />
                                                     <TextInput
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.reb ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "reb", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "reb", val)}
                                                     />
                                                     <TextInput
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.stl ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "stl", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "stl", val)}
                                                     />
                                                     <TextInput
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.blk ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "blk", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "blk", val)}
                                                     />
                                                     <TextInput
                                                         style={styles.cellStatInput}
                                                         keyboardType="number-pad"
                                                         value={String(item.min ?? 0)}
-                                                        onChangeText={(val) => handleStatChange(idx, "min", val)}
+                                                        onChangeText={(val) => handleStatChange(item.athlete_id, "min", val)}
                                                     />
                                                     <Text style={styles.cellStatText}>{item.fg_pct || "50%"}</Text>
                                                 </>

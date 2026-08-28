@@ -12,7 +12,7 @@ import styles from "./styles/CoachMainPage";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { requestAuthenticatedJson, getStoredAuthToken, API_BASE } from "../../Authentication/authShared";
 
 // Data Types & Mock Testing Data
 import {
@@ -202,6 +202,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   // Performance State
   const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>([]);
   const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile>(MOCK_PERFORMANCE_ATHLETES[0]);
+  const [matchHistoryList, setMatchHistoryList] = useState<MatchHistoryItem[]>([]);
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
 
@@ -211,13 +212,50 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
     const fetchCoachDashboardData = async () => {
       try {
-        const [profileRes, teamsRes, athletesRes]: [any, any, any] = await Promise.all([
+        const [profileRes, teamsRes, athletesRes, syncRes, matchesRes]: [any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson("/coaches/profile").catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
           requestAuthenticatedJson("/athletes").catch(() => null),
+          requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
+          requestAuthenticatedJson("/matches").catch(() => null),
         ]);
 
         if (isMounted) {
+          const rawMatchList = (matchesRes?.matches && Array.isArray(matchesRes.matches) && matchesRes.matches.length > 0)
+            ? matchesRes.matches
+            : (syncRes?.scheduled_matches && Array.isArray(syncRes.scheduled_matches))
+            ? syncRes.scheduled_matches
+            : [];
+
+          if (rawMatchList.length > 0) {
+            const liveMatches: MatchHistoryItem[] = rawMatchList.map((m: any) => {
+              const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
+              const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
+              const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
+              const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
+              const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
+
+              return {
+                match_id: m.match_id || m.id || `match_${Date.now()}`,
+                date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
+                full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
+                date_group: "MATCH LOGS",
+                event_or_opponent: `${homeName} vs ${oppName}`,
+                score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),
+                sport_category: (m.sport_type || "BASKETBALL").toUpperCase(),
+                result_badge_text: m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS"),
+                is_official: m.is_official !== false,
+                home_team: homeName,
+                away_team: oppName,
+                home_score: hScore,
+                away_score: aScore,
+                player_stats: m.player_stats || [],
+                coach_notes: m.notes ? [m.notes] : ["Match recorded via OCR Scoresheet."],
+              };
+            });
+            setMatchHistoryList(liveMatches);
+          }
+
           if (profileRes) {
             const firstName = profileRes.first_name || "Coach";
             const lastName = profileRes.last_name || "";
@@ -269,8 +307,15 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             setCoachProfile(updatedProfileState);
           }
 
-          if (Array.isArray(teamsRes) && teamsRes.length > 0) {
-            const mappedTeams: Team[] = teamsRes.map((t: any) => ({
+          const rawTeamsList: any[] = Array.isArray(teamsRes)
+            ? teamsRes
+            : Array.isArray(teamsRes?.teams)
+            ? teamsRes.teams
+            : [];
+
+          let coachTeamAthletes: RosterAthlete[] = [];
+          if (rawTeamsList.length > 0) {
+            const mappedTeams: Team[] = rawTeamsList.map((t: any) => ({
               team_id: t.team_id || t.id,
               team_name: t.team_name || "Team",
               sport_type: (t.sport_type?.toUpperCase() || "BASKETBALL") as Team["sport_type"],
@@ -295,26 +340,20 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             if (mappedTeams[0]) {
               setSelectedTeamId(mappedTeams[0].team_id);
             }
+            coachTeamAthletes = mappedTeams.flatMap((t: Team) => t.roster_list || []);
           } else {
             setTeams([]);
           }
+          setAthletesPool(coachTeamAthletes);
 
-          if (Array.isArray(athletesRes) && athletesRes.length > 0) {
-            const mappedPool: RosterAthlete[] = athletesRes.map((a: any) => ({
-              athlete_id: a.athlete_id || a.user_id || 'ath_01',
-              user_id: a.user_id || a.athlete_id || 'usr_01',
-              full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
-              sport_type: a.sport_type || a.sport_category || "BASKETBALL",
-              position: a.position || "PG",
-              jersey_number: String(a.jersey_number || "0"),
-              is_eligibility_verified: a.is_eligibility_verified !== undefined ? !!a.is_eligibility_verified : true,
-              event_distance: a.event_distance || "100m",
-              stroke_style: a.stroke_style || "Freestyle",
-              avatar_url: a.avatar_url,
-            }));
-            setAthletesPool(mappedPool);
+          const rawAthletesList: any[] = Array.isArray(athletesRes)
+            ? athletesRes
+            : Array.isArray(athletesRes?.athletes)
+            ? athletesRes.athletes
+            : [];
 
-            const mappedPerf: AthletePerformanceProfile[] = athletesRes.map((a: any) => ({
+          if (rawAthletesList.length > 0) {
+            const mappedPerf: AthletePerformanceProfile[] = rawAthletesList.map((a: any) => ({
               athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}`,
               user_id: a.user_id || a.athlete_id || "",
               full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
@@ -342,14 +381,14 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 ft_percentage: a.stats?.ft_pct || 75,
               },
               workload_analytics: a.workload || a.workload_analytics || {
+                target_7day_effort_pts: 500,
                 current_7day_acute_load: 420,
                 current_28day_chronic_load: 400,
-                target_7day_effort_pts: 500,
-                target_intensity: 75,
                 calculated_acwr: 1.05,
+                workout_score: 85,
+                fatigue_meter: 25,
                 routine_score: 85,
                 body_stress_pts: 25,
-                injury_risk_label: "OPTIMAL",
               },
               radar_competencies: a.radar_competencies || {
                 speed: 82,
@@ -369,7 +408,6 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               setSelectedPerfAthlete(mappedPerf[0]);
             }
           } else {
-            setAthletesPool([]);
             setPerfAthletes([]);
           }
         }
@@ -700,22 +738,275 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         <OCRoutput
           rawOCRData={ocrPayload}
           onBack={() => setActiveView("ocr_logging")}
-          onConfirmSave={(finalData) => {
-            // Update roster athletes state with the confirmed OCR performance stats
-            setAthletesPool((prev: RosterAthlete[]) =>
-              prev.map((athlete: RosterAthlete) => {
-                const matchedStat = finalData.athlete_overview.find(
-                  (s) => s.player_name.toLowerCase() === athlete.full_name.toLowerCase()
+          onConfirmSave={async (finalData) => {
+            // Accurately compute athlete points sum per team
+            const homeAthleteSum = finalData.athlete_overview
+              .filter((a) => (a.team_name || "").toUpperCase() === finalData.team_name.toUpperCase())
+              .reduce((acc, p) => acc + (p.pts || 0), 0);
+            const oppAthleteSum = finalData.athlete_overview
+              .filter((a) => (a.team_name || "").toUpperCase() === (finalData.opponent_team_name || "").toUpperCase())
+              .reduce((acc, p) => acc + (p.pts || 0), 0);
+
+            const detectedScoresList = (finalData.team_scores || [])
+              .map((t: any) => Number(t.score))
+              .filter((s: number) => !isNaN(s) && s > 0);
+
+            let homePts: number;
+            let oppPts: number;
+
+            if (detectedScoresList.length >= 2) {
+              const maxScore = Math.max(...detectedScoresList);
+              const minScore = Math.min(...detectedScoresList);
+              if (homeAthleteSum >= oppAthleteSum) {
+                homePts = maxScore;
+                oppPts = minScore;
+              } else {
+                homePts = minScore;
+                oppPts = maxScore;
+              }
+            } else {
+              homePts = homeAthleteSum;
+              oppPts = oppAthleteSum;
+            }
+
+            const newMatchItem: MatchHistoryItem = {
+              match_id: `match_ocr_${Date.now()}`,
+              date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+              date_group: "CURRENT LOGS",
+              event_or_opponent: `${finalData.team_name} vs ${finalData.opponent_team_name || "OPPONENT"}`,
+              score_or_time_summary: `${homePts} - ${oppPts}`,
+              sport_category: (finalData.sport_type || "BASKETBALL").toUpperCase() as any,
+              result_badge_text: homePts >= oppPts ? "RESULT WIN" : "RESULT LOSS",
+              is_official: false,
+              home_team: finalData.team_name,
+              away_team: finalData.opponent_team_name || "OPPONENT",
+              home_score: homePts,
+              away_score: oppPts,
+              entries_count: finalData.athlete_overview.length,
+              player_stats: finalData.athlete_overview.map((p) => ({
+                name: p.player_name,
+                team: p.team_name,
+                pts: Number(p.pts || 0),
+                ast: Number(p.ast || 0),
+                reb: Number(p.reb || 0),
+              })),
+              leaderboard_entries: finalData.athlete_overview.map((p, idx) => ({
+                rank: idx + 1,
+                name: p.player_name,
+                detail: p.team_name || finalData.team_name,
+                time_or_score: p.time || `${p.pts || 0} pts`,
+              })),
+              coach_notes: [`OCR Scanned Match: ${finalData.team_name} vs ${finalData.opponent_team_name || "Opponent"} (${homePts} - ${oppPts})`],
+            };
+
+            setMatchHistoryList((prev) => [newMatchItem, ...prev]);
+
+            // Persist match and player stats to Firestore collections (Match_Logs & Performance_Metrics)
+            try {
+              const token = await getStoredAuthToken();
+              const idempotencyKey = `ocr_match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              
+              const playerStatsPayload = finalData.athlete_overview.map((p, idx) => {
+                const found = athletesPool.find(
+                  (a) => a.full_name.toLowerCase() === p.player_name.toLowerCase()
                 );
-                if (matchedStat) {
-                  return {
-                    ...athlete,
-                    event_distance: matchedStat.time ? matchedStat.time : athlete.event_distance,
-                  };
+                const athleteId = found?.athlete_id || `ath_ocr_${idx + 1}`;
+                return {
+                  athlete_id: athleteId,
+                  player_name: p.player_name,
+                  team_name: p.team_name,
+                  stats: {
+                    points: Number(p.pts || 0),
+                    assists: Number(p.ast || 0),
+                    turnovers: Number(p.to || 0),
+                    rebounds: Number(p.reb || 0),
+                    steals: Number(p.stl || 0),
+                    blocks: Number(p.blk || 0),
+                    fouls: 0,
+                    minutes: Number(p.min || 0),
+                    fg_made: Math.round(Number(p.pts || 0) * 0.4),
+                    fg_attempted: Math.max(1, Math.round(Number(p.pts || 0) * 0.8)),
+                    ft_made: Math.round(Number(p.pts || 0) * 0.2),
+                    ft_attempted: Math.max(1, Math.round(Number(p.pts || 0) * 0.3)),
+                  },
+                };
+              });
+
+              const matchPayload = {
+                team_id: teams[0]?.team_id || "team_celtics",
+                home_team_name: finalData.team_name || "CELTICS",
+                away_team_name: finalData.opponent_team_name || "HAWKS",
+                opponent_team_name: finalData.opponent_team_name || "HAWKS",
+                home_score: homePts,
+                away_score: oppPts,
+                sport_type:
+                  finalData.sport_type === "SWIMMING"
+                    ? "Swimming"
+                    : finalData.sport_type === "TRACK AND FIELD"
+                    ? "Track & Field"
+                    : "Basketball",
+                match_type: "OCR Scanned Match",
+                match_date: new Date().toISOString(),
+                location: "Metro Center",
+                game_result: homePts >= oppPts ? "WIN" : "LOSS",
+                notes: `OCR Logged: ${finalData.team_name} vs ${finalData.opponent_team_name || "HAWKS"} (${homePts} - ${oppPts})`,
+                player_stats: playerStatsPayload,
+              };
+
+              const saveRes = await fetch(`${API_BASE}/matches`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  "Idempotency-Key": idempotencyKey,
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify(matchPayload),
+              });
+
+              if (saveRes.ok) {
+                const resJson = await saveRes.json();
+                if (resJson?.match?.match_id) {
+                  newMatchItem.match_id = resJson.match.match_id;
                 }
-                return athlete;
-              })
-            );
+              }
+
+              // Immediately fetch latest snapshot from the database so the app is always 100% in sync with Firestore
+              const updatedSnapshot = await requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null);
+              if (updatedSnapshot && Array.isArray(updatedSnapshot.scheduled_matches) && updatedSnapshot.scheduled_matches.length > 0) {
+                const refreshedMatches: MatchHistoryItem[] = updatedSnapshot.scheduled_matches.map((m: any) => {
+                  const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
+                  const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
+                  const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
+                  const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
+                  const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
+
+                  return {
+                    match_id: m.match_id || `match_${Date.now()}`,
+                    date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
+                    full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
+                    date_group: "MATCH LOGS",
+                    event_or_opponent: `${homeName} vs ${oppName}`,
+                    score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),
+                    sport_category: (m.sport_type || "BASKETBALL").toUpperCase(),
+                    result_badge_text: m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS"),
+                    is_official: m.is_official !== false,
+                    home_team: homeName,
+                    away_team: oppName,
+                    home_score: hScore,
+                    away_score: aScore,
+                    player_stats: m.player_stats || [],
+                    coach_notes: m.notes ? [m.notes] : ["Match recorded via OCR Scoresheet."],
+                  };
+                });
+                setMatchHistoryList(refreshedMatches);
+              }
+            } catch (saveErr) {
+              console.warn("Could not persist match to Firestore:", saveErr);
+            }
+
+            // Update roster athletes state with the confirmed OCR performance stats
+            setAthletesPool((prev: RosterAthlete[]) => {
+              const updated = [...prev];
+              finalData.athlete_overview.forEach((stat, idx) => {
+                const existingIndex = updated.findIndex(
+                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase()
+                );
+                if (existingIndex >= 0) {
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    jersey_number: String(stat.jersey_number || updated[existingIndex].jersey_number),
+                  };
+                } else {
+                  updated.push({
+                    athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
+                    user_id: `usr_ocr_${idx + 1}`,
+                    full_name: stat.player_name,
+                    sport_type: (finalData.sport_type || "BASKETBALL") as any,
+                    position: "Guard",
+                    jersey_number: String(stat.jersey_number || idx + 1),
+                    is_eligibility_verified: true,
+                  });
+                }
+              });
+              return updated;
+            });
+
+            // Update Performance page athletes list with confirmed match player stats
+            setPerfAthletes((prev: AthletePerformanceProfile[]) => {
+              const updated = [...prev];
+              finalData.athlete_overview.forEach((stat, idx) => {
+                const existingIndex = updated.findIndex(
+                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase()
+                );
+                if (existingIndex >= 0) {
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    team_name: stat.team_name || updated[existingIndex].team_name,
+                    averages: {
+                      ...updated[existingIndex].averages,
+                      ppg: Number(stat.pts ?? updated[existingIndex].averages.ppg),
+                      apg: Number(stat.ast ?? updated[existingIndex].averages.apg),
+                      rpg: Number(stat.reb ?? updated[existingIndex].averages.rpg),
+                    },
+                  };
+                } else {
+                  updated.push({
+                    athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
+                    user_id: `usr_ocr_${idx + 1}`,
+                    full_name: stat.player_name,
+                    birthdate: "2006-01-01",
+                    position_or_event: "Guard",
+                    location_province: "Albay",
+                    team_name: stat.team_name || finalData.team_name,
+                    rating_score: 85,
+                    sport_category: (finalData.sport_type || "BASKETBALL").toUpperCase() as any,
+                    biometrics: {
+                      height_ft: "6'2\"",
+                      weight_lbs: "185 lbs",
+                      wingspan_ft: "6'4\"",
+                      vertical_jump_in: "32\"",
+                    },
+                    averages: {
+                      ppg: Number(stat.pts || 0),
+                      rpg: Number(stat.reb || 0),
+                      apg: Number(stat.ast || 0),
+                      per_score: 24,
+                      games_played: 1,
+                      wins: 1,
+                      fg_percentage: 50,
+                      three_pt_percentage: 35,
+                      ft_percentage: 75,
+                    },
+                    workload_analytics: {
+                      target_7day_effort_pts: 500,
+                      current_7day_acute_load: 420,
+                      current_28day_chronic_load: 400,
+                      calculated_acwr: 1.05,
+                      workout_score: 85,
+                      fatigue_meter: 25,
+                      routine_score: 85,
+                      body_stress_pts: 25,
+                    },
+                    radar_competencies: {
+                      speed: 80,
+                      power: 75,
+                      agility: 82,
+                      iq: 85,
+                      tech: 80,
+                    },
+                    scoring_trends_last_10: [Number(stat.pts || 15)],
+                    eligibility_documents: {
+                      psa_verified: true,
+                      residency_verified: true,
+                    },
+                  });
+                }
+              });
+              return updated;
+            });
+
             setTeams((prev: Team[]) =>
               prev.map((t: Team) => ({
                 ...t,
@@ -787,45 +1078,13 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               </ScrollView>
             </View>
 
-            {/* PLAYERS Section */}
-            <View style={styles.playersSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>PLAYERS</Text>
-                <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
-                  <Text style={styles.viewAllText}>View All</Text>
-                </TouchableOpacity>
-              </View>
 
-              {/* Player Rows */}
-              <View style={styles.playersList}>
-                {filteredDashboardPlayers.length === 0 ? (
-                  <View style={{ paddingVertical: 28, alignItems: "center", justifyContent: "center" }}>
-                    <Ionicons name="people-outline" size={36} color="#64748B" />
-                    <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "700", marginTop: 8 }}>
-                      No Athletes in Roster Yet
-                    </Text>
-                    <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: 20 }}>
-                      You don't have any athletes in your roster yet. Use the Teams or Discovery tab to add players.
-                    </Text>
-                  </View>
-                ) : (
-                  filteredDashboardPlayers.slice(0, 4).map((player, index) => (
-                    <PlayerRowItem
-                      key={player.athlete_id}
-                      player={player}
-                      isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
-                      onViewStats={handleViewStats}
-                    />
-                  ))
-                )}
-              </View>
-            </View>
 
             {/* TOTAL ATHLETES Card */}
             <View style={styles.summaryTile}>
               <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
               <View style={styles.summaryPill}>
-                <Text style={styles.summaryPillValue}>{athletesPool.length}</Text>
+                <Text style={styles.summaryPillValue}>{filteredDashboardPlayers.length}</Text>
               </View>
             </View>
           </ScrollView>
@@ -895,11 +1154,18 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       {/* PERFORMANCE MODULE  */}
       {activeView === "performance" && (
         <PerformancePage
-          athletes={perfAthletes}
-          onSelectAthlete={(ath) => {
-            setSelectedPerfAthlete(ath);
+          historyItems={matchHistoryList}
+          onSelectMatchItem={(matchItem) => {
+            setSelectedMatchItem(matchItem);
             setPreviousPortfolioView("performance");
-            setActiveView("athlete_portfolio");
+            const cat = String(matchItem.sport_category || "").toUpperCase();
+            if (cat.includes("SWIM")) {
+              setActiveView("perf_swimming_result");
+            } else if (cat.includes("TRACK") || cat.includes("FIELD")) {
+              setActiveView("perf_trackfield_result");
+            } else {
+              setActiveView("perf_basketball_result");
+            }
           }}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
@@ -946,6 +1212,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       {activeView === "match_history" && (
         <MatchHistory
           sportCategory={selectedPerfAthlete?.sport_category}
+          historyItems={matchHistoryList}
           onClose={() => setActiveView("athlete_portfolio")}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
@@ -961,15 +1228,24 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       )}
 
       {activeView === "perf_trackfield_result" && (
-        <TrackfieldMatchResult onBack={() => setActiveView("match_history")} />
+        <TrackfieldMatchResult
+          matchItem={selectedMatchItem}
+          onBack={() => setActiveView(previousPortfolioView || "performance")}
+        />
       )}
 
       {activeView === "perf_swimming_result" && (
-        <SwimmingMatchResult onBack={() => setActiveView("match_history")} />
+        <SwimmingMatchResult
+          matchItem={selectedMatchItem}
+          onBack={() => setActiveView(previousPortfolioView || "performance")}
+        />
       )}
 
       {activeView === "perf_basketball_result" && (
-        <BasketballMatchResult onBack={() => setActiveView("match_history")} />
+        <BasketballMatchResult
+          matchItem={selectedMatchItem}
+          onBack={() => setActiveView(previousPortfolioView || "performance")}
+        />
       )}
 
       {/* MULTI-LOGGING MODULE */}

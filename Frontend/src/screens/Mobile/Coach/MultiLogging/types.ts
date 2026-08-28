@@ -25,6 +25,7 @@ export interface AthleteRosterItem {
   position_or_event: string; // e.g. "Point Guard", "100M Free", "Discus Throw"
   is_active_on_field: boolean;
   avatar_url?: string;
+  sport_type?: string;
   // Dynamic Sport-Specific Stats:
   basketball_stats?: BasketballStats;
   timing_stats?: TimingStats;

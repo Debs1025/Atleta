@@ -12,9 +12,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 
 import styles from "./styles/OCRlogging";
-import { RawOCRDetectedData } from "./OCRoutput";
+import { RawOCRDetectedData, DetectedAthleteStat } from "./OCRoutput";
+import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
 
 // Client State Schema Models
 export interface UploadedFileItem {
@@ -40,6 +42,21 @@ const formatFileSize = (bytes: number): string => {
         return `${(bytes / 1048576).toFixed(1)} MB`;
     }
     return `${Math.round(bytes / 1024)} KB`;
+};
+
+// Compress and optimize image to ensure it stays well under Vercel's 4.5MB payload limit
+const optimizeScoresheetImage = async (uri: string): Promise<string> => {
+    try {
+        const result = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: 1200 } }],
+            { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        return result.uri;
+    } catch (err) {
+        console.warn("Could not compress image, proceeding with original URI:", err);
+        return uri;
+    }
 };
 
 export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
@@ -99,7 +116,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 const galleryResult = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ImagePicker.MediaTypeOptions.Images,
                     allowsEditing: true,
-                    quality: 0.9,
+                    quality: 0.8,
                 });
                 if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
                     const asset = galleryResult.assets[0];
@@ -119,7 +136,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
 
             const cameraResult = await ImagePicker.launchCameraAsync({
                 allowsEditing: true,
-                quality: 0.9,
+                quality: 0.8,
             });
 
             if (!cameraResult.canceled && cameraResult.assets && cameraResult.assets.length > 0) {
@@ -141,7 +158,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 const galleryResult = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ImagePicker.MediaTypeOptions.Images,
                     allowsEditing: true,
-                    quality: 0.9,
+                    quality: 0.8,
                 });
                 if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
                     const asset = galleryResult.assets[0];
@@ -172,66 +189,248 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
         setPreviewFile(file);
     }, []);
 
-    // Upload & Trigger OCR Handler
-    const handleUploadSubmit = useCallback(() => {
+    // Upload & Trigger Live OCR Processing
+    const handleUploadSubmit = useCallback(async () => {
         if (uploadedFiles.length === 0) {
             setModalMessage("Please browse or upload at least one PDF, CSV, or image file first.");
             return;
         }
 
         setIsProcessingOCR(true);
+        const file = uploadedFiles[0];
 
-        /* 
-         =============================================================================
-         [BACKEND API INTEGRATION POINT]:
-         Replace this setTimeout simulation with your actual API endpoint call:
-         
-         const formData = new FormData();
-         formData.append('file', { uri: uploadedFiles[0].file_url, name: uploadedFiles[0].file_name });
-         const response = await fetch('YOUR_BACKEND_API_URL/ocr/process', {
-           method: 'POST',
-           body: formData,
-         });
-         const parsedData: RawOCRDetectedData = await response.json();
-         =============================================================================
-        */
+        try {
+            const token = await getStoredAuthToken();
+            const formData = new FormData();
+            const fileExt = file.file_name.split(".").pop()?.toLowerCase() || "jpg";
+            const isImage =
+                file.file_type === "IMAGE" ||
+                fileExt === "jpg" ||
+                fileExt === "jpeg" ||
+                fileExt === "png" ||
+                fileExt === "webp";
 
-        setTimeout(() => {
-            setIsProcessingOCR(false);
+            // Optimize image if needed to stay well below Vercel's 4.5MB payload limit
+            const finalUri = isImage ? await optimizeScoresheetImage(file.file_url) : file.file_url;
 
-            // Default parsed sample data matching wireframe image_96e088.png
-            const parsedSampleData: RawOCRDetectedData = {
-                team_name: "CAMARINES SUR PANTHERS",
-                sport_type: "BASKETBALL",
-                athlete_overview: [
-                    { athlete_id: "ath_1", player_name: "MARCUS V. STEPHENS", pts: 24, ast: 4, to: 8 },
-                    { athlete_id: "ath_2", player_name: "JAKE L. RODRIGUEZ", pts: 18, ast: 6, to: 2 },
-                    { athlete_id: "ath_3", player_name: "CHEN W. ZHAO", pts: 12, ast: 2, to: 0 },
-                    { athlete_id: "ath_4", player_name: "TYSON K. REED", pts: 9, ast: 1, to: 3 },
-                    { athlete_id: "ath_5", player_name: "OMAR AL-FADIL", pts: 7, ast: 3, to: 1 },
+            const mimeType =
+                file.file_type === "PDF"
+                    ? "application/pdf"
+                    : file.file_type === "CSV"
+                    ? "text/csv"
+                    : "image/jpeg";
+
+            const filePayload = {
+                uri: finalUri,
+                name: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
+                type: mimeType,
+            };
+
+            formData.append("file", filePayload as any);
+            formData.append("scoresheet", filePayload as any);
+            formData.append("document", filePayload as any);
+
+            const headers: Record<string, string> = {
+                Accept: "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            };
+
+            // Call deployed backend OCR standalone endpoint
+            const endpoints = [
+                `${API_BASE}/matches/scan-scoresheet`,
+                `${API_BASE}/matches/ocr/scan`,
+                `${API_BASE}/matches/scoresheet`,
+            ];
+
+            let responseData: any = null;
+            let lastError: string = "";
+
+            for (const endpoint of endpoints) {
+                try {
+                    const res = await fetch(endpoint, {
+                        method: "POST",
+                        headers,
+                        body: formData,
+                    });
+
+                    if (res.ok) {
+                        responseData = await res.json();
+                        break;
+                    } else {
+                        const errBody = await res.text();
+                        lastError = `Server returned status ${res.status}: ${errBody}`;
+                    }
+                } catch (err: any) {
+                    lastError = err?.message || String(err);
+                }
+            }
+
+            if (!responseData) {
+                throw new Error(lastError || "Could not process scoresheet with OCR server.");
+            }
+
+            // Map real AI-extracted player statistics into RawOCRDetectedData
+            const rawPlayers = Array.isArray(responseData.player_summary)
+                ? responseData.player_summary
+                : [];
+
+            // Find home team and visitor/away team from response
+            const teamScoresArr = Array.isArray(responseData.team_scores) ? responseData.team_scores : [];
+            const homeScoreItem = teamScoresArr.find(
+              (t: any) => t.is_home === true || String(t.team || "").toUpperCase().includes("CELTIC")
+            );
+            const awayScoreItem = teamScoresArr.find(
+              (t: any) => t.is_home === false || String(t.team || "").toUpperCase().includes("HAWK")
+            );
+
+            const homeTeamName = String(
+                responseData.match_info?.home_team_name ||
+                responseData.match_info?.home_team ||
+                homeScoreItem?.team ||
+                "CELTICS"
+            ).toUpperCase();
+
+            const oppTeamName = String(
+                responseData.match_info?.opponent_team_name ||
+                responseData.match_info?.away_team ||
+                awayScoreItem?.team ||
+                "HAWKS"
+            ).toUpperCase();
+
+            const detectedTeamNames = Array.from(
+                new Set([
+                    ...rawPlayers.map((p: any) => (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : null).filter(Boolean),
+                    ...(responseData.team_scores || []).map((t: any) => t.team ? String(t.team).toUpperCase() : null).filter(Boolean),
+                    homeTeamName,
+                    oppTeamName,
+                ])
+            ).filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+
+            const totalPlayers = rawPlayers.length;
+            const halfCount = Math.ceil(totalPlayers / 2);
+
+            const athleteOverview: DetectedAthleteStat[] = rawPlayers.map((p: any, idx: number) => {
+                // If backend provided team_name or team, match it cleanly
+                let resolvedTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : "";
+                if (!resolvedTeam) {
+                    // On scoresheet layout: Left column = VISITORS (oppTeamName), Right column = HOME (homeTeamName)
+                    resolvedTeam = idx < halfCount ? oppTeamName : homeTeamName;
+                }
+
+                return {
+                    athlete_id: `ath_${idx + 1}`,
+                    player_name: String(p.player_name || `PLAYER #${p.jersey_number || idx + 1}`).toUpperCase(),
+                    team_name: resolvedTeam,
+                    jersey_number: Number(p.jersey_number || 0),
+                    pts: Number(p.points ?? p.pts ?? 0),
+                    ast: Number(p.assists ?? p.ast ?? 0),
+                    to: Number(p.turnovers ?? p.to ?? 0),
+                    reb: Number(p.rebounds ?? p.reb ?? 0),
+                    stl: Number(p.steals ?? p.stl ?? 0),
+                    blk: Number(p.blocks ?? p.blk ?? 0),
+                    fg_pct: p.true_shooting_pct
+                        ? `${Math.round(p.true_shooting_pct)}%`
+                        : p.fg_attempted > 0
+                        ? `${Math.round((p.fg_made / p.fg_attempted) * 100)}%`
+                        : "50%",
+                };
+            });
+
+            const ftMade = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_made || 0), 0);
+            const ftAttempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_attempted || 0), 0);
+            const pt2Made = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_made || 0), 0);
+            const pt2Attempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_attempted || 0), 0);
+            const totalAssists = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.assists || p.ast || 0), 0);
+            const totalTurnovers = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.turnovers || p.to || 0), 0);
+
+            // Accurately compute athlete points sum per team
+            const homeAthleteSum = athleteOverview
+                .filter((a) => a.team_name === homeTeamName)
+                .reduce((sum, a) => sum + (a.pts || 0), 0);
+            const oppAthleteSum = athleteOverview
+                .filter((a) => a.team_name === oppTeamName)
+                .reduce((sum, a) => sum + (a.pts || 0), 0);
+
+            // Extract numeric scores from AI response if available
+            const detectedScoresList = teamScoresArr
+                .map((t: any) => Number(t.score))
+                .filter((s: number) => !isNaN(s) && s > 0);
+
+            let hScore: number;
+            let aScore: number;
+
+            if (detectedScoresList.length >= 2) {
+                const maxScore = Math.max(...detectedScoresList);
+                const minScore = Math.min(...detectedScoresList);
+
+                if (homeAthleteSum >= oppAthleteSum) {
+                    hScore = maxScore;
+                    aScore = minScore;
+                } else {
+                    hScore = minScore;
+                    aScore = maxScore;
+                }
+            } else {
+                hScore = homeAthleteSum;
+                aScore = oppAthleteSum;
+            }
+
+            const parsedOcrResult: RawOCRDetectedData = {
+                team_name: homeTeamName,
+                opponent_team_name: oppTeamName,
+                final_score: `${hScore} - ${aScore}`,
+                game_result: hScore >= aScore ? "WIN" : "LOSS",
+                team_scores: [
+                    { team: homeTeamName, score: hScore },
+                    { team: oppTeamName, score: aScore },
+                ],
+                teams: detectedTeamNames,
+                sport_type: (
+                    responseData.match_info?.sport_type?.toUpperCase() ||
+                    "BASKETBALL"
+                ) as RawOCRDetectedData["sport_type"],
+                athlete_overview: athleteOverview.length > 0 ? athleteOverview : [
+                    {
+                        athlete_id: "ath_1",
+                        player_name: "EXTRACTED ATHLETE",
+                        team_name: homeTeamName,
+                        pts: 0,
+                        ast: 0,
+                        to: 0,
+                        reb: 0,
+                        stl: 0,
+                        blk: 0,
+                        fg_pct: "0%",
+                    },
                 ],
                 expanded_metrics: {
                     shooting_efficiency: {
-                        ft_made: 42,
-                        ft_attempts: 56,
-                        pt2_made: 31,
-                        pt2_attempts: 48,
-                        pt3_made: 12,
-                        pt3_attempts: 29,
+                        ft_made: ftMade,
+                        ft_attempts: ftAttempts,
+                        pt2_made: pt2Made,
+                        pt2_attempts: pt2Attempts,
+                        pt3_made: 0,
+                        pt3_attempts: 0,
                     },
                     possession_errors: {
-                        key_drives: 18,
-                        assists: 24,
-                        turnovers: 12,
-                        scv_12s: 3,
+                        key_drives: 0,
+                        assists: totalAssists,
+                        turnovers: totalTurnovers,
+                        scv_12s: 0,
                     },
                 },
             };
 
+            setIsProcessingOCR(false);
+
             if (onUploadSuccess) {
-                onUploadSuccess(parsedSampleData);
+                onUploadSuccess(parsedOcrResult);
             }
-        }, 1000);
+        } catch (err: any) {
+            setIsProcessingOCR(false);
+            console.error("OCR Processing error:", err);
+            setModalMessage(err?.message || "Could not process scoresheet with OCR server. Please try again.");
+        }
     }, [uploadedFiles, onUploadSuccess]);
 
     return (

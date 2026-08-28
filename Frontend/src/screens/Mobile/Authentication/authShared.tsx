@@ -264,6 +264,9 @@ export async function requestAuthenticatedJson(path: string, method: string = "G
     Accept: "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
+  if (method.toUpperCase() !== "GET" && method.toUpperCase() !== "HEAD") {
+    headers["Idempotency-Key"] = `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
@@ -275,9 +278,16 @@ export async function requestAuthenticatedJson(path: string, method: string = "G
 }
 
 export function requestJson(path: string, body: unknown, method: string = "POST") {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json"
+  };
+  if (method.toUpperCase() !== "GET" && method.toUpperCase() !== "HEAD") {
+    headers["Idempotency-Key"] = `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
   return fetchApi(path, {
     method,
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body)
   });
 }

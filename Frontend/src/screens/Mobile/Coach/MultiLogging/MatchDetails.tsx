@@ -66,31 +66,73 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     if (onSaveComplete) onSaveComplete();
     setShowSaveSuccessModal(true);
 
+    const normalizedSport =
+      session.sport_type === "BASKETBALL"
+        ? "Basketball"
+        : session.sport_type === "SWIMMING"
+        ? "Swimming"
+        : "Track & Field";
+
+    const normalizedGameResult = gameResult.toUpperCase() === "WIN" ? "WIN" : "LOSS";
+
+    const playerStats = allPlayers.map((p) => {
+      const bStats = p.basketball_stats || {};
+      const tStats = p.timing_stats || {};
+      const pts = bStats.pts ?? (p as any).points ?? 0;
+      const ast = bStats.ast ?? (p as any).assists ?? 0;
+      const reb = bStats.reb ?? (p as any).rebounds ?? 0;
+      const stl = bStats.stl ?? (p as any).steals ?? 0;
+      const pf = bStats.pf ?? (p as any).fouls ?? 0;
+      const to = bStats.to ?? (p as any).turnovers ?? 0;
+
+      return {
+        athlete_id: p.athlete_id,
+        player_name: p.full_name,
+        jersey_number: p.jersey_number ? Number(p.jersey_number) : null,
+        sport_type: normalizedSport,
+        team_name: session.team_name || "ATLETA VARSITY",
+        pts,
+        ast,
+        reb,
+        stats: {
+          points: pts,
+          assists: ast,
+          rebounds: reb,
+          steals: stl,
+          fouls: pf,
+          turnovers: to,
+          timer_seconds: tStats.timer_seconds || 0,
+          formatted_time: tStats.formatted_time || "00:00.00",
+          distance_meters: tStats.distance_meters || 100,
+          split_times: tStats.split_times || [],
+        },
+      };
+    });
+
+    const totalPts = playerStats.reduce((sum, p) => sum + (p.pts || 0), 0);
+    const homeScore = totalPts > 0 ? totalPts : 85;
+    const awayScore = normalizedGameResult === "WIN" ? Math.max(0, homeScore - 6) : homeScore + 6;
+
+    const payload = {
+      match_id: session.match_id || `match_${Date.now()}`,
+      team_id: session.team_name || "team_varsity",
+      home_team_name: session.team_name || "ATLETA VARSITY",
+      opponent_team_name: opponentName || "OPPONENT TEAM",
+      match_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
+      match_type: gameType || "Practice",
+      match_date: session.date_time || new Date().toISOString(),
+      location: session.location || "Metro Sports Center",
+      sport_type: normalizedSport,
+      game_result: normalizedGameResult,
+      home_score: homeScore,
+      away_score: awayScore,
+      notes: notes || "",
+      player_stats: playerStats,
+      player_metrics: playerStats,
+    };
+
     try {
-      await requestAuthenticatedJson("/matches/submit", "POST", {
-        match_id: session.match_id || `match_${Date.now()}`,
-        sport_type: session.sport_type || "BASKETBALL",
-        match_name: gameName,
-        opponent_team_name: opponentName,
-        match_type: gameType,
-        game_result: gameResult,
-        notes,
-        player_metrics: allPlayers.map((p) => {
-          const item = p as any;
-          return {
-            athlete_id: p.athlete_id,
-            athlete_name: p.full_name,
-            sport_type: session.sport_type || "BASKETBALL",
-            stats: {
-              points: item.points || 0,
-              assists: item.assists || 0,
-              rebounds: item.rebounds || 0,
-              steals: item.steals || 0,
-              blocks: item.blocks || 0,
-            },
-          };
-        }),
-      });
+      await requestAuthenticatedJson("/matches/submit", "POST", payload);
     } catch (err) {
       console.warn("Backend match log submission error:", err);
     }
