@@ -15,5 +15,5 @@
     "sourceMap": true
   },
   "include": ["./**/*.ts"],
-  "exclude": ["node_modules", "dist", "scratch"]
+  "exclude": ["node_modules", "dist", "scratch", "**/scratch/**", "Backend/scratch/**", "Frontend/**"]
 }
