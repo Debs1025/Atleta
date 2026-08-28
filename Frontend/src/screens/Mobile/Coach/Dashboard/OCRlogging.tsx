@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 
 import styles from "./styles/OCRlogging";
 import { RawOCRDetectedData } from "./OCRoutput";
@@ -30,35 +31,8 @@ interface OCRloggingProps {
     onUploadSuccess?: (ocrData: RawOCRDetectedData) => void;
 }
 
-// Sample Initial Mock Files
-// Remove initial mock datas when linking to backend api
-// API Request: fetch uploaded scoresheets & documents (GET /api/ocr/uploads)
-const INITIAL_MOCK_FILES: UploadedFileItem[] = [
-    {
-        upload_id: "upl_001",
-        file_name: "SEASON_FINALS_2023.CSV",
-        file_size_bytes: 1258291,
-        uploaded_at_relative: "Uploaded 2h ago",
-        file_type: "CSV",
-        file_url: "file://mock/SEASON_FINALS_2023.CSV",
-    },
-    {
-        upload_id: "upl_002",
-        file_name: "ATHLETE_REPORT_JULY.PDF",
-        file_size_bytes: 5033164, // 4.8 MB
-        uploaded_at_relative: "Uploaded yesterday",
-        file_type: "PDF",
-        file_url: "file://mock/ATHLETE_REPORT_JULY.PDF",
-    },
-    {
-        upload_id: "upl_003",
-        file_name: "TRAINING_LOG_B.CSV",
-        file_size_bytes: 862208, // 842 KB
-        uploaded_at_relative: "Uploaded 3 days ago",
-        file_type: "CSV",
-        file_url: "file://mock/TRAINING_LOG_B.CSV",
-    },
-];
+// Initial empty files list - only real uploaded files are displayed
+const INITIAL_MOCK_FILES: UploadedFileItem[] = [];
 
 // Helper to format file size in human readable string
 const formatFileSize = (bytes: number): string => {
@@ -91,7 +65,14 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 let fileType: UploadedFileItem["file_type"] = "CSV";
                 if (asset.name.toLowerCase().endsWith(".pdf")) fileType = "PDF";
                 else if (asset.name.toLowerCase().endsWith(".json")) fileType = "JSON";
-                else if (asset.mimeType?.startsWith("image/")) fileType = "IMAGE";
+                else if (
+                    asset.mimeType?.startsWith("image/") ||
+                    asset.name.toLowerCase().endsWith(".jpg") ||
+                    asset.name.toLowerCase().endsWith(".jpeg") ||
+                    asset.name.toLowerCase().endsWith(".png")
+                ) {
+                    fileType = "IMAGE";
+                }
 
                 const newFile: UploadedFileItem = {
                     upload_id: `upl_${Date.now()}`,
@@ -104,14 +85,81 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
 
                 setUploadedFiles((prev) => [newFile, ...prev]);
             }
-        } catch (err) {
+        } catch {
             setModalMessage("Could not pick document file.");
         }
     }, []);
 
-    // Camera Action Handler
-    const handleTakePhoto = useCallback(() => {
-        setModalMessage("Camera scanner initialized. Ready to scan physical game scoresheets.");
+    // Camera / Photo Capture Action Handler
+    const handleTakePhoto = useCallback(async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== "granted") {
+                // If camera permission not granted or camera missing (e.g. simulator), open image library
+                const galleryResult = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    allowsEditing: true,
+                    quality: 0.9,
+                });
+                if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
+                    const asset = galleryResult.assets[0];
+                    const fileName = asset.fileName || `SCORESHEET_PHOTO_${Date.now()}.JPG`;
+                    const newFile: UploadedFileItem = {
+                        upload_id: `upl_${Date.now()}`,
+                        file_name: fileName.toUpperCase(),
+                        file_size_bytes: asset.fileSize || 1024 * 600,
+                        uploaded_at_relative: "Selected just now",
+                        file_type: "IMAGE",
+                        file_url: asset.uri,
+                    };
+                    setUploadedFiles((prev) => [newFile, ...prev]);
+                }
+                return;
+            }
+
+            const cameraResult = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                quality: 0.9,
+            });
+
+            if (!cameraResult.canceled && cameraResult.assets && cameraResult.assets.length > 0) {
+                const asset = cameraResult.assets[0];
+                const fileName = asset.fileName || `SCORESHEET_CAMERA_${Date.now()}.JPG`;
+                const newFile: UploadedFileItem = {
+                    upload_id: `upl_${Date.now()}`,
+                    file_name: fileName.toUpperCase(),
+                    file_size_bytes: asset.fileSize || 1024 * 600,
+                    uploaded_at_relative: "Captured just now",
+                    file_type: "IMAGE",
+                    file_url: asset.uri,
+                };
+                setUploadedFiles((prev) => [newFile, ...prev]);
+            }
+        } catch {
+            // Fallback to gallery picker
+            try {
+                const galleryResult = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    allowsEditing: true,
+                    quality: 0.9,
+                });
+                if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
+                    const asset = galleryResult.assets[0];
+                    const fileName = asset.fileName || `SCORESHEET_PHOTO_${Date.now()}.JPG`;
+                    const newFile: UploadedFileItem = {
+                        upload_id: `upl_${Date.now()}`,
+                        file_name: fileName.toUpperCase(),
+                        file_size_bytes: asset.fileSize || 1024 * 600,
+                        uploaded_at_relative: "Selected just now",
+                        file_type: "IMAGE",
+                        file_url: asset.uri,
+                    };
+                    setUploadedFiles((prev) => [newFile, ...prev]);
+                }
+            } catch {
+                setModalMessage("Could not open camera or photo picker.");
+            }
+        }
     }, []);
 
     // Delete File Handler
@@ -223,10 +271,10 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 {/* FILE PICKER CARD */}
                 <View style={styles.dropzoneCard}>
                     <View style={styles.dropzoneIconBox}>
-                        <Ionicons name="close-outline" size={48} color="#FFFFFF" />
+                        <Ionicons name="cloud-upload-outline" size={44} color="#00C8FF" />
                     </View>
-                    <Text style={styles.dropzoneTitle}>SELECT PDF OR CSV FILE</Text>
-                    <Text style={styles.dropzoneSubtext}>Maximum file size: 25MB</Text>
+                    <Text style={styles.dropzoneTitle}>SELECT PHOTO, PDF OR CSV FILE</Text>
+                    <Text style={styles.dropzoneSubtext}>Supports JPG, PNG, PDF, CSV (Max: 25MB)</Text>
 
                     <View style={styles.actionButtonsRow}>
                         <TouchableOpacity
@@ -249,54 +297,63 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 </View>
 
                 {/* FILES UPLOADED SECTION */}
-                <Text style={styles.sectionLabel}>FILES UPLOADED</Text>
-                <View style={styles.filesList}>
-                    {uploadedFiles.map((file) => (
-                        <View key={file.upload_id} style={styles.fileCard}>
-                            <View style={styles.fileCardLeft}>
-                                <View style={styles.fileBadge}>
-                                    <Ionicons
-                                        name={
-                                            file.file_type === "PDF"
-                                                ? "document-text-outline"
-                                                : file.file_type === "IMAGE"
-                                                    ? "image-outline"
-                                                    : "grid-outline"
-                                        }
-                                        size={20}
-                                        color="#FFFFFF"
-                                    />
+                <Text style={styles.sectionLabel}>FILES UPLOADED ({uploadedFiles.length})</Text>
+                {uploadedFiles.length === 0 ? (
+                    <View style={[styles.fileCard, { justifyContent: "center", alignItems: "center", paddingVertical: 20, marginBottom: 24 }]}>
+                        <Ionicons name="document-outline" size={28} color="#64748B" style={{ marginBottom: 6 }} />
+                        <Text style={{ color: "#64748B", fontSize: 13, textAlign: "center" }}>
+                            No files selected yet. Choose a photo or document above.
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={styles.filesList}>
+                        {uploadedFiles.map((file) => (
+                            <View key={file.upload_id} style={styles.fileCard}>
+                                <View style={styles.fileCardLeft}>
+                                    <View style={styles.fileBadge}>
+                                        <Ionicons
+                                            name={
+                                                file.file_type === "PDF"
+                                                    ? "document-text-outline"
+                                                    : file.file_type === "IMAGE"
+                                                        ? "image-outline"
+                                                        : "grid-outline"
+                                            }
+                                            size={20}
+                                            color="#00C8FF"
+                                        />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.fileName} numberOfLines={1}>
+                                            {file.file_name}
+                                        </Text>
+                                        <Text style={styles.fileMeta}>
+                                            {formatFileSize(file.file_size_bytes)} • {file.uploaded_at_relative}
+                                        </Text>
+                                    </View>
                                 </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.fileName} numberOfLines={1}>
-                                        {file.file_name}
-                                    </Text>
-                                    <Text style={styles.fileMeta}>
-                                        {formatFileSize(file.file_size_bytes)}
-                                    </Text>
+
+                                <View style={styles.fileActions}>
+                                    <TouchableOpacity
+                                        style={styles.iconControlBtn}
+                                        onPress={() => handlePreviewFile(file)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons name="eye-outline" size={16} color="#FFFFFF" />
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.iconControlBtn}
+                                        onPress={() => handleDeleteFile(file.upload_id)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                                    </TouchableOpacity>
                                 </View>
                             </View>
-
-                            <View style={styles.fileActions}>
-                                <TouchableOpacity
-                                    style={styles.iconControlBtn}
-                                    onPress={() => handlePreviewFile(file)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons name="eye-outline" size={16} color="#FFFFFF" />
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.iconControlBtn}
-                                    onPress={() => handleDeleteFile(file.upload_id)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    ))}
-                </View>
+                        ))}
+                    </View>
+                )}
 
                 {/* FOOTER METADATA BAR */}
                 <View style={styles.metaGrid}>
