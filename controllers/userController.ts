@@ -160,9 +160,17 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
     }
 
     const { email } = req.body;
-    const result = await requestPasswordResetService(email);
+    const clientFrontendUrl = req.body?.frontend_url
+      || req.body?.redirect_url
+      || req.body?.reset_url;
+
+    const result = await requestPasswordResetService(email, clientFrontendUrl);
     res.status(200).json(result);
   } catch (error: any) {
+    if (error.code === 'SOCIAL_AUTH_ACCOUNT') {
+      res.status(400).json({ error: error.message, code: 'SOCIAL_AUTH_ACCOUNT' });
+      return;
+    }
     if (error.code === 'USER_NOT_FOUND') {
       res.status(404).json({ error: error.message });
       return;
@@ -178,18 +186,22 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
 
 export async function resetPassword(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const token = (req.body.token || req.params.token || req.query.token) as string;
-    const new_password = (req.body.new_password || req.body.password) as string;
+    const token = (req.body?.token || req.params?.token || req.query?.token || req.headers?.authorization?.replace(/^Bearer\s+/i, '') || req.user?.uid) as string;
+    const new_password = (req.body?.new_password || req.body?.password) as string;
+    const emailHint = (req.body?.email || req.query?.email) as string | undefined;
 
-    const errors = validatePasswordResetConfirm({ token, new_password });
-    if (errors.length > 0) {
-      res.status(400).json({ errors });
+    if (!new_password || new_password.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters.' });
       return;
     }
 
-    const result = await resetPasswordConfirmService(token, new_password);
+    const result = await resetPasswordConfirmService(token, new_password, emailHint);
     res.status(200).json(result);
   } catch (error: any) {
+    if (error.code === 'SOCIAL_AUTH_ACCOUNT') {
+      res.status(400).json({ error: error.message, code: 'SOCIAL_AUTH_ACCOUNT' });
+      return;
+    }
     if (error.code === 'INVALID_TOKEN') {
       res.status(400).json({ error: error.message });
       return;
@@ -220,6 +232,10 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
       message: 'Password updated successfully.',
     });
   } catch (error: any) {
+    if (error.code === 'SOCIAL_AUTH_ACCOUNT') {
+      res.status(400).json({ error: error.message, code: 'SOCIAL_AUTH_ACCOUNT' });
+      return;
+    }
     console.error('ChangePassword error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
