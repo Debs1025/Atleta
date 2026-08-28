@@ -1,12 +1,13 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { requestAuthenticatedJson } from '../../Authentication/authShared';
 import {
   AthleteDiscoveryItem,
   ScoutingProposalItem,
   DiscoveryTeamItem,
   DiscoveryEventItem,
-  DiscoveryMatchItem,
   DiscoveryTab,
   SportCategoryFilter,
+  DiscoveryMatchItem,
 } from './discoveryTypes';
 
 interface DiscoveryContextType {
@@ -34,323 +35,19 @@ interface DiscoveryContextType {
   setSortRecruits: (sort: 'date' | 'status') => void;
 }
 
-//sample data for testing 
-const INITIAL_ATHLETES: AthleteDiscoveryItem[] = [
-  {
-    athlete_id: 'ath_disc_01',
-    full_name: 'Erick De Belen',
-    province: 'Albay',
-    recruitment_status: 'Available',
-    position_tag: 'PG',
-    sport_category: 'BASKETBALL',
-    biometrics: { height_ft: `6'2"`, weight_lbs: '185 lbs', wingspan_ft: `6'5"` },
-    stats: { ppg: 22.4, rpg: 6.4, ast: 8.1, fg_pct: 48 },
-    calculated_per: 32.4,
-    efficiency_pct: 88,
-    contact_info: { email: 'erick@atleta.ph', facebook: 'fb.com/erick.debelen', phone: '+63 917 123 4567' },
-    jersey_number: '2',
-  },
-  {
-    athlete_id: 'ath_disc_02',
-    full_name: 'Mickey Mouse',
-    province: 'Albay',
-    recruitment_status: 'Available',
-    position_tag: 'SWIMMING',
-    sport_category: 'SWIMMING',
-    biometrics: { height_ft: `5'11"`, weight_lbs: '160 lbs', wingspan_ft: `6'1"` },
-    stats: { times_100m: '48.2s', times_200m: '1m 34s', times_50m_free: '22.1s' },
-    calculated_per: 30.1,
-    efficiency_pct: 85,
-    contact_info: { email: 'mickey@atleta.ph', facebook: 'fb.com/mickey.mouse', phone: '+63 917 987 6543' },
-    jersey_number: '5',
-  },
-  {
-    athlete_id: 'ath_disc_03',
-    full_name: 'Marcus Thorne',
-    province: 'Camarines Sur',
-    recruitment_status: 'Available',
-    position_tag: 'PG',
-    sport_category: 'BASKETBALL',
-    biometrics: { height_ft: `6'4"`, weight_lbs: '195 lbs', wingspan_ft: `6'7"` },
-    stats: { ppg: 24.1, rpg: 7.8, ast: 9.2, fg_pct: 51 },
-    calculated_per: 34.2,
-    efficiency_pct: 92,
-    contact_info: { email: 'marcus@atleta.ph', facebook: 'fb.com/marcus.thorne', phone: '+63 918 111 2233' },
-    jersey_number: '42',
-  },
-  {
-    athlete_id: 'ath_disc_04',
-    full_name: 'Gabriel Santos',
-    province: 'Albay',
-    recruitment_status: 'Available',
-    position_tag: 'TRACK AND FIELD',
-    sport_category: 'TRACK AND FIELD',
-    biometrics: { height_ft: `6'0"`, weight_lbs: '170 lbs', wingspan_ft: `6'2"` },
-    stats: { times_100m: '10.2s', times_200m: '20.9s', times_400m: '46.8s' },
-    calculated_per: 33.1,
-    efficiency_pct: 90,
-    contact_info: { email: 'gabriel@atleta.ph', facebook: 'fb.com/gabriel.santos', phone: '+63 919 333 4455' },
-    jersey_number: '7',
-  },
-  {
-    athlete_id: 'ath_disc_05',
-    full_name: 'Julian Vance',
-    province: 'Naga City',
-    recruitment_status: 'Recruited',
-    position_tag: 'SG',
-    sport_category: 'BASKETBALL',
-    biometrics: { height_ft: `6'3"`, weight_lbs: '188 lbs', wingspan_ft: `6'4"` },
-    stats: { ppg: 19.8, rpg: 4.2, ast: 4.5, fg_pct: 46 },
-    calculated_per: 28.5,
-    efficiency_pct: 79,
-    contact_info: { email: 'julian@atleta.ph', facebook: 'fb.com/julian.vance', phone: '+63 920 555 6677' },
-    jersey_number: '22',
-  },
-  {
-    athlete_id: 'ath_disc_06',
-    full_name: 'Diego Cruz',
-    province: 'Camarines Sur',
-    recruitment_status: 'Available',
-    position_tag: 'SWIMMING',
-    sport_category: 'SWIMMING',
-    biometrics: { height_ft: `6'1"`, weight_lbs: '175 lbs', wingspan_ft: `6'3"` },
-    stats: { times_100m: '47.5s', times_200m: '1m 32s', times_50m_free: '21.8s' },
-    calculated_per: 31.5,
-    efficiency_pct: 89,
-    contact_info: { email: 'diego@atleta.ph', facebook: 'fb.com/diego.cruz', phone: '+63 921 777 8899' },
-    jersey_number: '1',
-  },
-  {
-    athlete_id: 'ath_disc_07',
-    full_name: 'Elena Rodriguez',
-    province: 'Naga City',
-    recruitment_status: 'Available',
-    position_tag: 'PG',
-    sport_category: 'BASKETBALL',
-    biometrics: { height_ft: `5'9"`, weight_lbs: '145 lbs', wingspan_ft: `5'11"` },
-    stats: { ppg: 21.0, rpg: 5.1, ast: 7.5, fg_pct: 49 },
-    calculated_per: 30.8,
-    efficiency_pct: 86,
-    contact_info: { email: 'elena@atleta.ph', facebook: 'fb.com/elena.rodriguez', phone: '+63 922 999 0011' },
-    jersey_number: '11',
-  },
-  {
-    athlete_id: 'ath_disc_08',
-    full_name: 'Kaleb Rossi',
-    province: 'Albay',
-    recruitment_status: 'Available',
-    position_tag: 'TRACK AND FIELD',
-    sport_category: 'TRACK AND FIELD',
-    biometrics: { height_ft: `6'1"`, weight_lbs: '178 lbs', wingspan_ft: `6'2"` },
-    stats: { times_100m: '10.6s', times_200m: '21.5s', times_400m: '48.2s' },
-    calculated_per: 29.4,
-    efficiency_pct: 81,
-    contact_info: { email: 'kaleb@atleta.ph', facebook: 'fb.com/kaleb.rossi', phone: '+63 923 111 4477' },
-    jersey_number: '7',
-  },
-  {
-    athlete_id: 'ath_disc_09',
-    full_name: 'Dominic Hayes',
-    province: 'Camarines Sur',
-    recruitment_status: 'Available',
-    position_tag: 'SF',
-    sport_category: 'BASKETBALL',
-    biometrics: { height_ft: `6'5"`, weight_lbs: '205 lbs', wingspan_ft: `6'8"` },
-    stats: { ppg: 18.5, rpg: 8.5, ast: 6.2, fg_pct: 44 },
-    calculated_per: 27.9,
-    efficiency_pct: 78,
-    contact_info: { email: 'dominic@atleta.ph', facebook: 'fb.com/dominic.hayes', phone: '+63 924 333 8811' },
-    jersey_number: '33',
-  },
-  {
-    athlete_id: 'ath_disc_10',
-    full_name: 'Sienna Reyes',
-    province: 'Naga City',
-    recruitment_status: 'Available',
-    position_tag: 'SWIMMING',
-    sport_category: 'SWIMMING',
-    biometrics: { height_ft: `5'8"`, weight_lbs: '138 lbs', wingspan_ft: `5'10"` },
-    stats: { times_100m: '49.1s', times_50m_free: '22.5s' },
-    calculated_per: 28.9,
-    efficiency_pct: 82,
-    contact_info: { email: 'sienna@atleta.ph', facebook: 'fb.com/sienna.reyes', phone: '+63 925 555 9922' },
-    jersey_number: '4',
-  },
-];
-
-const INITIAL_PROPOSALS: ScoutingProposalItem[] = [
-  {
-    scout_id: 'scout_01',
-    athlete_id: 'ath_disc_03',
-    athlete_name: 'Marcus Thorne',
-    sport_category: 'Basketball',
-    offer_status: 'ACCEPTED',
-    date_added_relative: 'Added 2 days ago',
-    created_at: '2026-08-11',
-  },
-  {
-    scout_id: 'scout_02',
-    athlete_id: 'ath_disc_04',
-    athlete_name: 'Gabriel Santos',
-    sport_category: 'Track & Field',
-    offer_status: 'PENDING',
-    date_added_relative: 'Added 5 days ago',
-    created_at: '2026-08-08',
-  },
-  {
-    scout_id: 'scout_03',
-    athlete_id: 'ath_disc_06',
-    athlete_name: 'Diego Cruz',
-    sport_category: 'Swimming',
-    offer_status: 'DECLINED',
-    date_added_relative: 'Added 1 week ago',
-    created_at: '2026-08-06',
-  },
-];
-
-const INITIAL_TEAMS: DiscoveryTeamItem[] = [
-  {
-    team_id: 'disc_team_01',
-    team_name: 'Camarines Sur Panthers',
-    sport_category: 'BASKETBALL',
-    division_tag: 'BASKETBALL • DIVISION I',
-    description: 'Elite-level basketball program focused on advanced defensive transitions and high-precision shooting drills. Recruiting for the summer season.',
-    head_coach: 'Joseph Alaba',
-    season_record: '2025-26 | 14 - 2',
-    roster: INITIAL_ATHLETES.filter((a) => a.sport_category === 'BASKETBALL'),
-  },
-  {
-    team_id: 'disc_team_02',
-    team_name: 'Bicol Velocity Track',
-    sport_category: 'TRACK AND FIELD',
-    division_tag: 'TRACK AND FIELD • REGIONAL',
-    description: 'Specializing in short-distance sprints and relay optimization around the Naga City athletic complex. High-performance data tracking included.',
-    head_coach: 'Joseph Alaba',
-    season_record: '2025-26 | 12 - 3',
-    roster: INITIAL_ATHLETES.filter((a) => a.sport_category === 'TRACK AND FIELD'),
-  },
-  {
-    team_id: 'disc_team_03',
-    team_name: 'Naga City Swimmers',
-    sport_category: 'SWIMMING',
-    division_tag: 'SWIMMING • YOUTH LEAGUE',
-    description: 'Specialize in stroke efficiency and form optimization for competitive age-group swimmers. Weekly technique workshops and video analysis.',
-    head_coach: 'David Brunson',
-    season_record: '2025-26 | 18 - 1',
-    roster: INITIAL_ATHLETES.filter((a) => a.sport_category === 'SWIMMING'),
-  },
-  {
-    team_id: 'disc_team_04',
-    team_name: 'Bicol Tritons Swim Club',
-    sport_category: 'SWIMMING',
-    division_tag: 'SWIMMING • DIVISION I',
-    description: 'Premier competitive swimming team specializing in 50m and 100m freestyle sprint events and medley relays. Underwater motion tracking included.',
-    head_coach: 'Elena Vance',
-    season_record: '2025-26 | 16 - 2',
-    roster: INITIAL_ATHLETES.filter((a) => a.sport_category === 'SWIMMING'),
-  },
-  {
-    team_id: 'disc_team_05',
-    team_name: 'Camarines Blue Marlins',
-    sport_category: 'SWIMMING',
-    division_tag: 'SWIMMING • VARSITY LEAGUE',
-    description: 'Championship-winning aquatics squad training at the Metro Aquatics Arena. Focused on backstroke and butterfly technique refinement.',
-    head_coach: 'Marcus Thorne',
-    season_record: '2025-26 | 14 - 4',
-    roster: INITIAL_ATHLETES.filter((a) => a.sport_category === 'SWIMMING'),
-  },
-];
-
-const INITIAL_EVENTS: DiscoveryEventItem[] = [
-  {
-    event_id: 'evt_01',
-    event_name: 'Naga City Sports Meet 2026',
-    date_range: 'OCT 20 - OCT 28, 2026',
-    matches: [
-      {
-        match_id: 'm_01',
-        sport_category: 'BASKETBALL',
-        headline: 'PANTHERS VS. HAWKS',
-        time_venue: '19:30 | Metro Sports Arena, Court 4',
-        team1_name: 'PANTHERS',
-        team2_name: 'HAWKS',
-        team1_score: 84,
-        team2_score: 78,
-        status: 'FINAL',
-        player_stats: [
-          { player: 'Erick De Belen', role_team: 'Forward • Panthers', pts: 24, reb: 7, ast: 8, fg_pct: 52 },
-          { player: 'Marcus Thorne', role_team: 'Guard • Panthers', pts: 19, reb: 4, ast: 6, fg_pct: 48 },
-          { player: 'Julian Vance', role_team: 'Guard • Hawks', pts: 14, reb: 3, ast: 3, fg_pct: 44 },
-        ],
-        dynamics_data: [40, 65, 88, 70, 95, 82, 90, 60],
-      },
-      {
-        match_id: 'm_03',
-        sport_category: 'TRACK AND FIELD',
-        headline: 'STRIKERS VS. TITANS',
-        time_venue: '10:30 | Naga City Athletic Oval',
-        team1_name: 'STRIKERS',
-        team2_name: 'TITANS',
-        team1_score: '40 pts',
-        team2_score: '28 pts',
-        status: 'FINAL',
-        player_stats: [
-          { player: 'Gabriel Santos', role_team: 'Sprint • Strikers', time_100m: '10.2s', time_200m: '20.9s', time_400m: '46.8s', final_time: '10.2s' },
-          { player: 'Kaleb Rossi', role_team: 'Sprint • Titans', time_100m: '10.6s', time_200m: '21.5s', time_400m: '48.2s', final_time: '10.6s' },
-        ],
-        dynamics_data: [45, 60, 80, 95, 90, 85, 75, 70],
-      },
-    ],
-  },
-  {
-    event_id: 'evt_02',
-    event_name: 'Bicol Regional Swimming Meet 2026',
-    date_range: 'NOV 12 - NOV 18, 2026',
-    matches: [
-      {
-        match_id: 'm_02',
-        sport_category: 'SWIMMING',
-        headline: 'TRITONS VS. DOLPHINS',
-        time_venue: '09:00 | Naga City Aquatic Center',
-        team1_name: 'TRITONS',
-        team2_name: 'DOLPHINS',
-        team1_score: '3 Gold',
-        team2_score: '1 Gold',
-        status: 'FINAL',
-        player_stats: [
-          { player: 'Diego Cruz', role_team: 'Freestyle • Tritons', time_50m: '21.8s', time_100m: '47.5s', time_200m: '1m 32s', final_time: '47.5s' },
-          { player: 'Mickey Mouse', role_team: 'Freestyle • Tritons', time_50m: '22.1s', time_100m: '48.2s', time_200m: '1m 34s', final_time: '48.2s' },
-          { player: 'Sienna Reyes', role_team: 'Backstroke • Dolphins', time_50m: '22.5s', time_100m: '49.1s', time_200m: '1m 36s', final_time: '49.1s' },
-        ],
-        dynamics_data: [50, 70, 85, 90, 95, 88, 92, 80],
-      },
-      {
-        match_id: 'm_04',
-        sport_category: 'SWIMMING',
-        headline: 'BLUE MARLINS VS. AQUA JAYS',
-        time_venue: '14:00 | Olympic Swimming Complex',
-        team1_name: 'MARLINS',
-        team2_name: 'AQUA JAYS',
-        team1_score: '2 Gold',
-        team2_score: '2 Gold',
-        status: 'FINAL',
-        player_stats: [
-          { player: 'Diego Cruz', role_team: 'Butterfly • Marlins', time_50m: '23.1s', time_100m: '50.4s', time_200m: '1m 40s', final_time: '50.4s' },
-          { player: 'Sienna Reyes', role_team: 'Freestyle • Aqua Jays', time_50m: '22.8s', time_100m: '49.8s', time_200m: '1m 38s', final_time: '49.8s' },
-        ],
-        dynamics_data: [60, 75, 80, 85, 90, 95, 85, 75],
-      },
-    ],
-  },
-];
+// Fallback initial structures if offline or pending
+const INITIAL_ATHLETES: AthleteDiscoveryItem[] = [];
+const INITIAL_PROPOSALS: ScoutingProposalItem[] = [];
+const INITIAL_TEAMS: DiscoveryTeamItem[] = [];
+const INITIAL_EVENTS: DiscoveryEventItem[] = [];
 
 const DiscoveryContext = createContext<DiscoveryContextType | undefined>(undefined);
 
 export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [athletes] = useState<AthleteDiscoveryItem[]>(INITIAL_ATHLETES);
+  const [athletes, setAthletes] = useState<AthleteDiscoveryItem[]>(INITIAL_ATHLETES);
   const [scoutingProposals, setScoutingProposals] = useState<ScoutingProposalItem[]>(INITIAL_PROPOSALS);
-  const [teams] = useState<DiscoveryTeamItem[]>(INITIAL_TEAMS);
-  const [events] = useState<DiscoveryEventItem[]>(INITIAL_EVENTS);
+  const [teams, setTeams] = useState<DiscoveryTeamItem[]>(INITIAL_TEAMS);
+  const [events, setEvents] = useState<DiscoveryEventItem[]>(INITIAL_EVENTS);
 
   const [activeTab, setActiveTab] = useState<DiscoveryTab>('PLAYERS');
   const [activeSportFilter, setActiveSportFilter] = useState<SportCategoryFilter>('BASKETBALL');
@@ -359,12 +56,392 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [selectedTeam, setSelectedTeam] = useState<DiscoveryTeamItem | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<DiscoveryMatchItem | null>(null);
   const [sortRecruits, setSortRecruits] = useState<'date' | 'status'>('date');
+  const [activeCoachNameState, setActiveCoachNameState] = useState<string>('Coach');
 
-  const scoutAthlete = (athlete: AthleteDiscoveryItem) => {
+  // Fetch backend data for Athletes, Teams, Matches, and Proposals/Inquiries
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchBackendDiscovery = async () => {
+      try {
+        const [athletesRes, allAthletesRes, teamsRes, myTeamsRes, matchesRes, proposalsRes, inquiriesRes, coachMeRes]: [any, any, any, any, any, any, any, any] = await Promise.all([
+          requestAuthenticatedJson(`/scouting/athletes?sport=${activeSportFilter}`).catch(() => null),
+          requestAuthenticatedJson('/scouting/athletes').catch(() => null),
+          requestAuthenticatedJson('/teams').catch(() => null),
+          requestAuthenticatedJson('/teams?coach_id=me').catch(() => null),
+          requestAuthenticatedJson('/matches').catch(() => null),
+          requestAuthenticatedJson('/scouting/proposals').catch(() => null),
+          requestAuthenticatedJson('/inquiries').catch(() => null),
+          requestAuthenticatedJson('/coaches/me').catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        const coachData = coachMeRes?.coach || coachMeRes?.data || coachMeRes?.user || coachMeRes;
+        const activeCoachName = coachData
+          ? (coachData.full_name || coachData.name || `${coachData.first_name || ''} ${coachData.last_name || ''}`).trim()
+          : '';
+        if (activeCoachName) setActiveCoachNameState(activeCoachName);
+
+        const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // 1. Build list of coach identifiers
+        const ownCoachIdClean = norm(coachData?.coach_id || coachData?.id || coachData?.user_id || '');
+        const ownCoachNameClean = norm(activeCoachName || coachData?.full_name || '');
+
+        const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : teamsRes?.data || []);
+        const rawMyTeams = myTeamsRes?.teams || (Array.isArray(myTeamsRes) ? myTeamsRes : myTeamsRes?.data || []);
+        const allTeamsList = [...rawTeams, ...rawMyTeams];
+
+        // 2. Build set of owned athlete identifiers (IDs + normalized names)
+        const ownAthleteIds = new Set<string>();
+        const ownAthleteNames = new Set<string>();
+
+        allTeamsList.forEach((t: any) => {
+          const tCoachId = norm(t.coach_id || t.user_id || '');
+          const tHeadCoach = norm(t.head_coach || t.coach_name || '');
+
+          const isOwnTeam = Boolean(
+            !t.coach_id || // Team created locally/owned
+            (tCoachId && ownCoachIdClean && (tCoachId.includes(ownCoachIdClean) || ownCoachIdClean.includes(tCoachId))) ||
+            (tHeadCoach && ownCoachNameClean && (tHeadCoach.includes(ownCoachNameClean) || ownCoachNameClean.includes(tHeadCoach)))
+          );
+
+          if (isOwnTeam) {
+            const rawRoster = Array.isArray(t.roster_list)
+              ? t.roster_list
+              : Array.isArray(t.roster)
+              ? t.roster
+              : Array.isArray(t.athletes)
+              ? t.athletes
+              : [];
+            rawRoster.forEach((ra: any) => {
+              const idClean = norm(ra.athlete_id || ra.id || ra.user_id);
+              if (idClean) ownAthleteIds.add(idClean);
+
+              const nameClean = norm(ra.full_name || ra.name || `${ra.first_name || ''} ${ra.last_name || ''}`);
+              if (nameClean) ownAthleteNames.add(nameClean);
+            });
+          }
+        });
+
+        // 3. Add athletes with ACCEPTED recruitment proposals/inquiries
+        const ownProposals = proposalsRes?.proposals || (Array.isArray(proposalsRes) ? proposalsRes : []);
+        const ownInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
+        [...ownProposals, ...ownInquiries].forEach((p: any) => {
+          const status = String(p.offer_status || p.status || '').toUpperCase();
+          if (status.includes('ACCEPT')) {
+            const athId = norm(p.athlete_id || p.receiver_id || p.id || '');
+            if (athId) ownAthleteIds.add(athId);
+            const athName = norm(p.athlete_name || p.receiver_name || '');
+            if (athName) ownAthleteNames.add(athName);
+          }
+        });
+
+        // 4. Process Athletes (Excluding athletes already owned or joined with coach)
+        const rawSportAthletes = athletesRes?.athletes || (Array.isArray(athletesRes) ? athletesRes : athletesRes?.data || []);
+        const rawAllAthletes = allAthletesRes?.athletes || (Array.isArray(allAthletesRes) ? allAthletesRes : allAthletesRes?.data || []);
+        const allFetchedAthletes = [...rawSportAthletes, ...rawAllAthletes];
+
+        const globalAthletesMap = new Map<string, any>();
+        allFetchedAthletes.forEach((a: any) => {
+          const id = a.athlete_id || a.user_id || a.id;
+          if (id) {
+            globalAthletesMap.set(String(id).toLowerCase(), a);
+            globalAthletesMap.set(norm(id), a);
+          }
+          const fullName = (a.full_name || a.name || `${a.first_name || ''} ${a.last_name || ''}`).trim();
+          if (fullName) {
+            globalAthletesMap.set(norm(fullName), a);
+          }
+        });
+
+        const combinedMap = new Map<string, any>();
+        allFetchedAthletes.forEach((a: any, idx: number) => {
+          const id = a.athlete_id || a.user_id || a.id || `ath_${idx}`;
+          const idClean = norm(id);
+          const nameClean = norm(a.full_name || a.name || `${a.first_name || ''} ${a.last_name || ''}`);
+
+          // Skip if athlete is already owned on coach's team roster or has an accepted inquiry
+          const isOwned =
+            ownAthleteIds.has(idClean) ||
+            (nameClean && ownAthleteNames.has(nameClean)) ||
+            Array.from(ownAthleteNames).some((ownN) => ownN && nameClean && (nameClean.includes(ownN) || ownN.includes(nameClean)));
+
+          if (isOwned) return;
+
+          if (id && !combinedMap.has(id)) {
+            combinedMap.set(id, a);
+          }
+        });
+        const rawAthletes = Array.from(combinedMap.values());
+        let mappedAthletes: AthleteDiscoveryItem[] = [];
+        if (Array.isArray(rawAthletes) && rawAthletes.length > 0) {
+          mappedAthletes = rawAthletes.map((a: any, idx: number) => {
+            const rawSport = (a.sport_type || a.sport_category || a.sport || a.primary_sport || '').toUpperCase();
+            let sportCategory: SportCategoryFilter = 'BASKETBALL';
+            if (rawSport.includes('SWIM')) {
+              sportCategory = 'SWIMMING';
+            } else if (rawSport.includes('TRACK') || rawSport.includes('FIELD') || rawSport.includes('RUNNING')) {
+              sportCategory = 'TRACK AND FIELD';
+            } else if (rawSport.includes('BASKET')) {
+              sportCategory = 'BASKETBALL';
+            } else {
+              // Infer from athlete stats / position
+              const pos = String(a.primary_position || a.position || '').toUpperCase();
+              if (['FREESTYLE', 'BUTTERFLY', 'BACKSTROKE', 'BREASTSTROKE', 'SWIM'].includes(pos) || a.stats?.times_50m_free) {
+                sportCategory = 'SWIMMING';
+              } else if (['100M', '200M', '400M', 'SPRINTER', 'TRACK'].includes(pos) || a.stats?.times_100m) {
+                sportCategory = 'TRACK AND FIELD';
+              } else {
+                sportCategory = 'BASKETBALL';
+              }
+            }
+
+            const defaultPos = sportCategory === 'SWIMMING' ? 'SWIM' : sportCategory === 'TRACK AND FIELD' ? 'TRACK' : 'PG';
+            const positionTag = (a.primary_position || a.position || defaultPos).toUpperCase();
+
+            return {
+              athlete_id: a.athlete_id || a.user_id || a.id || `ath_${idx}`,
+              full_name: (a.full_name || a.name || `${a.first_name || ''} ${a.last_name || ''}`).trim() || 'Prospect Athlete',
+              province: (a.province || a.location || a.city || '').replace(/,\s*PH(ILIPPINES)?$/i, '').trim(),
+              recruitment_status: a.recruitment_status || 'Available',
+              position_tag: positionTag,
+              sport_category: sportCategory,
+              biometrics: {
+                height_ft: a.biometrics?.height_ft || a.height || '',
+                weight_lbs: a.biometrics?.weight_lbs || a.weight || '',
+                wingspan_ft: a.biometrics?.wingspan_ft || a.wingspan || '',
+              },
+              stats: {
+                ppg: Number(a.stats?.ppg ?? a.ppg ?? 0),
+                rpg: Number(a.stats?.rpg ?? a.rpg ?? 0),
+                ast: Number(a.stats?.ast ?? a.ast ?? 0),
+                fg_pct: Number(a.stats?.fg_pct ?? a.fg_pct ?? 0),
+                times_100m: a.stats?.times_100m || '',
+                times_200m: a.stats?.times_200m || '',
+                times_50m_free: a.stats?.times_50m_free || '',
+              },
+              calculated_per: Number(a.calculated_per ?? a.per ?? 0),
+              efficiency_pct: Number(a.efficiency_pct ?? a.efficiency ?? 0),
+              contact_info: {
+                email: a.email || a.contact_info?.email || '',
+                facebook: a.facebook || a.contact_info?.facebook || '',
+                phone: a.phone || a.contact_info?.phone || '',
+              },
+              jersey_number: a.jersey_number !== undefined ? String(a.jersey_number) : '',
+              avatar_url: a.avatar_url || a.profile_image,
+            };
+          });
+          setAthletes(mappedAthletes);
+        }
+
+        // 2. Process Teams (Excluding coach's own teams from Discovery Teams)
+        if (allTeamsList.length > 0) {
+          const seenTeamIds = new Set<string>();
+          const otherTeamsList = allTeamsList.filter((t: any) => {
+            const teamId = t.team_id || t.id;
+            if (teamId && seenTeamIds.has(teamId)) return false;
+            if (teamId) seenTeamIds.add(teamId);
+
+            const tCoachId = norm(t.coach_id || t.user_id || '');
+            const tHeadCoach = norm(t.head_coach || t.coach_name || '');
+
+            const isOwnTeam = Boolean(
+              !t.coach_id || // Team created locally by current coach
+              (tCoachId && ownCoachIdClean && (tCoachId.includes(ownCoachIdClean) || ownCoachIdClean.includes(tCoachId))) ||
+              (tHeadCoach && ownCoachNameClean && (tHeadCoach.includes(ownCoachNameClean) || ownCoachNameClean.includes(tHeadCoach)))
+            );
+
+            return !isOwnTeam;
+          });
+
+          const mappedTeams: DiscoveryTeamItem[] = otherTeamsList.map((t: any, idx: number) => {
+            const rawSport = (t.sport_type || t.sport || 'BASKETBALL').toUpperCase();
+            const sportCategory: SportCategoryFilter = rawSport.includes('SWIM')
+              ? 'SWIMMING'
+              : rawSport.includes('TRACK')
+              ? 'TRACK AND FIELD'
+              : 'BASKETBALL';
+
+            const rawRoster = Array.isArray(t.roster_list)
+              ? t.roster_list
+              : Array.isArray(t.roster)
+              ? t.roster
+              : Array.isArray(t.athletes)
+              ? t.athletes
+              : [];
+
+            const roster: AthleteDiscoveryItem[] = rawRoster.map((ra: any, rIdx: number) => ({
+              athlete_id: ra.athlete_id || ra.id || `ros_${rIdx}`,
+              full_name: (ra.full_name || ra.name || `${ra.first_name || ''} ${ra.last_name || ''}`).trim() || 'Roster Athlete',
+              province: ra.province || t.organization_school || '',
+              recruitment_status: 'Recruited',
+              position_tag: (ra.position || ra.primary_position || 'ATHLETE').toUpperCase(),
+              sport_category: sportCategory,
+              biometrics: {
+                height_ft: ra.height || '',
+                weight_lbs: ra.weight || '',
+                wingspan_ft: ra.wingspan || '',
+              },
+              stats: {
+                ppg: Number(ra.stats?.ppg ?? ra.ppg ?? 0),
+                rpg: Number(ra.stats?.rpg ?? ra.rpg ?? 0),
+                ast: Number(ra.stats?.ast ?? ra.ast ?? 0),
+                fg_pct: Number(ra.stats?.fg_pct ?? ra.fg_pct ?? 0),
+              },
+              calculated_per: Number(ra.calculated_per ?? ra.per ?? 0),
+              efficiency_pct: Number(ra.efficiency_pct ?? ra.efficiency ?? 0),
+              contact_info: {
+                email: ra.email || ra.contact_info?.email || '',
+                facebook: ra.facebook || ra.contact_info?.facebook || '',
+                phone: ra.phone || ra.contact_info?.phone || '',
+              },
+              jersey_number: ra.jersey_number !== undefined ? String(ra.jersey_number) : '',
+            }));
+
+            const rawCoachName = (
+              t.coach_name ||
+              t.head_coach ||
+              t.coach_full_name ||
+              t.coach?.full_name ||
+              t.coach?.name ||
+              t.owner_name ||
+              t.created_by_name ||
+              ''
+            ).trim();
+
+            const headCoach = rawCoachName && rawCoachName.toLowerCase() !== 'coach' && rawCoachName.toLowerCase() !== 'head coach'
+              ? rawCoachName
+              : 'Head Coach';
+
+            return {
+              team_id: t.team_id || t.id || `team_${idx}`,
+              team_name: t.team_name || t.name || 'Sports Team',
+              sport_category: sportCategory,
+              division_tag: `${sportCategory} • ${t.division || 'VARSITY'}`,
+              description: t.description || t.organization_school || '',
+              head_coach: headCoach,
+              season_record: t.season_record ? `${t.season_record.wins || 0} - ${t.season_record.losses || 0}` : '0 - 0',
+              roster: roster,
+            };
+          });
+          setTeams(mappedTeams);
+        }
+
+        // 3. Process Matches
+        const rawMatches = matchesRes?.matches || (Array.isArray(matchesRes) ? matchesRes : matchesRes?.data || []);
+        if (Array.isArray(rawMatches) && rawMatches.length > 0) {
+          const mappedMatches: DiscoveryMatchItem[] = rawMatches.map((m: any, idx: number) => {
+            const rawSport = (m.sport_type || m.sport || 'BASKETBALL').toUpperCase();
+            const sportCategory: SportCategoryFilter = rawSport.includes('SWIM')
+              ? 'SWIMMING'
+              : rawSport.includes('TRACK')
+              ? 'TRACK AND FIELD'
+              : 'BASKETBALL';
+
+            const rawPlayerStats = Array.isArray(m.player_stats) ? m.player_stats : Array.isArray(m.boxscore) ? m.boxscore : [];
+
+            return {
+              match_id: m.match_id || m.id || `match_${idx}`,
+              sport_category: sportCategory,
+              headline: m.headline || `${m.team1_name || 'TEAM A'} VS. ${m.team2_name || 'TEAM B'}`,
+              time_venue: m.time_venue || `${m.match_date || 'Today'} | ${m.location || 'Metro Sports Arena'}`,
+              team1_name: m.team1_name || 'PANTHERS',
+              team2_name: m.team2_name || 'HAWKS',
+              team1_score: m.team1_score || 84,
+              team2_score: m.team2_score || 78,
+              status: m.status || 'FINAL',
+              player_stats: rawPlayerStats.map((ps: any) => ({
+                player: ps.player || ps.player_name || ps.full_name || 'Athlete',
+                role_team: ps.role_team || ps.team_name || 'Forward',
+                pts: Number(ps.pts ?? ps.points ?? 18),
+                reb: Number(ps.reb ?? ps.rebounds ?? 6),
+                ast: Number(ps.ast ?? ps.assists ?? 5),
+                fg_pct: Number(ps.fg_pct ?? 48),
+                time_100m: ps.time_100m,
+                time_200m: ps.time_200m,
+                time_50m: ps.time_50m,
+                final_time: ps.final_time,
+              })),
+              dynamics_data: m.dynamics_data || [40, 65, 88, 70, 95, 82, 90, 60],
+            };
+          });
+
+          setEvents([
+            {
+              event_id: 'evt_live_01',
+              event_name: 'Regional Championship Series 2026',
+              date_range: 'SEASON 2026',
+              matches: mappedMatches,
+            },
+          ]);
+        }
+        const rawProposals = proposalsRes?.proposals || (Array.isArray(proposalsRes) ? proposalsRes : []);
+        const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
+        const combinedList = [...rawProposals, ...rawInquiries];
+
+        if (combinedList.length > 0) {
+          const mappedProps: ScoutingProposalItem[] = combinedList.map((p: any, idx: number) => {
+            const rawStatus = (p.offer_status || p.status || 'PENDING').toUpperCase();
+            const status: 'PENDING' | 'ACCEPTED' | 'DECLINED' = rawStatus.includes('ACCEPT')
+              ? 'ACCEPTED'
+              : rawStatus.includes('DECLIN')
+              ? 'DECLINED'
+              : 'PENDING';
+
+            const targetAthId = p.athlete_id || p.receiver_id || p.user_id || p.id;
+            const targetAthIdClean = norm(targetAthId);
+            const rawInqNameClean = norm(p.athlete_name || p.receiver_name || p.athlete_full_name || p.full_name || p.name);
+
+            const foundAth = globalAthletesMap.get(targetAthIdClean) || (rawInqNameClean ? globalAthletesMap.get(rawInqNameClean) : null);
+
+            const rawName = (
+              p.athlete_name ||
+              p.receiver_name ||
+              p.athlete_full_name ||
+              p.full_name ||
+              p.name ||
+              p.athlete?.full_name ||
+              p.athlete?.name ||
+              (foundAth ? (foundAth.full_name || foundAth.name || `${foundAth.first_name || ''} ${foundAth.last_name || ''}`) : '')
+            ).trim();
+
+            const athleteName = rawName && rawName.toLowerCase() !== 'athlete'
+              ? rawName
+              : (foundAth ? (foundAth.full_name || `${foundAth.first_name || ''} ${foundAth.last_name || ''}`).trim() : 'Prospect Athlete');
+
+            const rawSport = p.sport_category || p.sport_type || p.sport || foundAth?.sport_category || foundAth?.sport_type || 'Basketball';
+            const sportCategory = rawSport.toUpperCase().includes('TRACK') ? 'Track & Field' : rawSport.toUpperCase().includes('SWIM') ? 'Swimming' : 'Basketball';
+
+            return {
+              scout_id: p.scout_id || p.inquiry_id || p.id || `scout_${idx}`,
+              athlete_id: targetAthId || `ath_${idx}`,
+              athlete_name: athleteName || 'Prospect Athlete',
+              sport_category: sportCategory,
+              offer_status: status,
+              date_added_relative: p.date_initiated ? `Sent: ${new Date(p.date_initiated).toLocaleDateString()}` : 'Recently',
+              created_at: p.created_at || p.date_initiated || new Date().toISOString().split('T')[0],
+            };
+          });
+          setScoutingProposals(mappedProps);
+        }
+      } catch (err) {
+        // Fallback gracefully
+      }
+    };
+
+    fetchBackendDiscovery();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSportFilter]);
+
+  const scoutAthlete = async (athlete: AthleteDiscoveryItem) => {
     const existingIndex = scoutingProposals.findIndex((p) => p.athlete_id === athlete.athlete_id);
-    
+
+    // Optimistic UI update
     if (existingIndex >= 0) {
-      // Update status to pending if re-scouted
       setScoutingProposals((prev) =>
         prev.map((p, idx) =>
           idx === existingIndex
@@ -383,6 +460,39 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         created_at: new Date().toISOString().split('T')[0],
       };
       setScoutingProposals((prev) => [newProposal, ...prev]);
+    }
+
+    // Backend API Fetch
+    try {
+      await Promise.all([
+        requestAuthenticatedJson('/inquiries', 'POST', {
+          receiver_id: athlete.athlete_id,
+          athlete_id: athlete.athlete_id,
+          athlete_name: athlete.full_name,
+          coach_name: activeCoachNameState || 'Coach',
+          sport_type: athlete.sport_category,
+          sport_category: athlete.sport_category,
+          subject: 'Recruitment Inquiry',
+          message: `Coach ${activeCoachNameState || ''} has scouted ${athlete.full_name} for recruitment.`,
+          contact_phone: athlete.contact_info?.phone || '+639170000000',
+          status: 'PENDING',
+          offer_status: 'PENDING',
+        }),
+        requestAuthenticatedJson('/scouting/proposals', 'POST', {
+          athlete_id: athlete.athlete_id,
+          athlete_name: athlete.full_name,
+          coach_name: activeCoachNameState || 'Coach',
+          sport_category: athlete.sport_category,
+          scholarship_type: 'Full Athletic Scholarship',
+          offer_details: `Recruitment proposal for ${athlete.sport_category}.`,
+          contact_email: athlete.contact_info?.email || 'coach@atleta.ph',
+          deadline: '2026-12-31',
+          status: 'PENDING',
+          offer_status: 'PENDING',
+        }),
+      ]).catch(() => null);
+    } catch (e) {
+      // Ignored
     }
   };
 

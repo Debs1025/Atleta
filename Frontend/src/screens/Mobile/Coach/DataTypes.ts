@@ -137,6 +137,7 @@ export interface AthleteItem {
   jersey_number?: string;
   event_distance?: string;
   stroke_style?: string;
+  sport_type?: string;
   is_verified: boolean;
   missing_documents?: string[]; // e.g. ["Missing PSA Registration", "Residency proof expired"]
   avatar_url?: string;
@@ -147,6 +148,7 @@ export interface TeamDetailsState {
   team_name: string;
   sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "";
   division: string;
+  established_year?: string;
   selected_roster: AthleteItem[];
 }
 

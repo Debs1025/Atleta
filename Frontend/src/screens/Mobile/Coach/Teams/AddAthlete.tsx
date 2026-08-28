@@ -23,6 +23,7 @@ export interface AddAthleteProps {
   onNext: () => void;
   onBack: () => void;
   onNotifyAthlete?: (notification: AthleteNotification) => void;
+  athletesPool?: any[];
 }
 
 export function AddAthlete({
@@ -31,6 +32,7 @@ export function AddAthlete({
   onNext,
   onBack,
   onNotifyAthlete,
+  athletesPool,
 }: AddAthleteProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 12);
@@ -40,17 +42,60 @@ export function AddAthlete({
   const [showSuccessNotifyModal, setShowSuccessNotifyModal] = useState(false);
   const [notifiedAthleteName, setNotifiedAthleteName] = useState("");
 
-  // Filter pool based on search query
+  const poolItems: AthleteItem[] = useMemo(() => {
+    if (athletesPool && athletesPool.length > 0) {
+      return athletesPool.map((a: any) => ({
+        athlete_id: a.athlete_id || a.id || "ath_1",
+        id_number: String(a.jersey_number || a.id_number || "00"),
+        full_name: a.full_name || a.name || "Athlete",
+        grad_class: a.grad_class || "Active Athlete",
+        primary_position: (a.position || a.primary_position || "Player").toUpperCase(),
+        jersey_number: a.jersey_number,
+        event_distance: a.event_distance,
+        stroke_style: a.stroke_style,
+        sport_type: (a.sport_type || a.sport_category || a.sport || "").toUpperCase(),
+        is_verified: Boolean(a.is_eligibility_verified ?? a.is_verified ?? true),
+      }));
+    }
+    return MOCK_ATHLETE_ITEMS;
+  }, [athletesPool]);
+
+  // Filter pool based on team sport category and search query
   const filteredAthletes = useMemo(() => {
+    const targetSport = (teamDetails.sport_type || "").toUpperCase();
+
+    const sportFiltered = poolItems.filter((a) => {
+      if (!targetSport) return true;
+      const athleteSport = (a.sport_type || "").toUpperCase();
+
+      if (athleteSport) {
+        if (targetSport.includes("SWIM")) return athleteSport.includes("SWIM");
+        if (targetSport.includes("TRACK")) return athleteSport.includes("TRACK") || athleteSport.includes("FIELD") || athleteSport.includes("RUNNING");
+        if (targetSport.includes("BASKET")) return athleteSport.includes("BASKET");
+      }
+
+      // Infer from position if sport_type is missing
+      const pos = (a.primary_position || "").toUpperCase();
+      if (targetSport.includes("BASKET")) {
+        return ["PG", "SG", "SF", "PF", "C", "GUARD", "FORWARD", "CENTER"].includes(pos) || !pos;
+      } else if (targetSport.includes("TRACK")) {
+        return ["100M", "200M", "400M", "SPRINTER", "TRACK", "FIELD", "LONG JUMP", "SHOT PUT"].includes(pos);
+      } else if (targetSport.includes("SWIM")) {
+        return ["FREESTYLE", "BUTTERFLY", "BACKSTROKE", "BREASTSTROKE", "SWIM", "MEDLEY"].includes(pos);
+      }
+
+      return true;
+    });
+
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return MOCK_ATHLETE_ITEMS;
-    return MOCK_ATHLETE_ITEMS.filter(
+    if (!q) return sportFiltered;
+    return sportFiltered.filter(
       (a) =>
         a.full_name.toLowerCase().includes(q) ||
         a.id_number.includes(q) ||
         a.primary_position.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [poolItems, searchQuery, teamDetails.sport_type]);
 
   // Check if athlete is in current selected roster
   const isSelected = (athleteId: string) => {
@@ -70,25 +115,6 @@ export function AddAthlete({
     }
   };
 
-  /*
-   * DISPATCH ATHLETE NOTIFICATION (CLIENT STATE / TEMPORARY DATA)
-   * -------------------------------------------------------------
-   * When the coach clicks "NOTIFY ATHLETE", this function dispatches an
-   * Action Required notification to the athlete's client side.
-   *
-   * TODO: BACKEND INTEGRATION INSTRUCTIONS
-   * Remove this local dispatch block when your backend API is ready:
-   *
-   * await fetch('/api/notifications/dispatch', {
-   *   method: 'POST',
-   *   headers: { 'Content-Type': 'application/json' },
-   *   body: JSON.stringify({
-   *     target_athlete_id: athlete.athlete_id,
-   *     type: 'ACTION_REQUIRED',
-   *     missing_documents: athlete.missing_documents,
-   *   })
-   * });
-   */
   const handleNotifyAthlete = (athlete: AthleteItem) => {
     const notification: AthleteNotification = {
       notification_id: `notif_${Date.now()}`,

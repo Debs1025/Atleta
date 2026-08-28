@@ -94,6 +94,8 @@ export function NotificationPage({
   // Modal States
   const [selectedInquiryNotif, setSelectedInquiryNotif] =
     useState<NotificationItem | null>(null);
+  const [viewCoachDetailNotif, setViewCoachDetailNotif] =
+    useState<NotificationItem | null>(null);
   const [selectedDocNotif, setSelectedDocNotif] =
     useState<NotificationItem | null>(null);
   const [selectedFile, setSelectedFile] = useState<{
@@ -125,37 +127,39 @@ export function NotificationPage({
           // Process API notifications
           const apiNotifs = notifRes?.notifications || (Array.isArray(notifRes) ? notifRes : []);
           apiNotifs.forEach((n: any) => {
-            const rawType = n.type || "ACTION_REQUIRED";
-            const isRecruitment = rawType.includes("INQUIRY") || rawType.includes("RECRUITMENT");
-
+            const isDocReq = n.type === "DOCUMENT_REQUEST" || n.document_details;
             items.push({
-              id: n.notification_id || n.id || `notif_${Math.random()}`,
-              type: isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
+              id: n.id || `notif_${Math.random()}`,
+              type: "ACTION_REQUIRED",
               date_group: "TODAY",
               timestamp_relative: formatRelativeTime(n.created_at),
-              read_status: Boolean(n.is_read),
-              sender: isRecruitment ? {
-                name: n.title || "Coach Inquiry",
-                role_category: "Recruitment Inquiry",
-              } : undefined,
-              title: n.title || (isRecruitment ? "Recruitment Inquiry" : "Action Required"),
-              message_body: n.message || n.message_body || "",
-              highlighted_text: n.action_url ? "Document Verification" : undefined,
-              action_label: isRecruitment ? "View Inquiry" : "Upload Now ->",
-              document_details: !isRecruitment ? {
-                document_name: "Eligibility Document",
-                required_type: "ELIGIBILITY",
-                is_uploaded: false,
-              } : undefined,
+              read_status: n.read_status || false,
+              sender: {
+                name: n.title || "System Notification",
+                role_category: "Notification",
+              },
+              title: n.title || "Notification",
+              message_body: n.message || n.body || "",
+              highlighted_text: n.highlighted_text,
+              action_label: isDocReq ? "Upload Document" : "View Notification",
+              document_details: n.document_details,
             });
           });
 
           // Process API recruitment inquiries
           const apiInquiries = inqRes?.inquiries || (Array.isArray(inqRes) ? inqRes : []);
           apiInquiries.forEach((inq: any) => {
-            const rawStatus = (inq.offer_status || "Sent").toUpperCase();
+            const rawStatus = (inq.offer_status || inq.status || "Sent").toUpperCase();
             const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
-            const coachName = inq.coach_name || "Coach";
+            const coachName = (
+              inq.coach_name ||
+              inq.coach_full_name ||
+              inq.sender_name ||
+              inq.sender?.name ||
+              inq.coach?.full_name ||
+              inq.coach?.name ||
+              "Coach"
+            ).trim();
 
             // If the inquiry was sent BY the athlete and is still PENDING, skip showing in Notification inbox
             // (it belongs in the Inquiries Tracker screen, not as an incoming notification asking athlete to accept)
@@ -169,30 +173,30 @@ export function NotificationPage({
               : "Recruitment Inquiry";
             const notifMessage = isSentByAthlete
               ? `${coachName} has ${mappedStatus.toLowerCase()} your recruitment inquiry.`
-              : `${coachName} from ${inq.current_institution || "Athletic Department"} sent you a recruitment inquiry.`;
+              : `${coachName} from ${inq.current_institution || inq.team_name || "Athletic Department"} sent you a recruitment inquiry.`;
 
             items.push({
-              id: inq.scout_id || `inq_${Math.random()}`,
+              id: inq.scout_id || inq.inquiry_id || inq.id || `inq_${Math.random()}`,
               type: "RECRUITMENT_INQUIRY",
               date_group: "TODAY",
-              timestamp_relative: formatRelativeTime(inq.date_initiated),
+              timestamp_relative: formatRelativeTime(inq.date_initiated || inq.created_at),
               read_status: mappedStatus !== "PENDING",
               sender: {
                 name: coachName,
-                role_category: `${inq.sport_type || "Basketball"} Inquiry`,
+                role_category: `${inq.sport_type || inq.sport_category || "Basketball"} Inquiry`,
               },
               title: notifTitle,
               message_body: notifMessage,
               action_label: isSentByAthlete ? "View Details" : "View Inquiry",
               target_route: "CoachProfile",
               inquiry_details: {
-                inquiry_id: inq.scout_id,
-                coach_id: inq.coach_scout_id || "",
+                inquiry_id: inq.scout_id || inq.inquiry_id || inq.id,
+                coach_id: inq.coach_scout_id || inq.coach_id || "",
                 coach_name: coachName,
                 role_title: "Head Coach",
-                team_name: inq.current_institution || "Varsity Team",
-                sport: (inq.sport_type || "BASKETBALL").toUpperCase(),
-                message: inq.offer_message || "Recruitment inquiry discussion.",
+                team_name: inq.current_institution || inq.team_name || inq.organization || "Varsity Team",
+                sport: (inq.sport_type || inq.sport_category || "BASKETBALL").toUpperCase(),
+                message: inq.offer_message || inq.message || inq.subject || "Recruitment inquiry discussion.",
                 status: mappedStatus,
                 is_sent_by_me: isSentByAthlete,
               },
@@ -278,7 +282,9 @@ export function NotificationPage({
     }
 
     try {
-      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Accepted" });
+      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Accepted" }).catch(() =>
+        requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PUT", { status: "Accepted" })
+      );
       Alert.alert("Inquiry Accepted", "You have accepted the recruitment inquiry!");
     } catch (err: any) {
       Alert.alert("Inquiry Responded", "Your acceptance has been logged.");
@@ -315,7 +321,9 @@ export function NotificationPage({
     }
 
     try {
-      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Declined" });
+      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Declined" }).catch(() =>
+        requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PUT", { status: "Declined" })
+      );
       Alert.alert("Inquiry Declined", "You have declined the recruitment inquiry.");
     } catch (err: any) {
       Alert.alert("Inquiry Responded", "Your decision has been logged.");
@@ -625,15 +633,33 @@ export function NotificationPage({
                     style={styles.modalAvatar}
                   />
                   <Text style={styles.modalCoachName}>
-                    {selectedInquiryNotif.sender?.name}
+                    {selectedInquiryNotif.inquiry_details?.coach_name || selectedInquiryNotif.sender?.name || "Coach"}
                   </Text>
                   <Text style={styles.modalCoachRole}>
                     {selectedInquiryNotif.inquiry_details?.role_title || "Head Coach"}{" "}
-                    • {selectedInquiryNotif.inquiry_details?.team_name || "Varsity"}
+                    • {selectedInquiryNotif.inquiry_details?.team_name || "Varsity Team"}
                   </Text>
                   <Text style={styles.modalSportTag}>
                     {selectedInquiryNotif.inquiry_details?.sport || "BASKETBALL"}
                   </Text>
+
+                  <Pressable
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: "rgba(56, 189, 248, 0.15)",
+                      borderColor: "#38BDF8",
+                      borderWidth: 1,
+                      paddingVertical: 8,
+                      paddingHorizontal: 16,
+                      borderRadius: 20,
+                      marginTop: 12,
+                    }}
+                    onPress={() => setViewCoachDetailNotif(selectedInquiryNotif)}
+                  >
+                    <Ionicons name="person-circle-outline" size={18} color="#38BDF8" style={{ marginRight: 6 }} />
+                    <Text style={{ color: "#38BDF8", fontSize: 13, fontWeight: "700" }}>VIEW COACH DETAILS</Text>
+                  </Pressable>
                 </View>
 
                 <View style={styles.modalMessageBox}>
@@ -678,6 +704,75 @@ export function NotificationPage({
                     </Text>
                   </View>
                 )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 1B: VIEW COACH PROFILE DETAILS */}
+      <Modal
+        visible={!!viewCoachDetailNotif}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setViewCoachDetailNotif(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>COACH PROFILE</Text>
+              <Pressable onPress={() => setViewCoachDetailNotif(null)}>
+                <Ionicons name="close" size={24} color="#94A3B8" />
+              </Pressable>
+            </View>
+
+            {viewCoachDetailNotif && (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 12 }}>
+                <View style={[styles.modalCoachProfile, { marginBottom: 16 }]}>
+                  <Image
+                    source={require("../../../../assets/profile.png")}
+                    style={[styles.modalAvatar, { width: 72, height: 72, borderRadius: 36 }]}
+                  />
+                  <Text style={[styles.modalCoachName, { fontSize: 20, marginTop: 8 }]}>
+                    {viewCoachDetailNotif.inquiry_details?.coach_name || viewCoachDetailNotif.sender?.name || "Coach"}
+                  </Text>
+                  <Text style={[styles.modalCoachRole, { color: "#38BDF8", fontWeight: "700" }]}>
+                    {viewCoachDetailNotif.inquiry_details?.role_title || "Head Coach"}
+                  </Text>
+                  <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 2 }}>
+                    {viewCoachDetailNotif.inquiry_details?.team_name || "Varsity Athletics Program"}
+                  </Text>
+                </View>
+
+                <View style={{ backgroundColor: "#0F172A", padding: 14, borderRadius: 12, marginBottom: 12 }}>
+                  <Text style={{ color: "#64748B", fontSize: 11, fontWeight: "700", marginBottom: 6 }}>
+                    SPORT & PROGRAM
+                  </Text>
+                  <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "600" }}>
+                    {viewCoachDetailNotif.inquiry_details?.sport || "BASKETBALL"}
+                  </Text>
+                </View>
+
+                <View style={{ backgroundColor: "#0F172A", padding: 14, borderRadius: 12, marginBottom: 16 }}>
+                  <Text style={{ color: "#64748B", fontSize: 11, fontWeight: "700", marginBottom: 6 }}>
+                    RECRUITMENT INQUIRY NOTE
+                  </Text>
+                  <Text style={{ color: "#CBD5E1", fontSize: 13, lineHeight: 18 }}>
+                    {viewCoachDetailNotif.inquiry_details?.message || "Active recruitment inquiry sent to your profile."}
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={{
+                    backgroundColor: "#38BDF8",
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: "center",
+                  }}
+                  onPress={() => setViewCoachDetailNotif(null)}
+                >
+                  <Text style={{ color: "#0F172A", fontSize: 14, fontWeight: "800" }}>BACK TO INQUIRY</Text>
+                </Pressable>
               </ScrollView>
             )}
           </View>

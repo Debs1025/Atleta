@@ -85,6 +85,19 @@ export function CreateTeam({
           </Text>
         </View>
 
+        {/* YEAR ESTABLISHED FIELD */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>YEAR ESTABLISHED</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="e.g. 2026"
+            placeholderTextColor="#94A3B8"
+            value={teamDetails.established_year || ""}
+            onChangeText={(text) => onChangeState({ established_year: text })}
+            keyboardType="numeric"
+          />
+        </View>
+
         {/* SPORT CATEGORY DROPDOWN */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>SPORT CATEGORY</Text>

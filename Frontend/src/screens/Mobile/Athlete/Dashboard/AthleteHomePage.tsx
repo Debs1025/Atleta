@@ -82,11 +82,14 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     let isMounted = true;
     const fetchAthleteHomeData = async () => {
       try {
-        const [homeRes, profileRes, statsRes, workloadRes]: [any, any, any, any] = await Promise.all([
+        const [homeRes, profileRes, statsRes, workloadRes, inqRes, inqMeRes, propRes]: [any, any, any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson("/athletes/home").catch(() => null),
           requestAuthenticatedJson("/athletes/profile").catch(() => null),
           requestAuthenticatedJson("/athletes/stats/all").catch(() => null),
           requestAuthenticatedJson("/athletes/workload").catch(() => null),
+          requestAuthenticatedJson("/inquiries").catch(() => null),
+          requestAuthenticatedJson("/inquiries/my-inquiries").catch(() => null),
+          requestAuthenticatedJson("/scouting/proposals").catch(() => null),
         ]);
 
         if (isMounted && (homeRes || profileRes || statsRes || workloadRes)) {
@@ -116,7 +119,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
           if (Array.isArray(entriesList)) {
             entriesList.forEach((entry: any) => {
-              const dateStr = entry.entry_date ? String(entry.entry_date).slice(5) : (entry.date || "DAY");
+              const rawDate = entry.entry_date || entry.date || "DAY";
+              const dateStr = String(rawDate).length > 5 ? String(rawDate).slice(5) : String(rawDate);
               const duration = Number(entry.session_duration_mins || entry.duration_minutes || 0);
               const intensity = Number(entry.srpe_score || entry.srpe || 0);
 
@@ -146,29 +150,82 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             athlete_id: raw.athlete_id || raw.user_id || "ath_me",
             first_name: (raw.first_name || raw.user?.first_name || "").toUpperCase(),
             last_name: (raw.last_name || raw.user?.last_name || "").toUpperCase(),
-            birthdate: raw.birthdate || raw.birth_date || raw.user?.birthdate || "",
+            birthdate: raw.birthdate || raw.birth_date || raw.user?.birthdate || raw.user?.birth_date || "",
             gender: (raw.gender || raw.user?.gender || "").toUpperCase(),
-            province: (raw.province || raw.location || raw.user?.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase(),
+            province: (raw.province || raw.location || raw.user?.province || raw.user?.location || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase(),
             category: (raw.sport_type || raw.category || raw.sport || "BASKETBALL").toUpperCase() as any,
             height_cm: Number(phys.height_cm || phys.height || raw.height_cm || raw.height || 0),
             weight_kg: Number(phys.weight_kg || phys.weight || raw.weight_kg || raw.weight || 0),
             wingspan_cm: Number(phys.wingspan_cm || phys.wingspan || raw.wingspan_cm || raw.wingspan || 0),
             recruitment_status: raw.recruitment_status || "AVAILABLE",
             leaderboard_rank: raw.leaderboard_rank || "N/A",
-            current_affiliation: {
-              team_id: raw.current_affiliation?.team_id || raw.team_id || "",
-              team_name: raw.current_affiliation?.team_name || raw.team_name || (raw.team_id ? "Assigned Team" : "Unassigned Team"),
-              sport_type: (raw.current_affiliation?.sport_type || raw.sport_type || raw.category || "BASKETBALL").toUpperCase() as any,
-              division: raw.current_affiliation?.division || raw.division || "",
-              head_coach: raw.current_affiliation?.head_coach || raw.head_coach || {
-                coach_id: "",
-                full_name: "No Coach Assigned",
-                role_title: "Head Coach",
-                years_experience: "0 Years",
-                quote: "",
-              },
-              is_verified: Boolean(raw.current_affiliation?.is_verified ?? raw.is_verified),
-            },
+            current_affiliation: (() => {
+              const baseTeamId = raw.current_affiliation?.team_id || raw.team_id || "";
+              const baseTeamName = raw.current_affiliation?.team_name || raw.team_name || "";
+
+              if (baseTeamName && baseTeamName !== "Unassigned Team") {
+                return {
+                  team_id: baseTeamId,
+                  team_name: baseTeamName,
+                  sport_type: (raw.current_affiliation?.sport_type || raw.sport_type || raw.category || "BASKETBALL").toUpperCase() as any,
+                  division: raw.current_affiliation?.division || raw.division || "Varsity",
+                  head_coach: typeof raw.current_affiliation?.head_coach === "object" ? raw.current_affiliation.head_coach : {
+                    coach_id: raw.coach_id || "",
+                    full_name: raw.head_coach || raw.coach_name || "Head Coach",
+                    role_title: "Head Coach",
+                    years_experience: raw.years_of_experience ? `${raw.years_of_experience} Years` : "",
+                    quote: raw.quote || "",
+                  },
+                  is_verified: true,
+                };
+              }
+
+              // Check if athlete has an accepted inquiry or proposal
+              const rawInq = inqRes?.inquiries || (Array.isArray(inqRes) ? inqRes : []);
+              const rawInqMe = inqMeRes?.inquiries || (Array.isArray(inqMeRes) ? inqMeRes : []);
+              const rawProp = propRes?.proposals || (Array.isArray(propRes) ? propRes : []);
+              const accepted = [...rawInq, ...rawInqMe, ...rawProp].find((x: any) => {
+                const s = String(x.offer_status || x.status || x.response_status || x.state || "").toUpperCase();
+                return s.includes("ACCEPT");
+              });
+
+              if (accepted) {
+                const teamName = accepted.team_name || accepted.institution_name || accepted.current_institution || accepted.school_name || accepted.team || `${accepted.sport_category || 'Varsity'} Team`;
+                const coachName = accepted.coach_name || accepted.sender_name || accepted.head_coach || accepted.name || "Head Coach";
+                const sport = (accepted.sport_category || accepted.sport_type || accepted.sport || raw.sport_type || "BASKETBALL").toUpperCase();
+                const yrsExp = accepted.years_of_experience ? `${accepted.years_of_experience} Years` : "";
+
+                return {
+                  team_id: accepted.team_id || accepted.inquiry_id || accepted.id || "",
+                  team_name: teamName,
+                  sport_type: sport.includes("SWIM") ? "SWIMMING" : sport.includes("TRACK") ? "TRACK AND FIELD" : "BASKETBALL",
+                  division: accepted.division || "Varsity",
+                  head_coach: {
+                    coach_id: accepted.coach_id || accepted.sender_id || accepted.user_id || "",
+                    full_name: coachName,
+                    role_title: accepted.role_title || "Head Coach",
+                    years_experience: yrsExp,
+                    quote: accepted.quote || "",
+                  },
+                  is_verified: true,
+                };
+              }
+
+              return {
+                team_id: "",
+                team_name: "Unassigned Team",
+                sport_type: (raw.sport_type || raw.category || "BASKETBALL").toUpperCase() as any,
+                division: "",
+                head_coach: {
+                  coach_id: "",
+                  full_name: "No Coach Assigned",
+                  role_title: "Head Coach",
+                  years_experience: "0 Years",
+                  quote: "",
+                },
+                is_verified: false,
+              };
+            })(),
             analytics: {
               points_per_game: Number(stats.points_per_game ?? stats.ppg ?? stats.points ?? 0),
               assists_per_game: Number(stats.assists_per_game ?? stats.apg ?? stats.assists ?? 0),

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Alert,
   Modal,
@@ -12,6 +12,7 @@ import styles from "./styles/CoachMainPage";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
 
 // Data Types & Mock Testing Data
 import {
@@ -30,6 +31,7 @@ import { ManageTeamPage } from "../Teams/ManageTeamPage";
 import { ViewAllPlayers } from "./ViewAllPlayers";
 import { CoachSettings } from "./CoachSettings";
 import { AtletaHeader } from "../Components/AtletaHeader";
+import { CoachNotificationModal } from "../Components/CoachNotificationModal";
 import { AtletaNavbar } from "../Components/AtletaNavbar";
 import { CoachProfile } from "../Profile/CoachProfile";
 import { CoachEditProfile } from "../Profile/CoachEditProfile";
@@ -150,9 +152,198 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   // Local State
-  const [coach] = useState<UserCoach>(MOCK_COACH);
+  const [coach, setCoach] = useState<UserCoach>(MOCK_COACH);
   const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
   const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>(MOCK_ATHLETES_POOL);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCoachAndTeamsData = async () => {
+      try {
+        const coachRes: any = await requestAuthenticatedJson("/coaches/me").catch(() => null);
+
+        if (!isMounted) return;
+
+        let activeCoachId = coach.coach_id;
+        if (coachRes) {
+          const rawCoach = coachRes.coach || coachRes.user || coachRes;
+          activeCoachId = rawCoach.coach_id || rawCoach.id || rawCoach.user_id || coach.coach_id;
+          setCoach((prev) => ({
+            ...prev,
+            coach_id: activeCoachId,
+            first_name: rawCoach.first_name || prev.first_name,
+            last_name: rawCoach.last_name || prev.last_name,
+            email: rawCoach.email || prev.email,
+            current_institution: rawCoach.current_institution || rawCoach.school_organization || prev.current_institution,
+          }));
+        }
+
+        const [teamsRes, athletesRes]: [any, any] = await Promise.all([
+          requestAuthenticatedJson(`/teams?coach_id=${activeCoachId}`).catch(() =>
+            requestAuthenticatedJson("/teams").catch(() => null)
+          ),
+          requestAuthenticatedJson("/scouting/athletes").catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        let poolList: RosterAthlete[] = [];
+        if (athletesRes) {
+          const rawAthletes = Array.isArray(athletesRes)
+            ? athletesRes
+            : Array.isArray(athletesRes.athletes)
+            ? athletesRes.athletes
+            : Array.isArray(athletesRes.data)
+            ? athletesRes.data
+            : [];
+
+          if (rawAthletes.length > 0) {
+            poolList = rawAthletes.map((a: any, idx: number) => ({
+              athlete_id: a.athlete_id || a.id || `ath_pool_${idx}`,
+              user_id: a.user_id || `usr_${a.athlete_id || idx}`,
+              full_name: (a.full_name || a.name || `${a.first_name || ""} ${a.last_name || ""}`).trim() || "Athlete",
+              position: (a.primary_position || a.position || "PG").toUpperCase(),
+              jersey_number: a.jersey_number !== undefined ? String(a.jersey_number) : "00",
+              sport_type: (a.sport_type || a.sport || "BASKETBALL").toUpperCase(),
+              is_eligibility_verified: Boolean(a.is_eligibility_verified ?? a.is_verified ?? true),
+              event_distance: a.event_distance,
+              stroke_style: a.stroke_style,
+            }));
+            setAthletesPool(poolList);
+          }
+        }
+
+        if (teamsRes) {
+          const rawTeamsList = Array.isArray(teamsRes)
+            ? teamsRes
+            : Array.isArray(teamsRes.teams)
+            ? teamsRes.teams
+            : Array.isArray(teamsRes.data)
+            ? teamsRes.data
+            : [];
+
+          const ownCoachIdClean = String(activeCoachId || "").replace(/^coach_/, "").toLowerCase();
+          const ownTeamsList = rawTeamsList.filter((t: any) => {
+            if (!t.coach_id) return true;
+            const tCoachId = String(t.coach_id).replace(/^coach_/, "").toLowerCase();
+            return tCoachId === ownCoachIdClean;
+          });
+
+          if (ownTeamsList.length > 0) {
+            const mappedTeams: Team[] = ownTeamsList.map((t: any, idx: number) => {
+              const rawRoster = Array.isArray(t.roster_list)
+                ? t.roster_list
+                : Array.isArray(t.roster)
+                ? t.roster
+                : Array.isArray(t.athletes)
+                ? t.athletes
+                : [];
+
+              const rosterList: RosterAthlete[] = rawRoster.map((a: any, aIdx: number) => {
+                const isStringId = typeof a === "string";
+                const athId = isStringId ? a : a.athlete_id || a.id || a.user_id || `ath_${aIdx}`;
+                const cleanId = String(athId).toLowerCase().replace(/^ath_/, "").replace(/^usr_/, "");
+
+                const foundInPool = poolList.find((p) => {
+                  const pId = String(p.athlete_id || p.user_id || "").toLowerCase().replace(/^ath_/, "").replace(/^usr_/, "");
+                  return pId === cleanId || (cleanId.length > 0 && pId.includes(cleanId)) || (cleanId.length > 0 && cleanId.includes(pId));
+                });
+
+                const rawName = !isStringId
+                  ? (a.full_name || a.name || `${a.first_name || ""} ${a.last_name || ""}`).trim()
+                  : "";
+
+                const fullName = rawName && rawName.toLowerCase() !== "athlete"
+                  ? rawName
+                  : foundInPool?.full_name || (isStringId ? athId : `Athlete #${aIdx + 1}`);
+
+                const pos = !isStringId && (a.position || a.primary_position)
+                  ? (a.position || a.primary_position).toUpperCase()
+                  : foundInPool?.position || "PG";
+
+                const jersey = !isStringId && a.jersey_number !== undefined
+                  ? String(a.jersey_number)
+                  : foundInPool?.jersey_number || String(aIdx + 1);
+
+                const sport = !isStringId && (a.sport_type || a.sport)
+                  ? (a.sport_type || a.sport).toUpperCase()
+                  : foundInPool?.sport_type || (t.sport_type || t.sport || "BASKETBALL").toUpperCase();
+
+                return {
+                  athlete_id: String(athId),
+                  user_id: String(foundInPool?.user_id || (!isStringId ? a.user_id : undefined) || athId),
+                  full_name: fullName,
+                  position: pos,
+                  jersey_number: jersey,
+                  sport_type: sport,
+                  is_eligibility_verified: Boolean(
+                    !isStringId
+                      ? (a.is_eligibility_verified ?? a.is_verified ?? foundInPool?.is_eligibility_verified ?? true)
+                      : (foundInPool?.is_eligibility_verified ?? true)
+                  ),
+                  event_distance: !isStringId ? (a.event_distance || foundInPool?.event_distance) : foundInPool?.event_distance,
+                  stroke_style: !isStringId ? (a.stroke_style || foundInPool?.stroke_style) : foundInPool?.stroke_style,
+                };
+              });
+
+              return {
+                team_id: t.team_id || t.id || `team_${idx}`,
+                team_name: t.team_name || t.name || "My Team",
+                sport_type: (t.sport_type || t.sport || "BASKETBALL").toUpperCase() as Team["sport_type"],
+                division: t.division || t.organization_school || "",
+                season_record: t.season_record || { wins: t.wins || 0, losses: t.losses || 0 },
+                coach_id: t.coach_id || activeCoachId,
+                roster_list: rosterList,
+                created_at: t.created_at || new Date().toISOString().split("T")[0],
+              };
+            });
+
+            // Fetch individual team details
+            const enrichedTeams = await Promise.all(
+              mappedTeams.map(async (team) => {
+                if (team.roster_list && team.roster_list.length > 0) return team;
+                try {
+                  const detailsRes: any = await requestAuthenticatedJson(`/teams/${team.team_id}`).catch(() => null);
+                  const rawDetailsRoster = detailsRes?.roster || detailsRes?.team?.roster || detailsRes?.roster_list || [];
+                  if (Array.isArray(rawDetailsRoster) && rawDetailsRoster.length > 0) {
+                    const mappedDetailsRoster: RosterAthlete[] = rawDetailsRoster.map((a: any, aIdx: number) => ({
+                      athlete_id: String(a.athlete_id || a.id || `ath_${aIdx}`),
+                      user_id: String(a.user_id || `usr_${a.athlete_id || aIdx}`),
+                      full_name: (a.full_name || a.name || `${a.first_name || ""} ${a.last_name || ""}`).trim() || `Athlete #${aIdx + 1}`,
+                      position: (a.position || a.primary_position || "PG").toUpperCase(),
+                      jersey_number: a.jersey_number !== undefined ? String(a.jersey_number) : String(aIdx + 1),
+                      sport_type: (a.sport_type || team.sport_type || "BASKETBALL").toUpperCase(),
+                      is_eligibility_verified: Boolean(a.is_eligibility_verified ?? a.is_verified ?? true),
+                      event_distance: a.event_distance,
+                      stroke_style: a.stroke_style,
+                    }));
+                    return { ...team, roster_list: mappedDetailsRoster };
+                  }
+                } catch {
+                  // Fallback
+                }
+                return team;
+              })
+            );
+
+            setTeams(enrichedTeams);
+            if (enrichedTeams.length > 0) {
+              setSelectedTeamId(enrichedTeams[0].team_id);
+            }
+          }
+        }
+      } catch (err) {
+        // Non-blocking catch
+      }
+    };
+
+    fetchCoachAndTeamsData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
@@ -191,6 +382,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     setTeams((prev) =>
       prev.map((t) => (t.team_id === teamId ? { ...t, team_name: newName } : t))
     );
+    requestAuthenticatedJson(`/teams/${teamId}`, "PUT", { name: newName, team_name: newName }).catch(() => null);
   }, []);
 
   const handleUpdateTeamDetails = useCallback(
@@ -201,6 +393,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       setTeams((prev) =>
         prev.map((t) => (t.team_id === teamId ? { ...t, ...updates } : t))
       );
+      requestAuthenticatedJson(`/teams/${teamId}`, "PUT", {
+        name: updates.team_name,
+        team_name: updates.team_name,
+        division: updates.division,
+        sport_type: updates.sport_type,
+      }).catch(() => null);
     },
     []
   );
@@ -254,51 +452,168 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   );
 
   const handleRemovePlayer = useCallback((teamId: string, athleteId: string) => {
+    let removedPlayer: RosterAthlete | null = null;
+    let nextRoster: RosterAthlete[] = [];
+
     setTeams((prev) =>
       prev.map((t) => {
         if (t.team_id !== teamId) return t;
+        const target = t.roster_list.find((p) => p.athlete_id === athleteId);
+        if (target) removedPlayer = target;
+        nextRoster = t.roster_list.filter((p) => p.athlete_id !== athleteId);
         return {
           ...t,
-          roster_list: t.roster_list.filter((p) => p.athlete_id !== athleteId),
+          roster_list: nextRoster,
         };
       })
     );
+
+    // Keep removed player in coach's available athletes pool so they can be re-added anytime
+    if (removedPlayer) {
+      const playerToAdd: RosterAthlete = removedPlayer;
+      setAthletesPool((prev) => {
+        const exists = prev.some(
+          (ap) =>
+            ap.athlete_id === athleteId ||
+            (ap.user_id && playerToAdd.user_id && ap.user_id === playerToAdd.user_id)
+        );
+        if (exists) return prev;
+        return [...prev, playerToAdd];
+      });
+    }
+
+    const rosterPayload = nextRoster.map((a) => ({
+      athlete_id: a.athlete_id,
+      user_id: a.user_id || a.athlete_id,
+      position: a.position || 'PG',
+      jersey_number: Number(a.jersey_number) || 0,
+    }));
+
+    const backendPayload = {
+      roster_list: rosterPayload,
+      roster_updates: rosterPayload,
+      override_unverified: true,
+    };
+
+    Promise.all([
+      requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", backendPayload),
+      requestAuthenticatedJson(`/teams/${teamId}`, "PATCH", backendPayload),
+    ]).catch(() => null);
   }, []);
 
   const handleAddPlayersToTeam = useCallback((teamId: string, newAthletes: RosterAthlete[]) => {
+    let nextRoster: RosterAthlete[] = [];
+
     setTeams((prev) =>
       prev.map((t) => {
         if (t.team_id !== teamId) return t;
+        const existingIds = new Set(t.roster_list.map((r) => r.athlete_id));
+        const uniqueNew = newAthletes.filter((a) => !existingIds.has(a.athlete_id));
+        nextRoster = [...t.roster_list, ...uniqueNew];
         return {
           ...t,
-          roster_list: [...t.roster_list, ...newAthletes],
+          roster_list: nextRoster,
         };
       })
     );
+
+    const rosterPayload = nextRoster.map((a) => ({
+      athlete_id: a.athlete_id,
+      user_id: a.user_id || a.athlete_id,
+      position: a.position || 'PG',
+      jersey_number: Number(a.jersey_number) || 0,
+    }));
+
+    const backendPayload = {
+      roster_list: rosterPayload,
+      roster_updates: rosterPayload,
+      override_unverified: true,
+    };
+
+    Promise.all([
+      requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", backendPayload),
+      requestAuthenticatedJson(`/teams/${teamId}`, "PATCH", backendPayload),
+    ]).catch(() => null);
   }, []);
 
   const handleCreateTeam = useCallback(
-    (newTeamData: {
+    async (newTeamData: {
       team_name: string;
       sport_type: Team["sport_type"];
       division: string;
+      established_year?: string;
       roster_list: RosterAthlete[];
     }) => {
-      const created: Team = {
-        team_id: `team_${Date.now()}`,
-        team_name: newTeamData.team_name,
-        sport_type: newTeamData.sport_type,
-        division: newTeamData.division || "Elite Professional",
-        season_record: { wins: 0, losses: 0 },
-        coach_id: coach.coach_id,
-        roster_list: newTeamData.roster_list,
-        created_at: new Date().toISOString().split("T")[0],
-      };
-      setTeams((prev) => [created, ...prev]);
-      setSelectedTeamId(created.team_id);
-      setActiveView("manage_team");
+      try {
+        const divisionVal = (newTeamData.division || "").trim() || "Varsity Division";
+        const rosterPayload = (newTeamData.roster_list || []).map((a) => ({
+          athlete_id: a.athlete_id,
+          user_id: a.user_id || a.athlete_id,
+          first_name: a.full_name.split(" ")[0] || a.full_name,
+          last_name: a.full_name.split(" ").slice(1).join(" ") || "",
+          position: a.position || "PG",
+          jersey_number: a.jersey_number || "00",
+        }));
+
+        const payload = {
+          name: newTeamData.team_name.trim(),
+          team_name: newTeamData.team_name.trim(),
+          sport_type: newTeamData.sport_type,
+          division: divisionVal,
+          established_year: Number(newTeamData.established_year) || new Date().getFullYear(),
+          organization_school: coach.current_institution || "Atleta Academy",
+          roster_list: rosterPayload,
+          roster: rosterPayload,
+        };
+
+        const res: any = await requestAuthenticatedJson("/teams", "POST", payload);
+
+        const createdTeamObj = res?.team || res;
+        const newTeamId = createdTeamObj?.team_id || createdTeamObj?.id || `team_${Date.now()}`;
+        const athleteIds = (newTeamData.roster_list || []).map((a) => a.athlete_id);
+
+        if (athleteIds.length > 0) {
+          await requestAuthenticatedJson(`/teams/${newTeamId}/roster`, "PATCH", {
+            roster_list: rosterPayload,
+            roster_updates: rosterPayload,
+            athlete_ids: athleteIds,
+            action: "ADD",
+            override_unverified: true,
+          }).catch(() => null);
+        }
+
+        const created: Team = {
+          team_id: newTeamId,
+          team_name: createdTeamObj?.team_name || createdTeamObj?.name || newTeamData.team_name,
+          sport_type: newTeamData.sport_type,
+          division: divisionVal,
+          season_record: { wins: 0, losses: 0 },
+          coach_id: coach.coach_id,
+          roster_list: newTeamData.roster_list || [],
+          created_at: new Date().toISOString().split("T")[0],
+        };
+
+        setTeams((prev) => [created, ...prev]);
+        setSelectedTeamId(created.team_id);
+        setActiveView("manage_team");
+      } catch (e) {
+        const divisionVal = (newTeamData.division || "").trim() || "Varsity Division";
+        const fallbackCreated: Team = {
+          team_id: `team_${Date.now()}`,
+          team_name: newTeamData.team_name,
+          sport_type: newTeamData.sport_type,
+          division: divisionVal,
+          season_record: { wins: 0, losses: 0 },
+          coach_id: coach.coach_id,
+          roster_list: newTeamData.roster_list,
+          created_at: new Date().toISOString().split("T")[0],
+        };
+        setTeams((prev) => [fallbackCreated, ...prev]);
+        setSelectedTeamId(fallbackCreated.team_id);
+        setActiveView("manage_team");
+      }
     },
-    [coach.coach_id]
+    [coach.coach_id, coach.current_institution]
   );
 
   const handleSelectTab = useCallback((tab: NavigationTab) => {
@@ -325,6 +640,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
   const handleDeleteTeam = useCallback((teamId: string) => {
     setTeams((prev) => prev.filter((t) => t.team_id !== teamId));
+    requestAuthenticatedJson(`/teams/${teamId}`, "DELETE").catch(() => null);
     setActiveView("teams_list");
     setActiveTab("Teams");
   }, []);
@@ -424,13 +740,14 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           <AtletaHeader
             onSettingsPress={() => setActiveView("settings")}
             onProfilePress={() => setShowProfileModal(true)}
+            onNotificationPress={() => setShowNotificationModal(true)}
           />
 
           {/* SCROLLABLE DASHBOARD BODY */}
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
+              { paddingTop: headerTopPadding + 88, paddingBottom: 150 },
             ]}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
@@ -512,6 +829,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           onLogout={onLogout}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
+          onNotificationPress={() => setShowNotificationModal(true)}
         />
       )}
 
@@ -570,6 +888,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           }}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
+          onNotificationPress={() => setShowNotificationModal(true)}
         />
       )}
 
@@ -735,6 +1054,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           setShowProfileModal(false);
           setActiveView("edit_profile");
         }}
+      />
+
+      {/* COACH NOTIFICATIONS & ATHLETE INQUIRIES MODAL */}
+      <CoachNotificationModal
+        visible={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
       />
 
       {/* FLOATING ACTION OVERLAY MENU */}

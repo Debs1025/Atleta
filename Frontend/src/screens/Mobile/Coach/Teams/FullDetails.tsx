@@ -80,7 +80,7 @@ export function FullDetails({
         <View style={styles.teamHeaderBlock}>
           <View style={styles.teamNameRow}>
             <Text style={styles.teamNameTitle}>
-              {teamDetails.team_name.toUpperCase() || "CAMARINES SUR PANTHERS"}
+              {(teamDetails.team_name || "MY TEAM").toUpperCase()}
             </Text>
             <TouchableOpacity
               style={styles.editIconButton}

@@ -97,9 +97,10 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     const fetchDirectoryAndInquiries = async () => {
       try {
         setLoading(true);
-        const [teamsRes, inquiriesRes]: [any, any] = await Promise.all([
+        const [teamsRes, inquiriesRes, proposalsRes]: [any, any, any] = await Promise.all([
           requestAuthenticatedJson("/teams").catch(() => null),
           requestAuthenticatedJson("/inquiries").catch(() => null),
+          requestAuthenticatedJson("/scouting/proposals").catch(() => null),
         ]);
 
         if (isMounted) {
@@ -124,16 +125,23 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
           }));
           setTeams(mappedTeams);
 
-          const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
-          const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {
-            const rawStatus = (inq.offer_status || "PENDING").toUpperCase();
-            const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
+          const rawInq = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
+          const rawProp = proposalsRes?.proposals || (Array.isArray(proposalsRes) ? proposalsRes : []);
+          const combinedInquiries = [...rawInq, ...rawProp];
+
+          const mappedInquiries: InquirySchema[] = combinedInquiries.map((inq: any, idx: number) => {
+            const rawStatus = (inq.offer_status || inq.status || inq.response_status || "PENDING").toUpperCase();
+            const mappedStatus = rawStatus.includes("ACCEPT")
+              ? "ACCEPTED"
+              : rawStatus.includes("DECLIN") || rawStatus.includes("REJECT")
+              ? "DECLINED"
+              : "PENDING";
             return {
-              inquiry_id: inq.scout_id || `inq_${idx}`,
-              coach_name: inq.coach_name || "Coach",
-              institution_sport: `${inq.current_institution || "Varsity"} • ${inq.sport_type || "Basketball"}`,
+              inquiry_id: inq.scout_id || inq.inquiry_id || inq.id || `inq_${idx}`,
+              coach_name: inq.coach_name || inq.sender_name || inq.name || "Coach",
+              institution_sport: `${inq.current_institution || inq.institution_name || inq.team_name || "Varsity"} • ${inq.sport_category || inq.sport_type || "Basketball"}`,
               status: mappedStatus as any,
-              updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
+              updated_at_relative: `Sent: ${inq.date_initiated || inq.created_at ? new Date(inq.date_initiated || inq.created_at).toLocaleDateString() : "Recently"}`,
               sub_note: inq.decline_reason || undefined,
             };
           });

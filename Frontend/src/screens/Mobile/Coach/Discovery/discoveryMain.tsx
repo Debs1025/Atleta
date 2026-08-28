@@ -3,6 +3,7 @@ import { View, TextInput, TouchableOpacity, ScrollView, Text, Image } from 'reac
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AtletaHeader } from '../Components/AtletaHeader';
+import { CoachNotificationModal } from '../Components/CoachNotificationModal';
 import { DiscoveryProvider, useDiscovery } from './DiscoveryContext';
 import { DiscoveryPlayer } from './discoveryPlayer';
 import { DiscoveryTeams } from './discoveryTeams';
@@ -48,6 +49,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
   } = useDiscovery();
 
   const [subView, setSubView] = useState<'none' | 'rankings' | 'recruits' | 'viewTeam' | 'viewMatch'>('none');
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
 
   const isFullSubPage = subView !== 'none' || !!selectedAthlete;
 
@@ -63,8 +65,17 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
   return (
     <View style={styles.container}>
       {subView === 'none' && (
-        <AtletaHeader onSettingsPress={onSettingsPress} onProfilePress={onProfilePress} />
+        <AtletaHeader
+          onSettingsPress={onSettingsPress}
+          onProfilePress={onProfilePress}
+          onNotificationPress={() => setShowNotificationModal(true)}
+        />
       )}
+
+      <CoachNotificationModal
+        visible={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+      />
 
       <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 55 : insets.top }}>
         {subView === 'rankings' || subView === 'recruits' ? (

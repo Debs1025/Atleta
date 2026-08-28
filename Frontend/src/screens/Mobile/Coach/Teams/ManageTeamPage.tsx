@@ -98,13 +98,9 @@ export function ManageTeamPage({
   const [showEditMetadataModal, setShowEditMetadataModal] = useState(false);
   const [editName, setEditName] = useState(team.team_name);
   const [editSport, setEditSport] = useState<Team["sport_type"]>(team.sport_type);
-  const [editDivision, setEditDivision] = useState(team.division || "Elite Professional");
-
+  const [editDivision, setEditDivision] = useState(team.division || "");
   // Remove Player Confirmation Overlay State
   const [playerToRemove, setPlayerToRemove] = useState<RosterAthlete | null>(null);
-
-  // Delete Team Confirmation Overlay State
-  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
 
   // Basketball Position Picker Modal State
   const [posPickerPlayer, setPosPickerPlayer] = useState<RosterAthlete | null>(null);
@@ -115,12 +111,35 @@ export function ManageTeamPage({
   useEffect(() => {
     setEditName(team.team_name);
     setEditSport(team.sport_type);
-    setEditDivision(team.division || "Elite Professional");
+    setEditDivision(team.division);
   }, [team]);
 
-  const availablePool = athletesPool.filter(
-    (p) => !team.roster_list.some((rp) => rp.athlete_id === p.athlete_id)
-  );
+  const availablePool = athletesPool.filter((p) => {
+    // 1. Exclude players already on team roster
+    const alreadyOnTeam = team.roster_list.some((rp) => rp.athlete_id === p.athlete_id);
+    if (alreadyOnTeam) return false;
+
+    // 2. Match team's sport type
+    const teamSport = (team.sport_type || "").toUpperCase();
+    const athleteSport = (p.sport_type || "").toUpperCase();
+
+    if (athleteSport) {
+      if (teamSport.includes("SWIM")) return athleteSport.includes("SWIM");
+      if (teamSport.includes("TRACK")) return athleteSport.includes("TRACK") || athleteSport.includes("FIELD") || athleteSport.includes("RUNNING");
+      if (teamSport.includes("BASKET")) return athleteSport.includes("BASKET");
+    }
+
+    const pos = (p.position || "").toUpperCase();
+    if (teamSport.includes("BASKET")) {
+      return ["PG", "SG", "SF", "PF", "C", "GUARD", "FORWARD", "CENTER"].includes(pos) || !pos;
+    } else if (teamSport.includes("TRACK")) {
+      return ["100M", "200M", "400M", "SPRINTER", "TRACK", "FIELD", "LONG JUMP", "SHOT PUT"].includes(pos);
+    } else if (teamSport.includes("SWIM")) {
+      return ["FREESTYLE", "BUTTERFLY", "BACKSTROKE", "BREASTSTROKE", "SWIM", "MEDLEY"].includes(pos);
+    }
+
+    return true;
+  });
 
   const handleConfirmAdd = () => {
     const toAdd = availablePool.filter((p) => selectedIds.includes(p.athlete_id));
@@ -150,11 +169,6 @@ export function ManageTeamPage({
     }
   };
 
-  const handleConfirmDeleteTeam = () => {
-    setShowDeleteConfirmModal(false);
-    onDeleteTeam?.(team.team_id);
-  };
-
   return (
     <View style={styles.container}>
       {/* FIXED TOP HEADER */}
@@ -166,15 +180,6 @@ export function ManageTeamPage({
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Manage Team</Text>
           </View>
-
-          {/* Minimalist Delete Team Icon Button */}
-          <TouchableOpacity
-            style={styles.deleteTeamHeaderIcon}
-            onPress={() => setShowDeleteConfirmModal(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="trash-outline" size={20} color="#EF4444" />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -603,51 +608,6 @@ export function ManageTeamPage({
                 activeOpacity={0.8}
               >
                 <Text style={styles.removeConfirmText}>YES, REMOVE</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* MODAL 5: CONFIRMATION OVERLAY FOR DELETING ENTIRE TEAM */}
-      <Modal
-        visible={showDeleteConfirmModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDeleteConfirmModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.confirmOverlayBackdrop}
-          activeOpacity={1}
-          onPress={() => setShowDeleteConfirmModal(false)}
-        >
-          <View style={styles.confirmDialogCard}>
-            <View style={styles.warningIconCircle}>
-              <Ionicons name="trash" size={26} color="#EF4444" />
-            </View>
-
-            <Text style={styles.confirmTitle}>Delete Team?</Text>
-            <Text style={styles.confirmMessage}>
-              Are you sure you want to delete{" "}
-              <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>{team.team_name}</Text>? This
-              action cannot be undone and will permanently remove this team.
-            </Text>
-
-            <View style={styles.confirmButtonRow}>
-              <TouchableOpacity
-                style={styles.cancelConfirmButton}
-                onPress={() => setShowDeleteConfirmModal(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.cancelConfirmText}>CANCEL</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.removeConfirmButton}
-                onPress={handleConfirmDeleteTeam}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.removeConfirmText}>DELETE TEAM</Text>
               </TouchableOpacity>
             </View>
           </View>

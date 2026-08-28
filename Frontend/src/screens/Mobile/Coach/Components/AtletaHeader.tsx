@@ -12,9 +12,11 @@ const fontBoldPlatform = Platform.select({
 export interface AtletaHeaderProps {
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
+  onNotificationPress?: () => void;
+  unreadCount?: number;
 }
 
-export function AtletaHeader({ onSettingsPress, onProfilePress }: AtletaHeaderProps) {
+export function AtletaHeader({ onSettingsPress, onProfilePress, onNotificationPress, unreadCount = 0 }: AtletaHeaderProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
 
@@ -23,6 +25,28 @@ export function AtletaHeader({ onSettingsPress, onProfilePress }: AtletaHeaderPr
       <View style={styles.header}>
         <Text style={styles.brandTitle}>ATLETA</Text>
         <View style={styles.headerRight}>
+          {onNotificationPress && (
+            <TouchableOpacity
+              style={styles.iconCircleButton}
+              onPress={onNotificationPress}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="notifications-outline" size={18} color="#FFFFFF" />
+              {unreadCount > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 6,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: "#EF4444",
+                  }}
+                />
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.iconCircleButton}
             onPress={onSettingsPress}

@@ -249,9 +249,10 @@ export function HomeAnalyticsPage({
         </View>
 
         <View style={styles.teamCardContainer}>
-          {profile?.current_affiliation?.team_id &&
-          profile.current_affiliation.team_id !== "" &&
-          profile.current_affiliation.team_name !== "Unassigned Team" ? (
+          {Boolean(
+            profile?.current_affiliation?.team_name &&
+            profile.current_affiliation.team_name !== "Unassigned Team"
+          ) ? (
             <>
               {/* Group / Teams */}
               <View style={styles.teamHeaderRow}>

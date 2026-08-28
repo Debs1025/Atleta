@@ -19,6 +19,7 @@ interface PerformancePageProps {
   onSelectAthlete: (athlete: AthletePerformanceProfile) => void;
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
+  onNotificationPress?: () => void;
   athletes?: AthletePerformanceProfile[];
 }
 
@@ -28,6 +29,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
   onSettingsPress,
   onProfilePress,
+  onNotificationPress,
   athletes = MOCK_PERFORMANCE_ATHLETES,
 }) => {
   const insets = useSafeAreaInsets();
@@ -55,6 +57,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
       <AtletaHeader
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress}
+        onNotificationPress={onNotificationPress}
       />
 
       <ScrollView

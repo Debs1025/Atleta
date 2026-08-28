@@ -118,7 +118,7 @@ export const DiscoveryPlayer: React.FC<{
         ) : (
           <View style={styles.emptyStateContainer}>
             <Ionicons name="search-outline" size={32} color="#64748B" />
-            <Text style={styles.emptyStateText}>No players found matching query</Text>
+            <Text style={styles.emptyStateText}>No Players found</Text>
           </View>
         )}
       </View>

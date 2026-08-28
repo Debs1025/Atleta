@@ -38,11 +38,13 @@ interface MyTeamsPageProps {
     team_name: string;
     sport_type: Team["sport_type"];
     division: string;
+    established_year?: string;
     roster_list: RosterAthlete[];
   }) => void;
   onLogout?: () => void;
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
+  onNotificationPress?: () => void;
 }
 
 export function MyTeamsPage({
@@ -53,6 +55,7 @@ export function MyTeamsPage({
   onLogout,
   onSettingsPress,
   onProfilePress,
+  onNotificationPress,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
@@ -72,7 +75,11 @@ export function MyTeamsPage({
   return (
     <View style={styles.container}>
       {/* TOP HEADER */}
-      <AtletaHeader onSettingsPress={onSettingsPress} onProfilePress={onProfilePress || onLogout} />
+      <AtletaHeader
+        onSettingsPress={onSettingsPress}
+        onProfilePress={onProfilePress || onLogout}
+        onNotificationPress={onNotificationPress}
+      />
 
       {/* SCROLLABLE PAGE BODY */}
       <ScrollView
@@ -130,7 +137,7 @@ export function MyTeamsPage({
           ))}
         </View>
 
-        {/* CREATE NEW TEAM + BUTTON (Inline at bottom of teams list, not fixed) */}
+        {/* CREATE NEW TEAM + BUTTON */}
         <TouchableOpacity
           style={styles.createTeamCtaButton}
           onPress={() => setShowCreateTeam(true)}
@@ -147,6 +154,7 @@ export function MyTeamsPage({
         onRequestClose={() => setShowCreateTeam(false)}
       >
         <CreateTeamDetailsFlow
+          athletesPool={athletesPool}
           onClose={() => setShowCreateTeam(false)}
           onSubmit={(teamData) => {
             onCreateTeam(teamData);
@@ -161,20 +169,23 @@ export function MyTeamsPage({
 function CreateTeamDetailsFlow({
   onClose,
   onSubmit,
+  athletesPool,
 }: {
   onClose: () => void;
   onSubmit: (data: {
     team_name: string;
     sport_type: Team["sport_type"];
     division: string;
+    established_year?: string;
     roster_list: RosterAthlete[];
   }) => void;
+  athletesPool?: RosterAthlete[];
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [teamDetails, setTeamDetails] = useState<TeamDetailsState>({
     team_name: "",
     sport_type: "BASKETBALL",
-    division: "Elite Professional",
+    division: "",
     selected_roster: [],
   });
 
@@ -197,7 +208,8 @@ function CreateTeamDetailsFlow({
     onSubmit({
       team_name: teamDetails.team_name,
       sport_type: (teamDetails.sport_type || "BASKETBALL") as Team["sport_type"],
-      division: teamDetails.division || "Elite Professional",
+      division: teamDetails.division || "",
+      established_year: teamDetails.established_year || String(new Date().getFullYear()),
       roster_list: rosterList,
     });
   };
@@ -220,6 +232,7 @@ function CreateTeamDetailsFlow({
         onChangeState={updateState}
         onNext={() => setStep(3)}
         onBack={() => setStep(1)}
+        athletesPool={athletesPool}
       />
     );
   }
