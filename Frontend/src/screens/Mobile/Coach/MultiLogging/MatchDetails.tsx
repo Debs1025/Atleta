@@ -76,8 +76,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     const normalizedGameResult = gameResult.toUpperCase() === "WIN" ? "WIN" : "LOSS";
 
     const playerStats = allPlayers.map((p) => {
-      const bStats = p.basketball_stats || {};
-      const tStats = p.timing_stats || {};
+      const bStats: any = (p as any).basketball_stats || {};
+      const tStats: any = (p as any).timing_stats || {};
       const pts = bStats.pts ?? (p as any).points ?? 0;
       const ast = bStats.ast ?? (p as any).assists ?? 0;
       const reb = bStats.reb ?? (p as any).rebounds ?? 0;
