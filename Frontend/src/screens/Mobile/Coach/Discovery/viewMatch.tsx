@@ -16,7 +16,6 @@ interface ViewMatchProps {
   match?: DiscoveryMatchItem;
 }
 
-// API READY: Dedicated View Match screen ready for live backend API payload
 export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top - 12, 4);
@@ -54,21 +53,33 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
     if (found) {
       setSelectedAthlete(found);
     } else if (currentMatch) {
+      const rawRow = currentMatch.player_stats?.find(
+        (ps: any) => ps.player?.toLowerCase() === playerName.toLowerCase()
+      );
       setSelectedAthlete({
-        athlete_id: `ath_${Date.now()}`,
+        athlete_id: (rawRow as any)?.athlete_id || `ath_${Date.now()}`,
         full_name: playerName,
         sport_category: currentMatch.sport_category,
-        position_tag: currentMatch.sport_category === 'BASKETBALL' ? 'FORWARD' : currentMatch.sport_category === 'SWIMMING' ? 'FREESTYLE' : 'SPRINT',
-        province: 'Camarines Sur',
+        position_tag: ((rawRow?.role_team || 'ATHLETE') as string).toUpperCase(),
+        province: currentMatch.time_venue?.split('•')[1]?.trim() || '',
         recruitment_status: 'OPEN',
-        calculated_per: 24.5,
-        efficiency_pct: 88,
-        biometrics: { height_ft: "6'2\"", weight_lbs: '185 lbs', wingspan_ft: "6'5\"" },
-        stats: { ppg: 22.4, rpg: 7.1, ast: 8.1, fg_pct: 48 },
+        calculated_per: Number(rawRow?.pts ?? 0),
+        efficiency_pct: Number(rawRow?.fg_pct ?? 0),
+        biometrics: { height_ft: '--', weight_lbs: '--', wingspan_ft: '--' },
+        stats: {
+          ppg: Number(rawRow?.pts ?? 0),
+          rpg: Number(rawRow?.reb ?? 0),
+          ast: Number(rawRow?.ast ?? 0),
+          fg_pct: Number(rawRow?.fg_pct ?? 0),
+          times_50m_free: rawRow?.time_50m,
+          times_100m: rawRow?.time_100m,
+          times_200m: rawRow?.time_200m,
+          times_400m: rawRow?.time_400m,
+        },
         contact_info: {
-          email: `${playerName.toLowerCase().replace(/\s+/g, '.')}@anhs.edu.ph`,
-          facebook: playerName,
-          phone: '+67000',
+          email: '',
+          facebook: '',
+          phone: '',
         },
       });
     }
@@ -104,8 +115,8 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
 
-  // SAMPLE DATA FALLBACK: If backend record intensity spikes array is pending
-  const dynamicsData = currentMatch.dynamics_data || [40, 65, 88, 70, 95, 82, 90, 60];
+  // Real dynamics data from backend
+  const dynamicsData = Array.isArray(currentMatch.dynamics_data) ? currentMatch.dynamics_data : [];
 
   const renderPlayerRow = (row: any, idx: number, isLast: boolean, overallRank?: number) => {
     const rankNum = overallRank ?? idx + 1;
@@ -405,38 +416,46 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
           </View>
         </ScrollView>
 
-        {/* Match Dynamics Chart Section */}
-        <View style={styles.dynamicsCard}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="trending-up-outline" size={18} color="#00C8FF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Match Dynamics</Text>
+        {/* Match Dynamics or Match Overview Section */}
+        {dynamicsData.length > 0 ? (
+          <View style={styles.dynamicsCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="trending-up-outline" size={18} color="#00C8FF" />
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Match Dynamics</Text>
+              </View>
+              <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
+                MATCH TELEMETRY
+              </Text>
             </View>
-            <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
-              LIVE PROJECTION (PAST)
+
+            {/* Bar Chart Bars */}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 90, paddingHorizontal: 6, marginBottom: 12 }}>
+              {dynamicsData.map((val, idx) => (
+                <View key={idx} style={{ alignItems: 'center', flex: 1 }}>
+                  <View
+                    style={{
+                      width: 16,
+                      height: `${val}%`,
+                      backgroundColor: val > 80 ? '#00C8FF' : '#334155',
+                      borderRadius: 4,
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.dynamicsCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="information-circle-outline" size={18} color="#00C8FF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Match Details</Text>
+            </View>
+            <Text style={{ color: '#94A3B8', fontSize: 12, lineHeight: 18 }}>
+              {`Official fixture played at ${currentMatch.time_venue}. Verified and recorded in the database.`}
             </Text>
           </View>
-
-          {/* Bar Chart Bars */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 90, paddingHorizontal: 6, marginBottom: 12 }}>
-            {dynamicsData.map((val, idx) => (
-              <View key={idx} style={{ alignItems: 'center', flex: 1 }}>
-                <View
-                  style={{
-                    width: 16,
-                    height: `${val}%`,
-                    backgroundColor: val > 80 ? '#00C8FF' : '#334155',
-                    borderRadius: 4,
-                  }}
-                />
-              </View>
-            ))}
-          </View>
-
-          <Text style={{ color: '#94A3B8', fontSize: 11, lineHeight: 16 }}>
-            Peak intensity occurred during the final 4 minutes with 4 consecutive field goals from Mitchell.
-          </Text>
-        </View>
+        )}
       </ScrollView>
     </View>
   );
