@@ -320,18 +320,14 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
 
             {/* Bottom Primary Action Button: Request Official Scoresheet */}
             <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                match.audit_status === 'PENDING REQUEST' && styles.disabledButton,
-              ]}
+              style={styles.primaryButton}
               activeOpacity={0.85}
               onPress={handleRequestAudit}
-              disabled={match.audit_status === 'PENDING REQUEST'}
             >
               <Ionicons name="document-text-outline" size={20} color="#FFFFFF" />
               <Text style={styles.primaryButtonText}>
                 {match.audit_status === 'PENDING REQUEST'
-                  ? 'Request Pending Review'
+                  ? 'Request Pending Review (Tap to Resend)'
                   : 'Request Official Scoresheet'}
               </Text>
             </TouchableOpacity>

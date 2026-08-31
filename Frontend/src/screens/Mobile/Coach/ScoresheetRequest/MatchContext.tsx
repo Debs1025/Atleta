@@ -318,21 +318,32 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
     );
 
-    // 2. Transmit to deployed backend
+    const payload = {
+      match: targetMatch,
+      match_id: matchId,
+      team_id: targetMatch?.team_id || 'team_default',
+      home_team_name: targetMatch?.home_team_name,
+      away_team_name: targetMatch?.away_team_name,
+      league_name: targetMatch?.league_name,
+      sport_type: targetMatch?.sport_type,
+      match_date: targetMatch?.match_date,
+      location: targetMatch?.location,
+      coach_notes: targetMatch?.coach_notes,
+    };
+
+    // 2. Transmit to deployed backend via authenticated request or direct fetch
     try {
-      await requestAuthenticatedJson(`/matches/${matchId}/audit-request`, 'POST', {
-        match: targetMatch,
-        team_id: targetMatch?.team_id || 'team_default',
-        home_team_name: targetMatch?.home_team_name,
-        away_team_name: targetMatch?.away_team_name,
-        league_name: targetMatch?.league_name,
-        sport_type: targetMatch?.sport_type,
-        match_date: targetMatch?.match_date,
-        location: targetMatch?.location,
-        coach_notes: targetMatch?.coach_notes,
-      });
+      await requestAuthenticatedJson(`/matches/${matchId}/audit-request`, 'POST', payload);
     } catch (err: any) {
-      console.log(`[ScoresheetRequest] Submitted audit request for ${matchId} to backend:`, err);
+      try {
+        await fetch(`${API_BASE}/matches/${matchId}/audit-request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (fErr) {
+        console.warn(`[ScoresheetRequest] Audit request fallback error:`, fErr);
+      }
     }
 
     Alert.alert(
