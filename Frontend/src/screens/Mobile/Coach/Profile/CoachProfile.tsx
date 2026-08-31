@@ -235,14 +235,14 @@ export function CoachProfile({
             <View style={styles.statsGridContainer}>
               <View style={[styles.statColumn, styles.statBorderRight]}>
                 <Text style={styles.statNumberText}>
-                  {profile.system_statistics?.total_athletes ?? 42}
+                  {profile.system_statistics?.total_athletes ?? 0}
                 </Text>
                 <Text style={styles.statLabelText}>TOTAL ATHLETES</Text>
               </View>
 
               <View style={styles.statColumn}>
                 <Text style={styles.statNumberText}>
-                  {profile.system_statistics?.metric_logs ?? 156}
+                  {profile.system_statistics?.metric_logs ?? 0}
                 </Text>
                 <Text style={styles.statLabelText}>MATCH LOGGED</Text>
               </View>

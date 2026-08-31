@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,7 +40,7 @@ export const RankingPage: React.FC<RankingProps> = ({
   const seasonInfoText = meta?.season_info || 'SEASON 2026 • REGION V';
   const columnLabelText = meta?.column_label || 'PER SCORE';
 
-  const { athletes, setSelectedAthlete } = useDiscovery();
+  const { athletes, setSelectedAthlete, loading } = useDiscovery();
   const [selectedSport, setSelectedSport] = useState<SportCategoryFilter>('BASKETBALL');
   const [currentPage, setCurrentPage] = useState<number>(1);
 
@@ -112,7 +113,19 @@ export const RankingPage: React.FC<RankingProps> = ({
 
         {/* Dynamic Ranked Athletes List */}
         <View style={{ gap: 8 }}>
-          {displayedAthletes.map((athlete, index) => {
+          {loading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <ActivityIndicator size="large" color="#00C8FF" />
+              <Text style={{ color: '#00C8FF', fontSize: 13, fontWeight: '700' }}>
+                CALCULATING PLAYER RANKINGS...
+              </Text>
+            </View>
+          ) : displayedAthletes.length === 0 ? (
+            <View style={{ paddingVertical: 32, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: '#64748B', fontSize: 13 }}>No ranked players found for this category</Text>
+            </View>
+          ) : (
+            displayedAthletes.map((athlete, index) => {
             const overallRank = (currentPageSafe - 1) * ITEMS_PER_PAGE + index + 1;
             const rankFormatted = overallRank.toString().padStart(2, '0');
             const isTop3 = overallRank <= 3;
@@ -141,7 +154,7 @@ export const RankingPage: React.FC<RankingProps> = ({
                 <Text style={styles.perScoreText}>{athlete.calculated_per} PER</Text>
               </TouchableOpacity>
             );
-          })}
+          }))}
         </View>
 
         {/* Functional Pagination Footer Bar */}

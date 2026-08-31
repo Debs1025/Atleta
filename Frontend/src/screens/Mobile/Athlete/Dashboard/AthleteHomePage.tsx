@@ -111,9 +111,9 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           const rawWorkload: any = (finalWorkloadRes && (finalWorkloadRes.recent_entries?.length > 0 || finalWorkloadRes.weekly_logs?.length > 0))
             ? finalWorkloadRes
             : (profileRes?.workload_analytics || profileRes?.workload || homeRes?.workload_summary || homeRes?.workload || finalWorkloadRes || {});
-          
+
           const entriesList = rawWorkload.recent_entries || rawWorkload.weekly_logs || [];
-          
+
           // Group multiple workout logs on the same date: sum total minutes, keep max intensity
           const groupedByDateMap = new Map<string, { date: string; duration_minutes: number; srpe: number }>();
 
@@ -357,6 +357,40 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         {activeTab === "HOME" &&
           (dashboardScreen === "TEAM_PROFILE" ? (
             <TeamProfileScreen
+              teamId={profile.current_affiliation?.team_id}
+              teamData={
+                profile.current_affiliation?.team_name &&
+                profile.current_affiliation.team_name !== "Unassigned Team"
+                  ? {
+                      team_id: profile.current_affiliation.team_id || "",
+                      team_name: profile.current_affiliation.team_name,
+                      mission_statement:
+                        "Building character, discipline, and competitive excellence through athletics.",
+                      region: "NCR",
+                      total_athletes: 1,
+                      established_year: String(new Date().getFullYear()),
+                      coach:
+                        typeof profile.current_affiliation.head_coach === "object" &&
+                        profile.current_affiliation.head_coach !== null
+                          ? profile.current_affiliation.head_coach
+                          : {
+                              coach_id: "",
+                              full_name: String(profile.current_affiliation.head_coach || "Head Coach"),
+                              role_title: "HEAD COACH",
+                              years_experience: "Head Coach",
+                              quote: "Dedicated to driving team excellence and athlete development.",
+                              is_verified: true,
+                            },
+                      players: [
+                        {
+                          id: profile.athlete_id,
+                          name: `${profile.first_name} ${profile.last_name}`.trim() || "Athlete",
+                          position: (profile.category || "ATHLETE").toUpperCase(),
+                        },
+                      ],
+                    }
+                  : undefined
+              }
               onBack={() => {
                 setDashboardScreen("HOME_MAIN");
                 setHideParentBars(false);
@@ -410,75 +444,75 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       {/* Bottom Navigation Bar */}
       {!hideParentBars && (
         <View style={styles.bottomTabBar}>
-        {/* HOME TAB */}
-        <Pressable
-          style={styles.tabButton}
-          onPress={() => setActiveTab("HOME")}
-        >
-          <Image
-            source={require("../../../../assets/Home.png")}
-            style={[
-              styles.tabIcon,
-              activeTab === "HOME" ? styles.tabIconActive : styles.tabIconInactive,
-            ]}
-            resizeMode="contain"
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === "HOME" ? styles.tabLabelActive : styles.tabLabelInactive,
-            ]}
+          {/* HOME TAB */}
+          <Pressable
+            style={styles.tabButton}
+            onPress={() => setActiveTab("HOME")}
           >
-            HOME
-          </Text>
-        </Pressable>
+            <Image
+              source={require("../../../../assets/Home.png")}
+              style={[
+                styles.tabIcon,
+                activeTab === "HOME" ? styles.tabIconActive : styles.tabIconInactive,
+              ]}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === "HOME" ? styles.tabLabelActive : styles.tabLabelInactive,
+              ]}
+            >
+              HOME
+            </Text>
+          </Pressable>
 
-        {/* COACHES TAB */}
-        <Pressable
-          style={styles.tabButton}
-          onPress={() => setActiveTab("COACHES")}
-        >
-          <Image
-            source={require("../../../../assets/Coaches.png")}
-            style={[
-              styles.tabIcon,
-              activeTab === "COACHES" ? styles.tabIconActive : styles.tabIconInactive,
-            ]}
-            resizeMode="contain"
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === "COACHES" ? styles.tabLabelActive : styles.tabLabelInactive,
-            ]}
+          {/* COACHES TAB */}
+          <Pressable
+            style={styles.tabButton}
+            onPress={() => setActiveTab("COACHES")}
           >
-            COACHES
-          </Text>
-        </Pressable>
+            <Image
+              source={require("../../../../assets/Coaches.png")}
+              style={[
+                styles.tabIcon,
+                activeTab === "COACHES" ? styles.tabIconActive : styles.tabIconInactive,
+              ]}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === "COACHES" ? styles.tabLabelActive : styles.tabLabelInactive,
+              ]}
+            >
+              COACHES
+            </Text>
+          </Pressable>
 
-        {/* PROFILE TAB */}
-        <Pressable
-          style={styles.tabButton}
-          onPress={() => setActiveTab("PROFILE")}
-        >
-          <Image
-            source={require("../../../../assets/profile.png")}
-            style={[
-              styles.tabIcon,
-              activeTab === "PROFILE" ? styles.tabIconActive : styles.tabIconInactive,
-            ]}
-            resizeMode="contain"
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === "PROFILE" ? styles.tabLabelActive : styles.tabLabelInactive,
-            ]}
+          {/* PROFILE TAB */}
+          <Pressable
+            style={styles.tabButton}
+            onPress={() => setActiveTab("PROFILE")}
           >
-            PROFILE
-          </Text>
-        </Pressable>
-      </View>
+            <Image
+              source={require("../../../../assets/profile.png")}
+              style={[
+                styles.tabIcon,
+                activeTab === "PROFILE" ? styles.tabIconActive : styles.tabIconInactive,
+              ]}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === "PROFILE" ? styles.tabLabelActive : styles.tabLabelInactive,
+              ]}
+            >
+              PROFILE
+            </Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );

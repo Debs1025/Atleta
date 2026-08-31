@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +19,7 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top - 12, 4);
 
-  const { scoutingProposals, sortRecruits, setSortRecruits } = useDiscovery();
+  const { scoutingProposals, sortRecruits, setSortRecruits, loading } = useDiscovery();
 
   const toggleSort = () => {
     setSortRecruits(sortRecruits === 'date' ? 'status' : 'date');
@@ -48,7 +49,15 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={{ marginTop: 12 }}>
-          {sortedProposals.map((item) => (
+          {loading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <ActivityIndicator size="large" color="#00C8FF" />
+              <Text style={{ color: '#00C8FF', fontSize: 13, fontWeight: '700' }}>
+                LOADING SCOUTED RECRUITS...
+              </Text>
+            </View>
+          ) : (
+            sortedProposals.map((item) => (
             <View key={item.scout_id} style={styles.recruitCard}>
               <View style={styles.leftGroup}>
                 <View style={styles.avatarCircle}>
@@ -80,7 +89,7 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
                 <Text style={styles.relativeDateText}>{item.date_added_relative}</Text>
               </View>
             </View>
-          ))}
+          )))}
 
           {/* Empty State Container matching wireframe */}
           <View style={styles.emptyStateContainer}>

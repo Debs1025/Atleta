@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDiscovery } from './DiscoveryContext';
@@ -14,7 +15,7 @@ interface DiscoveryTeamsProps {
 }
 
 export const DiscoveryTeams: React.FC<DiscoveryTeamsProps> = ({ onViewTeam }) => {
-  const { filteredTeams, setSelectedTeam } = useDiscovery();
+  const { filteredTeams, setSelectedTeam, loading } = useDiscovery();
 
   const handleOpenTeam = (team: DiscoveryTeamItem) => {
     setSelectedTeam(team);
@@ -26,7 +27,17 @@ export const DiscoveryTeams: React.FC<DiscoveryTeamsProps> = ({ onViewTeam }) =>
   return (
     <View style={{ flex: 1 }}>
       <Text style={styles.sectionHeaderTitle}>Discovery Teams</Text>
-      {filteredTeams.length > 0 ? (
+      {loading ? (
+        <View style={{ paddingVertical: 48, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color="#00C8FF" />
+          <Text style={{ color: '#00C8FF', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 }}>
+            SEARCHING SPORTS TEAMS...
+          </Text>
+          <Text style={{ color: '#64748B', fontSize: 12 }}>
+            Fetching team programs, divisions & rosters
+          </Text>
+        </View>
+      ) : filteredTeams.length > 0 ? (
         filteredTeams.map((team) => (
           <View key={team.team_id} style={[styles.teamCard, { marginBottom: 14 }]}>
             <View style={styles.teamBadgeIconBox}>

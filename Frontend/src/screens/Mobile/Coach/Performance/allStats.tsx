@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import {
   AthletePerformanceProfile,
   WorkloadTargetState,
@@ -61,6 +62,16 @@ export const AllStats: React.FC<AllStatsProps> = ({
     if (onUpdateWorkload) {
       onUpdateWorkload(updated);
     }
+
+    // Persist to backend API (POST /athletes/workload)
+    requestAuthenticatedJson("/athletes/workload", "POST", {
+      athlete_id: athlete.athlete_id,
+      session_duration_mins: 60,
+      srpe_score: Math.max(1, Math.min(10, targetIntensity)),
+      entry_date: new Date().toISOString().slice(0, 10),
+      session_type: "Coach Workload Target",
+    }).catch(() => null);
+
     Alert.alert(
       "Workload Target Set",
       `Set ${athlete.full_name}'s 7-Day Workload Target to ${newTargetPts} Effort Pts (Target Intensity: ${targetIntensity}/10).`
@@ -100,13 +111,13 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.averagesTopCard}>
                 <Text style={styles.avgLabel}>100M AVG</Text>
                 <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_100m || "10.24s"}
+                  {athlete.averages.avg_100m || athlete.averages.pb_100m || "--"}
                 </Text>
               </View>
               <View style={styles.averagesTopCard}>
                 <Text style={styles.avgLabel}>200M AVG</Text>
                 <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_200m || "21.05s"}
+                  {athlete.averages.avg_200m || athlete.averages.pb_200m || "--"}
                 </Text>
               </View>
             </View>
@@ -115,19 +126,19 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>REACTION</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.reaction_time_s || "0.14s"}
+                  {athlete.averages.reaction_time_s || "--"}
                 </Text>
               </View>
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>START RATING</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.start_rating_pct ? `${athlete.averages.start_rating_pct}%` : "94%"}
+                  {athlete.averages.start_rating_pct !== undefined ? `${athlete.averages.start_rating_pct}%` : "--"}
                 </Text>
               </View>
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>PODIUMS</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.podiums_count || "14"}
+                  {athlete.averages.podiums_count !== undefined ? athlete.averages.podiums_count : "--"}
                 </Text>
               </View>
             </View>
@@ -138,7 +149,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 <Text style={styles.avgLabel}>TOP SPEED (KM/H)</Text>
               </View>
               <Text style={styles.splitValueText}>
-                {athlete.averages.top_speed_kmh || "36.2"} km/h
+                {athlete.averages.top_speed_kmh !== undefined ? `${athlete.averages.top_speed_kmh} km/h` : "--"}
               </Text>
               <View style={styles.progressBarTrack}>
                 <View
@@ -147,7 +158,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                     {
                       width: `${Math.min(
                         100,
-                        ((athlete.averages.top_speed_kmh || 36.2) / 45) * 100
+                        ((athlete.averages.top_speed_kmh || 0) / 45) * 100
                       )}%`,
                     },
                   ]}
@@ -159,7 +170,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.splitCardHalf}>
                 <Text style={styles.avgLabel}>STRIDE FREQ</Text>
                 <Text style={styles.splitValueText}>
-                  {athlete.averages.stride_freq_hz || "4.2"} Hz
+                  {athlete.averages.stride_freq_hz !== undefined ? `${athlete.averages.stride_freq_hz} Hz` : "--"}
                 </Text>
                 <View style={styles.progressBarTrack}>
                   <View
@@ -168,7 +179,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                       {
                         width: `${Math.min(
                           100,
-                          ((athlete.averages.stride_freq_hz || 4.2) / 5) * 100
+                          ((athlete.averages.stride_freq_hz || 0) / 5) * 100
                         )}%`,
                       },
                     ]}
@@ -179,7 +190,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.splitCardHalf}>
                 <Text style={styles.avgLabel}>WIN RATE %</Text>
                 <Text style={styles.splitValueText}>
-                  {athlete.averages.win_rate_pct || "86.7"}%
+                  {athlete.averages.win_rate_pct !== undefined ? `${athlete.averages.win_rate_pct}%` : "--"}
                 </Text>
                 <View style={styles.progressBarTrack}>
                   <View
@@ -188,7 +199,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                       {
                         width: `${Math.min(
                           100,
-                          athlete.averages.win_rate_pct || 86.7
+                          athlete.averages.win_rate_pct || 0
                         )}%`,
                       },
                     ]}
@@ -203,14 +214,14 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 SPRINT EFFICIENCY RATING (+-)
               </Text>
               <Text style={styles.advancedValue}>
-                {athlete.averages.per_score || "24.2"}
+                {athlete.averages.per_score !== undefined ? athlete.averages.per_score : "--"}
               </Text>
             </View>
 
             <View style={styles.advancedTile}>
               <Text style={styles.advancedLabel}>EVENT WINS</Text>
               <Text style={styles.advancedValue}>
-                {athlete.averages.wins || "13"}
+                {athlete.averages.wins !== undefined ? athlete.averages.wins : "--"}
               </Text>
             </View>
           </>
@@ -221,13 +232,13 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.averagesTopCard}>
                 <Text style={styles.avgLabel}>100M FREE</Text>
                 <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_100m_free || "52.10s"}
+                  {athlete.averages.avg_100m_free || athlete.averages.pb_100m_free || "--"}
                 </Text>
               </View>
               <View style={styles.averagesTopCard}>
                 <Text style={styles.avgLabel}>200M FREE</Text>
                 <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_200m_free || "1:54.20"}
+                  {athlete.averages.avg_200m_free || "--"}
                 </Text>
               </View>
             </View>
@@ -236,19 +247,19 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>50M FREE</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.pb_50m_free || "23.45s"}
+                  {athlete.averages.pb_50m_free || "--"}
                 </Text>
               </View>
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>FLIP TURN</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.flip_turn_s || "0.85s"}
+                  {athlete.averages.flip_turn_s || "--"}
                 </Text>
               </View>
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>PODIUMS</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.podiums_count || "12"}
+                  {athlete.averages.podiums_count !== undefined ? athlete.averages.podiums_count : "--"}
                 </Text>
               </View>
             </View>
@@ -259,7 +270,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 <Text style={styles.avgLabel}>STROKE EFFICIENCY %</Text>
               </View>
               <Text style={styles.splitValueText}>
-                {athlete.averages.stroke_efficiency_pct || "88.5"}%
+                {athlete.averages.stroke_efficiency_pct !== undefined ? `${athlete.averages.stroke_efficiency_pct}%` : "--"}
               </Text>
               <View style={styles.progressBarTrack}>
                 <View
@@ -268,7 +279,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                     {
                       width: `${Math.min(
                         100,
-                        athlete.averages.stroke_efficiency_pct || 88.5
+                        athlete.averages.stroke_efficiency_pct || 0
                       )}%`,
                     },
                   ]}
@@ -280,7 +291,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.splitCardHalf}>
                 <Text style={styles.avgLabel}>STROKE RATE</Text>
                 <Text style={styles.splitValueText}>
-                  {athlete.averages.stroke_rate_pm || "42"}/min
+                  {athlete.averages.stroke_rate_pm !== undefined ? `${athlete.averages.stroke_rate_pm}/min` : "--"}
                 </Text>
                 <View style={styles.progressBarTrack}>
                   <View
@@ -289,7 +300,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                       {
                         width: `${Math.min(
                           100,
-                          ((athlete.averages.stroke_rate_pm || 42) / 60) * 100
+                          ((athlete.averages.stroke_rate_pm || 0) / 60) * 100
                         )}%`,
                       },
                     ]}
@@ -300,7 +311,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.splitCardHalf}>
                 <Text style={styles.avgLabel}>SWIM INDEX</Text>
                 <Text style={styles.splitValueText}>
-                  {athlete.averages.swim_index_score || "854"}
+                  {athlete.averages.swim_index_score !== undefined ? athlete.averages.swim_index_score : "--"}
                 </Text>
                 <View style={styles.progressBarTrack}>
                   <View
@@ -309,7 +320,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                       {
                         width: `${Math.min(
                           100,
-                          ((athlete.averages.swim_index_score || 854) / 1000) * 100
+                          ((athlete.averages.swim_index_score || 0) / 1000) * 100
                         )}%`,
                       },
                     ]}
@@ -324,14 +335,14 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 SWIMMING PERFORMANCE INDEX (+-)
               </Text>
               <Text style={styles.advancedValue}>
-                {athlete.averages.per_score || "18.4"}
+                {athlete.averages.per_score !== undefined ? athlete.averages.per_score : "--"}
               </Text>
             </View>
 
             <View style={styles.advancedTile}>
               <Text style={styles.advancedLabel}>MEET WINS</Text>
               <Text style={styles.advancedValue}>
-                {athlete.averages.wins || "10"}
+                {athlete.averages.wins !== undefined ? athlete.averages.wins : "--"}
               </Text>
             </View>
           </>
@@ -342,13 +353,13 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.averagesTopCard}>
                 <Text style={styles.avgLabel}>PPG</Text>
                 <Text style={styles.avgValueLarge}>
-                  {athlete.averages.ppg || "24.5"}
+                  {athlete.averages.ppg !== undefined ? athlete.averages.ppg : "--"}
                 </Text>
               </View>
               <View style={styles.averagesTopCard}>
                 <Text style={styles.avgLabel}>APG</Text>
                 <Text style={styles.avgValueLarge}>
-                  {athlete.averages.apg || "8.2"}
+                  {athlete.averages.apg !== undefined ? athlete.averages.apg : "--"}
                 </Text>
               </View>
             </View>
@@ -357,19 +368,19 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>RPG</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.rpg || "6.4"}
+                  {athlete.averages.rpg !== undefined ? athlete.averages.rpg : "--"}
                 </Text>
               </View>
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>BPG</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.bpg || "1.2"}
+                  {athlete.averages.bpg !== undefined ? athlete.averages.bpg : "--"}
                 </Text>
               </View>
               <View style={styles.averagesSmallCard}>
                 <Text style={styles.avgLabel}>SPG</Text>
                 <Text style={styles.avgValueSmall}>
-                  {athlete.averages.spg || "1.5"}
+                  {athlete.averages.spg !== undefined ? athlete.averages.spg : "--"}
                 </Text>
               </View>
             </View>
@@ -380,7 +391,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 <Text style={styles.avgLabel}>FIELD GOAL %</Text>
               </View>
               <Text style={styles.splitValueText}>
-                {athlete.averages.fg_percentage || "52.4"}%
+                {athlete.averages.fg_percentage !== undefined ? `${athlete.averages.fg_percentage}%` : "--"}
               </Text>
               <View style={styles.progressBarTrack}>
                 <View
@@ -389,7 +400,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                     {
                       width: `${Math.min(
                         100,
-                        athlete.averages.fg_percentage || 52.4
+                        athlete.averages.fg_percentage || 0
                       )}%`,
                     },
                   ]}
@@ -401,7 +412,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.splitCardHalf}>
                 <Text style={styles.avgLabel}>3 POINTS %</Text>
                 <Text style={styles.splitValueText}>
-                  {athlete.averages.three_pt_percentage || "38.9"}%
+                  {athlete.averages.three_pt_percentage !== undefined ? `${athlete.averages.three_pt_percentage}%` : "--"}
                 </Text>
                 <View style={styles.progressBarTrack}>
                   <View
@@ -410,7 +421,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                       {
                         width: `${Math.min(
                           100,
-                          athlete.averages.three_pt_percentage || 38.9
+                          athlete.averages.three_pt_percentage || 0
                         )}%`,
                       },
                     ]}
@@ -421,7 +432,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
               <View style={styles.splitCardHalf}>
                 <Text style={styles.avgLabel}>FREE THROWS %</Text>
                 <Text style={styles.splitValueText}>
-                  {athlete.averages.ft_percentage || "88.1"}%
+                  {athlete.averages.ft_percentage !== undefined ? `${athlete.averages.ft_percentage}%` : "--"}
                 </Text>
                 <View style={styles.progressBarTrack}>
                   <View
@@ -430,7 +441,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                       {
                         width: `${Math.min(
                           100,
-                          athlete.averages.ft_percentage || 88.1
+                          athlete.averages.ft_percentage || 0
                         )}%`,
                       },
                     ]}
@@ -445,14 +456,14 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 PLAYER EFFICIENCY RATING (+-)
               </Text>
               <Text style={styles.advancedValue}>
-                {athlete.averages.per_score || "26.8"}
+                {athlete.averages.per_score !== undefined ? athlete.averages.per_score : "--"}
               </Text>
             </View>
 
             <View style={styles.advancedTile}>
               <Text style={styles.advancedLabel}>WINS</Text>
               <Text style={styles.advancedValue}>
-                {athlete.averages.wins || "12"}
+                {athlete.averages.wins !== undefined ? athlete.averages.wins : "--"}
               </Text>
             </View>
           </>

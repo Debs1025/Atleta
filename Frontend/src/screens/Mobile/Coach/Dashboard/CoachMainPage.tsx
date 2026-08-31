@@ -146,6 +146,63 @@ const PlayerRowItem = React.memo(
   }
 );
 
+const createAthletePerformanceProfile = (
+  a: RosterAthlete,
+  teamName: string,
+  extraData?: any
+): AthletePerformanceProfile => {
+  const sportUpper = (a.sport_type || "BASKETBALL").toUpperCase();
+  const sportCategory: AthletePerformanceProfile["sport_category"] =
+    sportUpper.includes("TRACK") || sportUpper.includes("FIELD")
+      ? "TRACK AND FIELD"
+      : sportUpper.includes("SWIM")
+      ? "SWIMMING"
+      : "BASKETBALL";
+
+  return {
+    athlete_id: a.athlete_id,
+    user_id: a.user_id || a.athlete_id,
+    full_name: a.full_name,
+    birthdate: extraData?.birthdate || extraData?.birth_date || "",
+    position_or_event: a.position || a.event_distance || a.stroke_style || "ATHLETE",
+    location_province: extraData?.province || extraData?.location || "",
+    team_name: teamName || "",
+    rating_score: Number(extraData?.rating_score || extraData?.rating || 0),
+    sport_category: sportCategory,
+    biometrics: {
+      height_ft: extraData?.biometrics?.height_ft || (extraData?.height_cm ? `${(extraData.height_cm / 30.48).toFixed(1)}'` : ""),
+      weight_lbs: extraData?.biometrics?.weight_lbs || (extraData?.weight_kg ? `${Math.round(extraData.weight_kg * 2.20462)} lbs` : ""),
+      wingspan_ft: extraData?.biometrics?.wingspan_ft || (extraData?.wingspan_cm ? `${(extraData.wingspan_cm / 30.48).toFixed(1)}'` : ""),
+      vertical_jump_in: extraData?.biometrics?.vertical_jump_in || (extraData?.vertical_cm ? `${Math.round(extraData.vertical_cm / 2.54)}"` : ""),
+    },
+    averages: extraData?.averages || extraData?.stats || {},
+    radar_competencies: extraData?.radar_competencies || extraData?.radar_scores || {
+      speed: 0,
+      power: 0,
+      agility: 0,
+      iq: 0,
+      tech: 0,
+    },
+    scoring_trends_last_10: Array.isArray(extraData?.scoring_trends_last_10)
+      ? extraData.scoring_trends_last_10
+      : [],
+    eligibility_documents: {
+      psa_verified: Boolean(a.is_eligibility_verified),
+      residency_verified: Boolean(a.is_eligibility_verified),
+    },
+    workload_analytics: extraData?.workload_analytics || {
+      target_7day_effort_pts: 0,
+      current_7day_acute_load: 0,
+      current_28day_chronic_load: 0,
+      calculated_acwr: 0,
+      workout_score: 0,
+      fatigue_meter: 0,
+      routine_score: 0,
+      body_stress_pts: 0,
+    },
+  };
+};
+
 // API Request: fetch coach dashboard & team summary (GET /api/coach/dashboard)
 export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const insets = useSafeAreaInsets();
@@ -331,6 +388,26 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             if (enrichedTeams.length > 0) {
               setSelectedTeamId(enrichedTeams[0].team_id);
             }
+
+            // Dynamically construct Performance Profiles ONLY from coach's real team athletes
+            const dynamicPerfAthletes: AthletePerformanceProfile[] = [];
+            const seenPerfIds = new Set<string>();
+
+            enrichedTeams.forEach((team) => {
+              (team.roster_list || []).forEach((player) => {
+                if (!seenPerfIds.has(player.athlete_id)) {
+                  seenPerfIds.add(player.athlete_id);
+                  dynamicPerfAthletes.push(
+                    createAthletePerformanceProfile(player, team.team_name)
+                  );
+                }
+              });
+            });
+
+            setPerfAthletes(dynamicPerfAthletes);
+            if (dynamicPerfAthletes.length > 0) {
+              setSelectedPerfAthlete(dynamicPerfAthletes[0]);
+            }
           }
         }
       } catch (err) {
@@ -359,11 +436,81 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
   const [ocrPayload, setOcrPayload] = useState<RawOCRDetectedData | undefined>();
 
-  // Performance State
-  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>(MOCK_PERFORMANCE_ATHLETES);
-  const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile>(MOCK_PERFORMANCE_ATHLETES[0]);
+  // Performance State (Real API Connected)
+  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>([]);
+  const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile | null>(null);
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
+
+  const handleSelectPerfAthlete = useCallback(async (ath: AthletePerformanceProfile) => {
+    setSelectedPerfAthlete(ath);
+    setPreviousPortfolioView("performance");
+    setActiveView("athlete_portfolio");
+
+    // Fetch real-time athlete profile and workload analytics from backend
+    try {
+      const [scoutRes, workloadRes]: [any, any] = await Promise.all([
+        requestAuthenticatedJson(`/scouting/athletes/${ath.athlete_id}`).catch(() => null),
+        requestAuthenticatedJson(`/athletes/${ath.athlete_id}/workload`).catch(() => null),
+      ]);
+
+      if (scoutRes || workloadRes) {
+        const rawScout = scoutRes?.athlete || scoutRes?.profile || scoutRes;
+        const rawWorkload = workloadRes?.workload || workloadRes || rawScout?.workload_trends;
+
+        const rawPhys = rawScout?.physical_attributes || rawScout?.biometrics || {};
+        const rawRadar = rawScout?.radar_scores || rawScout?.radar_competencies || {};
+        const rawSport = String(rawScout?.sport_type || ath.sport_category || "BASKETBALL").toUpperCase();
+        const sportCategory: AthletePerformanceProfile["sport_category"] =
+          rawSport.includes("TRACK") || rawSport.includes("FIELD")
+            ? "TRACK AND FIELD"
+            : rawSport.includes("SWIM")
+            ? "SWIMMING"
+            : "BASKETBALL";
+
+        setSelectedPerfAthlete((prev) => {
+          if (!prev || prev.athlete_id !== ath.athlete_id) return prev;
+          return {
+            ...prev,
+            sport_category: sportCategory,
+            biometrics: {
+              height_ft: rawPhys.height_cm ? `${(rawPhys.height_cm / 30.48).toFixed(1)}'` : (rawPhys.height_ft || prev.biometrics.height_ft),
+              weight_lbs: rawPhys.weight_kg ? `${Math.round(rawPhys.weight_kg * 2.20462)} lbs` : (rawPhys.weight_lbs || prev.biometrics.weight_lbs),
+              wingspan_ft: rawPhys.wingspan_cm ? `${(rawPhys.wingspan_cm / 30.48).toFixed(1)}'` : (rawPhys.wingspan_ft || prev.biometrics.wingspan_ft),
+              vertical_jump_in: rawPhys.vertical_cm ? `${Math.round(rawPhys.vertical_cm / 2.54)}"` : (rawPhys.vertical_jump_in || prev.biometrics.vertical_jump_in),
+            },
+            averages: rawScout?.stats ? { ...prev.averages, ...rawScout.stats } : {
+              ...prev.averages,
+              per_score: rawScout?.career_per || prev.averages.per_score,
+            },
+            radar_competencies: (rawScout?.stats && (rawScout.stats.ppg || rawScout.stats.games_played || rawScout.stats.efficiency_rating)) || (rawScout?.recent_matches && rawScout.recent_matches.length > 0)
+              ? {
+                  speed: Number(rawRadar.speed || 0),
+                  power: Number(rawRadar.power || 0),
+                  agility: Number(rawRadar.agility || 0),
+                  iq: Number(rawRadar.iq || 0),
+                  tech: Number(rawRadar.tech || rawRadar.endurance || 0),
+                }
+              : { speed: 0, power: 0, agility: 0, iq: 0, tech: 0 },
+            workload_analytics: rawWorkload?.calculated_acwr || rawWorkload?.acwr_ratio
+              ? {
+                  target_7day_effort_pts: rawWorkload.target_7day_effort_pts || prev.workload_analytics.target_7day_effort_pts,
+                  current_7day_acute_load: Number(rawWorkload.acute_load_7d || rawWorkload.acute_load || prev.workload_analytics.current_7day_acute_load),
+                  current_28day_chronic_load: Number(rawWorkload.chronic_load_28d || rawWorkload.chronic_load || prev.workload_analytics.current_28day_chronic_load),
+                  calculated_acwr: Number(rawWorkload.acwr_ratio || rawWorkload.calculated_acwr || prev.workload_analytics.calculated_acwr),
+                  workout_score: Number(rawWorkload.workout_score || prev.workload_analytics.workout_score),
+                  fatigue_meter: Number(rawWorkload.fatigue_meter || prev.workload_analytics.fatigue_meter),
+                  routine_score: Number(rawWorkload.routine_score || prev.workload_analytics.routine_score),
+                  body_stress_pts: Number(rawWorkload.body_stress_pts || prev.workload_analytics.body_stress_pts),
+                }
+              : prev.workload_analytics,
+          };
+        });
+      }
+    } catch {
+      // Non-blocking catch
+    }
+  }, []);
 
   // Current Selected Team
   const currentTeam = useMemo(
@@ -371,11 +518,35 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     [teams, selectedTeamId]
   );
 
-  // Memoized Filtered Players for Dashboard
+  // Unique athletes on Coach's Teams / Rosters
+  const coachTeamAthletes = useMemo(() => {
+    const athleteMap = new Map<string, RosterAthlete>();
+    teams.forEach((t) => {
+      (t.roster_list || []).forEach((p) => {
+        const id = typeof p === "string" ? p : p?.athlete_id;
+        if (id && !athleteMap.has(id)) {
+          if (typeof p === "object") {
+            athleteMap.set(id, p);
+          } else {
+            const found = athletesPool.find((ap) => ap.athlete_id === id);
+            if (found) athleteMap.set(id, found);
+          }
+        }
+      });
+    });
+    return Array.from(athleteMap.values());
+  }, [teams, athletesPool]);
+
+  // Filter athletes based on sport
   const filteredDashboardPlayers = useMemo(() => {
-    if (activeSportFilter === "ALL") return athletesPool;
-    return athletesPool.filter((p) => p.sport_type === activeSportFilter);
-  }, [athletesPool, activeSportFilter]);
+    if (activeSportFilter === "ALL") return coachTeamAthletes;
+    return coachTeamAthletes.filter((p) => p.sport_type === activeSportFilter);
+  }, [coachTeamAthletes, activeSportFilter]);
+
+  // Athlete Count
+  const totalAthletesCount = useMemo(() => {
+    return coachTeamAthletes.length;
+  }, [coachTeamAthletes]);
 
   // Handlers
   const handleUpdateTeamName = useCallback((teamId: string, newName: string) => {
@@ -631,12 +802,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
   const handleViewStats = useCallback((player: RosterAthlete) => {
     const matched = perfAthletes.find(
-      (a) => a.full_name.toLowerCase() === player.full_name.toLowerCase()
-    ) || perfAthletes[0];
-    setSelectedPerfAthlete(matched);
-    setPreviousPortfolioView(activeView);
-    setActiveView("athlete_portfolio");
-  }, [perfAthletes, activeView]);
+      (a) =>
+        a.athlete_id === player.athlete_id ||
+        a.full_name.toLowerCase() === player.full_name.toLowerCase()
+    ) || createAthletePerformanceProfile(player, currentTeam?.team_name || "Varsity Team");
+    handleSelectPerfAthlete(matched);
+  }, [perfAthletes, currentTeam, handleSelectPerfAthlete]);
 
   const handleDeleteTeam = useCallback((teamId: string) => {
     setTeams((prev) => prev.filter((t) => t.team_id !== teamId));
@@ -794,14 +965,25 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
               {/* Player Rows */}
               <View style={styles.playersList}>
-                {filteredDashboardPlayers.slice(0, 4).map((player, index) => (
-                  <PlayerRowItem
-                    key={player.athlete_id}
-                    player={player}
-                    isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
-                    onViewStats={handleViewStats}
-                  />
-                ))}
+                {filteredDashboardPlayers.length === 0 ? (
+                  <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ color: "#94A3B8", fontSize: 14, fontWeight: "600" }}>
+                      No Athletes in Roster
+                    </Text>
+                    <Text style={{ color: "#64748B", fontSize: 12, marginTop: 4, textAlign: "center" }}>
+                      Add athletes to your team roster or discover players in the Discovery tab.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredDashboardPlayers.slice(0, 4).map((player, index) => (
+                    <PlayerRowItem
+                      key={player.athlete_id}
+                      player={player}
+                      isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
+                      onViewStats={handleViewStats}
+                    />
+                  ))
+                )}
               </View>
             </View>
 
@@ -809,7 +991,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             <View style={styles.summaryTile}>
               <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
               <View style={styles.summaryPill}>
-                <Text style={styles.summaryPillValue}>24</Text>
+                <Text style={styles.summaryPillValue}>{totalAthletesCount}</Text>
               </View>
             </View>
           </ScrollView>
@@ -881,18 +1063,14 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       {activeView === "performance" && (
         <PerformancePage
           athletes={perfAthletes}
-          onSelectAthlete={(ath) => {
-            setSelectedPerfAthlete(ath);
-            setPreviousPortfolioView("performance");
-            setActiveView("athlete_portfolio");
-          }}
+          onSelectAthlete={handleSelectPerfAthlete}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
           onNotificationPress={() => setShowNotificationModal(true)}
         />
       )}
 
-      {activeView === "athlete_portfolio" && (
+      {activeView === "athlete_portfolio" && selectedPerfAthlete && (
         <AthletePortfolio
           athlete={selectedPerfAthlete}
           onClose={() => {
@@ -909,15 +1087,19 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-      {activeView === "all_stats" && (
+      {activeView === "all_stats" && selectedPerfAthlete && (
         <AllStats
           athlete={selectedPerfAthlete}
           onClose={() => setActiveView("athlete_portfolio")}
           onUpdateWorkload={(updatedWorkload) => {
-            setSelectedPerfAthlete((prev) => ({
-              ...prev,
-              workload_analytics: updatedWorkload,
-            }));
+            setSelectedPerfAthlete((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    workload_analytics: updatedWorkload,
+                  }
+                : null
+            );
             setPerfAthletes((prev) =>
               prev.map((a) =>
                 a.athlete_id === selectedPerfAthlete.athlete_id
@@ -929,9 +1111,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         />
       )}
 
-      {activeView === "match_history" && (
+      {activeView === "match_history" && selectedPerfAthlete && (
         <MatchHistory
-          sportCategory={selectedPerfAthlete?.sport_category}
+          athleteId={selectedPerfAthlete.athlete_id}
+          sportCategory={selectedPerfAthlete.sport_category}
           onClose={() => setActiveView("athlete_portfolio")}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
@@ -947,15 +1130,15 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       )}
 
       {activeView === "perf_trackfield_result" && (
-        <TrackfieldMatchResult onBack={() => setActiveView("match_history")} />
+        <TrackfieldMatchResult matchItem={selectedMatchItem} onBack={() => setActiveView("match_history")} />
       )}
 
       {activeView === "perf_swimming_result" && (
-        <SwimmingMatchResult onBack={() => setActiveView("match_history")} />
+        <SwimmingMatchResult matchItem={selectedMatchItem} onBack={() => setActiveView("match_history")} />
       )}
 
       {activeView === "perf_basketball_result" && (
-        <BasketballMatchResult onBack={() => setActiveView("match_history")} />
+        <BasketballMatchResult matchItem={selectedMatchItem} onBack={() => setActiveView("match_history")} />
       )}
 
       {/* MULTI-LOGGING MODULE */}

@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDiscovery } from './DiscoveryContext';
@@ -14,7 +15,7 @@ interface DiscoveryEventProps {
 }
 
 export const DiscoveryEvent: React.FC<DiscoveryEventProps> = ({ onViewMatch }) => {
-  const { filteredEvents, setSelectedMatch } = useDiscovery();
+  const { filteredEvents, setSelectedMatch, loading } = useDiscovery();
 
   const handleOpenMatch = (match: DiscoveryMatchItem) => {
     setSelectedMatch(match);
@@ -25,7 +26,17 @@ export const DiscoveryEvent: React.FC<DiscoveryEventProps> = ({ onViewMatch }) =
 
   return (
     <View style={{ flex: 1 }}>
-      {filteredEvents.length > 0 ? (
+      {loading ? (
+        <View style={{ paddingVertical: 48, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color="#00C8FF" />
+          <Text style={{ color: '#00C8FF', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 }}>
+            LOADING TOURNAMENT MATCHES...
+          </Text>
+          <Text style={{ color: '#64748B', fontSize: 12 }}>
+            Fetching head-to-head fixtures & live events
+          </Text>
+        </View>
+      ) : filteredEvents.length > 0 ? (
         filteredEvents.map((evt) => (
           <View key={evt.event_id}>
             <View style={styles.eventHeaderBox}>

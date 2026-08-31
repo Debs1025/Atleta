@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,31 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
 
   const { selectedMatch: contextMatch, setSelectedAthlete, athletes } = useDiscovery();
   const currentMatch = match || contextMatch;
+
+  // Group match players by their respective team
+  const { team1List, team2List } = useMemo(() => {
+    const rawList = currentMatch?.player_stats || [];
+    const t1 = (currentMatch?.team1_name || '').toLowerCase().trim();
+    const t2 = (currentMatch?.team2_name || '').toLowerCase().trim();
+
+    const group1: typeof rawList = [];
+    const group2: typeof rawList = [];
+
+    rawList.forEach((p, idx) => {
+      const pTeam = ((p as any).role_team || (p as any).team_name || (p as any).team || '').toLowerCase().trim();
+      if (t1 && (pTeam.includes(t1) || t1.includes(pTeam))) {
+        group1.push(p);
+      } else if (t2 && (pTeam.includes(t2) || t2.includes(pTeam))) {
+        group2.push(p);
+      } else if (idx < Math.ceil(rawList.length / 2)) {
+        group1.push(p);
+      } else {
+        group2.push(p);
+      }
+    });
+
+    return { team1List: group1, team2List: group2 };
+  }, [currentMatch]);
 
   const handleSelectPlayer = (playerName: string) => {
     const found = athletes.find((a) => a.full_name.toLowerCase() === playerName.toLowerCase());
@@ -62,8 +87,104 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
     );
   }
 
+  // Sport Type & Outcome
+  const isTimeSport =
+    currentMatch.sport_category === 'SWIMMING' ||
+    currentMatch.sport_category === 'TRACK AND FIELD';
+
+  // Scores and Win/Loss / Rank Outcome
+  const score1 = Number(currentMatch.team1_score ?? 0);
+  const score2 = Number(currentMatch.team2_score ?? 0);
+  const team1Won = score1 >= score2;
+  const team2Won = score2 > score1;
+
+  const getOrdinal = (n: number) => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
   // SAMPLE DATA FALLBACK: If backend record intensity spikes array is pending
   const dynamicsData = currentMatch.dynamics_data || [40, 65, 88, 70, 95, 82, 90, 60];
+
+  const renderPlayerRow = (row: any, idx: number, isLast: boolean, overallRank?: number) => {
+    const rankNum = overallRank ?? idx + 1;
+    const rankLabel = isTimeSport ? getOrdinal(rankNum) : String(idx + 1);
+
+    const isPodium1 = rankNum === 1;
+    const isPodium2 = rankNum === 2;
+    const isPodium3 = rankNum === 3;
+
+    return (
+      <TouchableOpacity
+        key={idx}
+        style={[
+          styles.tableRow,
+          { borderBottomWidth: isLast ? 0 : 1 },
+        ]}
+        onPress={() => handleSelectPlayer(row.player)}
+        activeOpacity={0.85}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: 170 }}>
+          <View style={[
+            styles.playerBadge,
+            isTimeSport && isPodium1
+              ? styles.rankBadge1st
+              : isTimeSport && isPodium2
+              ? styles.rankBadge2nd
+              : isTimeSport && isPodium3
+              ? styles.rankBadge3rd
+              : null
+          ]}>
+            <Text style={[
+              { fontSize: isTimeSport ? 10 : 11, fontWeight: '900' },
+              isTimeSport && isPodium1
+                ? styles.rankText1st
+                : isTimeSport && isPodium2
+                ? styles.rankText2nd
+                : isTimeSport && isPodium3
+                ? styles.rankText3rd
+                : { color: '#00C8FF' }
+            ]}>
+              {rankLabel}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.playerName}>{row.player}</Text>
+              <Ionicons name="chevron-forward-circle-outline" size={13} color="#00C8FF" />
+            </View>
+            <Text style={{ color: '#64748B', fontSize: 10, marginTop: 1 }}>
+              {row.role_team || 'Athlete'}
+            </Text>
+          </View>
+        </View>
+
+        {currentMatch.sport_category === 'BASKETBALL' ? (
+          <>
+            <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center' }]}>{row.pts ?? 0}</Text>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.reb ?? 0}</Text>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.ast ?? 0}</Text>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.fg_pct ?? 0}%</Text>
+          </>
+        ) : currentMatch.sport_category === 'SWIMMING' ? (
+          <>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_50m || '-'}</Text>
+            <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_100m || '-'}</Text>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_200m || '-'}</Text>
+            <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{row.final_time || '-'}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_100m || '-'}</Text>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_200m || '-'}</Text>
+            <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_400m || '-'}</Text>
+            <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{row.final_time || '-'}</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -84,27 +205,85 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
         <View style={styles.matchResultCard}>
           {/* Team 1 (Home) */}
           <View style={{ alignItems: 'center', marginBottom: 12 }}>
-            <View style={styles.teamIconBox}>
-              <Ionicons name="rocket-outline" size={24} color="#00C8FF" />
-            </View>
+            {isTimeSport ? (
+              <View style={[
+                styles.teamIconBox,
+                team1Won ? styles.outcomeBadge1st : styles.outcomeBadge2nd
+              ]}>
+                {team1Won ? (
+                  <Ionicons name="trophy" size={24} color="#F59E0B" />
+                ) : (
+                  <Ionicons name="medal-outline" size={24} color="#94A3B8" />
+                )}
+              </View>
+            ) : team1Won ? (
+              <View style={styles.winBadgeBox}>
+                <Text style={styles.winBadgeLetter}>W</Text>
+              </View>
+            ) : team2Won ? (
+              <View style={styles.lossBadgeBox}>
+                <Text style={styles.lossBadgeLetter}>L</Text>
+              </View>
+            ) : (
+              <View style={styles.teamIconBox}>
+                <Ionicons name="shield-outline" size={24} color="#94A3B8" />
+              </View>
+            )}
             <Text style={styles.teamName}>{currentMatch.team1_name}</Text>
-            <Text style={styles.teamRoleText}>Home Team</Text>
+            <Text style={styles.teamRoleText}>
+              {isTimeSport
+                ? team1Won
+                  ? '1st Place • Lead Program'
+                  : '2nd Place • Runner Up'
+                : `Home Team • ${team1Won ? 'Winner' : team2Won ? 'Defeated' : 'Final'}`}
+            </Text>
           </View>
 
           {/* Score Head to Head */}
           <View style={styles.scoreRow}>
-            <Text style={styles.scoreHomeText}>{currentMatch.team1_score}</Text>
+            <Text style={[styles.scoreHomeText, (team1Won || isTimeSport) ? { color: '#00C8FF' } : { color: '#94A3B8' }]}>
+              {currentMatch.team1_score}
+            </Text>
             <Text style={styles.vsText}>vs</Text>
-            <Text style={styles.scoreAwayText}>{currentMatch.team2_score}</Text>
+            <Text style={[styles.scoreAwayText, (team2Won || isTimeSport) ? { color: '#00C8FF' } : { color: '#94A3B8' }]}>
+              {currentMatch.team2_score}
+            </Text>
           </View>
 
           {/* Team 2 (Away) */}
           <View style={{ alignItems: 'center', marginTop: 12 }}>
-            <View style={styles.teamIconBox}>
-              <Ionicons name="sync-outline" size={24} color="#00C8FF" />
-            </View>
+            {isTimeSport ? (
+              <View style={[
+                styles.teamIconBox,
+                team2Won ? styles.outcomeBadge1st : styles.outcomeBadge2nd
+              ]}>
+                {team2Won ? (
+                  <Ionicons name="trophy" size={24} color="#F59E0B" />
+                ) : (
+                  <Ionicons name="medal-outline" size={24} color="#94A3B8" />
+                )}
+              </View>
+            ) : team2Won ? (
+              <View style={styles.winBadgeBox}>
+                <Text style={styles.winBadgeLetter}>W</Text>
+              </View>
+            ) : team1Won ? (
+              <View style={styles.lossBadgeBox}>
+                <Text style={styles.lossBadgeLetter}>L</Text>
+              </View>
+            ) : (
+              <View style={styles.teamIconBox}>
+                <Ionicons name="shield-outline" size={24} color="#94A3B8" />
+              </View>
+            )}
             <Text style={styles.teamName}>{currentMatch.team2_name}</Text>
-            <Text style={styles.teamRoleText}>Away Team</Text>
+            <Text style={styles.teamRoleText}>
+              {isTimeSport
+                ? team2Won
+                  ? '1st Place • Lead Program'
+                  : '2nd Place • Runner Up'
+                : `Away Team • ${team2Won ? 'Winner' : team1Won ? 'Defeated' : 'Final'}`}
+            </Text>
           </View>
         </View>
 
@@ -112,7 +291,7 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>
-              PLAYER PERFORMANCE
+              {isTimeSport ? 'ATHLETE STANDINGS & TIMES' : 'PLAYER PERFORMANCE'}
             </Text>
             <View style={{ backgroundColor: 'rgba(0,200,255,0.12)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(0,200,255,0.3)' }}>
               <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>TAP ROW TO SCOUT</Text>
@@ -128,7 +307,7 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
             {/* Sport-Specific Table Header */}
             <View style={styles.tableHeaderRow}>
               <Text style={[styles.tableHeaderLabel, { width: 170 }]}>
-                {currentMatch.sport_category === 'BASKETBALL' ? 'PLAYER' : 'ATHLETE'}
+                {currentMatch.sport_category === 'BASKETBALL' ? 'PLAYER' : 'ATHLETE (RANK)'}
               </Text>
               {currentMatch.sport_category === 'BASKETBALL' ? (
                 <>
@@ -154,51 +333,75 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
               )}
             </View>
 
-            {/* Table Rows (mapped dynamically from API data payload) */}
-            {currentMatch.player_stats?.map((row, idx) => (
-              <TouchableOpacity key={idx} style={[
-                styles.tableRow,
-                { borderBottomWidth: idx === (currentMatch.player_stats?.length || 0) - 1 ? 0 : 1 }
-              ]} onPress={() => handleSelectPlayer(row.player)} activeOpacity={0.85}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: 170 }}>
-                  <View style={styles.playerBadge}>
-                    <Text style={{ color: '#00C8FF', fontSize: 10, fontWeight: '900' }}>{idx + 1}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Text style={styles.playerName}>{row.player}</Text>
-                      <Ionicons name="chevron-forward-circle-outline" size={13} color="#00C8FF" />
-                    </View>
-                    <Text style={{ color: '#64748B', fontSize: 10, marginTop: 1 }}>
-                      {row.role_team || 'Athlete'}
-                    </Text>
-                  </View>
-                </View>
-
-                {currentMatch.sport_category === 'BASKETBALL' ? (
-                  <>
-                    <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center' }]}>{row.pts ?? 0}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.reb ?? 0}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.ast ?? 0}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.fg_pct ?? 0}%</Text>
-                  </>
-                ) : currentMatch.sport_category === 'SWIMMING' ? (
-                  <>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_50m || '-'}</Text>
-                    <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_100m || '-'}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_200m || '-'}</Text>
-                    <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{row.final_time || '-'}</Text>
-                  </>
+            {/* Team 1 Section */}
+            <View style={styles.teamSectionHeader}>
+              {isTimeSport ? (
+                team1Won ? (
+                  <Ionicons name="trophy" size={15} color="#F59E0B" />
                 ) : (
-                  <>
-                    <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_100m || '-'}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_200m || '-'}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_400m || '-'}</Text>
-                    <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{row.final_time || '-'}</Text>
-                  </>
+                  <Ionicons name="medal-outline" size={15} color="#94A3B8" />
+                )
+              ) : (
+                <View style={[
+                  styles.outcomePillBadge,
+                  team1Won ? styles.outcomeBadgeWin : team2Won ? styles.outcomeBadgeLoss : styles.outcomeBadgeTie
+                ]}>
+                  <Text style={[
+                    styles.outcomePillText,
+                    team1Won ? { color: '#10B981' } : team2Won ? { color: '#EF4444' } : { color: '#94A3B8' }
+                  ]}>
+                    {team1Won ? 'W' : team2Won ? 'L' : '-'}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.teamSectionHeaderText}>{currentMatch.team1_name}</Text>
+            </View>
+            {team1List.length > 0 ? (
+              team1List.map((row, idx) =>
+                renderPlayerRow(row, idx, idx === team1List.length - 1 && team2List.length === 0, idx + 1)
+              )
+            ) : (
+              <Text style={{ color: '#64748B', fontSize: 11, paddingVertical: 8, paddingLeft: 8 }}>
+                No roster players recorded
+              </Text>
+            )}
+
+            {/* Team 2 Section */}
+            {currentMatch.team2_name ? (
+              <>
+                <View style={[styles.teamSectionHeader, { marginTop: 14 }]}>
+                  {isTimeSport ? (
+                    team2Won ? (
+                      <Ionicons name="trophy" size={15} color="#F59E0B" />
+                    ) : (
+                      <Ionicons name="medal-outline" size={15} color="#94A3B8" />
+                    )
+                  ) : (
+                    <View style={[
+                      styles.outcomePillBadge,
+                      team2Won ? styles.outcomeBadgeWin : team1Won ? styles.outcomeBadgeLoss : styles.outcomeBadgeTie
+                    ]}>
+                      <Text style={[
+                        styles.outcomePillText,
+                        team2Won ? { color: '#10B981' } : team1Won ? { color: '#EF4444' } : { color: '#94A3B8' }
+                      ]}>
+                        {team2Won ? 'W' : team1Won ? 'L' : '-'}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.teamSectionHeaderText}>{currentMatch.team2_name}</Text>
+                </View>
+                {team2List.length > 0 ? (
+                  team2List.map((row, idx) =>
+                    renderPlayerRow(row, idx, idx === team2List.length - 1, team1List.length + idx + 1)
+                  )
+                ) : (
+                  <Text style={{ color: '#64748B', fontSize: 11, paddingVertical: 8, paddingLeft: 8 }}>
+                    No roster players recorded
+                  </Text>
                 )}
-              </TouchableOpacity>
-            ))}
+              </>
+            ) : null}
           </View>
         </ScrollView>
 

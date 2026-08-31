@@ -15,6 +15,7 @@ interface DiscoveryContextType {
   scoutingProposals: ScoutingProposalItem[];
   teams: DiscoveryTeamItem[];
   events: DiscoveryEventItem[];
+  loading: boolean;
   activeTab: DiscoveryTab;
   setActiveTab: (tab: DiscoveryTab) => void;
   activeSportFilter: SportCategoryFilter;
@@ -48,6 +49,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [scoutingProposals, setScoutingProposals] = useState<ScoutingProposalItem[]>(INITIAL_PROPOSALS);
   const [teams, setTeams] = useState<DiscoveryTeamItem[]>(INITIAL_TEAMS);
   const [events, setEvents] = useState<DiscoveryEventItem[]>(INITIAL_EVENTS);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [activeTab, setActiveTab] = useState<DiscoveryTab>('PLAYERS');
   const [activeSportFilter, setActiveSportFilter] = useState<SportCategoryFilter>('BASKETBALL');
@@ -64,6 +66,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const fetchBackendDiscovery = async () => {
       try {
+        setLoading(true);
         const [athletesRes, allAthletesRes, teamsRes, myTeamsRes, matchesRes, proposalsRes, inquiriesRes, coachMeRes]: [any, any, any, any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson(`/scouting/athletes?sport=${activeSportFilter}`).catch(() => null),
           requestAuthenticatedJson('/scouting/athletes').catch(() => null),
@@ -327,9 +330,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             };
           });
           setTeams(mappedTeams);
-        }
-
-        // 3. Process Matches
+        }        // 3. Process Matches
         const rawMatches = matchesRes?.matches || (Array.isArray(matchesRes) ? matchesRes : matchesRes?.data || []);
         if (Array.isArray(rawMatches) && rawMatches.length > 0) {
           const mappedMatches: DiscoveryMatchItem[] = rawMatches.map((m: any, idx: number) => {
@@ -342,41 +343,55 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
             const rawPlayerStats = Array.isArray(m.player_stats) ? m.player_stats : Array.isArray(m.boxscore) ? m.boxscore : [];
 
+            const team1Name = m.home_team_name || m.team1_name || m.team_name || 'Home Team';
+            const team2Name = m.opponent_team_name || m.team2_name || m.opponent || 'Opponent Team';
+
+            const matchDateStr = m.match_date || m.timestamp || m.created_at;
+            let dateDisplay = 'Recent';
+            if (matchDateStr) {
+              const d = new Date(matchDateStr);
+              dateDisplay = isNaN(d.getTime()) ? String(matchDateStr).slice(0, 10) : d.toLocaleDateString();
+            }
+            const venueDisplay = m.location || m.venue || 'Official Arena';
+
             return {
               match_id: m.match_id || m.id || `match_${idx}`,
               sport_category: sportCategory,
-              headline: m.headline || `${m.team1_name || 'TEAM A'} VS. ${m.team2_name || 'TEAM B'}`,
-              time_venue: m.time_venue || `${m.match_date || 'Today'} | ${m.location || 'Metro Sports Arena'}`,
-              team1_name: m.team1_name || 'PANTHERS',
-              team2_name: m.team2_name || 'HAWKS',
-              team1_score: m.team1_score || 84,
-              team2_score: m.team2_score || 78,
-              status: m.status || 'FINAL',
+              headline: m.headline || `${team1Name} vs ${team2Name}`.toUpperCase(),
+              time_venue: m.time_venue || `${dateDisplay} • ${venueDisplay}`,
+              team1_name: team1Name,
+              team2_name: team2Name,
+              team1_score: Number(m.home_score ?? m.team1_score ?? m.score1 ?? 0),
+              team2_score: Number(m.away_score ?? m.team2_score ?? m.score2 ?? 0),
+              status: (m.game_result ? `${m.game_result}` : m.status || 'FINAL').toUpperCase(),
               player_stats: rawPlayerStats.map((ps: any) => ({
                 player: ps.player || ps.player_name || ps.full_name || 'Athlete',
-                role_team: ps.role_team || ps.team_name || 'Forward',
-                pts: Number(ps.pts ?? ps.points ?? 18),
-                reb: Number(ps.reb ?? ps.rebounds ?? 6),
-                ast: Number(ps.ast ?? ps.assists ?? 5),
-                fg_pct: Number(ps.fg_pct ?? 48),
+                role_team: ps.role_team || ps.team_name || ps.position || 'Player',
+                pts: Number(ps.pts ?? ps.points ?? 0),
+                reb: Number(ps.reb ?? ps.rebounds ?? 0),
+                ast: Number(ps.ast ?? ps.assists ?? 0),
+                fg_pct: Number(ps.fg_pct ?? 0),
                 time_100m: ps.time_100m,
                 time_200m: ps.time_200m,
                 time_50m: ps.time_50m,
                 final_time: ps.final_time,
               })),
-              dynamics_data: m.dynamics_data || [40, 65, 88, 70, 95, 82, 90, 60],
+              dynamics_data: Array.isArray(m.dynamics_data) ? m.dynamics_data : [],
             };
           });
 
           setEvents([
             {
               event_id: 'evt_live_01',
-              event_name: 'Regional Championship Series 2026',
-              date_range: 'SEASON 2026',
+              event_name: 'Official Match Series',
+              date_range: 'Season 2026',
               matches: mappedMatches,
             },
           ]);
+        } else {
+          setEvents([]);
         }
+
         const rawProposals = proposalsRes?.proposals || (Array.isArray(proposalsRes) ? proposalsRes : []);
         const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
         const combinedList = [...rawProposals, ...rawInquiries];
@@ -420,14 +435,18 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               athlete_name: athleteName || 'Prospect Athlete',
               sport_category: sportCategory,
               offer_status: status,
-              date_added_relative: p.date_initiated ? `Sent: ${new Date(p.date_initiated).toLocaleDateString()}` : 'Recently',
-              created_at: p.created_at || p.date_initiated || new Date().toISOString().split('T')[0],
+              date_added_relative: p.date_initiated || p.created_at ? new Date(p.date_initiated || p.created_at).toLocaleDateString() : 'Recently Added',
+              created_at: p.date_initiated || p.created_at || new Date().toISOString(),
             };
           });
           setScoutingProposals(mappedProps);
         }
       } catch (err) {
         // Fallback gracefully
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -435,7 +454,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       isMounted = false;
     };
-  }, [activeSportFilter]);
+  }, []);
 
   const scoutAthlete = async (athlete: AthleteDiscoveryItem) => {
     const existingIndex = scoutingProposals.findIndex((p) => p.athlete_id === athlete.athlete_id);
@@ -597,6 +616,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         scoutingProposals,
         teams,
         events,
+        loading,
         activeTab,
         setActiveTab,
         activeSportFilter,

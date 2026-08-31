@@ -49,29 +49,78 @@ export function TeamProfileScreen({
   useEffect(() => {
     if (propTeamData) {
       setTeamData(propTeamData);
-      setLoading(false);
-      return;
     }
 
     let isMounted = true;
     const fetchTeamDetails = async () => {
       try {
-        setLoading(true);
-        const path = teamId ? `/teams/${teamId}` : "/athletes/team";
-        const res: any = await requestAuthenticatedJson(path).catch(() => null);
+        if (!propTeamData) setLoading(true);
+
+        let res: any = null;
+        if (teamId) {
+          res = await requestAuthenticatedJson(`/teams/${teamId}`).catch(() => null);
+        } else {
+          res = await requestAuthenticatedJson("/athletes/team").catch(() => null);
+        }
+
+        // Secondary fallback if /athletes/team is empty: check /inquiries
+        if (!res) {
+          const [inqRes, inqMeRes]: [any, any] = await Promise.all([
+            requestAuthenticatedJson("/inquiries").catch(() => null),
+            requestAuthenticatedJson("/inquiries/my-inquiries").catch(() => null),
+          ]);
+          const rawInquiries = [
+            ...(inqRes?.inquiries || (Array.isArray(inqRes) ? inqRes : [])),
+            ...(inqMeRes?.inquiries || (Array.isArray(inqMeRes) ? inqMeRes : [])),
+          ];
+          const acceptedInq = rawInquiries.find((x: any) => {
+            const s = String(x.offer_status || x.status || x.response_status || "").toUpperCase();
+            return s.includes("ACCEPT");
+          });
+
+          if (acceptedInq) {
+            const targetTeamId = acceptedInq.team_id || acceptedInq.inquiry_id;
+            if (targetTeamId) {
+              res = await requestAuthenticatedJson(`/teams/${targetTeamId}`).catch(() => null);
+            }
+            if (!res) {
+              res = {
+                team_id: targetTeamId || "accepted_team",
+                team_name: acceptedInq.current_institution || acceptedInq.institution_name || acceptedInq.team_name || "Varsity Team",
+                sport_type: acceptedInq.sport_type || acceptedInq.sport_category || "BASKETBALL",
+                division: acceptedInq.division || "VARSITY",
+                coach: {
+                  coach_id: acceptedInq.coach_id || acceptedInq.coach_scout_id || "",
+                  full_name: acceptedInq.coach_name || "Head Coach",
+                  role_title: "HEAD COACH",
+                  years_experience: "Head Coach",
+                  quote: "Dedicated to driving team excellence and athlete development.",
+                  is_verified: true,
+                },
+                roster: [],
+              };
+            }
+          }
+        }
 
         if (isMounted) {
           if (res) {
             const rawTeam = res.team || res;
             const rawCoach = res.coach || rawTeam.coach || {};
-            const rawRoster = Array.isArray(res.roster) ? res.roster : Array.isArray(rawTeam.roster) ? rawTeam.roster : Array.isArray(rawTeam.roster_list) ? rawTeam.roster_list : [];
+            const rawRoster = Array.isArray(res.roster)
+              ? res.roster
+              : Array.isArray(rawTeam.roster)
+              ? rawTeam.roster
+              : Array.isArray(rawTeam.roster_list)
+              ? rawTeam.roster_list
+              : [];
 
             const coachObj: Coach = {
-              coach_id: rawCoach.coach_id || rawTeam.coach_id || "",
-              full_name: (rawCoach.full_name || rawCoach.name || "Assigned Coach").toUpperCase(),
-              role_title: (rawCoach.role_title || rawCoach.current_institution || "HEAD COACH").toUpperCase(),
-              years_experience: rawCoach.years_of_experience || rawCoach.years_experience ? `${rawCoach.years_of_experience || rawCoach.years_experience} Years` : "Head Coach",
-              quote: rawCoach.quote || "Dedicated to driving team excellence and athlete development.",
+              coach_id: rawCoach.coach_id || rawTeam.coach_id || propTeamData?.coach?.coach_id || "",
+              full_name: (rawCoach.full_name || rawCoach.name || propTeamData?.coach?.full_name || "Assigned Coach").toUpperCase(),
+              role_title: (rawCoach.role_title || rawCoach.current_institution || propTeamData?.coach?.role_title || "HEAD COACH").toUpperCase(),
+              years_experience: rawCoach.years_of_experience || rawCoach.years_experience ? `${rawCoach.years_of_experience || rawCoach.years_experience} Years` : propTeamData?.coach?.years_experience || "Head Coach",
+              quote: rawCoach.quote || propTeamData?.coach?.quote || "Dedicated to driving team excellence and athlete development.",
               is_verified: true,
             };
 
@@ -87,21 +136,21 @@ export function TeamProfileScreen({
             });
 
             setTeamData({
-              team_id: rawTeam.team_id || teamId || "",
-              team_name: rawTeam.team_name || "Team Roster",
-              mission_statement: rawTeam.mission_statement || rawTeam.description || "Building character, discipline, and competitive excellence through athletics.",
-              region: rawTeam.region || "NCR",
-              total_athletes: playersList.length || Number(rawTeam.athlete_count || 0),
-              established_year: String(rawTeam.established_year || new Date().getFullYear()),
+              team_id: rawTeam.team_id || teamId || propTeamData?.team_id || "",
+              team_name: rawTeam.team_name || propTeamData?.team_name || "Team Roster",
+              mission_statement: rawTeam.mission_statement || rawTeam.description || propTeamData?.mission_statement || "Building character, discipline, and competitive excellence through athletics.",
+              region: rawTeam.region || propTeamData?.region || "NCR",
+              total_athletes: playersList.length || Number(rawTeam.athlete_count || propTeamData?.total_athletes || 0),
+              established_year: String(rawTeam.established_year || propTeamData?.established_year || new Date().getFullYear()),
               coach: coachObj,
-              players: playersList,
+              players: playersList.length > 0 ? playersList : (propTeamData?.players || []),
             });
-          } else {
+          } else if (!propTeamData) {
             setTeamData(null);
           }
         }
       } catch (err) {
-        if (isMounted) setTeamData(null);
+        if (isMounted && !propTeamData) setTeamData(null);
       } finally {
         if (isMounted) setLoading(false);
       }

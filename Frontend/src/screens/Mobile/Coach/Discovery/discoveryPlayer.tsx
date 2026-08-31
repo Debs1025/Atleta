@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDiscovery } from './DiscoveryContext';
@@ -22,6 +23,7 @@ export const DiscoveryPlayer: React.FC<{
     filteredAthletes,
     selectedAthlete,
     setSelectedAthlete,
+    loading,
   } = useDiscovery();
 
   const [showScoutingModal, setShowScoutingModal] = useState(false);
@@ -50,7 +52,17 @@ export const DiscoveryPlayer: React.FC<{
   return (
     <View style={{ flex: 1 }}>
       <View style={{ gap: 12 }}>
-        {filteredAthletes.length > 0 ? (
+        {loading ? (
+          <View style={{ paddingVertical: 48, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+            <ActivityIndicator size="large" color="#00C8FF" />
+            <Text style={{ color: '#00C8FF', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 }}>
+              DISCOVERING PROSPECTS...
+            </Text>
+            <Text style={{ color: '#64748B', fontSize: 12 }}>
+              Fetching athlete profiles & verified evaluations
+            </Text>
+          </View>
+        ) : filteredAthletes.length > 0 ? (
           filteredAthletes.map((athlete) => {
             return (
               <TouchableOpacity

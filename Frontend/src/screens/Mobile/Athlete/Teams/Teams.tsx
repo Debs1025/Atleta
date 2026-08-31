@@ -97,32 +97,51 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     const fetchDirectoryAndInquiries = async () => {
       try {
         setLoading(true);
-        const [teamsRes, inquiriesRes, proposalsRes]: [any, any, any] = await Promise.all([
-          requestAuthenticatedJson("/teams").catch(() => null),
+        let teamsRes: any = await requestAuthenticatedJson("/teams").catch(() => null);
+        if (!teamsRes || (Array.isArray(teamsRes) && teamsRes.length === 0) || (teamsRes.teams && teamsRes.teams.length === 0)) {
+          const browseRes: any = await requestAuthenticatedJson("/teams/browse").catch(() => null);
+          if (browseRes && (browseRes.teams?.length > 0 || (Array.isArray(browseRes) && browseRes.length > 0))) {
+            teamsRes = browseRes;
+          }
+        }
+
+        const [inquiriesRes, proposalsRes]: [any, any] = await Promise.all([
           requestAuthenticatedJson("/inquiries").catch(() => null),
           requestAuthenticatedJson("/scouting/proposals").catch(() => null),
         ]);
 
         if (isMounted) {
           const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
-          const mappedTeams: TeamSchema[] = rawTeams.map((t: any, idx: number) => ({
-            team_id: t.team_id || `team_${idx}`,
-            team_name: t.team_name || "Varsity Team",
-            sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
-            managed_by_coach_id: t.coach_id || "",
-            created_at: t.timestamp || new Date().toISOString(),
-            roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
-            program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
-            description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
-            region: t.region || "NCR",
-            head_coach: {
-              coach_id: t.coach_id || "",
-              full_name: (t.coach_name || "Head Coach").toUpperCase(),
-              role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
-              years_experience: "Experienced Coach",
-              quote: "Focused on developing fundamental athletic resilience and performance.",
-            },
-          }));
+          const mappedTeams: TeamSchema[] = rawTeams.map((t: any, idx: number) => {
+            const rawSport = (t.sport_type || t.category || t.sport || "BASKETBALL").toString().toUpperCase().trim();
+            let exactSport: TeamSchema["sport_type"] = "BASKETBALL";
+            if (rawSport.includes("TRACK") || rawSport.includes("FIELD") || rawSport.includes("ATHLETIC")) {
+              exactSport = "TRACK AND FIELD";
+            } else if (rawSport.includes("SWIM")) {
+              exactSport = "SWIMMING";
+            } else {
+              exactSport = "BASKETBALL";
+            }
+
+            return {
+              team_id: t.team_id || `team_${idx}`,
+              team_name: t.team_name || "Varsity Team",
+              sport_type: exactSport,
+              managed_by_coach_id: t.coach_id || "",
+              created_at: t.timestamp || new Date().toISOString(),
+              roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
+              program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
+              description: t.description || t.mission_statement || `Official ${exactSport} program in ${t.region || "NCR"}.`,
+              region: t.region || "NCR",
+              head_coach: {
+                coach_id: t.coach_id || "",
+                full_name: (t.coach_name || "Head Coach").toUpperCase(),
+                role_title: `${exactSport} HEAD COACH`,
+                years_experience: "Experienced Coach",
+                quote: "Focused on developing fundamental athletic resilience and performance.",
+              },
+            };
+          });
           setTeams(mappedTeams);
 
           const rawInq = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
@@ -249,12 +268,11 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
 
   const filteredTeams = teams.filter((team) => {
     const matchesSearch =
+      !searchQuery ||
       team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSport = selectedSport
-      ? team.sport_type === selectedSport
-      : true;
+    const matchesSport = !selectedSport || team.sport_type === selectedSport;
     return matchesSearch && matchesSport;
   });
 
