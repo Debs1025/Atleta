@@ -92,36 +92,52 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     }
   }, [currentScreen, onScreenStateChange]);
 
+  const [myCurrentTeamId, setMyCurrentTeamId] = useState<string>("");
+  const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>("");
+
   useEffect(() => {
     let isMounted = true;
     const fetchDirectoryAndInquiries = async () => {
       try {
         setLoading(true);
-        const [teamsRes, inquiriesRes]: [any, any] = await Promise.all([
+        const [teamsRes, inquiriesRes, myTeamRes]: [any, any, any] = await Promise.all([
           requestAuthenticatedJson("/teams").catch(() => null),
           requestAuthenticatedJson("/inquiries").catch(() => null),
+          requestAuthenticatedJson("/athletes/team").catch(() => null),
         ]);
 
         if (isMounted) {
+          const currentTeamId = myTeamRes?.team?.team_id || myTeamRes?.team_id || "";
+          const currentTeamName = myTeamRes?.team?.team_name || myTeamRes?.team_name || "";
+          setMyCurrentTeamId(currentTeamId);
+          setMyCurrentTeamName(currentTeamName);
+
           const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
-          const mappedTeams: TeamSchema[] = rawTeams.map((t: any, idx: number) => ({
-            team_id: t.team_id || `team_${idx}`,
-            team_name: t.team_name || "Varsity Team",
-            sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
-            managed_by_coach_id: t.coach_id || "",
-            created_at: t.timestamp || new Date().toISOString(),
-            roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
-            program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
-            description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
-            region: t.region || "NCR",
-            head_coach: {
-              coach_id: t.coach_id || "",
-              full_name: (t.coach_name || "Head Coach").toUpperCase(),
-              role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
-              years_experience: "Experienced Coach",
-              quote: "Focused on developing fundamental athletic resilience and performance.",
-            },
-          }));
+          const mappedTeams: TeamSchema[] = rawTeams
+            .filter((t: any) => {
+              // Exclude the athlete's current team if they already play in a team
+              if (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) return false;
+              if (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase()) return false;
+              return true;
+            })
+            .map((t: any, idx: number) => ({
+              team_id: t.team_id || `team_${idx}`,
+              team_name: t.team_name || "Varsity Team",
+              sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
+              managed_by_coach_id: t.coach_id || "",
+              created_at: t.timestamp || new Date().toISOString(),
+              roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
+              program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
+              description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
+              region: t.region || "NCR",
+              head_coach: {
+                coach_id: t.coach_id || "",
+                full_name: (t.coach_name || "Head Coach").toUpperCase(),
+                role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
+                years_experience: "Experienced Coach",
+                quote: "Focused on developing fundamental athletic resilience and performance.",
+              },
+            }));
           setTeams(mappedTeams);
 
           const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
@@ -239,13 +255,17 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
     }
   };
 
+  const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+
   const filteredTeams = teams.filter((team) => {
     const matchesSearch =
       team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSport = selectedSport
-      ? team.sport_type === selectedSport
+      ? normSport(team.sport_type) === normSport(selectedSport) ||
+        normSport(team.sport_type).includes(normSport(selectedSport)) ||
+        normSport(selectedSport).includes(normSport(team.sport_type))
       : true;
     return matchesSearch && matchesSport;
   });
