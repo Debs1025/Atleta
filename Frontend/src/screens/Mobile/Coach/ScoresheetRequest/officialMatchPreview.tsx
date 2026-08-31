@@ -35,13 +35,15 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   } = useMatchContext();
 
   // Find match
-  const match = matches.find((m) => m.match_id === matchId) || matches[0];
+  const match = matches.find((m) => m.match_id === matchId);
 
   const handleRequestAudit = useCallback(async () => {
+    if (!match) return;
     await requestAudit(match.match_id);
-  }, [match.match_id, requestAudit]);
+  }, [match, requestAudit]);
 
   const handleToggleCertified = useCallback(async () => {
+    if (!match) return;
     if (match.audit_status === 'REQUEST GRANTED') {
       await requestAudit(match.match_id);
     } else {
@@ -50,8 +52,27 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   }, [match, requestAudit, grantAudit]);
 
   const handleDownloadPDF = useCallback(async () => {
+    if (!match) return;
     await generatePDFScoresheet(match);
   }, [match, generatePDFScoresheet]);
+
+  if (!match) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#070D19" />
+        <View style={[styles.header, { paddingTop: Math.max(insets.top - 12, 0), paddingBottom: 10 }]}>
+          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>MATCH PREVIEW</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#00C8FF" />
+          <Text style={{ color: '#94A3B8', marginTop: 12, fontSize: 14 }}>Loading match details...</Text>
+        </View>
+      </View>
+    );
+  }
 
   const isCertified = match.audit_status === 'REQUEST GRANTED' && match.is_certified;
 

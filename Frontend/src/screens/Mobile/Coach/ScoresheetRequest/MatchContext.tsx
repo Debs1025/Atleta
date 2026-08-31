@@ -46,115 +46,8 @@ export interface OfficialMatchRecord {
   coach_notes?: string[];
 }
 
-// Sample fallback data for testing if offline or empty
-export const INITIAL_MATCH_RECORDS: OfficialMatchRecord[] = [
-  {
-    match_id: 'MATCH213123',
-    team_id: 'team_01',
-    home_team_name: 'Panthers',
-    away_team_name: 'Hawks',
-    league_name: 'BATANG PINOY',
-    sport_type: 'BASKETBALL',
-    match_date: 'Oct 24, 2026',
-    match_time: '19:30',
-    location: 'Metro Sports Arena, Court 4',
-    audit_status: 'NOT REQUESTED',
-    is_certified: false,
-    home_score: 84,
-    away_score: 78,
-    box_score_summary: [
-      { athlete_id: 'p1', player_name: 'Marcus V. Stephens', pts: 24, ast: 5, reb: 4, stl: 2, blk: 1 },
-      { athlete_id: 'p2', player_name: 'Jake L. Rodriguez', pts: 18, ast: 6, reb: 12, stl: 1, blk: 2 },
-      { athlete_id: 'p3', player_name: 'Chen W. Zhao', pts: 12, ast: 2, reb: 1, stl: 2, blk: 0 },
-      { athlete_id: 'p4', player_name: 'Tyson K. Reed', pts: 10, ast: 1, reb: 7, stl: 1, blk: 0 },
-      { athlete_id: 'p5', player_name: 'Omar Al-Fadil', pts: 15, ast: 4, reb: 12, stl: 1, blk: 3 },
-    ],
-    coach_notes: ['Strong overall transition play.', 'Defensive rebounds dominated in 4th quarter.']
-  },
-  {
-    match_id: 'MATCH213124',
-    team_id: 'team_02',
-    home_team_name: 'Vipers',
-    away_team_name: 'Blue Jays',
-    league_name: 'NATIONAL AQUATICS CHAMPIONSHIP',
-    sport_type: 'SWIMMING',
-    match_date: 'OCT 22, 2023',
-    match_time: '14:00',
-    location: 'Olympic Field House',
-    audit_status: 'PENDING REQUEST',
-    is_certified: false,
-    home_score: 112,
-    away_score: 95,
-    box_score_summary: [
-      { athlete_id: 'sw1', player_name: 'Diego Cruz', event_name: '50m Freestyle', time_seconds: '22.45s', split_time: '10.90s', rank_position: 1, lane: 4, pts: 10 },
-      { athlete_id: 'sw2', player_name: 'Sienna Reyes', event_name: '100m Butterfly', time_seconds: '58.12s', split_time: '27.50s', rank_position: 1, lane: 3, pts: 10 },
-      { athlete_id: 'sw3', player_name: 'Lucas Tan', event_name: '200m Backstroke', time_seconds: '1:58.30', split_time: '58.10s', rank_position: 2, lane: 5, pts: 8 },
-      { athlete_id: 'sw4', player_name: 'Hannah Vance', event_name: '100m Freestyle', time_seconds: '54.20s', split_time: '26.10s', rank_position: 1, lane: 2, pts: 10 },
-    ]
-  },
-  {
-    match_id: 'MATCH213125',
-    team_id: 'team_03',
-    home_team_name: 'Wolves FC',
-    away_team_name: 'Titans',
-    league_name: 'PALARONG PAMBANSA',
-    sport_type: 'TRACK AND FIELD',
-    match_date: 'OCT 20, 2023',
-    match_time: '10:30',
-    location: 'Community Stadium North',
-    audit_status: 'REQUEST GRANTED',
-    is_certified: true,
-    home_score: 140,
-    away_score: 118,
-    box_score_summary: [
-      { athlete_id: 'tf1', player_name: 'Gabriel Santos', discipline: '100m Sprint', mark_result: '10.42s', wind_reading: '+1.2 m/s', place: 1, pts: 10 },
-      { athlete_id: 'tf2', player_name: 'Mia Gonzales', discipline: '400m Hurdles', mark_result: '54.10s', wind_reading: 'N/A', place: 1, pts: 10 },
-      { athlete_id: 'tf3', player_name: 'Noah Perez', discipline: 'Long Jump', mark_result: '7.65m', wind_reading: '+0.8 m/s', place: 2, pts: 8 },
-      { athlete_id: 'tf4', player_name: 'Chloe Bennett', discipline: '200m Sprint', mark_result: '23.15s', wind_reading: '+0.5 m/s', place: 1, pts: 10 },
-    ]
-  },
-  {
-    match_id: 'MATCH213126',
-    team_id: 'team_04',
-    home_team_name: 'Eagles',
-    away_team_name: 'Sharks',
-    league_name: 'BATANG PINOY',
-    sport_type: 'BASKETBALL',
-    match_date: 'OCT 18, 2023',
-    match_time: '18:00',
-    location: 'Metro Sports Arena, Court 1',
-    audit_status: 'NOT REQUESTED',
-    is_certified: false,
-    home_score: 79,
-    away_score: 82,
-    box_score_summary: [
-      { athlete_id: 'e1', player_name: 'J. Dela Cruz', pts: 20, ast: 7, reb: 3, stl: 1, blk: 0 },
-      { athlete_id: 'e2', player_name: 'A. Rivera', pts: 16, ast: 4, reb: 8, stl: 3, blk: 1 },
-      { athlete_id: 'e3', player_name: 'M. Santos', pts: 14, ast: 1, reb: 11, stl: 0, blk: 4 },
-    ]
-  },
-  {
-    match_id: 'MATCH213127',
-    team_id: 'team_05',
-    home_team_name: 'Storm',
-    away_team_name: 'Rangers',
-    league_name: 'BRAA REGIONALS',
-    sport_type: 'BASKETBALL',
-    match_date: 'OCT 15, 2023',
-    match_time: '15:15',
-    location: 'Regional Training Center',
-    audit_status: 'REQUEST GRANTED',
-    is_certified: true,
-    home_score: 92,
-    away_score: 85,
-    box_score_summary: [
-      { athlete_id: 'st1', player_name: 'Adrian Reyes', pts: 28, ast: 8, reb: 5, stl: 3, blk: 1 },
-      { athlete_id: 'st2', player_name: 'Brandon Lee', pts: 21, ast: 3, reb: 9, stl: 2, blk: 4 },
-      { athlete_id: 'st3', player_name: 'Carlos Mendoza', pts: 14, ast: 5, reb: 4, stl: 1, blk: 0 },
-      { athlete_id: 'st4', player_name: 'Darius Thorne', pts: 18, ast: 2, reb: 10, stl: 1, blk: 2 },
-    ]
-  }
-];
+// Zero hardcoded mock matches - dynamically loaded 100% from Firestore Match_Logs
+export const INITIAL_MATCH_RECORDS: OfficialMatchRecord[] = [];
 
 interface MatchContextType {
   matches: OfficialMatchRecord[];
@@ -172,12 +65,12 @@ interface MatchContextType {
 const MatchContext = createContext<MatchContextType | undefined>(undefined);
 
 export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [matches, setMatches] = useState<OfficialMatchRecord[]>(INITIAL_MATCH_RECORDS);
-  const [isLoadingMatches, setIsLoadingMatches] = useState<boolean>(false);
+  const [matches, setMatches] = useState<OfficialMatchRecord[]>([]);
+  const [isLoadingMatches, setIsLoadingMatches] = useState<boolean>(true);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [downloadModal, setDownloadModal] = useState<{ visible: boolean; fileName: string; uri: string } | null>(null);
 
-  // Fetch matches from deployed backend
+  // Fetch matches purely from deployed backend / Firestore Match_Logs
   const refreshMatches = useCallback(async () => {
     try {
       setIsLoadingMatches(true);
@@ -265,15 +158,14 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         });
 
-        // Merge backend matches with existing demo sample records
-        setMatches((prev) => {
-          const backendIds = new Set(mappedBackendMatches.map((bm) => bm.match_id));
-          const filteredPrev = prev.filter((p) => !backendIds.has(p.match_id));
-          return [...mappedBackendMatches, ...filteredPrev];
-        });
+        // Set exclusively from Firestore matches
+        setMatches(mappedBackendMatches);
+      } else {
+        setMatches([]);
       }
     } catch (error) {
       console.warn('Failed to load live matches from deployed backend:', error);
+      setMatches([]);
     } finally {
       setIsLoadingMatches(false);
     }

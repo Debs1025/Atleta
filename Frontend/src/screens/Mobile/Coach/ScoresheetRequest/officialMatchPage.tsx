@@ -8,6 +8,7 @@ import {
   StatusBar,
   Modal,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -146,10 +147,15 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
             />
           }
         >
-          {filteredMatches.length === 0 ? (
+          {isLoadingMatches && matches.length === 0 ? (
+            <View style={[styles.emptyContainer, { paddingTop: 60 }]}>
+              <ActivityIndicator size="large" color="#00C8FF" />
+              <Text style={[styles.emptyText, { marginTop: 16 }]}>Loading matches from database...</Text>
+            </View>
+          ) : filteredMatches.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="search-outline" size={48} color="#334155" />
-              <Text style={styles.emptyText}>No matching games found</Text>
+              <Text style={styles.emptyText}>No matching games found in database</Text>
             </View>
           ) : (
             filteredMatches.map((match) => {
