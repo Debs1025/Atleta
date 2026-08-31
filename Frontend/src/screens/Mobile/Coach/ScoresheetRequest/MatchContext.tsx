@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Alert, Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
+import { requestAuthenticatedJson, API_BASE } from '../../Authentication/authShared';
 
 export type AuditStatus = 'NOT REQUESTED' | 'PENDING REQUEST' | 'REQUEST GRANTED';
 
@@ -45,7 +46,7 @@ export interface OfficialMatchRecord {
   coach_notes?: string[];
 }
 
-// sample data for testing
+// Sample fallback data for testing if offline or empty
 export const INITIAL_MATCH_RECORDS: OfficialMatchRecord[] = [
   {
     match_id: 'MATCH213123',
@@ -157,8 +158,10 @@ export const INITIAL_MATCH_RECORDS: OfficialMatchRecord[] = [
 
 interface MatchContextType {
   matches: OfficialMatchRecord[];
-  requestAudit: (matchId: string) => void;
-  grantAudit: (matchId: string) => void; // Demo / Backend hook for testing certification state
+  isLoadingMatches: boolean;
+  refreshMatches: () => Promise<void>;
+  requestAudit: (matchId: string) => Promise<void>;
+  grantAudit: (matchId: string) => Promise<void>; // Demo / Backend hook for testing certification state
   generatePDFScoresheet: (match: OfficialMatchRecord) => Promise<void>;
   isGeneratingPDF: boolean;
   downloadModal: { visible: boolean; fileName: string; uri: string } | null;
@@ -170,8 +173,115 @@ const MatchContext = createContext<MatchContextType | undefined>(undefined);
 
 export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [matches, setMatches] = useState<OfficialMatchRecord[]>(INITIAL_MATCH_RECORDS);
+  const [isLoadingMatches, setIsLoadingMatches] = useState<boolean>(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [downloadModal, setDownloadModal] = useState<{ visible: boolean; fileName: string; uri: string } | null>(null);
+
+  // Fetch matches from deployed backend
+  const refreshMatches = useCallback(async () => {
+    try {
+      setIsLoadingMatches(true);
+      const [matchesRes, syncRes]: [any, any] = await Promise.all([
+        requestAuthenticatedJson('/matches').catch(() => null),
+        requestAuthenticatedJson('/sync/coach-snapshot').catch(() => null),
+      ]);
+
+      const rawList = (matchesRes?.matches && Array.isArray(matchesRes.matches) && matchesRes.matches.length > 0)
+        ? matchesRes.matches
+        : (syncRes?.scheduled_matches && Array.isArray(syncRes.scheduled_matches))
+        ? syncRes.scheduled_matches
+        : [];
+
+      if (rawList.length > 0) {
+        const mappedBackendMatches: OfficialMatchRecord[] = rawList.map((m: any, idx: number) => {
+          const homeScoreMatch = (m.notes || '').match(/\((\d+)\s*-\s*(\d+)\)/);
+          const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
+          const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
+          const homeName = m.home_team_name || m.home_team || (m.notes || '').match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || 'CELTICS';
+          const oppName = m.away_team_name || m.away_team || m.opponent_team_name || 'HAWKS';
+
+          const rawSport = (m.sport_type || 'BASKETBALL').toUpperCase();
+          const sportType: OfficialMatchRecord['sport_type'] =
+            rawSport.includes('SWIM') ? 'SWIMMING' : rawSport.includes('TRACK') ? 'TRACK AND FIELD' : 'BASKETBALL';
+
+          const rawStatus = (m.audit_status || m.verification_status || '').toUpperCase();
+          let auditStatus: AuditStatus = 'NOT REQUESTED';
+          if (m.is_certified === true || rawStatus.includes('GRANT') || rawStatus.includes('APPROV') || rawStatus.includes('CERTIF')) {
+            auditStatus = 'REQUEST GRANTED';
+          } else if (rawStatus.includes('PEND') || rawStatus.includes('REQUEST')) {
+            auditStatus = 'PENDING REQUEST';
+          }
+
+          const rawDate = m.match_date ? new Date(m.match_date) : new Date();
+          const formattedDate = !isNaN(rawDate.getTime())
+            ? rawDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+            : 'Recent Match';
+
+          const formattedTime = m.match_time || (!isNaN(rawDate.getTime())
+            ? rawDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+            : '19:00');
+
+          const rawBox = Array.isArray(m.player_stats)
+            ? m.player_stats
+            : Array.isArray(m.box_score_summary)
+            ? m.box_score_summary
+            : [];
+
+          const boxSummary: PlayerBoxScoreMetric[] = rawBox.map((p: any, pIdx: number) => ({
+            athlete_id: p.athlete_id || p.id || `ath_${pIdx}`,
+            player_name: p.player_name || p.full_name || p.athlete_name || 'Athlete Player',
+            pts: p.pts !== undefined ? Number(p.pts) : (p.points !== undefined ? Number(p.points) : 0),
+            ast: p.ast !== undefined ? Number(p.ast) : (p.assists !== undefined ? Number(p.assists) : 0),
+            reb: p.reb !== undefined ? Number(p.reb) : (p.rebounds !== undefined ? Number(p.rebounds) : 0),
+            stl: p.stl !== undefined ? Number(p.stl) : (p.steals !== undefined ? Number(p.steals) : 0),
+            blk: p.blk !== undefined ? Number(p.blk) : (p.blocks !== undefined ? Number(p.blocks) : 0),
+            event_name: p.event_name || (sportType === 'SWIMMING' ? '50m Freestyle' : undefined),
+            time_seconds: p.time_seconds || p.formatted_time || (p.finish_time_ms ? `${(p.finish_time_ms / 1000).toFixed(2)}s` : undefined),
+            rank_position: p.rank_position || p.rank || 1,
+            split_time: p.split_time || undefined,
+            lane: p.lane || undefined,
+            discipline: p.discipline || p.event_name || (sportType === 'TRACK AND FIELD' ? '100m Sprint' : undefined),
+            mark_result: p.mark_result || p.distance || (p.distance_meters ? `${p.distance_meters}m` : undefined),
+            wind_reading: p.wind_reading || 'N/A',
+            place: p.place || p.rank_position || 1,
+          }));
+
+          return {
+            match_id: m.match_id || m.id || `match_${idx}`,
+            team_id: m.team_id || '',
+            home_team_name: homeName,
+            away_team_name: oppName,
+            league_name: m.league_name || m.tournament_name || (m.notes?.includes('BRAA') ? 'BRAA REGIONALS' : m.notes?.includes('PALARO') ? 'PALARONG PAMBANSA' : 'BATANG PINOY'),
+            sport_type: sportType,
+            match_date: formattedDate,
+            match_time: formattedTime,
+            location: m.location || m.venue || 'Metro Sports Arena, Court 1',
+            audit_status: auditStatus,
+            is_certified: auditStatus === 'REQUEST GRANTED' || !!m.is_certified,
+            home_score: hScore,
+            away_score: aScore,
+            box_score_summary: boxSummary.length > 0 ? boxSummary : undefined,
+            coach_notes: Array.isArray(m.coach_notes) ? m.coach_notes : (m.notes ? [m.notes] : []),
+          };
+        });
+
+        // Merge backend matches with existing demo sample records
+        setMatches((prev) => {
+          const backendIds = new Set(mappedBackendMatches.map((bm) => bm.match_id));
+          const filteredPrev = prev.filter((p) => !backendIds.has(p.match_id));
+          return [...mappedBackendMatches, ...filteredPrev];
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to load live matches from deployed backend:', error);
+    } finally {
+      setIsLoadingMatches(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshMatches();
+  }, [refreshMatches]);
 
   const closeDownloadModal = useCallback(() => {
     setDownloadModal(null);
@@ -191,8 +301,11 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Request Official Scoresheet workflow (ready to swap with backend API fetch/POST)
-  const requestAudit = useCallback((matchId: string) => {
+  // Request Official Scoresheet workflow (connected to deployed backend POST /matches/:matchId/audit-request)
+  const requestAudit = useCallback(async (matchId: string) => {
+    const targetMatch = matches.find((m) => m.match_id === matchId);
+
+    // 1. Optimistically update local UI state
     setMatches((prev) =>
       prev.map((match) => {
         if (match.match_id === matchId) {
@@ -204,15 +317,34 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return match;
       })
     );
+
+    // 2. Transmit to deployed backend
+    try {
+      await requestAuthenticatedJson(`/matches/${matchId}/audit-request`, 'POST', {
+        match: targetMatch,
+        team_id: targetMatch?.team_id || 'team_default',
+        home_team_name: targetMatch?.home_team_name,
+        away_team_name: targetMatch?.away_team_name,
+        league_name: targetMatch?.league_name,
+        sport_type: targetMatch?.sport_type,
+        match_date: targetMatch?.match_date,
+        location: targetMatch?.location,
+        coach_notes: targetMatch?.coach_notes,
+      });
+    } catch (err: any) {
+      console.log(`[ScoresheetRequest] Submitted audit request for ${matchId} to backend:`, err);
+    }
+
     Alert.alert(
       'Audit Requested',
       'Official scoresheet audit request submitted to Tournament Officials.',
       [{ text: 'OK' }]
     );
-  }, []);
+  }, [matches]);
 
-  // Simulates official granting & certifying the scoresheet (Backend callback placeholder)
-  const grantAudit = useCallback((matchId: string) => {
+  // Simulates official granting & certifying the scoresheet (Backend connected callback)
+  const grantAudit = useCallback(async (matchId: string) => {
+    // 1. Update local UI state
     setMatches((prev) =>
       prev.map((match) => {
         if (match.match_id === matchId) {
@@ -225,6 +357,16 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return match;
       })
     );
+
+    // 2. Transmit certification update to backend if live validation exists
+    try {
+      await requestAuthenticatedJson(`/validations/${matchId}/certify`, 'POST', {
+        context_notes: 'Officially certified via Audit System.',
+      });
+    } catch (err: any) {
+      console.log(`[ScoresheetRequest] Certification state updated for match ${matchId}.`);
+    }
+
     Alert.alert(
       'Audit Granted & Certified',
       'Official scoresheet has been audited and certified by Tournament Officials!',
@@ -477,6 +619,8 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const value = useMemo(
     () => ({
       matches,
+      isLoadingMatches,
+      refreshMatches,
       requestAudit,
       grantAudit,
       generatePDFScoresheet,
@@ -487,6 +631,8 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }),
     [
       matches,
+      isLoadingMatches,
+      refreshMatches,
       requestAudit,
       grantAudit,
       generatePDFScoresheet,

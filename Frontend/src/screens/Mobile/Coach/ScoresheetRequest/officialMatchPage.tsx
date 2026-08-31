@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -25,7 +26,7 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
   onSelectMatch,
 }) => {
   const insets = useSafeAreaInsets();
-  const { matches } = useMatchContext();
+  const { matches, isLoadingMatches, refreshMatches } = useMatchContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMatch, setSelectedMatch] = useState<OfficialMatchRecord | null>(null);
@@ -136,6 +137,14 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardList}
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoadingMatches}
+              onRefresh={refreshMatches}
+              tintColor="#00C8FF"
+              colors={['#00C8FF']}
+            />
+          }
         >
           {filteredMatches.length === 0 ? (
             <View style={styles.emptyContainer}>

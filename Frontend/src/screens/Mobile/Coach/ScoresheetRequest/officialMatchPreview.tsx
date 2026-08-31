@@ -37,20 +37,20 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   // Find match
   const match = matches.find((m) => m.match_id === matchId) || matches[0];
 
-  const handleRequestAudit = useCallback(() => {
-    requestAudit(match.match_id);
+  const handleRequestAudit = useCallback(async () => {
+    await requestAudit(match.match_id);
   }, [match.match_id, requestAudit]);
 
-  const handleToggleCertified = useCallback(() => {
+  const handleToggleCertified = useCallback(async () => {
     if (match.audit_status === 'REQUEST GRANTED') {
-      requestAudit(match.match_id);
+      await requestAudit(match.match_id);
     } else {
-      grantAudit(match.match_id);
+      await grantAudit(match.match_id);
     }
   }, [match, requestAudit, grantAudit]);
 
-  const handleDownloadPDF = useCallback(() => {
-    generatePDFScoresheet(match);
+  const handleDownloadPDF = useCallback(async () => {
+    await generatePDFScoresheet(match);
   }, [match, generatePDFScoresheet]);
 
   const isCertified = match.audit_status === 'REQUEST GRANTED' && match.is_certified;
