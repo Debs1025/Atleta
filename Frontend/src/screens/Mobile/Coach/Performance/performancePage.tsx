@@ -19,6 +19,7 @@ interface PerformancePageProps {
   onSelectAthlete: (athlete: AthletePerformanceProfile) => void;
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
+  onViewMatchHistory?: () => void;
   athletes?: AthletePerformanceProfile[];
 }
 
@@ -28,6 +29,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
   onSettingsPress,
   onProfilePress,
+  onViewMatchHistory,
   athletes = [],
 }) => {
   const insets = useSafeAreaInsets();
@@ -113,6 +115,39 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             );
           })}
         </ScrollView>
+
+        {/* Match History Quick Access Card */}
+        {onViewMatchHistory && (
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: "rgba(0, 200, 255, 0.08)",
+              borderWidth: 1,
+              borderColor: "rgba(0, 200, 255, 0.3)",
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              marginBottom: 16,
+            }}
+            onPress={onViewMatchHistory}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="trophy-outline" size={20} color="#00C8FF" />
+              <View>
+                <Text style={{ color: "#F8FAFC", fontSize: 13, fontWeight: "800" }}>
+                  VIEW MATCH HISTORY
+                </Text>
+                <Text style={{ color: "#94A3B8", fontSize: 11, marginTop: 1 }}>
+                  Recorded matches, boxscores & results
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#00C8FF" />
+          </TouchableOpacity>
+        )}
 
         {/* Ranked Athlete List / Empty State */}
         {filteredAthletes.length === 0 ? (

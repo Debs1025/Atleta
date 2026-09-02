@@ -1306,6 +1306,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             setPreviousPortfolioView("performance");
             setActiveView("athlete_portfolio");
           }}
+          onViewMatchHistory={() => {
+            setPreviousPortfolioView("performance");
+            setActiveView("match_history");
+          }}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
         />
@@ -1324,7 +1328,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             }
           }}
           onViewAllStats={() => setActiveView("all_stats")}
-          onViewMatchHistory={() => setActiveView("match_history")}
+          onViewMatchHistory={() => {
+            setPreviousPortfolioView("athlete_portfolio");
+            setActiveView("match_history");
+          }}
         />
       )}
 
@@ -1352,7 +1359,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
         <MatchHistory
           sportCategory={selectedPerfAthlete?.sport_category}
           historyItems={matchHistoryList}
-          onClose={() => setActiveView("athlete_portfolio")}
+          onClose={() => setActiveView(previousPortfolioView || "performance")}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
             if (matchItem.sport_category === "BASKETBALL") {
