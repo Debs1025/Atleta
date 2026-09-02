@@ -7,3 +7,4 @@ web-build
 .env.*
 coverage
 firebaseConfig.ts
+package-lock.json

@@ -11,6 +11,9 @@ export interface OfficialRegisterPayload {
   organization_name: string;
   first_name?: string;
   last_name?: string;
+  full_name?: string;
+  license_number?: string;
+  sport_accreditation?: string[];
   organization?: string;
   phone_number?: string;
   assigned_sport?: string;
@@ -18,12 +21,6 @@ export interface OfficialRegisterPayload {
 
 export interface PasswordResetPayload {
   email: string;
-}
-
-export interface OfficialSettingsPayload {
-  split_screen_defaults?: boolean;
-  discrepancy_presets?: boolean;
-  match_reminders?: boolean;
 }
 
 export interface AuthUser {
@@ -36,6 +33,8 @@ export interface AuthUser {
   email: string;
   organization_name?: string;
   organization?: string;
+  license_number?: string;
+  sport_accreditation?: string[];
   assigned_sport?: string;
   profile?: Record<string, unknown>;
 }

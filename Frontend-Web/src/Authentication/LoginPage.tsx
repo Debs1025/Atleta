@@ -14,7 +14,9 @@ export const LoginPage: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getStoredToken()) navigate('/settings');
+    if (getStoredToken()) {
+      navigate('/dashboard');
+    }
   }, [navigate]);
 
   const onLogin = async (e: React.FormEvent) => {
@@ -25,7 +27,7 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       await loginOfficial({ email, password, savePassword: savePass });
-      navigate('/settings');
+      navigate('/dashboard');
     } catch (e: any) {
       setErr(e.message || 'Authentication failed.');
     } finally {

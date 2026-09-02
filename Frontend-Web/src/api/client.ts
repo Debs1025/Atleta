@@ -3,7 +3,6 @@ import type {
   AuthUser,
   OfficialLoginPayload,
   OfficialRegisterPayload,
-  OfficialSettingsPayload,
   PasswordResetPayload,
 } from './types';
 
@@ -102,15 +101,15 @@ export const registerOfficial = async (payload: OfficialRegisterPayload): Promis
       password: payload.password,
       first_name: firstName,
       last_name: lastName,
+      full_name: fullName,
+      license_number: payload.license_number || 'LIC-2026-001',
+      sport_accreditation: payload.sport_accreditation || ['Basketball'],
       organization: orgName,
       phone_number: payload.phone_number?.trim() || 'N/A',
-      assigned_sport: payload.assigned_sport?.trim() || 'General',
+      assigned_sport: payload.assigned_sport?.trim() || 'Basketball',
     }),
   });
   const data = await handleResponse<AuthResponse>(res);
-  if (data.token && data.user) {
-    storeAuthSession(data.token, data.user, true);
-  }
   return data;
 };
 
@@ -132,17 +131,4 @@ export const getMe = async (): Promise<AuthUser> => {
     },
   });
   return handleResponse<AuthUser>(res);
-};
-
-export const updateOfficialSettings = async (settings: OfficialSettingsPayload): Promise<any> => {
-  const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/coaches/me/settings`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(settings),
-  });
-  return handleResponse<any>(res);
 };
