@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #F8FAFC;
+    color: #0B132B;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+}
+
+/* Interactive Hover */
+.btn-primary {
+  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: #1E293B !important;
+  box-shadow: 0 4px 12px rgba(11, 19, 43, 0.25) !important;
+}
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.nav-link {
+  transition: color 0.2s ease, opacity 0.2s ease;
+  cursor: pointer;
+}
+.nav-link:hover {
+  color: #FFFFFF !important;
+  opacity: 0.85;
+}
+
+.nav-btn {
+  transition: background-color 0.2s ease, transform 0.15s ease;
+  cursor: pointer;
+}
+.nav-btn:hover {
+  background-color: #E2E8F0 !important;
+}
+
+.text-link {
+  transition: color 0.2s ease, text-decoration 0.2s ease;
+  cursor: pointer;
+}
+.text-link:hover {
+  color: #0B132B !important;
+  text-decoration: underline !important;
+}
+
+.footer-link {
+  transition: color 0.2s ease;
+  cursor: pointer;
+}
+.footer-link:hover {
+  color: #0B132B !important;
+}
+
+/* Mobile Responsive Helpers */
+@media (max-width: 640px) {
+  .resp-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .resp-card {
+    padding: 24px 18px !important;
+  }
+  .resp-header {
+    padding: 14px 20px !important;
+  }
+  .resp-footer {
+    padding: 18px 20px !important;
+  }
+  .resp-foot-wrap {
+    flex-direction: column !important;
+    gap: 12px !important;
+    text-align: center;
+  }
+}
