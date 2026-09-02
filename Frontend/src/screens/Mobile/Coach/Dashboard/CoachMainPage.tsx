@@ -919,11 +919,14 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 };
               });
 
+              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Camarines Bulls";
+              const resolvedOpponentName = finalData.opponent_team_name || "METRO WARRIORS";
+
               const matchPayload = {
-                team_id: teams[0]?.team_id || "team_celtics",
-                home_team_name: finalData.team_name || "CELTICS",
-                away_team_name: finalData.opponent_team_name || "HAWKS",
-                opponent_team_name: finalData.opponent_team_name || "HAWKS",
+                team_id: teams[0]?.team_id || "team_bulls_TUCSIQ",
+                home_team_name: resolvedTeamName,
+                away_team_name: resolvedOpponentName,
+                opponent_team_name: resolvedOpponentName,
                 home_score: homePts,
                 away_score: oppPts,
                 sport_type:
@@ -936,7 +939,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 match_date: new Date().toISOString(),
                 location: "Metro Center",
                 game_result: homePts >= oppPts ? "WIN" : "LOSS",
-                notes: `OCR Logged: ${finalData.team_name} vs ${finalData.opponent_team_name || "HAWKS"} (${homePts} - ${oppPts})`,
+                notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,
               };
 
@@ -1314,6 +1317,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       {activeView === "athlete_portfolio" && (
         <AthletePortfolio
           athlete={selectedPerfAthlete}
+          matches={matchHistoryList}
           onClose={() => {
             const returnView = previousPortfolioView || "performance";
             setActiveView(returnView);

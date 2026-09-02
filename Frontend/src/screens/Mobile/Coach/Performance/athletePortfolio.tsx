@@ -20,11 +20,12 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 
-import { AthletePerformanceProfile } from "../DataTypes";
+import { AthletePerformanceProfile, MatchHistoryItem } from "../DataTypes";
 import { styles } from "./styles/athletePortfolio";
 
 interface AthletePortfolioProps {
   athlete: AthletePerformanceProfile;
+  matches?: MatchHistoryItem[];
   onClose: () => void;
   onViewAllStats: () => void;
   onViewMatchHistory: () => void;
@@ -32,6 +33,7 @@ interface AthletePortfolioProps {
 
 export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
   athlete,
+  matches = [],
   onClose,
   onViewAllStats,
   onViewMatchHistory,
@@ -417,31 +419,41 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
         </View>
 
         <View style={styles.recentMatchesList}>
-          <TouchableOpacity
-            style={styles.matchRowCard}
-            onPress={onViewMatchHistory}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.matchOpponentText}>
-              vs. Naga College Foundation
-            </Text>
-            <View style={styles.matchBadgeRow}>
-              <Text style={styles.matchResultBadgeWin}>WIN</Text>
-              <Text style={styles.matchDateText}>OCT 12</Text>
+          {(!matches || matches.length === 0) ? (
+            <View style={{ paddingVertical: 16, alignItems: "center" }}>
+              <Text style={{ color: "#94A3B8", fontSize: 13 }}>
+                No match logs recorded yet for this athlete.
+              </Text>
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.matchRowCard}
-            onPress={onViewMatchHistory}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.matchOpponentText}>vs. New York Knicks</Text>
-            <View style={styles.matchBadgeRow}>
-              <Text style={styles.matchResultBadgeLoss}>LOSE</Text>
-              <Text style={styles.matchDateText}>DEC 4</Text>
-            </View>
-          </TouchableOpacity>
+          ) : (
+            matches.slice(0, 3).map((m) => {
+              const isWin =
+                (m.result_badge_text || "").toUpperCase().includes("WIN") ||
+                (m.home_score !== undefined && m.away_score !== undefined && m.home_score >= m.away_score);
+              const opponent = m.away_team || m.event_or_opponent || "Opponent";
+              const oppText = opponent.toLowerCase().startsWith("vs") ? opponent : `vs. ${opponent}`;
+              return (
+                <TouchableOpacity
+                  key={m.match_id}
+                  style={styles.matchRowCard}
+                  onPress={onViewMatchHistory}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.matchOpponentText} numberOfLines={1}>
+                    {oppText}
+                  </Text>
+                  <View style={styles.matchBadgeRow}>
+                    <Text style={isWin ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
+                      {isWin ? "WIN" : "LOSE"}
+                    </Text>
+                    <Text style={styles.matchDateText}>
+                      {m.date_formatted || "RECENT"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* Visual Analytics Section */}
