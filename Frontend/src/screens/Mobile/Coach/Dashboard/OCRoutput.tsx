@@ -701,7 +701,7 @@ export function OCRoutput({
                             }}
                             activeOpacity={0.85}
                         >
-                            <Text style={styles.modalCtaText}>RETURN TO DASHBOARD</Text>
+                            <Text style={styles.modalCtaText}>VIEW PERFORMANCE & STATS</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

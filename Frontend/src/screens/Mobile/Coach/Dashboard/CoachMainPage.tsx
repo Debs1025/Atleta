@@ -1019,23 +1019,46 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               return updated;
             });
 
-            // Update Performance page athletes list with confirmed match player stats
+            // Update Performance page athletes list with confirmed match player stats & averages
             setPerfAthletes((prev: AthletePerformanceProfile[]) => {
               const updated = [...prev];
               finalData.athlete_overview.forEach((stat, idx) => {
                 const existingIndex = updated.findIndex(
-                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase()
+                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase() || a.athlete_id === stat.athlete_id
                 );
+                const gamePts = Number(stat.pts || 0);
+                const gameAst = Number(stat.ast || 0);
+                const gameReb = Number(stat.reb || 0);
+
                 if (existingIndex >= 0) {
+                  const curr = updated[existingIndex];
+                  const prevGames = Number(curr.averages?.games_played || 1);
+                  const newGames = prevGames + 1;
+                  const prevPpg = Number(curr.averages?.ppg || gamePts);
+                  const prevApg = Number(curr.averages?.apg || gameAst);
+                  const prevRpg = Number(curr.averages?.rpg || gameReb);
+
+                  const newPpg = Number(((prevPpg * prevGames + gamePts) / newGames).toFixed(1));
+                  const newApg = Number(((prevApg * prevGames + gameAst) / newGames).toFixed(1));
+                  const newRpg = Number(((prevRpg * prevGames + gameReb) / newGames).toFixed(1));
+
+                  const prevTrends = Array.isArray(curr.scoring_trends_last_10) ? curr.scoring_trends_last_10 : [prevPpg];
+                  const newTrends = [...prevTrends, gamePts].slice(-10);
+
+                  const newRating = Math.min(99, Math.max(75, Math.round(70 + (newPpg * 0.5) + (newApg * 0.8) + (newRpg * 0.6))));
+
                   updated[existingIndex] = {
-                    ...updated[existingIndex],
-                    team_name: stat.team_name || updated[existingIndex].team_name,
+                    ...curr,
+                    team_name: stat.team_name || curr.team_name,
+                    rating_score: newRating,
                     averages: {
-                      ...updated[existingIndex].averages,
-                      ppg: Number(stat.pts ?? updated[existingIndex].averages.ppg),
-                      apg: Number(stat.ast ?? updated[existingIndex].averages.apg),
-                      rpg: Number(stat.reb ?? updated[existingIndex].averages.rpg),
+                      ...curr.averages,
+                      ppg: newPpg,
+                      apg: newApg,
+                      rpg: newRpg,
+                      games_played: newGames,
                     },
+                    scoring_trends_last_10: newTrends,
                   };
                 } else {
                   updated.push({
@@ -1043,10 +1066,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                     user_id: `usr_ocr_${idx + 1}`,
                     full_name: stat.player_name,
                     birthdate: "2006-01-01",
-                    position_or_event: "Guard",
-                    location_province: "Albay",
+                    position_or_event: "Player",
+                    location_province: "Camarines Sur",
                     team_name: stat.team_name || finalData.team_name,
-                    rating_score: 85,
+                    rating_score: Math.min(99, Math.max(75, Math.round(70 + (gamePts * 0.5) + (gameAst * 0.8) + (gameReb * 0.6)))),
                     sport_category: (finalData.sport_type || "BASKETBALL").toUpperCase() as any,
                     biometrics: {
                       height_ft: "6'2\"",
@@ -1055,9 +1078,9 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                       vertical_jump_in: "32\"",
                     },
                     averages: {
-                      ppg: Number(stat.pts || 0),
-                      rpg: Number(stat.reb || 0),
-                      apg: Number(stat.ast || 0),
+                      ppg: gamePts,
+                      rpg: gameReb,
+                      apg: gameAst,
                       per_score: 24,
                       games_played: 1,
                       wins: 1,
@@ -1082,7 +1105,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                       iq: 85,
                       tech: 80,
                     },
-                    scoring_trends_last_10: [Number(stat.pts || 15)],
+                    scoring_trends_last_10: [gamePts],
                     eligibility_documents: {
                       psa_verified: true,
                       residency_verified: true,
@@ -1110,7 +1133,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 }),
               }))
             );
-            setActiveView("dashboard");
+
+            // Navigate directly to the Performance screen so coach can inspect the updated PPG, APG, RPG
+            setActiveTab("Performance");
+            setActiveView("performance");
           }}
         />
       )}

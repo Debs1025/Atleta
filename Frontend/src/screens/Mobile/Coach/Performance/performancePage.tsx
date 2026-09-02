@@ -144,7 +144,20 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                 <Text style={styles.athleteSubline}>
                   {athlete.team_name} • {athlete.position_or_event}
                 </Text>
-                <View style={styles.progressTrack}>
+                {athlete.sport_category === "BASKETBALL" && athlete.averages ? (
+                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                    {athlete.averages.ppg ?? 0} PPG • {athlete.averages.rpg ?? 0} RPG • {athlete.averages.apg ?? 0} APG
+                  </Text>
+                ) : athlete.sport_category === "SWIMMING" && athlete.averages ? (
+                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                    {athlete.averages.pb_50m_free || "23.45s"} 50M • {athlete.averages.swim_index_score || "850"} SWIM INDEX
+                  </Text>
+                ) : athlete.sport_category === "TRACK AND FIELD" && athlete.averages ? (
+                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                    {athlete.averages.pb_100m || "10.12s"} 100M • {athlete.averages.win_rate_pct ? `${athlete.averages.win_rate_pct}%` : "86%"} WIN
+                  </Text>
+                ) : null}
+                <View style={[styles.progressTrack, { marginTop: 6 }]}>
                   <View
                     style={[
                       styles.progressFill,
