@@ -28,7 +28,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
   onSettingsPress,
   onProfilePress,
-  athletes = MOCK_PERFORMANCE_ATHLETES,
+  athletes = [],
 }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
@@ -37,16 +37,16 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   const [activeTab, setActiveTab] = useState("ALL");
   const [visibleCount, setVisibleCount] = useState(5);
 
-  const displayAthletes = (athletes && athletes.length > 0) ? athletes : MOCK_PERFORMANCE_ATHLETES;
+  const displayAthletes = Array.isArray(athletes) ? athletes : [];
 
   const filteredAthletes = useMemo(() => {
     return displayAthletes.filter((ath) => {
       const matchesTab =
-        activeTab === "ALL" || ath.sport_category === activeTab;
+        activeTab === "ALL" || (ath.sport_category || "").toUpperCase() === activeTab.toUpperCase();
       const matchesSearch =
-        ath.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ath.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ath.position_or_event.toLowerCase().includes(searchQuery.toLowerCase());
+        (ath.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (ath.team_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (ath.position_or_event || "").toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
   }, [displayAthletes, activeTab, searchQuery]);
@@ -114,39 +114,53 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           })}
         </ScrollView>
 
-        {/* Ranked Athlete List */}
-        {filteredAthletes.slice(0, visibleCount).map((athlete) => (
-          <TouchableOpacity
-            key={athlete.athlete_id}
-            style={styles.athleteCard}
-            onPress={() => onSelectAthlete(athlete)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.avatarBox}>
-              <Ionicons name="person" size={24} color="#00C8FF" />
-            </View>
-
-            <View style={styles.cardCenter}>
-              <Text style={styles.athleteName}>{athlete.full_name}</Text>
-              <Text style={styles.athleteSubline}>
-                {athlete.team_name} • {athlete.position_or_event}
-              </Text>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${Math.min(100, athlete.rating_score)}%` },
-                  ]}
-                />
+        {/* Ranked Athlete List / Empty State */}
+        {filteredAthletes.length === 0 ? (
+          <View style={{ paddingVertical: 48, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="people-outline" size={42} color="#64748B" />
+            <Text style={{ color: "#F8FAFC", fontSize: 16, fontWeight: "800", marginTop: 12 }}>
+              No Athletes in Roster
+            </Text>
+            <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4, textAlign: "center", paddingHorizontal: 20 }}>
+              {searchQuery
+                ? `No athletes match "${searchQuery}".`
+                : "You don't have any athletes assigned to your roster yet. Use the Teams or Discovery tab to add players."}
+            </Text>
+          </View>
+        ) : (
+          filteredAthletes.slice(0, visibleCount).map((athlete) => (
+            <TouchableOpacity
+              key={athlete.athlete_id}
+              style={styles.athleteCard}
+              onPress={() => onSelectAthlete(athlete)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.avatarBox}>
+                <Ionicons name="person" size={24} color="#00C8FF" />
               </View>
-            </View>
 
-            <View style={styles.cardRight}>
-              <Text style={styles.ratingValue}>{athlete.rating_score}</Text>
-              <Text style={styles.ratingLabel}>RATING</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+              <View style={styles.cardCenter}>
+                <Text style={styles.athleteName}>{athlete.full_name}</Text>
+                <Text style={styles.athleteSubline}>
+                  {athlete.team_name} • {athlete.position_or_event}
+                </Text>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${Math.min(100, athlete.rating_score || 85)}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.cardRight}>
+                <Text style={styles.ratingValue}>{athlete.rating_score || 85}</Text>
+                <Text style={styles.ratingLabel}>RATING</Text>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
 
         {/* Expansion Button */}
         {visibleCount < filteredAthletes.length && (

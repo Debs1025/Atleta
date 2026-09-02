@@ -162,13 +162,13 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     current_institution: "University Athletics",
     athlete_managed: [],
   });
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
-  const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>(MOCK_ATHLETES_POOL);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>([]);
 
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
   const [activeView, setActiveView] = useState<ViewState>("dashboard");
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("team_01");
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   // Filters & Modals
   const [activeSportFilter, setActiveSportFilter] = useState<string>("BASKETBALL");
@@ -176,11 +176,31 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [hideDiscoveryNav, setHideDiscoveryNav] = useState(false);
-  const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
+  const [coachProfile, setCoachProfile] = useState<CoachProfileState>({
+    coach_id: "",
+    user_id: "",
+    first_name: "Coach",
+    last_name: "",
+    full_name: "Coach",
+    email: "",
+    role_title: "COACH",
+    sports_focus: "BASKETBALL",
+    regional_affiliations: {
+      association_name: "National Sports League",
+      office_name: "Sports Office",
+    },
+    credentials: [],
+    uploaded_documents: [],
+    system_statistics: {
+      total_athletes: 0,
+      metric_logs: 0,
+    },
+    last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
+  });
   const [ocrPayload, setOcrPayload] = useState<RawOCRDetectedData | undefined>();
 
   // Performance State
-  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>(MOCK_PERFORMANCE_ATHLETES);
+  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>([]);
   const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile>(MOCK_PERFORMANCE_ATHLETES[0]);
   const [matchHistoryList, setMatchHistoryList] = useState<MatchHistoryItem[]>([]);
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
@@ -192,10 +212,9 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
     const fetchCoachDashboardData = async () => {
       try {
-        const [profileRes, teamsRes, athletesRes, syncRes, matchesRes, coachAthletesRes]: [any, any, any, any, any, any] = await Promise.all([
+        const [profileRes, teamsRes, syncRes, matchesRes, coachAthletesRes]: [any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson("/coaches/profile").catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
-          requestAuthenticatedJson("/athletes").catch(() => null),
           requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
           requestAuthenticatedJson("/matches").catch(() => null),
           requestAuthenticatedJson("/coaches/athletes").catch(() => null),
@@ -239,6 +258,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               };
             });
             setMatchHistoryList(liveMatches);
+          } else {
+            setMatchHistoryList([]);
           }
 
           const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)
@@ -282,8 +303,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             }
             coachTeamAthletes = mappedTeams.flatMap((t: Team) => t.roster_list || []);
           } else {
-            setTeams(INITIAL_TEAMS);
-            coachTeamAthletes = INITIAL_TEAMS.flatMap((t: Team) => t.roster_list || []);
+            setTeams([]);
+            coachTeamAthletes = [];
           }
 
           const unassignedCoachAthletes: RosterAthlete[] = rawCoachAthletes
@@ -300,11 +321,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             }));
 
           const allHandledAthletes = [...coachTeamAthletes, ...unassignedCoachAthletes];
-          if (allHandledAthletes.length > 0) {
-            setAthletesPool(allHandledAthletes);
-          } else {
-            setAthletesPool(MOCK_ATHLETES_POOL);
-          }
+          setAthletesPool(allHandledAthletes);
 
           if (profileRes) {
             const firstName = profileRes.first_name || "Coach";
@@ -349,7 +366,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               credentials: profileRes.credentials || profileRes.certifications || [],
               uploaded_documents: profileRes.uploaded_documents || [],
               system_statistics: {
-                total_athletes: allHandledAthletes.length || (Array.isArray(athletesRes) ? athletesRes.length : 0),
+                total_athletes: allHandledAthletes.length,
                 metric_logs: profileRes.metric_logs || 0,
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
@@ -357,11 +374,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             setCoachProfile(updatedProfileState);
           }
 
-          const rawAthletesList: any[] = Array.isArray(athletesRes)
-            ? athletesRes
-            : Array.isArray(athletesRes?.athletes)
-            ? athletesRes.athletes
-            : [];
+          const rawAthletesList: any[] = allHandledAthletes;
 
           const mappedPerf: AthletePerformanceProfile[] = rawAthletesList.map((a: any) => ({
             athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}`,
@@ -369,50 +382,52 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
             birthdate: a.birthdate || "2006-01-01",
             position_or_event: a.position || "Athlete",
-            location_province: a.location || a.province || "Albay",
+            location_province: a.location || a.province || "Camarines Sur",
             team_name: a.team_name || "Team",
-            rating_score: a.rating_score || 85,
+            rating_score: a.rating_score || 88,
             sport_category: (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() as any,
             biometrics: {
-              height_ft: a.physical_attributes?.height_cm ? `${Math.floor(a.physical_attributes.height_cm / 30.48)}'${Math.round((a.physical_attributes.height_cm % 30.48) / 2.54)}"` : `6'0"`,
-              weight_lbs: a.physical_attributes?.weight_kg ? `${Math.round(a.physical_attributes.weight_kg * 2.20462)} lbs` : `175 lbs`,
-              wingspan_ft: a.physical_attributes?.wingspan_cm ? `${Math.floor(a.physical_attributes.wingspan_cm / 30.48)}'${Math.round((a.physical_attributes.wingspan_cm % 30.48) / 2.54)}"` : `6'2"`,
-              vertical_jump_in: a.physical_attributes?.vertical_cm ? `${Math.round(a.physical_attributes.vertical_cm / 2.54)}"` : `30"`,
+              height_ft: a.physical_attributes?.height_cm ? `${Math.floor(a.physical_attributes.height_cm / 30.48)}'${Math.round((a.physical_attributes.height_cm % 30.48) / 2.54)}"` : (a.biometrics?.height_ft || `6'1"`),
+              weight_lbs: a.physical_attributes?.weight_kg ? `${Math.round(a.physical_attributes.weight_kg * 2.20462)} lbs` : (a.biometrics?.weight_lbs || `180 lbs`),
+              wingspan_ft: a.physical_attributes?.wingspan_cm ? `${Math.floor(a.physical_attributes.wingspan_cm / 30.48)}'${Math.round((a.physical_attributes.wingspan_cm % 30.48) / 2.54)}"` : (a.biometrics?.wingspan_ft || `6'4"`),
+              vertical_jump_in: a.physical_attributes?.vertical_cm ? `${Math.round(a.physical_attributes.vertical_cm / 2.54)}"` : (a.biometrics?.vertical_jump_in || `34"`),
             },
             averages: a.averages || {
-              ppg: a.stats?.ppg || 0,
-              rpg: a.stats?.rpg || 0,
-              apg: a.stats?.apg || 0,
+              ppg: a.stats?.ppg || a.pts || 20,
+              rpg: a.stats?.rpg || a.reb || 6,
+              apg: a.stats?.apg || a.ast || 5,
               per_score: a.stats?.per || 25,
-              games_played: a.stats?.games_played || 10,
-              wins: 8,
-              fg_percentage: a.stats?.fg_pct || 45,
-              three_pt_percentage: a.stats?.three_pct || 35,
-              ft_percentage: a.stats?.ft_pct || 75,
+              games_played: a.stats?.games_played || 12,
+              wins: 10,
+              fg_percentage: a.stats?.fg_pct || 48,
+              three_pt_percentage: a.stats?.three_pct || 38,
+              ft_percentage: a.stats?.ft_pct || 82,
             },
             workload_analytics: a.workload || a.workload_analytics || {
-              target_7day_effort_pts: 500,
-              current_7day_acute_load: 420,
-              current_28day_chronic_load: 400,
-              calculated_acwr: 1.05,
-              workout_score: 85,
-              fatigue_meter: 25,
-              routine_score: 85,
-              body_stress_pts: 25,
+              target_7day_effort_pts: 520,
+              current_7day_acute_load: 490,
+              current_28day_chronic_load: 460,
+              calculated_acwr: 1.06,
+              workout_score: 91,
+              fatigue_meter: 20,
+              routine_score: 88,
+              body_stress_pts: 22,
             },
             radar_competencies: a.radar_competencies || {
-              speed: 82,
-              power: 78,
-              agility: 85,
-              iq: 88,
-              tech: 80,
+              speed: 88,
+              power: 82,
+              agility: 90,
+              iq: 92,
+              tech: 88,
             },
-            scoring_trends_last_10: a.scoring_trends_last_10 || [18, 22, 25, 20, 28, 24, 30],
+            scoring_trends_last_10: a.scoring_trends_last_10 || [20, 24, 22, 28, 25, 23, 26],
             eligibility_documents: {
-              psa_verified: !!a.documents?.psa_birth_certificate || true,
-              residency_verified: !!a.documents?.proof_of_residency || true,
+              psa_verified: true,
+              residency_verified: true,
             },
           }));
+
+          setPerfAthletes(mappedPerf);
 
           // Merge unassigned handled athletes into mappedPerf if not already present
           if (rawCoachAthletes.length > 0) {
