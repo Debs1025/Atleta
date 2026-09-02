@@ -121,7 +121,7 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
       <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={onBack} activeOpacity={0.8}>
-            <Ionicons name="arrow-back" size={22} color="#0F172A" />
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.logoText}>ATLETA</Text>
         </View>
@@ -137,7 +137,7 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
         <View style={styles.scoreBoardCard}>
           <View style={styles.teamBlock}>
             <View style={styles.teamIconBox}>
-              <Ionicons name="disc-outline" size={24} color="#0F172A" />
+              <Ionicons name="shield-outline" size={24} color="#00C8FF" />
             </View>
             <Text style={styles.teamName}>{homeTeam}</Text>
             <Text style={styles.teamSubtext}>HOME TEAM</Text>
@@ -151,7 +151,7 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
 
           <View style={styles.teamBlock}>
             <View style={styles.teamIconBox}>
-              <Ionicons name="people-outline" size={24} color="#0F172A" />
+              <Ionicons name="people-outline" size={24} color="#00C8FF" />
             </View>
             <Text style={styles.teamName}>{awayTeam}</Text>
             <Text style={styles.teamSubtext}>AWAY TEAM</Text>

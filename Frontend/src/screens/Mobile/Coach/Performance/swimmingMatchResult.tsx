@@ -101,7 +101,7 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
       <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={onBack} activeOpacity={0.8}>
-            <Ionicons name="arrow-back" size={22} color="#0F172A" />
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.logoText}>ATLETA</Text>
         </View>

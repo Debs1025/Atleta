@@ -15,7 +15,7 @@ const fontBoldPlatform = Platform.select({
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#070D19",
   },
   headerBar: {
     flexDirection: "row",
@@ -23,9 +23,9 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingBottom: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#070D19",
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: "#1E293B",
   },
   headerLeft: {
     flexDirection: "row",
@@ -35,14 +35,14 @@ export const styles = StyleSheet.create({
   logoText: {
     fontSize: 20,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#FFFFFF",
     letterSpacing: 2,
     fontFamily: fontBoldPlatform,
   },
   editButton: {
-    backgroundColor: "#0D192E",
+    backgroundColor: "rgba(0, 200, 255, 0.12)",
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: "#00C8FF",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
@@ -50,7 +50,7 @@ export const styles = StyleSheet.create({
   editText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#FFFFFF",
+    color: "#00C8FF",
     letterSpacing: 0.5,
   },
   scrollContent: {
@@ -59,23 +59,25 @@ export const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   pageTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#F8FAFC",
     letterSpacing: 1,
     marginBottom: 16,
     fontFamily: fontBoldPlatform,
   },
   eventCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#0D1526",
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#1E293B",
   },
   tuneUpText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#64748B",
+    color: "#00C8FF",
     letterSpacing: 1,
     marginBottom: 4,
     textTransform: "uppercase",
@@ -83,7 +85,7 @@ export const styles = StyleSheet.create({
   eventTitle: {
     fontSize: 22,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#F8FAFC",
     fontFamily: fontBoldPlatform,
     marginBottom: 12,
     lineHeight: 28,
@@ -94,13 +96,13 @@ export const styles = StyleSheet.create({
     gap: 6,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "#1E293B",
     marginBottom: 14,
   },
   eventDateText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#64748B",
+    color: "#94A3B8",
   },
   badgesRow: {
     flexDirection: "row",
@@ -113,34 +115,36 @@ export const styles = StyleSheet.create({
   badgeLabel: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#94A3B8",
+    color: "#64748B",
     letterSpacing: 1,
   },
   badgeValue: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#00C8FF",
     marginTop: 2,
     fontFamily: fontBoldPlatform,
   },
   badgeDivider: {
     width: 1,
     height: 24,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "#1E293B",
   },
   tableCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#0D1526",
     borderRadius: 16,
     overflow: "hidden",
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#1E293B",
   },
   tableHeaderRow: {
     flexDirection: "row",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#111C33",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "#1E293B",
   },
   colRank: {
     width: 50,
@@ -170,12 +174,14 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "#1E293B",
   },
   rankSquareDark: {
     width: 32,
     height: 32,
-    backgroundColor: "#0B132B",
+    backgroundColor: "rgba(0, 200, 255, 0.15)",
+    borderWidth: 1,
+    borderColor: "#00C8FF",
     borderRadius: 4,
     justifyContent: "center",
     alignItems: "center",
@@ -184,7 +190,7 @@ export const styles = StyleSheet.create({
   rankTextWhite: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#FFFFFF",
+    color: "#00C8FF",
     fontFamily: fontBoldPlatform,
   },
   rankSquareOutline: {
@@ -192,7 +198,7 @@ export const styles = StyleSheet.create({
     height: 32,
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: "#1E293B",
     borderRadius: 4,
     justifyContent: "center",
     alignItems: "center",
@@ -201,7 +207,7 @@ export const styles = StyleSheet.create({
   rankTextDark: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#94A3B8",
     fontFamily: fontBoldPlatform,
   },
   nameContainer: {
@@ -210,7 +216,7 @@ export const styles = StyleSheet.create({
   nameText: {
     fontSize: 14,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#F8FAFC",
     fontFamily: fontBoldPlatform,
   },
   detailText: {
@@ -223,14 +229,16 @@ export const styles = StyleSheet.create({
   timeText: {
     fontSize: 16,
     fontWeight: "900",
-    color: "#0F172A",
+    color: "#38BDF8",
     textAlign: "right",
     fontFamily: fontBoldPlatform,
   },
   coachNotesCard: {
-    backgroundColor: "#0B132B",
+    backgroundColor: "#0D1526",
     borderRadius: 16,
     padding: 20,
+    borderWidth: 1,
+    borderColor: "#1E293B",
   },
   coachNotesTitle: {
     fontSize: 11,
@@ -247,7 +255,7 @@ export const styles = StyleSheet.create({
   noteIndex: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#FFFFFF",
+    color: "#00C8FF",
     marginRight: 12,
     fontFamily: fontBoldPlatform,
   },
