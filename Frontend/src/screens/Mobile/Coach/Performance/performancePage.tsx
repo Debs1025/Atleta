@@ -24,17 +24,31 @@ interface PerformancePageProps {
 
 const CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
 
+const formatSafeDate = (rawDate: any): { short: string; full: string } => {
+  if (!rawDate) return { short: "RECENT", full: "RECENT" };
+  const d = new Date(rawDate);
+  if (!isNaN(d.getTime())) {
+    return {
+      short: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      full: d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+    };
+  }
+  const str = String(rawDate).trim();
+  return { short: str || "RECENT", full: str || "RECENT" };
+};
+
 const mapFirestoreMatch = (m: any): MatchHistoryItem => {
   const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
   const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
   const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
   const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
   const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
+  const dateInfo = formatSafeDate(m.match_date || m.date_time || m.created_at);
 
   return {
     match_id: m.match_id || m.id || `match_${Date.now()}`,
-    date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
-    full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
+    date_formatted: dateInfo.short,
+    full_date: dateInfo.full,
     date_group: "MATCH LOGS",
     event_or_opponent: `${homeName} vs ${oppName}`,
     score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),

@@ -235,11 +235,15 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
               const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
               const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
+              const rawD = m.match_date || m.date_time || m.created_at;
+              const d = rawD ? new Date(rawD) : null;
+              const dateShort = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
+              const dateFull = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
 
               return {
                 match_id: m.match_id || m.id || `match_${Date.now()}`,
-                date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
-                full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
+                date_formatted: dateShort,
+                full_date: dateFull,
                 date_group: "MATCH LOGS",
                 event_or_opponent: `${homeName} vs ${oppName}`,
                 score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),
@@ -255,6 +259,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               };
             });
             setMatchHistoryList(liveMatches);
+          } else {
+            setMatchHistoryList([]);
           }
 
           const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)

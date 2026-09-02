@@ -160,6 +160,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const googleAndroidId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_ANDROID_ID") ?? "").trim();
   const googleIosId = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_IOS_ID") ?? "").trim();
   const googleRedirectUri = (runtimeProcessEnv("EXPO_PUBLIC_GOOGLE_REDIRECT_URI") ?? "").trim();
+  const facebookAppId = (runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID") ?? "").trim();
 
   useEffect(() => {
     if (googleClientId && NativeGoogleSignin) {
@@ -174,16 +175,19 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     }
   }, [googleClientId]);
 
+  const fallbackGoogleClientId = "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com";
+  const fallbackGoogleAndroidId = "203586668533-54oqq5mc56b38dhrcqa5t157ngrsmqvt.apps.googleusercontent.com";
+
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
-    clientId: googleClientId || undefined,
-    androidClientId: googleAndroidId || undefined,
-    iosClientId: googleIosId || undefined,
-    webClientId: googleClientId || undefined,
+    clientId: googleClientId || fallbackGoogleClientId,
+    androidClientId: googleAndroidId || fallbackGoogleAndroidId,
+    iosClientId: googleIosId || fallbackGoogleClientId,
+    webClientId: googleClientId || fallbackGoogleClientId,
     redirectUri: googleRedirectUri || undefined
   });
 
   const [facebookRequest, facebookResponse, promptFacebookAsync] = Facebook.useAuthRequest({
-    clientId: (runtimeProcessEnv("EXPO_PUBLIC_FACEBOOK_APP_ID") ?? "").trim()
+    clientId: facebookAppId || "000000000000"
   });
 
   const handleGoogleSignUpPress = async () => {
