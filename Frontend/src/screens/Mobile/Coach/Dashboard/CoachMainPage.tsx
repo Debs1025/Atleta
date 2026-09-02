@@ -1306,10 +1306,6 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             setPreviousPortfolioView("performance");
             setActiveView("athlete_portfolio");
           }}
-          onViewMatchHistory={() => {
-            setPreviousPortfolioView("performance");
-            setActiveView("match_history");
-          }}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
         />
