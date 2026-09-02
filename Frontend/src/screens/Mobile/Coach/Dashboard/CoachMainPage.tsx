@@ -1319,7 +1319,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           athlete={selectedPerfAthlete}
           matches={matchHistoryList}
           onClose={() => {
-            const returnView = previousPortfolioView || "performance";
+            let returnView = previousPortfolioView;
+            if (!returnView || returnView === "athlete_portfolio") {
+              returnView = activeTab === "Performance" ? "performance" : "dashboard";
+            }
             setActiveView(returnView);
             if (returnView === "performance") {
               setActiveTab("Performance");
@@ -1329,7 +1332,10 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           }}
           onViewAllStats={() => setActiveView("all_stats")}
           onViewMatchHistory={() => {
-            setPreviousPortfolioView("athlete_portfolio");
+            const safeBase = previousPortfolioView && previousPortfolioView !== "athlete_portfolio"
+              ? previousPortfolioView
+              : (activeTab === "Performance" ? "performance" : "dashboard");
+            setPreviousPortfolioView(safeBase);
             setActiveView("match_history");
           }}
         />

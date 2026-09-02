@@ -243,9 +243,10 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
         <TouchableOpacity
           style={styles.closeButton}
           onPress={onClose}
-          activeOpacity={0.8}
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          activeOpacity={0.7}
         >
-          <Ionicons name="close" size={20} color="#FFFFFF" />
+          <Ionicons name="close" size={22} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
