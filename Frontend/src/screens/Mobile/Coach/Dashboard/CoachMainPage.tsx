@@ -162,13 +162,13 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
     current_institution: "University Athletics",
     athlete_managed: [],
   });
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>([]);
+  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
+  const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>(MOCK_ATHLETES_POOL);
 
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
   const [activeView, setActiveView] = useState<ViewState>("dashboard");
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("team_01");
 
   // Filters & Modals
   const [activeSportFilter, setActiveSportFilter] = useState<string>("BASKETBALL");
@@ -176,31 +176,11 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [hideDiscoveryNav, setHideDiscoveryNav] = useState(false);
-  const [coachProfile, setCoachProfile] = useState<CoachProfileState>({
-    coach_id: "",
-    user_id: "",
-    first_name: "Coach",
-    last_name: "",
-    full_name: "Coach",
-    email: "",
-    role_title: "COACH",
-    sports_focus: "BASKETBALL",
-    regional_affiliations: {
-      association_name: "National Sports League",
-      office_name: "Sports Office",
-    },
-    credentials: [],
-    uploaded_documents: [],
-    system_statistics: {
-      total_athletes: 0,
-      metric_logs: 0,
-    },
-    last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
-  });
+  const [coachProfile, setCoachProfile] = useState<CoachProfileState>(DEFAULT_COACH_PROFILE);
   const [ocrPayload, setOcrPayload] = useState<RawOCRDetectedData | undefined>();
 
   // Performance State
-  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>([]);
+  const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>(MOCK_PERFORMANCE_ATHLETES);
   const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile>(MOCK_PERFORMANCE_ATHLETES[0]);
   const [matchHistoryList, setMatchHistoryList] = useState<MatchHistoryItem[]>([]);
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
@@ -259,8 +239,6 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               };
             });
             setMatchHistoryList(liveMatches);
-          } else {
-            setMatchHistoryList([]);
           }
 
           const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)
@@ -287,7 +265,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               roster_list: Array.isArray(t.roster_list) ? t.roster_list.map((p: any) => ({
                 athlete_id: typeof p === 'string' ? p : (p.athlete_id || p.user_id || 'ath_01'),
                 user_id: typeof p === 'string' ? p : (p.user_id || p.athlete_id || 'usr_01'),
-                full_name: typeof p === 'object' ? (p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim()) : 'Athlete',
+                full_name: typeof p === 'object' ? (p.full_name || p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Athlete') : 'Athlete',
                 sport_type: typeof p === 'object' ? (p.sport_type || 'BASKETBALL') : 'BASKETBALL',
                 position: typeof p === 'object' ? (p.position || 'PG') : 'PG',
                 jersey_number: typeof p === 'object' ? String(p.jersey_number || '0') : '0',
@@ -304,7 +282,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             }
             coachTeamAthletes = mappedTeams.flatMap((t: Team) => t.roster_list || []);
           } else {
-            setTeams([]);
+            setTeams(INITIAL_TEAMS);
+            coachTeamAthletes = INITIAL_TEAMS.flatMap((t: Team) => t.roster_list || []);
           }
 
           const unassignedCoachAthletes: RosterAthlete[] = rawCoachAthletes
@@ -321,7 +300,11 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             }));
 
           const allHandledAthletes = [...coachTeamAthletes, ...unassignedCoachAthletes];
-          setAthletesPool(allHandledAthletes);
+          if (allHandledAthletes.length > 0) {
+            setAthletesPool(allHandledAthletes);
+          } else {
+            setAthletesPool(MOCK_ATHLETES_POOL);
+          }
 
           if (profileRes) {
             const firstName = profileRes.first_name || "Coach";
@@ -519,9 +502,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   );
 
   const availableSportCategories = useMemo(() => {
-    const focus = (coachProfile.sports_focus || "BASKETBALL").toUpperCase();
-    return [focus];
-  }, [coachProfile.sports_focus]);
+    return ["BASKETBALL", "TRACK AND FIELD", "SWIMMING", "ALL"];
+  }, []);
 
   // Memoized Filtered Players for Dashboard
   const filteredDashboardPlayers = useMemo(() => {
@@ -1169,6 +1151,40 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
 
 
+            {/* PLAYERS Section */}
+            <View style={styles.playersSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>PLAYERS</Text>
+                <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Player Rows */}
+              <View style={styles.playersList}>
+                {filteredDashboardPlayers.length === 0 ? (
+                  <View style={{ paddingVertical: 28, alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="people-outline" size={36} color="#64748B" />
+                    <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "700", marginTop: 8 }}>
+                      No Athletes in Roster Yet
+                    </Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: 20 }}>
+                      You don't have any athletes in your roster yet. Use the Teams or Discovery tab to add players.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredDashboardPlayers.slice(0, 4).map((player, index) => (
+                    <PlayerRowItem
+                      key={player.athlete_id}
+                      player={player}
+                      isLast={index === Math.min(filteredDashboardPlayers.length, 4) - 1}
+                      onViewStats={handleViewStats}
+                    />
+                  ))
+                )}
+              </View>
+            </View>
+
             {/* TOTAL ATHLETES Card */}
             <View style={styles.summaryTile}>
               <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
@@ -1243,18 +1259,11 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
       {/* PERFORMANCE MODULE  */}
       {activeView === "performance" && (
         <PerformancePage
-          historyItems={matchHistoryList}
-          onSelectMatchItem={(matchItem) => {
-            setSelectedMatchItem(matchItem);
+          athletes={perfAthletes}
+          onSelectAthlete={(ath) => {
+            setSelectedPerfAthlete(ath);
             setPreviousPortfolioView("performance");
-            const cat = String(matchItem.sport_category || "").toUpperCase();
-            if (cat.includes("SWIM")) {
-              setActiveView("perf_swimming_result");
-            } else if (cat.includes("TRACK") || cat.includes("FIELD")) {
-              setActiveView("perf_trackfield_result");
-            } else {
-              setActiveView("perf_basketball_result");
-            }
+            setActiveView("athlete_portfolio");
           }}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
