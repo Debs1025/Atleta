@@ -3,6 +3,8 @@ import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
 import { ForgotPassword } from './Authentication/ForgotPassword';
 import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
+import { SchedulePage } from './Officials/Schedule/SchedulePage';
+import { SettingsPage } from './Officials/Settings/SettingsPage';
 
 function App() {
   return (
@@ -13,6 +15,8 @@ function App() {
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/dashboard" element={<OfficialHomePage />} />
+        <Route path="/schedules" element={<SchedulePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

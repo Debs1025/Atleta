@@ -29,7 +29,15 @@ export const LoginPage: React.FC = () => {
       await loginOfficial({ email, password, savePassword: savePass });
       navigate('/dashboard');
     } catch (e: any) {
-      setErr(e.message || 'Authentication failed.');
+      const msg = e.message || '';
+      if (
+        msg.toLowerCase().includes('not found') ||
+        msg.toLowerCase().includes('user-not-found')
+      ) {
+        setErr('Account does not exist.');
+      } else {
+        setErr(msg || 'Authentication failed.');
+      }
     } finally {
       setLoading(false);
     }
