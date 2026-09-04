@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ExternalLink, Loader2, X } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 import {
   getStoredToken,
   getStoredUser,
   getCachedData,
   getMe,
   getOfficialDashboard,
-  createOfficialMatch,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -23,17 +22,10 @@ export const OfficialHomePage: React.FC = () => {
     () => getCachedData<OfficialDashboardResponse>('official_dashboard')
   );
   const [loading, setLoading] = useState(() => !getCachedData('official_dashboard'));
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createErr, setCreateErr] = useState<string | null>(null);
 
-  // Form state
-  const [sportType, setSportType] = useState('BASKETBALL');
-  const [homeTeam, setHomeTeam] = useState('');
-  const [opponentTeam, setOpponentTeam] = useState('');
-  const [matchDate, setMatchDate] = useState('');
-  const [location, setLocation] = useState('Sports Complex');
-  const [court, setCourt] = useState('1');
+  const refreshDashboard = () => {
+    getOfficialDashboard(true).then((res) => setDashboard(res)).catch(() => {});
+  };
 
   useEffect(() => {
     if (!getStoredToken()) {
@@ -46,36 +38,6 @@ export const OfficialHomePage: React.FC = () => {
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [navigate]);
-
-  const handleCreateMatch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateErr(null);
-    if (!homeTeam || !opponentTeam || !matchDate) {
-      setCreateErr('Please fill in all required match fields.');
-      return;
-    }
-
-    try {
-      setCreating(true);
-      await createOfficialMatch({
-        sport_type: sportType,
-        home_team_name: homeTeam,
-        opponent_team_name: opponentTeam,
-        match_date: new Date(matchDate).toISOString(),
-        location,
-        court_number: court,
-      });
-      setIsModalOpen(false);
-      setHomeTeam('');
-      setOpponentTeam('');
-      setMatchDate('');
-      getOfficialDashboard(true).then((res) => setDashboard(res)).catch(() => {});
-    } catch (err: any) {
-      setCreateErr(err.message || 'Failed to create match.');
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const totalMatches = dashboard?.total_matches ?? 0;
   const pendingCount = dashboard?.pending_count ? String(dashboard.pending_count).padStart(2, '0') : '00';
@@ -91,7 +53,7 @@ export const OfficialHomePage: React.FC = () => {
         {/* Shared Sidebar */}
         <Sidebar
           activeTab="DASHBOARD"
-          onCreateMatch={() => setIsModalOpen(true)}
+          onMatchCreated={refreshDashboard}
         />
 
         {/* Dashboard Content Area */}
@@ -197,118 +159,6 @@ export const OfficialHomePage: React.FC = () => {
           </div>
         </main>
       </div>
-
-      {/* Create Match Modal */}
-      {isModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={styles.modalTitle}>CREATE OFFICIAL MATCH</h3>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
-              >
-                <X style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-
-            {createErr && (
-              <div style={{ padding: '8px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '4px', color: '#B91C1C', fontSize: '12px', marginBottom: '14px' }}>
-                {createErr}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateMatch}>
-              <div style={styles.formRow}>
-                <label style={styles.formLabel}>SPORT</label>
-                <select
-                  value={sportType}
-                  onChange={(e) => setSportType(e.target.value)}
-                  style={styles.formInput}
-                >
-                  <option value="BASKETBALL">Basketball</option>
-                  <option value="VOLLEYBALL">Volleyball</option>
-                  <option value="FOOTBALL">Football</option>
-                </select>
-              </div>
-
-              <div style={styles.formRow}>
-                <label style={styles.formLabel}>HOME TEAM</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. ADNU Knights"
-                  value={homeTeam}
-                  onChange={(e) => setHomeTeam(e.target.value)}
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={styles.formRow}>
-                <label style={styles.formLabel}>OPPONENT TEAM</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. UNC Greyhounds"
-                  value={opponentTeam}
-                  onChange={(e) => setOpponentTeam(e.target.value)}
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={styles.formRow}>
-                <label style={styles.formLabel}>SCHEDULED DATE & TIME</label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={matchDate}
-                  onChange={(e) => setMatchDate(e.target.value)}
-                  style={styles.formInput}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>VENUE</label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    style={styles.formInput}
-                  />
-                </div>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>COURT NUMBER</label>
-                  <input
-                    type="text"
-                    value={court}
-                    onChange={(e) => setCourt(e.target.value)}
-                    style={styles.formInput}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.modalBtns}>
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  style={styles.cancelBtn}
-                >
-                  CANCEL
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  style={styles.saveBtn}
-                >
-                  {creating ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : 'SAVE MATCH'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

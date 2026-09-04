@@ -321,6 +321,51 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
     sport_discipline: n.sport_discipline || n.sport || undefined,
   }));
 
+  // Game Reminders: Notify official 3, 2, or 1 day before scheduled game/event for all 3 sports
+  try {
+    const schedules = await getOfficialSchedules().catch(() => []);
+    const now = Date.now();
+    schedules.forEach((s) => {
+      const timeStr = s.scheduled_time || (s as any).match_date || s.venue_logistics?.time;
+      if (!timeStr) return;
+      const gameTime = new Date(timeStr).getTime();
+      const diffDays = Math.ceil((gameTime - now) / (1000 * 60 * 60 * 24));
+      if (diffDays >= 1 && diffDays <= 3) {
+        const rawSport = (s.sport || (s as any).sport_type || s.venue_logistics?.sport || 'Basketball').trim();
+        let sportName = rawSport;
+        const lower = rawSport.toLowerCase();
+        if (lower.includes('swim')) {
+          sportName = 'Swimming';
+        } else if (lower.includes('track') || lower.includes('field')) {
+          sportName = 'Track & Field';
+        } else if (lower.includes('basket')) {
+          sportName = 'Basketball';
+        }
+
+        const matchTitle = s.home_team && s.away_team
+          ? `${s.home_team} vs ${s.away_team}`
+          : `${sportName} Scheduled Event`;
+        const eventNoun = sportName === 'Basketball' ? 'Game' : sportName === 'Swimming' ? 'Meet' : 'Event';
+        const venueLabel = s.venue || s.venue_logistics?.location || (sportName === 'Swimming' ? 'Aquatic Center' : sportName === 'Track & Field' ? 'Athletics Oval' : 'Main Court');
+        const reminderId = `reminder_${s.schedule_id || s.match_id}_${diffDays}d`;
+
+        if (!notifications.some((n) => n.notification_id === reminderId)) {
+          notifications.unshift({
+            notification_id: reminderId,
+            official_id: s.official_id || '',
+            type: 'SCHEDULE_UPDATE',
+            title: `${sportName} ${eventNoun} in ${diffDays} Day${diffDays > 1 ? 's' : ''}`,
+            message: `Scheduled ${sportName.toLowerCase()} reminder: ${matchTitle} is on ${new Date(gameTime).toLocaleDateString()} (${venueLabel}).`,
+            is_read: false,
+            created_at: new Date().toISOString(),
+            match_context: s.match_class || `${sportName} Competition`,
+            sport_discipline: sportName,
+          });
+        }
+      }
+    });
+  } catch {}
+
   const unread_count = typeof data?.unread_count === 'number'
     ? data.unread_count
     : notifications.filter((n) => !n.is_read).length;

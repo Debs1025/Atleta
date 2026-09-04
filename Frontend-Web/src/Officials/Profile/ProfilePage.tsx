@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Loader2, X, Camera, Trash2 } from 'lucide-react';
+import { User, X, Camera, Trash2 } from 'lucide-react';
 import {
   getStoredToken,
   getStoredUser,
@@ -9,7 +9,6 @@ import {
   getMe,
   getOfficialProfileData,
   getOfficialDashboard,
-  createOfficialMatch,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -37,15 +36,6 @@ export const ProfilePage: React.FC = () => {
   const [editOrg, setEditOrg] = useState('');
   const [editAvatar, setEditAvatar] = useState<string | null>(null);
 
-  // Create match modal state
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createErr, setCreateErr] = useState<string | null>(null);
-  const [sportType, setSportType] = useState('BASKETBALL');
-  const [homeTeam, setHomeTeam] = useState('');
-  const [opponentTeam, setOpponentTeam] = useState('');
-  const [matchDate, setMatchDate] = useState('');
-
   useEffect(() => {
     if (!getStoredToken()) {
       navigate('/login');
@@ -64,33 +54,6 @@ export const ProfilePage: React.FC = () => {
       }).catch(() => {}),
     ]);
   }, [navigate]);
-
-  const handleCreateMatch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateErr(null);
-    if (!homeTeam || !opponentTeam || !matchDate) {
-      setCreateErr('Please fill in all required match fields.');
-      return;
-    }
-
-    try {
-      setCreating(true);
-      await createOfficialMatch({
-        sport_type: sportType,
-        home_team_name: homeTeam,
-        opponent_team_name: opponentTeam,
-        match_date: new Date(matchDate).toISOString(),
-      });
-      setIsCreateModalOpen(false);
-      setHomeTeam('');
-      setOpponentTeam('');
-      setMatchDate('');
-    } catch (err: any) {
-      setCreateErr(err.message || 'Failed to create match.');
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const handleOpenEditModal = () => {
     setEditName(
@@ -210,10 +173,7 @@ export const ProfilePage: React.FC = () => {
       {/* Main Body */}
       <div style={styles.layoutBody}>
         {/* Shared Sidebar */}
-        <Sidebar
-          activeTab="DASHBOARD"
-          onCreateMatch={() => setIsCreateModalOpen(true)}
-        />
+        <Sidebar activeTab="DASHBOARD" />
 
         {/* Profile Content Area */}
         <main style={styles.contentArea}>
@@ -409,97 +369,6 @@ export const ProfilePage: React.FC = () => {
                   style={{ padding: '9px 20px', border: 'none', backgroundColor: '#0B132B', color: '#FFFFFF', fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
                 >
                   SAVE CHANGES
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create Match Modal */}
-      {isCreateModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(11, 19, 43, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: '#FFFFFF', border: '2px solid #0B132B', width: '92%', maxWidth: '500px', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0B132B', margin: 0 }}>CREATE SCHEDULED MATCH</h3>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
-              >
-                <X style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-
-            {createErr && (
-              <div style={{ padding: '8px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '4px', color: '#B91C1C', fontSize: '12px', marginBottom: '14px' }}>
-                {createErr}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateMatch}>
-              <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#0B132B', textTransform: 'uppercase' }}>SPORT</label>
-                <select
-                  value={sportType}
-                  onChange={(e) => setSportType(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '4px', padding: '10px 12px', fontSize: '13px' }}
-                >
-                  <option value="BASKETBALL">Basketball</option>
-                  <option value="VOLLEYBALL">Volleyball</option>
-                  <option value="FOOTBALL">Football</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#0B132B', textTransform: 'uppercase' }}>HOME TEAM</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. ADNU Knights"
-                  value={homeTeam}
-                  onChange={(e) => setHomeTeam(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '4px', padding: '10px 12px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#0B132B', textTransform: 'uppercase' }}>OPPONENT TEAM</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. ADMU Eagles"
-                  value={opponentTeam}
-                  onChange={(e) => setOpponentTeam(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '4px', padding: '10px 12px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '800', color: '#0B132B', textTransform: 'uppercase' }}>MATCH DATE & TIME</label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={matchDate}
-                  onChange={(e) => setMatchDate(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '4px', padding: '10px 12px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  style={{ padding: '10px 16px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#64748B', fontWeight: 700, borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  CANCEL
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  style={{ padding: '10px 18px', border: 'none', backgroundColor: '#0B132B', color: '#FFFFFF', fontWeight: 800, borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  {creating ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : 'SAVE'}
                 </button>
               </div>
             </form>

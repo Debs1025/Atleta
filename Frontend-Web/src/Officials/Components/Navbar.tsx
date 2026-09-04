@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import type { AuthUser } from '../../api/types';
 import { useNotifications } from '../Notification/useNotifications';
 import { NotificationFloat } from '../Notification/NotificationFloat';
+import { styles } from './styles/Navbar';
 
 interface NavbarProps {
   user: AuthUser | null;
@@ -12,6 +13,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isBellHovered, setIsBellHovered] = useState(false);
+  const [isProfileHovered, setIsProfileHovered] = useState(false);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
   const {
     notifications,
@@ -30,36 +32,12 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     'OFFICIAL';
 
   return (
-    <header
-      style={{
-        height: '58px',
-        backgroundColor: '#FFFFFF',
-        borderBottom: '1px solid #0B132B',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 28px',
-        boxSizing: 'border-box',
-        flexShrink: 0,
-        position: 'relative',
-        zIndex: 50,
-        fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      }}
-    >
-      <Link
-        to="/dashboard"
-        style={{
-          fontSize: '22px',
-          fontWeight: '900',
-          letterSpacing: '0.25em',
-          color: '#0B132B',
-          textDecoration: 'none',
-        }}
-      >
-        ATLETA<sup style={{ fontSize: '10px', fontWeight: '800', verticalAlign: 'super', marginLeft: '3px', letterSpacing: '0.05em' }}>WEB</sup>
+    <header style={styles.header}>
+      <Link to="/dashboard" style={styles.logo}>
+        ATLETA<sup style={styles.logoSup}>WEB</sup>
       </Link>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}>
+      <div style={styles.rightSection}>
         {/* Notification Bell Button */}
         <button
           ref={bellButtonRef}
@@ -69,37 +47,12 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           onMouseEnter={() => setIsBellHovered(true)}
           onMouseLeave={() => setIsBellHovered(false)}
           style={{
-            position: 'relative',
-            backgroundColor: isBellHovered ? '#F1F5F9' : 'transparent',
-            borderRadius: '6px',
-            border: 'none',
-            cursor: 'pointer',
-            color: isBellHovered ? '#0284C7' : '#0B132B',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '6px',
-            outline: 'none',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            transition: 'all 0.15s ease',
+            ...styles.bellBtn,
+            ...(isBellHovered ? styles.bellBtnHovered : {}),
           }}
         >
           <Bell style={{ width: 18, height: 18, pointerEvents: 'none' }} />
-          {unreadCount > 0 && (
-            <span
-              style={{
-                position: 'absolute',
-                top: '4px',
-                right: '4px',
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: '#EF4444',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
+          {unreadCount > 0 && <span style={styles.bellDot} />}
         </button>
 
         {/* Floating Notifications Popover */}
@@ -114,37 +67,23 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           onMarkSingleRead={markSingleRead}
         />
 
-        <div style={{ width: '1px', height: '26px', backgroundColor: '#CBD5E1' }} />
+        <div style={styles.divider} />
 
         <Link
           to="/profile"
+          onMouseEnter={() => setIsProfileHovered(true)}
+          onMouseLeave={() => setIsProfileHovered(false)}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            textDecoration: 'none',
-            cursor: 'pointer',
+            ...styles.profileLink,
+            ...(isProfileHovered ? styles.profileLinkHovered : {}),
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <div style={styles.profileCol}>
+            <span style={styles.profileRole}>OFFICIAL</span>
             <span
               style={{
-                fontSize: '10px',
-                fontWeight: 700,
-                color: '#94A3B8',
-                letterSpacing: '0.12em',
-                lineHeight: 1,
-              }}
-            >
-              OFFICIAL
-            </span>
-            <span
-              style={{
-                fontSize: '13px',
-                fontWeight: 800,
-                color: '#0B132B',
-                letterSpacing: '0.04em',
-                marginTop: '3px',
+                ...styles.profileName,
+                ...(isProfileHovered ? styles.profileNameHovered : {}),
               }}
             >
               {displayName.toUpperCase()}
@@ -154,22 +93,15 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           {/* Official Avatar or Profile Icon */}
           <div
             style={{
-              width: '32px',
-              height: '32px',
-              color: '#0B132B',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              overflow: 'hidden',
-              flexShrink: 0,
+              ...styles.avatarWrap,
+              ...(isProfileHovered ? styles.avatarWrapHovered : {}),
             }}
           >
             {user?.avatar_url || (user as any)?.profile_image ? (
               <img
                 src={user?.avatar_url || (user as any)?.profile_image || ''}
                 alt={displayName}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={styles.avatarImg}
               />
             ) : (
               <svg
@@ -178,7 +110,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                 viewBox="0 0 24 24"
                 strokeWidth={1.8}
                 stroke="currentColor"
-                style={{ width: '28px', height: '28px' }}
+                style={styles.avatarIcon}
               >
                 <path
                   strokeLinecap="round"
