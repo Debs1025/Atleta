@@ -17,7 +17,8 @@ export const ScheduleMatch: React.FC<ScheduleMatchProps> = ({
   selectedDate,
 }) => {
   if (!isOpen) return null;
-
+  
+  //hardcoded for testing
   let dateHeader = 'OCTOBER 22, 2026';
   try {
     if (selectedDate) {

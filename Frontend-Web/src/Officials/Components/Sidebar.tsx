@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onCreateMatch }) =>
       style={{
         width: '240px',
         backgroundColor: '#FFFFFF',
-        borderRight: '1px solid #E2E8F0',
+        borderRight: '1px solid #0B132B',
         padding: '24px 16px',
         display: 'flex',
         flexDirection: 'column',

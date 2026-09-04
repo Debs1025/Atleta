@@ -286,3 +286,103 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
   invalidateCache('official_schedules');
   return data;
 };
+
+export const getOfficialNotifications = async (forceRefresh = false): Promise<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }> => {
+  const cached = getCachedData<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }>('official_notifications');
+  if (cached && !forceRefresh) return cached;
+
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/officials/notifications`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await handleResponse<any>(res);
+  const rawList: any[] = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.notifications)
+    ? data.notifications
+    : Array.isArray(data?.data)
+    ? data.data
+    : [];
+
+  const notifications: import('./types').OfficialNotificationItem[] = rawList.map((n: any, idx: number) => ({
+    notification_id: n.notification_id || `notif_${idx}`,
+    official_id: n.official_id || '',
+    type: n.type || 'AUDIT_REQUEST',
+    title: n.title || '',
+    message: n.message || '',
+    reference_id: n.reference_id || null,
+    is_read: Boolean(n.is_read),
+    created_at: n.created_at || new Date().toISOString(),
+    requested_by_coach: n.requested_by_coach || n.requested_by || undefined,
+    match_context: n.match_context || n.match_class || undefined,
+    sport_discipline: n.sport_discipline || n.sport || undefined,
+  }));
+
+  const unread_count = typeof data?.unread_count === 'number'
+    ? data.unread_count
+    : notifications.filter((n) => !n.is_read).length;
+
+  const result = { unread_count, notifications };
+  setCachedData('official_notifications', result);
+  return result;
+};
+
+export const markAllOfficialNotificationsAsRead = async (): Promise<void> => {
+  const token = getStoredToken();
+  // Optimistically update cache
+  const cached = getCachedData<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }>('official_notifications');
+  if (cached) {
+    setCachedData('official_notifications', {
+      unread_count: 0,
+      notifications: cached.notifications.map((n) => ({ ...n, is_read: true })),
+    });
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/officials/notifications/read-all`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      // Fallback to /notifications/read-all or POST
+      await fetch(`${BASE_URL}/notifications/read-all`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }).catch(() => {});
+    }
+  } catch {
+  }
+};
+
+export const markOfficialNotificationAsRead = async (notificationId: string): Promise<void> => {
+  const token = getStoredToken();
+  // Optimistically update cache
+  const cached = getCachedData<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }>('official_notifications');
+  if (cached) {
+    const updated = cached.notifications.map((n) =>
+      n.notification_id === notificationId ? { ...n, is_read: true } : n
+    );
+    const unread = updated.filter((n) => !n.is_read).length;
+    setCachedData('official_notifications', { unread_count: unread, notifications: updated });
+  }
+
+  try {
+    await fetch(`${BASE_URL}/notifications/${notificationId}/read`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch {
+  }
+};

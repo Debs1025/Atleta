@@ -32,7 +32,7 @@ export const SchedulePage: React.FC = () => {
     () => getCachedData<OfficialScheduleItem[]>(`official_schedules_${month}_${year}`) || []
   );
 
-  // Selected date initialized to today's date on the device
+  // Selected date initialized to current date of the device
   const now = new Date();
   const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -254,7 +254,7 @@ export const SchedulePage: React.FC = () => {
                         return <td key={dayIndex} style={styles.calTdEmpty} />;
                       }
 
-                      // Live Matches for this day from Backend API
+                      // Matches for this day
                       const matchesForDay = safeSchedules.filter((s) => {
                         if (!s || !s.scheduled_time) return false;
                         try {

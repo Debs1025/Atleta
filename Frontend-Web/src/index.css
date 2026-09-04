@@ -1,12 +1,17 @@
 @import "tailwindcss";
 
 @layer base {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
   }
-  html, body {
+
+  html,
+  body {
     height: 100%;
     width: 100%;
     overflow-x: hidden;
@@ -18,8 +23,27 @@
     -webkit-user-select: none;
   }
 
-  /* Prevent text carets and unwanted text cursor on all static UI elements */
-  h1, h2, h3, h4, h5, h6, p, span, div, table, tr, th, td, aside, main, header, section, label, b, strong {
+  /* Remove the input line when clicking an icon */
+  h1,
+  h2,
+  h3, 
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  table,
+  tr,
+  th,
+  td,
+  aside,
+  main,
+  header,
+  section,
+  label,
+  b,
+  strong {
     user-select: none;
     -webkit-user-select: none;
     caret-color: transparent !important;
@@ -27,7 +51,15 @@
   }
 
   /* Interactive Links and Buttons */
-  button, a, [role="button"], select, .btn-primary, .nav-item, .nav-link, .nav-btn, .text-link {
+  button,
+  a,
+  [role="button"],
+  select,
+  .btn-primary,
+  .nav-item,
+  .nav-link,
+  .nav-btn,
+  .text-link {
     cursor: pointer !important;
     outline: none !important;
     user-select: none !important;
@@ -36,12 +68,14 @@
     caret-color: transparent !important;
   }
 
-  button:focus, button:focus-visible, a:focus, a:focus-visible {
+  button:focus,
+  button:focus-visible,
+  a:focus,
+  a:focus-visible {
     outline: none !important;
     box-shadow: none !important;
   }
 
-  /* ONLY actual form input fields can have text selection and typing caret */
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -57,18 +91,39 @@
   }
 }
 
+/* Smooth Popover Transitions */
+@keyframes notifPopFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.notif-popover-enter {
+  animation: notifPopFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top right;
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #F1F5F9;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #CBD5E1;
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
@@ -78,10 +133,12 @@
   transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
   cursor: pointer;
 }
+
 .btn-primary:hover:not(:disabled) {
   background-color: #1E293B !important;
   box-shadow: 0 4px 12px rgba(11, 19, 43, 0.2) !important;
 }
+
 .btn-primary:active:not(:disabled) {
   transform: scale(0.99);
 }
@@ -90,6 +147,7 @@
   transition: color 0.2s ease, opacity 0.2s ease;
   cursor: pointer;
 }
+
 .nav-link:hover {
   color: #FFFFFF !important;
   opacity: 0.85;
@@ -99,6 +157,7 @@
   transition: background-color 0.2s ease, transform 0.15s ease;
   cursor: pointer;
 }
+
 .nav-btn:hover {
   background-color: #E2E8F0 !important;
 }
@@ -107,6 +166,7 @@
   transition: color 0.2s ease, text-decoration 0.2s ease;
   cursor: pointer;
 }
+
 .text-link:hover {
   color: #0B132B !important;
   text-decoration: underline !important;
@@ -116,6 +176,7 @@
   transition: color 0.2s ease;
   cursor: pointer;
 }
+
 .footer-link:hover {
   color: #0B132B !important;
 }
@@ -126,13 +187,16 @@
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
     gap: 12px !important;
   }
+
   .resp-content-area {
     padding: 20px 16px !important;
   }
+
   .resp-sidebar {
     width: 70px !important;
     padding: 16px 8px !important;
   }
+
   .resp-sidebar-text {
     display: none !important;
   }
@@ -142,12 +206,15 @@
   .resp-grid {
     grid-template-columns: 1fr !important;
   }
+
   .resp-card {
     padding: 20px 14px !important;
   }
+
   .resp-header {
     padding: 12px 16px !important;
   }
+
   .resp-kpi-grid {
     grid-template-columns: 1fr !important;
   }

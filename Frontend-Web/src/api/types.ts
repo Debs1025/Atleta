@@ -116,3 +116,20 @@ export interface CreateMatchPayload {
   opponent_team_name: string;
   home_team_name?: string;
 }
+
+export type OfficialNotificationType = 'AUDIT_REQUEST' | 'SCHEDULE_UPDATE' | 'SCHEDULE_UPDATES' | string;
+
+export interface OfficialNotificationItem {
+  notification_id: string;
+  official_id: string;
+  type: OfficialNotificationType;
+  title: string;
+  message: string;
+  reference_id?: string | null;
+  is_read: boolean;
+  created_at: string;
+  requested_by_coach?: string;
+  match_context?: string;
+  sport_discipline?: string;
+  [key: string]: any;
+}

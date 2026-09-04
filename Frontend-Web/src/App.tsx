@@ -5,6 +5,7 @@ import { ForgotPassword } from './Authentication/ForgotPassword';
 import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
 import { SchedulePage } from './Officials/Schedule/SchedulePage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
+import { NotificationPage } from './Officials/Notification/NotificationPage';
 
 function App() {
   return (
@@ -17,6 +18,8 @@ function App() {
         <Route path="/dashboard" element={<OfficialHomePage />} />
         <Route path="/schedules" element={<SchedulePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/notifications" element={<NotificationPage />} />
+        <Route path="/notifications-center" element={<NotificationPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
