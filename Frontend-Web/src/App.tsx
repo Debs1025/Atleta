@@ -6,6 +6,7 @@ import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
 import { SchedulePage } from './Officials/Schedule/SchedulePage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
 import { NotificationPage } from './Officials/Notification/NotificationPage';
+import { ProfilePage } from './Officials/Profile/ProfilePage';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/notifications" element={<NotificationPage />} />
         <Route path="/notifications-center" element={<NotificationPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

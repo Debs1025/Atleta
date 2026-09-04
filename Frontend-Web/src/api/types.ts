@@ -43,9 +43,13 @@ export interface AuthUser {
   email: string;
   organization_name?: string;
   organization?: string;
+  phone_number?: string;
   license_number?: string;
+  official_license_number?: string;
   sport_accreditation?: string[];
-  assigned_sport?: string;
+  avatar_url?: string;
+  profile_image?: string;
+  photo_url?: string;
   profile?: Record<string, unknown>;
 }
 

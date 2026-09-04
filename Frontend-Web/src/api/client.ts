@@ -386,3 +386,26 @@ export const markOfficialNotificationAsRead = async (notificationId: string): Pr
   } catch {
   }
 };
+
+export const getOfficialProfileData = async (forceRefresh = false): Promise<any> => {
+  const cached = getCachedData<any>('official_profile');
+  if (cached && !forceRefresh) return cached;
+
+  const token = getStoredToken();
+  try {
+    const res = await fetch(`${BASE_URL}/officials/profile`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setCachedData('official_profile', data);
+      return data;
+    }
+  } catch {
+  }
+
+  return getMe();
+};

@@ -11,6 +11,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isBellHovered, setIsBellHovered] = useState(false);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
   const {
     notifications,
@@ -20,13 +21,13 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     markSingleRead,
   } = useNotifications();
 
-  // Robust fallback chain to get official's name
+  // Extract official's name from auth user record
   const displayName =
     user?.full_legal_name ||
     user?.full_name ||
     (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
-    user?.email?.split('@')[0]?.toUpperCase() ||
-    'ERICK DE BELEN';
+    (user?.email ? user.email.split('@')[0].toUpperCase() : '') ||
+    'OFFICIAL';
 
   return (
     <header
@@ -42,6 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
         flexShrink: 0,
         position: 'relative',
         zIndex: 50,
+        fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
       <Link
@@ -64,12 +66,15 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           type="button"
           title="Notifications"
           onClick={() => setIsNotifOpen((prev) => !prev)}
+          onMouseEnter={() => setIsBellHovered(true)}
+          onMouseLeave={() => setIsBellHovered(false)}
           style={{
             position: 'relative',
-            background: 'none',
+            backgroundColor: isBellHovered ? '#F1F5F9' : 'transparent',
+            borderRadius: '6px',
             border: 'none',
             cursor: 'pointer',
-            color: '#0B132B',
+            color: isBellHovered ? '#0284C7' : '#0B132B',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -77,6 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
             outline: 'none',
             userSelect: 'none',
             WebkitUserSelect: 'none',
+            transition: 'all 0.15s ease',
           }}
         >
           <Bell style={{ width: 18, height: 18, pointerEvents: 'none' }} />
@@ -108,9 +114,18 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           onMarkSingleRead={markSingleRead}
         />
 
-        <div style={{ width: '1px', height: '26px', backgroundColor: '#E2E8F0' }} />
+        <div style={{ width: '1px', height: '26px', backgroundColor: '#CBD5E1' }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Link
+          to="/profile"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
             <span
               style={{
@@ -136,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
             </span>
           </div>
 
-          {/* Tailwind CSS / Heroicons User Circle Profile Icon */}
+          {/* Official Avatar or Profile Icon */}
           <div
             style={{
               width: '32px',
@@ -145,25 +160,35 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
+              borderRadius: '50%',
+              overflow: 'hidden',
+              flexShrink: 0,
             }}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.8}
-              stroke="currentColor"
-              style={{ width: '28px', height: '28px' }}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+            {user?.avatar_url || (user as any)?.profile_image ? (
+              <img
+                src={user?.avatar_url || (user as any)?.profile_image || ''}
+                alt={displayName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
-            </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.8}
+                stroke="currentColor"
+                style={{ width: '28px', height: '28px' }}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                />
+              </svg>
+            )}
           </div>
-        </div>
+        </Link>
       </div>
     </header>
   );

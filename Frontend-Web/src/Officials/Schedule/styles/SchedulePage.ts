@@ -8,7 +8,7 @@ export const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: '#FFFFFF',
-    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   },
   layoutBody: {
     display: 'flex',
