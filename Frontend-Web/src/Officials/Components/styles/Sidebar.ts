@@ -39,7 +39,7 @@ export const styles: Record<string, React.CSSProperties> = {
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '12px',
   },
   navLink: {
     display: 'flex',

@@ -119,6 +119,77 @@ export interface CreateMatchPayload {
   court_number?: string | number;
   opponent_team_name: string;
   home_team_name?: string;
+  participating_teams?: string[];
+  game_name?: string;
+  coaches?: string[];
+}
+
+export type AuditStatus = 'PENDING' | 'AUDITED' | 'REJECTED';
+
+export interface BoxScoreRow {
+  jersey_no: string;
+  player_name: string;
+  position?: string;
+  minutes: string;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  fg_pct: string;
+  three_p_pct: string;
+  ft_pct: string;
+}
+
+export interface RaceResultRow {
+  athlete_id?: string;
+  placement_rank: number | string;
+  athlete_name: string;
+  team_name?: string;
+  distance: string;
+  finish_time: string;
+  split_times?: string[] | number[];
+  efficiency?: number;
+  is_disqualified?: boolean;
+}
+
+export interface MatchAuditDetail {
+  match_id: string;
+  validation_id: string;
+  game_name: string;
+  sport_type: string;
+  league_class: string;
+  match_date_formatted: string;
+  home_team: {
+    name: string;
+    score: number;
+    result: 'WIN' | 'LOSE';
+    roster_stats: BoxScoreRow[];
+    team_totals: BoxScoreRow;
+  };
+  away_team: {
+    name: string;
+    score: number;
+    result: 'WIN' | 'LOSE';
+    roster_stats: BoxScoreRow[];
+    team_totals: BoxScoreRow;
+  };
+  race_results?: RaceResultRow[];
+  scoresheet_url?: string;
+  audit_context_notes?: string;
+  is_certified?: boolean;
+  is_locked?: boolean;
+}
+
+export interface MatchSummaryItem {
+  match_id: string;
+  validation_id?: string;
+  match_class: string;
+  sport: string;
+  coaches: string;
+  date_time: string;
+  status: AuditStatus;
+  raw_match?: any;
 }
 
 export type OfficialNotificationType = 'AUDIT_REQUEST' | 'SCHEDULE_UPDATE' | 'SCHEDULE_UPDATES' | string;
@@ -137,3 +208,4 @@ export interface OfficialNotificationItem {
   sport_discipline?: string;
   [key: string]: any;
 }
+

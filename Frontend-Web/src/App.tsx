@@ -7,6 +7,9 @@ import { SchedulePage } from './Officials/Schedule/SchedulePage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
 import { NotificationPage } from './Officials/Notification/NotificationPage';
 import { ProfilePage } from './Officials/Profile/ProfilePage';
+import { ViewAllMatch } from './Officials/Match/ViewAllMatch';
+import { ScoresheetMatch } from './Officials/Match/ScoresheetMatch';
+import { CreateMatch } from './Officials/Match/createMatch';
 
 function App() {
   return (
@@ -17,6 +20,9 @@ function App() {
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/dashboard" element={<OfficialHomePage />} />
+        <Route path="/matches" element={<ViewAllMatch />} />
+        <Route path="/matches/:matchId" element={<ScoresheetMatch />} />
+        <Route path="/create-match" element={<CreateMatch />} />
         <Route path="/schedules" element={<SchedulePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/notifications" element={<NotificationPage />} />

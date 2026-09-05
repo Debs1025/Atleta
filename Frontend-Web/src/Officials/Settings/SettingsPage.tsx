@@ -10,6 +10,7 @@ import {
   getStoredToken,
   getStoredUser,
   getCachedData,
+  getStoredOfficialSettings,
   getMe,
   getOfficialSettings,
   updateOfficialSettings,
@@ -26,7 +27,8 @@ export const SettingsPage: React.FC = () => {
   );
   const [settings, setSettings] = useState<OfficialSettings>(
     () =>
-      getCachedData<OfficialSettings>('official_settings') || {
+      getCachedData<OfficialSettings>('official_settings') ||
+      getStoredOfficialSettings() || {
         split_screen_defaults: true,
         discrepancy_presets: false,
         match_reminders: false,

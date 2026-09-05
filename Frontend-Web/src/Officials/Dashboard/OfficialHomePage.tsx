@@ -7,6 +7,9 @@ import {
   getCachedData,
   getMe,
   getOfficialDashboard,
+  getOfficialSettings,
+  prefetchAllOfficialAuditMatches,
+  prefetchMatchAuditDetail,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -36,6 +39,8 @@ export const OfficialHomePage: React.FC = () => {
     Promise.all([
       getMe().then((res) => setUser(res)).catch(() => {}),
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => {}),
+      getOfficialSettings().catch(() => {}),
+      prefetchAllOfficialAuditMatches().catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [navigate]);
 
@@ -82,7 +87,11 @@ export const OfficialHomePage: React.FC = () => {
           {/* New Matches Table Section */}
           <div style={styles.sectionHeaderRow}>
             <h3 style={styles.sectionHeading}>NEW MATCHES</h3>
-            <Link to="/schedules" style={styles.viewAllLink}>
+            <Link
+              to="/matches"
+              style={styles.viewAllLink}
+              onMouseEnter={() => prefetchAllOfficialAuditMatches()}
+            >
               VIEW ALL <ExternalLink style={{ width: 12, height: 12 }} />
             </Link>
           </div>
@@ -108,7 +117,8 @@ export const OfficialHomePage: React.FC = () => {
                 ) : dashboard?.audit_queue && dashboard.audit_queue.length > 0 ? (
                   dashboard.audit_queue.map((item, idx) => {
                     const match = item.match_details || {};
-                    const matchId = match.match_id || item.match_id || `#MATCH-${idx + 1}`;
+                    const rawId = match.match_id || item.match_id || `MATCH-${idx + 1}`;
+                    const matchId = rawId.startsWith('#') ? rawId : `#${rawId}`;
                     const matchClass =
                       match.home_team_name && match.away_team_name
                         ? `${match.home_team_name} vs. ${match.away_team_name}`
@@ -117,13 +127,18 @@ export const OfficialHomePage: React.FC = () => {
                     const coach = match.coach_name || item.requested_by || 'Assigned Coach';
 
                     return (
-                      <tr key={item.audit_id || idx}>
+                      <tr
+                        key={item.audit_id || idx}
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => prefetchMatchAuditDetail(rawId)}
+                        onClick={() => navigate(`/matches/${rawId.replace(/^#/, '')}`)}
+                      >
                         <td style={{ ...styles.td, ...styles.tdMatchId }}>{matchId}</td>
                         <td style={styles.td}>{matchClass}</td>
                         <td style={styles.td}>{sport}</td>
                         <td style={styles.td}>{coach}</td>
                         <td style={{ ...styles.td, borderRight: 'none' }}>
-                          <span style={styles.statusBadge}>PENDING VERIFICATION</span>
+                          <span style={styles.statusBadge}>PENDING</span>
                         </td>
                       </tr>
                     );
@@ -145,10 +160,22 @@ export const OfficialHomePage: React.FC = () => {
             <div style={styles.activityBody}>
               {dashboard?.audit_queue && dashboard.audit_queue.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {dashboard.audit_queue.slice(0, 5).map((act, i) => (
-                    <div key={i} style={{ fontSize: '12px', color: '#334155', display: 'flex', justifyContent: 'space-between' }}>
+                  {dashboard.audit_queue.map((act, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: '12px',
+                        color: '#334155',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        paddingBottom: '8px',
+                        borderBottom: i < dashboard.audit_queue.length - 1 ? '1px solid #F1F5F9' : 'none',
+                      }}
+                    >
                       <span>Audit requested for Match ID <strong>{act.match_id}</strong></span>
-                      <span style={{ color: '#94A3B8' }}>{act.requested_at ? new Date(act.requested_at).toLocaleDateString() : 'Recent'}</span>
+                      <span style={{ color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: '12px' }}>
+                        {act.requested_at ? new Date(act.requested_at).toLocaleDateString() : 'Recent'}
+                      </span>
                     </div>
                   ))}
                 </div>

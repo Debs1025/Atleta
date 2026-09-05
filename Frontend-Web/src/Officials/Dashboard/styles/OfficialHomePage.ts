@@ -323,7 +323,9 @@ export const styles: Record<string, React.CSSProperties> = {
   },
   activityBody: {
     padding: '16px 18px',
-    minHeight: '110px',
+    maxHeight: '180px',
+    overflowY: 'auto',
+    boxSizing: 'border-box',
   },
   emptyNotice: {
     color: '#94A3B8',

@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { loginOfficial, getStoredToken } from '../api/client';
+import {
+  loginOfficial,
+  getStoredToken,
+  getOfficialSettings,
+  getMe,
+  getOfficialDashboard,
+  prefetchAllOfficialAuditMatches,
+} from '../api/client';
 import { styles } from './styles/LoginPage';
 
 export const LoginPage: React.FC = () => {
@@ -15,6 +22,10 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (getStoredToken()) {
+      // Eagerly prefetch settings, dashboard, and match queue if session exists
+      getOfficialSettings().catch(() => {});
+      getMe().catch(() => {});
+      prefetchAllOfficialAuditMatches().catch(() => {});
       navigate('/dashboard');
     }
   }, [navigate]);
@@ -27,6 +38,13 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       await loginOfficial({ email, password, savePassword: savePass });
+      // Eagerly prefetch settings, user profile, dashboard, and matches before navigating
+      await Promise.allSettled([
+        getOfficialSettings(true),
+        getMe(true),
+        getOfficialDashboard(true),
+        prefetchAllOfficialAuditMatches(),
+      ]);
       navigate('/dashboard');
     } catch (e: any) {
       const msg = e.message || '';

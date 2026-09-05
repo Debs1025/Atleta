@@ -217,11 +217,17 @@ export const SchedulePage: React.FC = () => {
                       }
 
                       // Matches for this day
+                      const targetDatePrefix = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                       const matchesForDay = safeSchedules.filter((s) => {
                         if (!s || !s.scheduled_time) return false;
+                        if (s.scheduled_time.startsWith(targetDatePrefix)) return true;
                         try {
                           const d = new Date(s.scheduled_time);
-                          return d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === dayNum;
+                          if (isNaN(d.getTime())) return false;
+                          return (
+                            (d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === dayNum) ||
+                            (d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month && d.getUTCDate() === dayNum)
+                          );
                         } catch {
                           return false;
                         }
@@ -262,15 +268,16 @@ export const SchedulePage: React.FC = () => {
                                   ? styles.fbBadge
                                   : styles.bbBadge;
 
-                              const home = String(m?.home_team || m?.venue_logistics?.home_team || 'Team A');
-                              const away = String(m?.away_team || m?.venue_logistics?.away_team || 'Team B');
+                              const home = String(m?.home_team || m?.venue_logistics?.home_team || '').trim();
+                              const away = String(m?.away_team || m?.venue_logistics?.away_team || '').trim();
+                              const label = home && away ? `${home} vs. ${away}` : home || away || 'Event';
 
                               return (
                                 <div
                                   key={m?.schedule_id || idx}
                                   style={{ ...styles.matchBadge, ...badgeStyle }}
                                 >
-                                  <strong>{code}</strong> {home} vs. {away}
+                                  <strong>{code}</strong> {label}
                                 </div>
                               );
                             })}
