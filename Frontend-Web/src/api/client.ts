@@ -299,16 +299,23 @@ export const getAdminCoachQueue = async (forceRefresh = false): Promise<AdminCoa
   if (cached && !forceRefresh) return cached;
 
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/admin/coaches/queue`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await handleResponse<AdminCoachQueueResponse>(res);
-  setCachedData('admin_coach_queue', data);
-  return data;
+  try {
+    const res = await fetch(`${BASE_URL}/admin/coaches/queue`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await handleResponse<AdminCoachQueueResponse>(res);
+      setCachedData('admin_coach_queue', data);
+      return data;
+    }
+  } catch {}
+
+  return { total_pending: 0, queue: [] };
 };
+
 
 export const approveCoachAccreditation = async (coachId: string): Promise<any> => {
   const token = getStoredToken();

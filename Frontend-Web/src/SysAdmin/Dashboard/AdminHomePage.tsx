@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  ClipboardCheck,
-  DraftingCompass,
-  Users,
-  CircleUser,
   ChevronLeft,
   ChevronRight,
   X,
@@ -12,12 +8,13 @@ import {
 } from 'lucide-react';
 import {
   getStoredToken,
-  clearAuthSession,
   getAdminCoachQueue,
   approveCoachAccreditation,
   rejectCoachAccreditation,
 } from '../../api/client';
 import type { AdminCoachQueueItem } from '../../api/types';
+import { Navbar } from '../Components/Navbar';
+import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/AdminHomePage';
 
 export const AdminHomePage: React.FC = () => {
@@ -36,8 +33,10 @@ export const AdminHomePage: React.FC = () => {
     try {
       setLoading(true);
       const res = await getAdminCoachQueue(true);
-      setQueue(res.queue || []);
+      const list = Array.isArray(res?.queue) ? res.queue : Array.isArray(res) ? res : [];
+      setQueue(list);
     } catch {
+      setQueue([]);
     } finally {
       setLoading(false);
     }
@@ -46,7 +45,7 @@ export const AdminHomePage: React.FC = () => {
   useEffect(() => {
     const token = getStoredToken();
     if (!token) {
-      navigate('/admin/login');
+      navigate('/login');
       return;
     }
     loadQueue();
@@ -99,11 +98,6 @@ export const AdminHomePage: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    clearAuthSession();
-    navigate('/admin/login');
-  };
-
   const pendingCount = queue.filter(
     (c) => (c.account_status || '').toLowerCase() === 'pending' || (c.status || '').includes('PENDING')
   ).length;
@@ -111,39 +105,32 @@ export const AdminHomePage: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(queue.length / itemsPerPage));
   const displayedItems = queue.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
+  // Format date so that the timestamp is displayed correctly
+  const formatDate = (raw: any): string => {
+    try {
+      if (raw) {
+        if (typeof raw === 'string' || typeof raw === 'number') {
+          const d = new Date(raw);
+          if (!isNaN(d.getTime())) return d.toISOString().replace('T', ' ').slice(0, 16);
+        } else if (typeof raw === 'object' && (raw._seconds || raw.seconds)) {
+          const sec = raw._seconds ?? raw.seconds;
+          const d = new Date(sec * 1000);
+          if (!isNaN(d.getTime())) return d.toISOString().replace('T', ' ').slice(0, 16);
+        }
+      }
+    } catch {}
+    return new Date().toISOString().replace('T', ' ').slice(0, 16);
+  };
+
   return (
     <div style={styles.shell}>
-      {/* Top Header */}
-      <header style={styles.header}>
-        <Link to="/admin/dashboard" style={styles.logo}>
-          ATLETA
-        </Link>
-        <div style={styles.headerRight}>
-          <span>SYSTEM DASHBOARD</span>
-          <span>|</span>
-          <div style={styles.profileIcon} onClick={handleLogout} title="Click to Logout">
-            <CircleUser style={{ width: 22, height: 22 }} />
-          </div>
-        </div>
-      </header>
+      {/* Shared Navbar */}
+      <Navbar />
 
       {/* Main Layout */}
       <div style={styles.layout}>
-        {/* Left Navigation Sidebar */}
-        <aside style={styles.sidebar}>
-          <div style={styles.navItemActive}>
-            <ClipboardCheck style={{ width: 16, height: 16 }} />
-            <span>AUDIT QUEUE</span>
-          </div>
-          <div style={styles.navItem}>
-            <DraftingCompass style={{ width: 16, height: 16 }} />
-            <span>SPORT ARCHITECTURE</span>
-          </div>
-          <div style={styles.navItem}>
-            <Users style={{ width: 16, height: 16 }} />
-            <span>USER MANAGEMENT</span>
-          </div>
-        </aside>
+        {/* Shared Sidebar with Bottom-Left Logout */}
+        <Sidebar activeTab="AUDIT_QUEUE" />
 
         {/* Center Dashboard View */}
         <main style={styles.main}>
@@ -215,19 +202,20 @@ export const AdminHomePage: React.FC = () => {
                       item.account_status === 'Active' ||
                       item.status === 'VERIFIED' ||
                       item.status === 'ACTIVE';
-                    const dateFormatted = item.date_uploaded || (item.created_at ? new Date(item.created_at).toISOString().replace('T', ' ').slice(0, 16) : '2023-10-24 09:12');
+                    const dateFormatted = formatDate(item.date_uploaded || item.created_at);
 
                     return (
                       <tr key={item.coach_id || idx}>
                         <td style={styles.td}>
-                          <span style={styles.idText}>{item.coach_id}</span>
+                          <span style={styles.idText}>{item.coach_id || `#C-${idx + 1}`}</span>
                         </td>
                         <td style={{ ...styles.td, fontWeight: 800, textTransform: 'uppercase' }}>
-                          {item.full_name}
+                          {item.full_name || 'COACH APPLICANT'}
                         </td>
                         <td style={{ ...styles.td, textTransform: 'uppercase' }}>
-                          {item.institutional_affiliation || item.current_institution || 'STANFORD ATHLETICS'}
+                          {item.institutional_affiliation || item.current_institution || '—'}
                         </td>
+
                         <td style={styles.td}>
                           <span style={styles.dateText}>{dateFormatted}</span>
                         </td>
@@ -254,6 +242,7 @@ export const AdminHomePage: React.FC = () => {
               </tbody>
             </table>
           </div>
+
 
           {/* Pagination Controls */}
           <div style={styles.paginationRow}>
