@@ -8,6 +8,9 @@ import type {
   OfficialDashboardResponse,
   OfficialScheduleItem,
   CreateMatchPayload,
+  AdminLoginPayload,
+  AdminRegisterPayload,
+  AdminCoachQueueResponse,
 } from './types';
 
 const BASE_URL = (import.meta.env.VITE_ATLETA_API || '').replace(/\/+$/, '');
@@ -126,18 +129,213 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const loginOfficial = async (payload: OfficialLoginPayload): Promise<AuthResponse> => {
-  const res = await fetch(`${BASE_URL}/users/official/login`, {
+  const email = payload.email.trim();
+  const password = payload.password;
+
+  try {
+    const res = await fetch(`${BASE_URL}/users/official/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) {
+      const data = await handleResponse<AuthResponse>(res);
+      if (data.token && data.user) {
+        storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+      }
+      return data;
+    }
+  } catch {}
+
+  try {
+    const res = await fetch(`${BASE_URL}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) {
+      const data = await handleResponse<AuthResponse>(res);
+      if (data.token && data.user) {
+        data.user.role = data.user.role || 'SystemAdmin';
+        storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+      }
+      return data;
+    }
+  } catch {}
+
+  // 3. Fallback to general user login route
+  const res = await fetch(`${BASE_URL}/users/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: payload.email.trim(),
-      password: payload.password,
-    }),
+    body: JSON.stringify({ email, password }),
   });
   const data = await handleResponse<AuthResponse>(res);
   if (data.token && data.user) {
     storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
   }
+  return data;
+};
+
+export const loginAdmin = async (payload: AdminLoginPayload): Promise<AuthResponse> => {
+  const email = payload.email.trim();
+  const password = payload.password;
+
+  // Try admin login endpoint
+  let data: AuthResponse | null = null;
+  try {
+    const res = await fetch(`${BASE_URL}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) {
+      data = await handleResponse<AuthResponse>(res);
+    }
+  } catch {}
+
+  // Fallback to general user login
+  if (!data || !data.token) {
+    const userRes = await fetch(`${BASE_URL}/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    data = await handleResponse<AuthResponse>(userRes);
+  }
+
+  if (data && data.token && data.user) {
+    if (!data.user.role || data.user.role === 'User' || data.user.role === 'System Admin') {
+      data.user.role = 'SystemAdmin';
+    }
+    storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+    return data;
+  }
+
+  throw new Error('Invalid email or password.');
+};
+
+
+
+export const registerAdmin = async (payload: AdminRegisterPayload): Promise<AuthResponse> => {
+  const fullName = payload.full_name.trim();
+  const email = payload.email.trim();
+  const nameParts = fullName.split(' ');
+  const firstName = nameParts[0] || 'Admin';
+  const lastName = nameParts.slice(1).join(' ') || 'User';
+
+  // Try admin/register first
+  try {
+    const res = await fetch(`${BASE_URL}/admin/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: fullName,
+        email,
+        password: payload.password,
+        department_code: payload.department_code || 'SYS_ADMIN',
+        clearance_level: payload.clearance_level || 4,
+        rbac_compliance_accepted: payload.rbac_compliance_accepted ?? true,
+      }),
+    });
+    if (res.ok) {
+      const data = await handleResponse<AuthResponse>(res);
+      if (data.token && data.user) {
+        storeAuthSession(data.token, data.user, true);
+      }
+      return data;
+    }
+  } catch {}
+
+  // Fallback to /users/register with System Admin role (compatible with general user register endpoint)
+  const res = await fetch(`${BASE_URL}/users/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName,
+      email,
+      password: payload.password,
+      role: 'System Admin',
+      department_code: payload.department_code || 'SYS_ADMIN',
+      clearance_level: payload.clearance_level || 4,
+      institution: payload.institution || 'Ateneo de Naga University',
+      admin_security_key: 'atleta_admin_key_2026',
+    }),
+  });
+
+  const data = await handleResponse<AuthResponse>(res);
+  if (data.token && data.user) {
+    data.user.role = 'SystemAdmin';
+    storeAuthSession(data.token, data.user, true);
+  }
+  return data;
+};
+
+export const getAdminProfile = async (forceRefresh = false): Promise<any> => {
+  const cached = getCachedData<any>('admin_profile');
+  if (cached && !forceRefresh) return cached;
+
+  const token = getStoredToken();
+  try {
+    const res = await fetch(`${BASE_URL}/admin/profile`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await handleResponse<any>(res);
+      setCachedData('admin_profile', data);
+      return data;
+    }
+  } catch {}
+
+  return getMe(forceRefresh);
+};
+
+export const getAdminCoachQueue = async (forceRefresh = false): Promise<AdminCoachQueueResponse> => {
+  const cached = getCachedData<AdminCoachQueueResponse>('admin_coach_queue');
+  if (cached && !forceRefresh) return cached;
+
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/admin/coaches/queue`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await handleResponse<AdminCoachQueueResponse>(res);
+  setCachedData('admin_coach_queue', data);
+  return data;
+};
+
+export const approveCoachAccreditation = async (coachId: string): Promise<any> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/admin/coaches/${coachId.replace(/^coach_/, '')}/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await handleResponse<any>(res);
+  invalidateCache('admin_coach_queue');
+  return data;
+};
+
+export const rejectCoachAccreditation = async (coachId: string, reason: string): Promise<any> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/admin/coaches/${coachId.replace(/^coach_/, '')}/reject`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ rejection_reason: reason }),
+  });
+  const data = await handleResponse<any>(res);
+  invalidateCache('admin_coach_queue');
   return data;
 };
 
@@ -178,6 +376,7 @@ export const requestPasswordReset = async (payload: PasswordResetPayload): Promi
   });
   return handleResponse<{ message: string }>(res);
 };
+
 
 export const getMe = async (forceRefresh = false): Promise<AuthUser> => {
   const cached = getCachedData<AuthUser>('user_me');
@@ -543,32 +742,6 @@ export const getAuditMatches = async (
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const currentUser = getStoredUser();
-  const currentProfile = getCachedData<any>('official_profile') || getCachedData<any>('user_me');
-  const uObj = (currentUser || {}) as any;
-  const pObj = (currentProfile || {}) as any;
-  const uid = uObj.uid || uObj.id || pObj.uid || pObj.id || '';
-  const officialId = uObj.official_id || pObj.official_id || '';
-  const email = (uObj.email || pObj.email || '').toLowerCase().trim();
-  const name = (uObj.name || uObj.displayName || pObj.name || pObj.displayName || '').toLowerCase().trim();
-
-  const userIdentifiers = new Set<string>();
-  if (uid) {
-    const rawUid = uid.toLowerCase().trim();
-    userIdentifiers.add(rawUid);
-    userIdentifiers.add(`off_${rawUid.replace(/^off_/, '')}`);
-    userIdentifiers.add(rawUid.replace(/^off_/, ''));
-  }
-  if (officialId) {
-    userIdentifiers.add(officialId.toLowerCase().trim());
-  }
-  if (email) {
-    userIdentifiers.add(email);
-  }
-  if (name) {
-    userIdentifiers.add(name);
-  }
-
   try {
     const [dashboardRes, matchesRes, pendingRes] = await Promise.all([
       fetch(`${BASE_URL}/officials/dashboard`, { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
@@ -576,208 +749,81 @@ export const getAuditMatches = async (
       fetch(`${BASE_URL}/validations/pending`, { headers }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ]);
 
-    const dashboardQueue: any[] = Array.isArray(dashboardRes?.audit_queue)
-      ? dashboardRes.audit_queue
-      : Array.isArray(dashboardRes?.matches)
-      ? dashboardRes.matches
-      : [];
-
-    const allMatchesList: any[] = Array.isArray(matchesRes?.matches)
-      ? matchesRes.matches
-      : Array.isArray(matchesRes)
-      ? matchesRes
-      : [];
-
+    const dashboardQueue: any[] = Array.isArray(dashboardRes?.audit_queue) ? dashboardRes.audit_queue : [];
+    const allMatchesList: any[] = Array.isArray(matchesRes?.matches) ? matchesRes.matches : (Array.isArray(matchesRes) ? matchesRes : []);
     const pendingValidations: any[] = Array.isArray(pendingRes) ? pendingRes : [];
-    const pendingMatchIds = new Set(pendingValidations.map((v: any) => v.match_id));
 
-    // Combine matches with validation records
     const combinedMap = new Map<string, import('./types').MatchSummaryItem>();
 
-    // 1. Process items from Official Dashboard (guaranteed official's matches)
-    for (const item of dashboardQueue) {
-      const match = item.match_details || item;
-      const rawMatchId = String(match.match_id || item.match_id || item.audit_id || '');
-      if (!rawMatchId) continue;
-      const matchId = rawMatchId.startsWith('#') ? rawMatchId : `#${rawMatchId}`;
-      const homeTeam = match.home_team_name || match.team_id || match.home_team || '';
-      const awayTeam = match.opponent_team_name || match.away_team_name || match.away_team || '';
-      const sport = match.sport_type || match.sport || '';
-      const matchType = match.match_type ? ` (${match.match_type})` : '';
-      const rawDate = match.match_date || match.timestamp || item.requested_at || item.created_at || new Date().toISOString();
-      const coaches = match.assigned_coaches?.length
-        ? match.assigned_coaches.join('\n')
-        : match.coach_name
-        ? match.coach_name
-        : item.requested_by
-        ? `Coach ${item.requested_by}`
-        : 'Assigned Coaches';
-
-      const d = new Date(rawDate);
-      const dateFormatted = !isNaN(d.getTime())
-        ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase()} / ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
-        : 'DATE TBD';
-
-      const status: import('./types').AuditStatus =
-        item.status === 'AUDITED' || item.status === 'Certified' || match.is_certified === true
-          ? 'AUDITED'
-          : 'PENDING';
-
-      combinedMap.set(rawMatchId.replace(/^#/, ''), {
-        match_id: matchId,
-        validation_id: item.validation_id || item.audit_id,
-        match_class: `${homeTeam} vs. ${awayTeam}${matchType}`,
-        sport: sport,
-        coaches: coaches,
-        date_time: dateFormatted,
-        status: status,
-        raw_match: { ...match, from_official_dashboard: true },
-      });
-    }
-
-    // 2. Process pending validations
-    for (const v of pendingValidations) {
-      const match = v.match_details || {};
-      const rawMatchId = String(match.match_id || v.match_id || v.validation_id || '');
-      if (!rawMatchId) continue;
-      const matchId = rawMatchId.startsWith('#') ? rawMatchId : `#${rawMatchId}`;
-      const homeTeam = match.home_team_name || match.team_id || match.home_team || '';
-      const awayTeam = match.opponent_team_name || match.away_team_name || match.away_team || '';
-      const sport = match.sport_type || match.sport || '';
-      const matchType = match.match_type ? ` (${match.match_type})` : '';
-      const rawDate = match.match_date || v.created_at || new Date().toISOString();
-      const coaches = match.assigned_coaches?.length
-        ? match.assigned_coaches.join('\n')
-        : match.coach_name
-        ? match.coach_name
-        : v.requested_by
-        ? `Coach ${v.requested_by}`
-        : 'Assigned Coaches';
-
-      const d = new Date(rawDate);
-      const dateFormatted = !isNaN(d.getTime())
-        ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase()} / ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
-        : 'DATE TBD';
-
-      const itemPayload = {
-        ...match,
-        official_id: v.official_id || match.official_id,
-        requested_by: v.requested_by || match.requested_by,
-        validation_id: v.validation_id,
-      };
+    const parseMatchItem = (raw: any, isAuditedOverride?: boolean) => {
+      const match = raw.match_details || raw;
+      const rawMatchId = String(match.match_id || raw.match_id || raw.audit_id || raw.id || '');
+      if (!rawMatchId) return;
 
       const key = rawMatchId.replace(/^#/, '');
-      if (!combinedMap.has(key)) {
-        combinedMap.set(key, {
-          match_id: matchId,
-          validation_id: v.validation_id,
-          match_class: `${homeTeam} vs. ${awayTeam}${matchType}`,
-          sport: sport,
-          coaches: coaches,
-          date_time: dateFormatted,
-          status: 'PENDING',
-          raw_match: itemPayload,
-        });
-      }
-    }
+      const sRaw = String(raw.status || raw.verification_status || match.status || match.verification_status || '').toLowerCase().trim();
+      const isCertified = Boolean(
+        isAuditedOverride ||
+        match.is_certified === true ||
+        String(match.is_certified) === 'true' ||
+        match.is_locked === true ||
+        String(match.is_locked) === 'true' ||
+        sRaw === 'approved' ||
+        sRaw === 'audited' ||
+        sRaw === 'certified' ||
+        sRaw === 'certify'
+      );
+      const status: import('./types').AuditStatus = isCertified ? 'AUDITED' : 'PENDING';
 
-    // 3. Process all Match_Logs
-    for (const m of allMatchesList) {
-      const rawMatchId = String(m.match_id || m.id || '');
-      if (!rawMatchId) continue;
-      const matchId = rawMatchId.startsWith('#') ? rawMatchId : `#${rawMatchId}`;
-      const isPending = pendingMatchIds.has(rawMatchId) || m.is_certified === false || m.status === 'Pending';
-      const homeTeam = m.home_team_name || m.team_id || m.home_team || '';
-      const awayTeam = m.opponent_team_name || m.away_team_name || m.away_team || '';
-      const sport = m.sport_type || m.sport || '';
-      const matchType = m.match_type ? ` (${m.match_type})` : '';
-      const rawDate = m.match_date || m.timestamp || new Date().toISOString();
-      const coaches = m.assigned_coaches?.length
-        ? m.assigned_coaches.join('\n')
-        : m.logged_by_coach_id
-        ? `Coach ${m.logged_by_coach_id}`
-        : 'Assigned Coaches';
-
-      const d = new Date(rawDate);
+      const homeTeam = (match.home_team_name || match.team_id || match.home_team || 'Home Team').toUpperCase();
+      const awayTeam = (match.opponent_team_name || match.away_team_name || match.away_team || 'Opponent').toUpperCase();
+      const sport = match.sport_type || match.sport || 'Basketball';
+      const matchType = match.match_type ? ` (${match.match_type})` : '';
+      const coaches = match.assigned_coaches?.length ? match.assigned_coaches.join('\n') : (match.coach_name || raw.requested_by ? `Coach ${match.coach_name || raw.requested_by}` : 'Official Assigned');
+      const d = new Date(match.match_date || match.timestamp || raw.requested_at || Date.now());
       const dateFormatted = !isNaN(d.getTime())
         ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase()} / ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
         : 'DATE TBD';
 
-      const status: import('./types').AuditStatus = isPending ? 'PENDING' : 'AUDITED';
-
-      const key = rawMatchId.replace(/^#/, '');
-      if (!combinedMap.has(key)) {
+      if (combinedMap.has(key)) {
+        const existing = combinedMap.get(key)!;
+        if (isCertified) existing.status = 'AUDITED';
+        existing.raw_match = { ...existing.raw_match, ...match };
+      } else {
         combinedMap.set(key, {
-          match_id: matchId,
-          validation_id: m.validation_id,
+          match_id: `#${key}`,
+          validation_id: raw.validation_id || raw.audit_id || key,
           match_class: `${homeTeam} vs. ${awayTeam}${matchType}`,
-          sport: sport,
-          coaches: coaches,
+          sport,
+          coaches,
           date_time: dateFormatted,
-          status: status,
-          raw_match: m,
+          status,
+          raw_match: { ...match, ...raw },
         });
       }
-    }
+    };
+
+    // Process from all sources
+    dashboardQueue.forEach((item) => parseMatchItem(item));
+    pendingValidations.forEach((v) => parseMatchItem(v));
+    allMatchesList.forEach((m) => parseMatchItem(m));
 
     let items = Array.from(combinedMap.values());
-
-    // Filter ONLY matches created by or assigned to this official
-    if (userIdentifiers.size > 0) {
-      const isUserMatch = (val: any): boolean => {
-        if (!val) return false;
-        if (typeof val === 'string') {
-          const v = val.toLowerCase().trim();
-          return userIdentifiers.has(v) || (email && v === email) || (name && (v === name || v.includes(name)));
-        }
-        if (Array.isArray(val)) {
-          return val.some(isUserMatch);
-        }
-        return false;
-      };
-
-      const officialOwned = items.filter((item) => {
-        const m = item.raw_match || {};
-        return (
-          m.from_official_dashboard === true ||
-          isUserMatch(m.official_id) ||
-          isUserMatch(m.created_by) ||
-          isUserMatch(m.creator_id) ||
-          isUserMatch(m.user_id) ||
-          isUserMatch(m.logged_by_coach_id) ||
-          isUserMatch(m.requested_by) ||
-          isUserMatch(m.assigned_officials) ||
-          isUserMatch(m.assigned_coaches) ||
-          isUserMatch(m.coach_name) ||
-          isUserMatch(item.coaches)
-        );
-      });
-
-      // Strict scoping: only return matches created by / assigned to this official
-      items = officialOwned;
-    }
-
-    // Always cache the un-filtered master list for client-side instant filtering
     setCachedData('all_official_matches_master', items);
 
-    // Filter by status
-    if (statusFilter === 'PENDING') {
-      items = items.filter((i) => i.status === 'PENDING');
-    } else if (statusFilter === 'PROCESSED') {
-      items = items.filter((i) => i.status === 'AUDITED');
-    }
+    // Filter by tab status
+    if (statusFilter === 'PENDING') items = items.filter((i) => i.status === 'PENDING');
+    else if (statusFilter === 'PROCESSED') items = items.filter((i) => i.status === 'AUDITED');
 
-    // Filter by sport: Basketball, Track and Field, Swimming
+    // Filter by sport
     if (normSport && normSport !== 'ALL' && normSport !== 'ALL SPORTS') {
-      const sLower = normSport.toLowerCase();
+      const s = normSport.toLowerCase();
       items = items.filter((i) => {
         const itemSport = (i.sport || '').toLowerCase();
-        if (sLower.includes('basket')) return itemSport.includes('basket');
-        if (sLower.includes('swim')) return itemSport.includes('swim') || itemSport.includes('aquatic');
-        if (sLower.includes('track') || sLower.includes('field')) {
-          return itemSport.includes('track') || itemSport.includes('field') || itemSport.includes('athletic');
-        }
-        return itemSport.includes(sLower);
+        if (s.includes('basket')) return itemSport.includes('basket');
+        if (s.includes('swim')) return itemSport.includes('swim') || itemSport.includes('aquatic');
+        if (s.includes('track') || s.includes('field')) return itemSport.includes('track') || itemSport.includes('field');
+        return itemSport.includes(s);
       });
     }
 
@@ -1008,6 +1054,21 @@ export const certifyMatchValidation = async (
   const data = await handleResponse<any>(res);
   invalidateCache();
   return data;
+};
+
+export const downloadCertifiedMatchPdf = async (matchId: string): Promise<Blob> => {
+  const cleanId = matchId.replace(/^#/, '');
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/matches/${cleanId}/pdf`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to download certified match PDF' }));
+    throw new Error(err.error || 'Failed to download certified match PDF');
+  }
+  return res.blob();
 };
 
 export const deleteOfficialMatch = async (matchId: string): Promise<any> => {

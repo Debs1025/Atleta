@@ -10,6 +10,7 @@ import {
   Loader2,
   Eye,
   X,
+  Download,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -18,6 +19,7 @@ import {
   deleteOfficialMatch,
   uploadScoresheetFile,
   getCachedData,
+  downloadCertifiedMatchPdf,
 } from '../../api/client';
 import type { MatchAuditDetail, BoxScoreRow, RaceResultRow } from '../../api/types';
 import { styles } from './styles/ScoresheetMatch';
@@ -43,10 +45,11 @@ export const ScoresheetMatch: React.FC = () => {
   const [raceResults, setRaceResults] = useState<RaceResultRow[]>(() => cached?.race_results || []);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Modals
+  // Modals & Actions
   const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!getStoredToken()) {
@@ -148,6 +151,27 @@ export const ScoresheetMatch: React.FC = () => {
       setActionError(err?.message || 'Failed to remove match record.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!cleanId) return;
+    try {
+      setIsDownloadingPdf(true);
+      setActionError(null);
+      const blob = await downloadCertifiedMatchPdf(cleanId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `certified_match_${cleanId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to download certified match PDF.');
+    } finally {
+      setIsDownloadingPdf(false);
     }
   };
 
@@ -607,17 +631,41 @@ export const ScoresheetMatch: React.FC = () => {
                 >
                   REMOVE MATCH
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal('CERTIFY')}
-                  disabled={matchData.is_certified}
-                  style={{
-                    ...styles.certifyBtn,
-                    ...(matchData.is_certified ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
-                  }}
-                >
-                  {matchData.is_certified ? 'MATCH CERTIFIED' : 'CERTIFY MATCH'}
-                </button>
+
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {!matchData.is_certified ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('CERTIFY')}
+                      style={styles.certifyBtn}
+                    >
+                      CERTIFY MATCH
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleDownloadPdf}
+                        disabled={isDownloadingPdf}
+                        style={styles.downloadPdfBtn}
+                      >
+                        {isDownloadingPdf ? (
+                          <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
+                        ) : (
+                          <Download style={{ width: 15, height: 15 }} />
+                        )}
+                        <span>DOWNLOAD CERTIFIED SCORESHEET PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
+                      >
+                        MATCH CERTIFIED
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </>
           ) : (
@@ -690,6 +738,7 @@ export const ScoresheetMatch: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

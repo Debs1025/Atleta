@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
 import { ForgotPassword } from './Authentication/ForgotPassword';
+import { AdminHomePage } from './SysAdmin/Dashboard/AdminHomePage';
 import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
 import { SchedulePage } from './Officials/Schedule/SchedulePage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
@@ -19,7 +20,10 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/admin/dashboard" element={<AdminHomePage />} />
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/dashboard" element={<OfficialHomePage />} />
+
         <Route path="/matches" element={<ViewAllMatch />} />
         <Route path="/matches/:matchId" element={<ScoresheetMatch />} />
         <Route path="/create-match" element={<CreateMatch />} />
@@ -33,5 +37,6 @@ function App() {
     </Router>
   );
 }
+
 
 export default App;

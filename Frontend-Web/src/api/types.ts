@@ -209,3 +209,66 @@ export interface OfficialNotificationItem {
   [key: string]: any;
 }
 
+export interface AdminLoginPayload {
+  email: string;
+  password: string;
+  savePassword?: boolean;
+}
+
+export interface AdminRegisterPayload {
+  full_name: string;
+  email: string;
+  password: string;
+  department_code?: string;
+  clearance_level?: number;
+  rbac_compliance_accepted: boolean;
+  institution?: string;
+}
+
+export interface AdminProfile {
+  admin_id: string;
+  user_id: string;
+  institution?: string;
+  department_code: string;
+  clearance_level: number;
+  is_active: boolean;
+  is_elevated?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SystemAuditLog {
+  log_id: string;
+  user_id: string;
+  action: string;
+  endpoint: string;
+  ip_address: string;
+  timestamp: string;
+  status?: string;
+  details?: Record<string, unknown> | string;
+}
+
+export interface AdminCoachQueueItem {
+  coach_id: string;
+  user_id: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  sport_type?: string;
+  years_of_experience?: number;
+  current_institution?: string;
+  institutional_affiliation?: string;
+  professional_documents?: string[];
+  account_status: string;
+  status?: string;
+  created_at: string;
+  date_uploaded?: string;
+}
+
+export interface AdminCoachQueueResponse {
+  message?: string;
+  total_pending: number;
+  queue: AdminCoachQueueItem[];
+}
+
+

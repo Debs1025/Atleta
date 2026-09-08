@@ -22,11 +22,17 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (getStoredToken()) {
-      // Eagerly prefetch settings, dashboard, and match queue if session exists
-      getOfficialSettings().catch(() => {});
-      getMe().catch(() => {});
-      prefetchAllOfficialAuditMatches().catch(() => {});
-      navigate('/dashboard');
+      getMe().then((user) => {
+        if (user?.role === 'SystemAdmin' || user?.role === 'System Admin' || user?.role === 'Admin') {
+          navigate('/admin/dashboard');
+        } else {
+          getOfficialSettings().catch(() => { });
+          prefetchAllOfficialAuditMatches().catch(() => { });
+          navigate('/dashboard');
+        }
+      }).catch(() => {
+        navigate('/dashboard');
+      });
     }
   }, [navigate]);
 
@@ -37,8 +43,15 @@ export const LoginPage: React.FC = () => {
 
     try {
       setLoading(true);
-      await loginOfficial({ email, password, savePassword: savePass });
-      // Eagerly prefetch settings, user profile, dashboard, and matches before navigating
+      const res = await loginOfficial({ email, password, savePassword: savePass });
+
+      const role = res?.user?.role;
+      if (role === 'SystemAdmin' || role === 'System Admin' || role === 'Admin') {
+        navigate('/admin/dashboard');
+        return;
+      }
+
+      //  Prefetch the data settings, user profile, dashboard, and matches before navigating to avoid loadings
       await Promise.allSettled([
         getOfficialSettings(true),
         getMe(true),
@@ -60,6 +73,7 @@ export const LoginPage: React.FC = () => {
       setLoading(false);
     }
   };
+
 
   return (
     <div style={styles.container}>

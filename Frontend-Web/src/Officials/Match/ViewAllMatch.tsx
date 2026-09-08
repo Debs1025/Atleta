@@ -69,9 +69,9 @@ export const ViewAllMatch: React.FC = () => {
       setLoading(true);
     }
 
-    getAllOfficialMatchesMaster(false)
+    getAllOfficialMatchesMaster(true)
       .then((data) => {
-        if (isMounted && data && data.length > 0) {
+        if (isMounted && data) {
           setAllMatches(data);
         }
       })
@@ -92,14 +92,14 @@ export const ViewAllMatch: React.FC = () => {
     []
   );
 
-  // 100% Instant in-memory filtering: 0ms latency, zero re-fetching or skeleton flicker
+  // Filter Sports and Pending/Processed
   const displayedMatches = useMemo(() => {
     return allMatches.filter((item) => {
-      // 1. Status Filter
+      // Status Filter
       if (activeTab === 'PENDING' && item.status !== 'PENDING') return false;
       if (activeTab === 'PROCESSED' && item.status !== 'AUDITED') return false;
 
-      // 2. Sport Filter
+      // Sport Filter
       const normSport = selectedSport.replace('&', 'AND').toUpperCase().trim();
       if (normSport !== 'ALL' && normSport !== 'ALL SPORTS') {
         const itemSport = (item.sport || '').toLowerCase();
