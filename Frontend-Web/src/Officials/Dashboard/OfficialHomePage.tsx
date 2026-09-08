@@ -44,9 +44,31 @@ export const OfficialHomePage: React.FC = () => {
     ]).finally(() => setLoading(false));
   }, [navigate]);
 
-  const totalMatches = dashboard?.total_matches ?? 0;
-  const pendingCount = dashboard?.pending_count ? String(dashboard.pending_count).padStart(2, '0') : '00';
-  const auditedCount = dashboard?.audited_count ? String(dashboard.audited_count).padStart(2, '0') : '00';
+  // Filter matches specifically created/assigned to current official
+  const currentOfficialIds = new Set(
+    [
+      user?.uid,
+      user?.user_id,
+      (user as any)?.official_id,
+      user?.uid ? `off_${user.uid}` : null,
+      user?.email,
+    ].filter(Boolean) as string[]
+  );
+
+
+  const officialQueue = (dashboard?.audit_queue || []).filter((item: any) => {
+    const creator = item.requested_by || item.official_id || item.match_details?.official_id || item.match_details?.created_by;
+    return creator ? currentOfficialIds.has(creator) : false;
+  });
+
+  const totalMatches = officialQueue.length;
+  const pendingCount = String(
+    officialQueue.filter((i: any) => String(i.status || '').toUpperCase().includes('PENDING')).length
+  ).padStart(2, '0');
+  const auditedCount = String(
+    officialQueue.filter((i: any) => !String(i.status || '').toUpperCase().includes('PENDING')).length
+  ).padStart(2, '0');
+
 
   return (
     <div style={styles.shell}>
@@ -114,8 +136,9 @@ export const OfficialHomePage: React.FC = () => {
                       <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#0B132B' }} />
                     </td>
                   </tr>
-                ) : dashboard?.audit_queue && dashboard.audit_queue.length > 0 ? (
-                  dashboard.audit_queue.map((item, idx) => {
+                ) : officialQueue.length > 0 ? (
+                  officialQueue.map((item, idx) => {
+
                     const match = item.match_details || {};
                     const rawId = match.match_id || item.match_id || `MATCH-${idx + 1}`;
                     const matchId = rawId.startsWith('#') ? rawId : `#${rawId}`;
