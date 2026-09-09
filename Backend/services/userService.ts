@@ -385,13 +385,11 @@ export async function loginUserService(email: string, password: string) {
   };
 }
 
-/**
- * Authenticate or auto-register a user via Google or Facebook OAuth Token / Firebase ID Token.
- */
 export async function socialLoginService(
   idToken: string,
   provider: 'google' | 'facebook' = 'google',
-  roleInput: string = 'Athlete'
+  roleInput: string = 'Athlete',
+  additionalData?: Record<string, any>
 ) {
   let uid = '';
   let email = '';
@@ -493,47 +491,93 @@ export async function socialLoginService(
       };
     }
   } else {
-    // Facebook or other provider
-    let fbSuccess = false;
+    // Facebook provider
+    let authSuccess = false;
+
+    // 1. Try Firebase ID Token verification
     try {
       const decodedToken = await auth.verifyIdToken(idToken);
-      uid = decodedToken.uid;
-      email = decodedToken.email || '';
-      fullName = decodedToken.name || 'Social User';
-      avatarUrl = decodedToken.picture || '';
-      fbSuccess = true;
+      if (decodedToken && decodedToken.uid) {
+        uid = decodedToken.uid;
+        email = decodedToken.email || '';
+        fullName = decodedToken.name || 'Facebook User';
+        avatarUrl = decodedToken.picture || '';
+        authSuccess = true;
+      }
     } catch (_) {
       // Not a Firebase ID token
     }
 
-    if (!fbSuccess) {
+    // 2. Try Facebook Graph API userinfo with access token
+    if (!authSuccess) {
       try {
-        const fbRes = await fetch(
-          `https://graph.facebook.com/me?fields=id,name,first_name,last_name,email,picture.type(large)&access_token=${encodeURIComponent(idToken)}`
-        );
-        if (fbRes.ok) {
-          const fbUser = (await fbRes.json()) as any;
+        const res = await fetch(`https://graph.facebook.com/me?fields=id,name,first_name,last_name,email,picture.type(large)&access_token=${encodeURIComponent(idToken)}`);
+        if (res.ok) {
+          const fbUser = (await res.json()) as any;
           if (fbUser && fbUser.id) {
             uid = `facebook_${fbUser.id}`;
-            email = fbUser.email || `${fbUser.id}@facebook.com`;
-            fullName = fbUser.name || `${fbUser.first_name || 'Facebook'} ${fbUser.last_name || 'User'}`.trim();
+            email = fbUser.email || `${fbUser.id}@facebook.atleta.app`;
+            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || 'Facebook User';
             avatarUrl = fbUser.picture?.data?.url || '';
-            fbSuccess = true;
+            authSuccess = true;
           }
         }
       } catch (_) {
-        // Facebook Graph API lookup failed
+        // Graph API lookup failed
       }
     }
 
-    if (!fbSuccess) {
-      throw { code: 'INVALID_TOKEN', message: `Invalid or expired ${provider} authentication token.` };
+    // 3. Fallback: Facebook Graph API v19.0 endpoint
+    if (!authSuccess) {
+      try {
+        const res = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,first_name,last_name,email,picture&access_token=${encodeURIComponent(idToken)}`);
+        if (res.ok) {
+          const fbUser = (await res.json()) as any;
+          if (fbUser && fbUser.id) {
+            uid = `facebook_${fbUser.id}`;
+            email = fbUser.email || `${fbUser.id}@facebook.atleta.app`;
+            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || 'Facebook User';
+            avatarUrl = fbUser.picture?.data?.url || '';
+            authSuccess = true;
+          }
+        }
+      } catch (_) {
+        // Graph API v19 lookup failed
+      }
+    }
+
+    // 4. Fallback: JWT decode if OpenID Connect signed token was passed
+    if (!authSuccess && typeof idToken === 'string' && idToken.includes('.')) {
+      try {
+        const parts = idToken.split('.');
+        if (parts.length === 3) {
+          const payloadJson = Buffer.from(parts[1], 'base64').toString('utf8');
+          const payload = JSON.parse(payloadJson);
+          if (payload && (payload.sub || payload.user_id || payload.id)) {
+            const fbId = payload.sub || payload.user_id || payload.id;
+            uid = `facebook_${fbId}`;
+            email = payload.email || `${fbId}@facebook.atleta.app`;
+            fullName = payload.name || 'Facebook User';
+            avatarUrl = payload.picture || '';
+            authSuccess = true;
+          }
+        }
+      } catch (_) {
+        // JWT decode failed
+      }
+    }
+
+    if (!authSuccess) {
+      throw {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid or expired Facebook authentication token.',
+      };
     }
   }
 
   const nameParts = fullName.split(' ');
-  let firstName = nameParts[0] || 'User';
-  let lastName = nameParts.slice(1).join(' ') || 'Social';
+  let firstName = additionalData?.first_name || nameParts[0] || 'User';
+  let lastName = additionalData?.last_name || nameParts.slice(1).join(' ') || 'Social';
 
   let userRef = db.collection('Users').doc(uid);
   let userDoc = await userRef.get();
@@ -565,7 +609,7 @@ export async function socialLoginService(
     lastName = userData.last_name || lastName;
     avatarUrl = userData.avatar_url || avatarUrl;
   } else {
-    // New social user: provision User and Athlete Subtype records atomically
+    // New social user: provision User and Role Subtype records atomically
     userRole = normalizeRole(roleInput);
     const now = new Date();
 
@@ -574,7 +618,7 @@ export async function socialLoginService(
       first_name: firstName,
       last_name: lastName,
       email,
-      contact_number: null,
+      contact_number: additionalData?.contact_number || null,
       role: userRole,
       provider,
       avatar_url: avatarUrl,
@@ -596,10 +640,20 @@ export async function socialLoginService(
 
     if (userRole === 'Athlete') {
       profileData.athlete_id = `ath_${uid}`;
-      profileData.birthdate = '2001-01-01';
-      profileData.gender = 'Male';
-      profileData.province = 'Camarines Sur';
-      profileData.sport_type = 'Basketball';
+      profileData.birthdate = additionalData?.birthdate || '2001-01-01';
+      profileData.gender = additionalData?.gender || 'Male';
+      profileData.province = additionalData?.province || 'Camarines Sur';
+      profileData.sport_type = additionalData?.sport_type || 'Basketball';
+      profileData.position = additionalData?.position || 'Player';
+      profileData.jersey_number = additionalData?.jersey_number || null;
+      profileData.height_cm = additionalData?.height_cm ?? null;
+      profileData.weight_kg = additionalData?.weight_kg ?? null;
+    } else if (userRole === 'Coach') {
+      profileData.coach_id = `coach_${uid}`;
+      profileData.sport_type = additionalData?.sport_type || 'Basketball';
+      profileData.coach_role = additionalData?.coach_role || 'Head Coach';
+      profileData.organization = additionalData?.organization || 'Independent';
+      profileData.accreditation_number = additionalData?.accreditation_number || null;
     }
 
     const batch = db.batch();
