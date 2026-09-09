@@ -2,6 +2,7 @@
   "expo": {
     "name": "Atleta",
     "slug": "atleta",
+    "owner": "gerardpelonio303511",
     "scheme": "com.anonymous.atleta",
     "version": "0.1.0",
     "android": {
