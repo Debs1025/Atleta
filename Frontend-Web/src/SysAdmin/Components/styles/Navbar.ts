@@ -20,6 +20,14 @@ export const styles: Record<string, React.CSSProperties> = {
     color: '#0F172A',
     textDecoration: 'none',
   },
+  logoSup: {
+    fontSize: '10px',
+    fontWeight: 800,
+    verticalAlign: 'super',
+    marginLeft: '3px',
+    letterSpacing: '0.05em',
+    color: '#0F172A',
+  },
   headerRight: {
     display: 'flex',
     alignItems: 'center',

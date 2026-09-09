@@ -215,16 +215,6 @@ export interface AdminLoginPayload {
   savePassword?: boolean;
 }
 
-export interface AdminRegisterPayload {
-  full_name: string;
-  email: string;
-  password: string;
-  department_code?: string;
-  clearance_level?: number;
-  rbac_compliance_accepted: boolean;
-  institution?: string;
-}
-
 export interface AdminProfile {
   admin_id: string;
   user_id: string;

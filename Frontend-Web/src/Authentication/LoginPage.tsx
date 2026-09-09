@@ -8,6 +8,7 @@ import {
   getMe,
   getOfficialDashboard,
   prefetchAllOfficialAuditMatches,
+  getAdminCoachQueue,
 } from '../api/client';
 import { styles } from './styles/LoginPage';
 
@@ -24,6 +25,7 @@ export const LoginPage: React.FC = () => {
     if (getStoredToken()) {
       getMe().then((user) => {
         if (user?.role === 'SystemAdmin' || user?.role === 'System Admin' || user?.role === 'Admin') {
+          getAdminCoachQueue(true).catch(() => {});
           navigate('/admin/dashboard');
         } else {
           getOfficialSettings().catch(() => { });
@@ -47,6 +49,7 @@ export const LoginPage: React.FC = () => {
 
       const role = res?.user?.role;
       if (role === 'SystemAdmin' || role === 'System Admin' || role === 'Admin') {
+        getAdminCoachQueue(true).catch(() => {});
         navigate('/admin/dashboard');
         return;
       }

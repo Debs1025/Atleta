@@ -9,7 +9,6 @@ import type {
   OfficialScheduleItem,
   CreateMatchPayload,
   AdminLoginPayload,
-  AdminRegisterPayload,
   AdminCoachQueueResponse,
 } from './types';
 
@@ -214,64 +213,6 @@ export const loginAdmin = async (payload: AdminLoginPayload): Promise<AuthRespon
   throw new Error('Invalid email or password.');
 };
 
-
-
-export const registerAdmin = async (payload: AdminRegisterPayload): Promise<AuthResponse> => {
-  const fullName = payload.full_name.trim();
-  const email = payload.email.trim();
-  const nameParts = fullName.split(' ');
-  const firstName = nameParts[0] || 'Admin';
-  const lastName = nameParts.slice(1).join(' ') || 'User';
-
-  // Try admin/register first
-  try {
-    const res = await fetch(`${BASE_URL}/admin/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        full_name: fullName,
-        email,
-        password: payload.password,
-        department_code: payload.department_code || 'SYS_ADMIN',
-        clearance_level: payload.clearance_level || 4,
-        rbac_compliance_accepted: payload.rbac_compliance_accepted ?? true,
-      }),
-    });
-    if (res.ok) {
-      const data = await handleResponse<AuthResponse>(res);
-      if (data.token && data.user) {
-        storeAuthSession(data.token, data.user, true);
-      }
-      return data;
-    }
-  } catch {}
-
-  // Fallback to /users/register with System Admin role (compatible with general user register endpoint)
-  const res = await fetch(`${BASE_URL}/users/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      first_name: firstName,
-      last_name: lastName,
-      full_name: fullName,
-      email,
-      password: payload.password,
-      role: 'System Admin',
-      department_code: payload.department_code || 'SYS_ADMIN',
-      clearance_level: payload.clearance_level || 4,
-      institution: payload.institution || 'Ateneo de Naga University',
-      admin_security_key: 'atleta_admin_key_2026',
-    }),
-  });
-
-  const data = await handleResponse<AuthResponse>(res);
-  if (data.token && data.user) {
-    data.user.role = 'SystemAdmin';
-    storeAuthSession(data.token, data.user, true);
-  }
-  return data;
-};
-
 export const getAdminProfile = async (forceRefresh = false): Promise<any> => {
   const cached = getCachedData<any>('admin_profile');
   if (cached && !forceRefresh) return cached;
@@ -299,12 +240,15 @@ export const getAdminCoachQueue = async (forceRefresh = false): Promise<AdminCoa
   if (cached && !forceRefresh) return cached;
 
   const token = getStoredToken();
+  if (!token) return { total_pending: 0, queue: [] };
+
   try {
     const res = await fetch(`${BASE_URL}/admin/coaches/queue`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
+      signal: AbortSignal.timeout(7000),
     });
     if (res.ok) {
       const data = await handleResponse<AdminCoachQueueResponse>(res);
@@ -313,7 +257,7 @@ export const getAdminCoachQueue = async (forceRefresh = false): Promise<AdminCoa
     }
   } catch {}
 
-  return { total_pending: 0, queue: [] };
+  return cached || { total_pending: 0, queue: [] };
 };
 
 
@@ -325,6 +269,7 @@ export const approveCoachAccreditation = async (coachId: string): Promise<any> =
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    signal: AbortSignal.timeout(7000),
   });
   const data = await handleResponse<any>(res);
   invalidateCache('admin_coach_queue');
@@ -340,6 +285,7 @@ export const rejectCoachAccreditation = async (coachId: string, reason: string):
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ rejection_reason: reason }),
+    signal: AbortSignal.timeout(7000),
   });
   const data = await handleResponse<any>(res);
   invalidateCache('admin_coach_queue');

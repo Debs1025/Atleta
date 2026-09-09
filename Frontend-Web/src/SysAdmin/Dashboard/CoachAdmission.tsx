@@ -20,12 +20,12 @@ import {
 import type { AdminCoachQueueItem, AdminCoachQueueResponse } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
-import { styles } from './styles/AdminHomePage';
+import { styles } from './styles/CoachAdmission';
 
-export const AdminHomePage: React.FC = () => {
+export const CoachAdmission: React.FC = () => {
   const navigate = useNavigate();
 
-  // Instant display from cache to prevent loading delay
+  // Instant display from cache to avoid too much loading time
   const [queue, setQueue] = useState<AdminCoachQueueItem[]>(
     () => getCachedData<AdminCoachQueueResponse>('admin_coach_queue')?.queue || []
   );
@@ -55,7 +55,6 @@ export const AdminHomePage: React.FC = () => {
     loadQueue();
   }, [navigate]);
 
-  // Shared routine for approve and reject state transitions
   const finalizeAction = (coachId: string, account_status: string, status: string, msg: string) => {
     setQueue((prev) => prev.map((c) => (c.coach_id === coachId ? { ...c, account_status, status } : c)));
     if (selectedCoach?.coach_id === coachId) {
@@ -131,7 +130,7 @@ export const AdminHomePage: React.FC = () => {
         <Sidebar activeTab="AUDIT_QUEUE" />
 
         <main style={styles.main}>
-          {/* Title Header */}
+          {/* Header */}
           <div style={styles.titleRow}>
             <h1 style={styles.title}>COACH AUDIT QUEUE</h1>
             <div style={styles.badgeRow}>
@@ -140,7 +139,7 @@ export const AdminHomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Metric Cards Grid */}
+          {/* Metric Cards */}
           <div style={styles.cardsGrid}>
             <div style={styles.criticalCard}>
               <div style={styles.watermark}>
@@ -278,7 +277,7 @@ export const AdminHomePage: React.FC = () => {
               </div>
             )}
 
-            {/* Coach Bio Grid */}
+            {/* Coach Bio */}
             <div style={styles.coachBioGrid}>
               {[
                 { label: 'COACH ID', value: formatCoachId(selectedCoach.coach_id), isMono: true },
@@ -348,7 +347,7 @@ export const AdminHomePage: React.FC = () => {
               )}
             </div>
 
-            {/* Decision Actions */}
+            {/* Actions */}
             {showRejectInput ? (
               <div style={{ marginTop: '16px', borderTop: '1.5px solid #E2E8F0', paddingTop: '16px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 800, color: '#DC2626', display: 'block', marginBottom: '6px' }}>
@@ -400,4 +399,4 @@ export const AdminHomePage: React.FC = () => {
   );
 };
 
-export default AdminHomePage;
+export default CoachAdmission;
