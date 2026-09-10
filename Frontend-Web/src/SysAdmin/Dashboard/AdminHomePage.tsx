@@ -108,7 +108,7 @@ export const AdminHomePage: React.FC = () => {
       const t = raw?._seconds ? raw._seconds * 1000 : raw;
       const d = new Date(t);
       if (!isNaN(d.getTime())) return d.toISOString().replace('T', ' ').slice(0, 16);
-    } catch {}
+    } catch { }
     return new Date().toISOString().replace('T', ' ').slice(0, 16);
   };
 
@@ -281,9 +281,9 @@ export const AdminHomePage: React.FC = () => {
             {/* Coach Bio Grid */}
             <div style={styles.coachBioGrid}>
               {[
-                { label: 'COACH ID', value: formatCoachId(selectedCoach.coach_id), isMono: true },
-                { label: 'FULL LEGAL NAME', value: selectedCoach.full_name || 'Coach Applicant' },
-                { label: 'INSTITUTION', value: selectedCoach.institutional_affiliation || selectedCoach.current_institution || 'Independent / Unassigned' },
+                { label: 'UID REFERENCE', value: formatCoachId(selectedCoach.coach_id), isMono: true },
+                { label: 'COACH NAME', value: selectedCoach.full_name || 'Coach Applicant' },
+                { label: 'AFFILIATION', value: selectedCoach.institutional_affiliation || selectedCoach.current_institution || 'Independent / Unassigned' },
                 { label: 'SPORT & EXPERIENCE', value: `${selectedCoach.sport_type || 'Basketball'} • ${selectedCoach.years_of_experience || 0} Years Experience` },
                 { label: 'APPLICATION DATE', value: formatDate(selectedCoach.date_uploaded || selectedCoach.created_at), isMono: true },
               ].map(({ label, value, isMono }) => (
@@ -295,26 +295,26 @@ export const AdminHomePage: React.FC = () => {
                 </div>
               ))}
               <div style={styles.bioItem}>
-                <span style={styles.bioLabel}>STATUS</span>
+                <span style={styles.bioLabel}>LICENSE STATUS</span>
                 <div>
                   <span style={isCoachVerified(selectedCoach) ? styles.verifiedBadge : styles.pendingReviewBadge}>
-                    {isCoachVerified(selectedCoach) ? 'VERIFIED' : 'PENDING_REVIEW'}
+                    {isCoachVerified(selectedCoach) ? 'Professional License Validated' : 'PENDING_REVIEW'}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Documents */}
+            {/* Documents Preview Grid */}
             <div>
               <div style={styles.docSectionTitle}>
                 <FileText style={{ width: 16, height: 16 }} />
-                <span>SUBMITTED PROFESSIONAL CREDENTIALS & CERTIFICATIONS</span>
+                <span>DOCUMENTS PREVIEW GRID: UPLOADED CERTIFICATIONS & CREDENTIALS</span>
               </div>
 
               {selectedCoach.professional_documents && selectedCoach.professional_documents.length > 0 ? (
                 <div style={styles.docList}>
                   {selectedCoach.professional_documents.map((doc, docIdx) => {
-                    const docName = typeof doc === 'string' ? doc.split('/').pop() || `Credential_${docIdx + 1}.pdf` : `Credential_${docIdx + 1}.pdf`;
+                    const docName = typeof doc === 'string' ? doc.split('/').pop() || `CERT_${docIdx + 1}.PDF` : `CERT_${docIdx + 1}.PDF`;
                     const isUrl = typeof doc === 'string' && (doc.startsWith('http://') || doc.startsWith('https://'));
 
                     return (
@@ -322,8 +322,10 @@ export const AdminHomePage: React.FC = () => {
                         <div style={styles.docInfo}>
                           <FileText style={{ width: 22, height: 22, color: '#0B132B' }} />
                           <div>
+                            <div style={{ ...styles.docMeta, fontFamily: 'monospace', fontWeight: 800, color: '#0B132B' }}>
+                              FILE REF: {docName.toUpperCase()}
+                            </div>
                             <div style={styles.docName}>{docName}</div>
-                            <div style={styles.docMeta}>Official Certification Document Attached</div>
                           </div>
                         </div>
                         {isUrl ? (
@@ -334,7 +336,7 @@ export const AdminHomePage: React.FC = () => {
                         ) : (
                           <span style={{ ...styles.docViewBtn, cursor: 'default' }}>
                             <ShieldCheck style={{ width: 13, height: 13, color: '#16A34A' }} />
-                            <span>ON RECORD</span>
+                            <span>VALIDATED</span>
                           </span>
                         )}
                       </div>
@@ -371,7 +373,7 @@ export const AdminHomePage: React.FC = () => {
                     onClick={() => handleReject(selectedCoach.coach_id)}
                     style={{ ...styles.declineBtn, backgroundColor: '#DC2626', color: '#FFFFFF' }}
                   >
-                    {actionLoading ? 'DECLINING...' : 'CONFIRM REJECTION'}
+                    {actionLoading ? 'REJECTING APPLICATION...' : 'CONFIRM REJECTION'}
                   </button>
                 </div>
               </div>
@@ -384,10 +386,10 @@ export const AdminHomePage: React.FC = () => {
                 ) : (
                   <>
                     <button type="button" disabled={actionLoading} onClick={() => setShowRejectInput(true)} style={styles.declineBtn}>
-                      DECLINE
+                      REJECT APPLICATION
                     </button>
                     <button type="button" disabled={actionLoading} onClick={() => handleApprove(selectedCoach.coach_id)} style={styles.approveBtn}>
-                      {actionLoading ? 'VERIFYING...' : 'VERIFY & APPROVE COACH'}
+                      {actionLoading ? 'APPROVING COACH ACCOUNT...' : 'APPROVE COACH ACCOUNT'}
                     </button>
                   </>
                 )}

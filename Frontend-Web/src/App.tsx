@@ -3,7 +3,6 @@ import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
 import { ForgotPassword } from './Authentication/ForgotPassword';
 import { AdminHomePage } from './SysAdmin/Dashboard/AdminHomePage';
-import { CoachAdmission } from './SysAdmin/Dashboard/CoachAdmission';
 import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
 import { SchedulePage } from './Officials/Schedule/SchedulePage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
@@ -22,8 +21,8 @@ function App() {
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/admin/dashboard" element={<AdminHomePage />} />
-        <Route path="/admin/admission" element={<CoachAdmission />} />
-        <Route path="/admin/coaches" element={<CoachAdmission />} />
+        <Route path="/admin/admission" element={<AdminHomePage />} />
+        <Route path="/admin/coaches" element={<AdminHomePage />} />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/dashboard" element={<OfficialHomePage />} />
 
