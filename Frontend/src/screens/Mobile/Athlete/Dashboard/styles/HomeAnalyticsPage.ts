@@ -55,9 +55,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#111C35",
     borderRadius: 18,
-    padding: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#1E2C4A",
+    justifyContent: "space-between",
   },
   metricLabel: {
     color: "#38BDF8",
@@ -67,9 +68,23 @@ const styles = StyleSheet.create({
   },
   metricValueLarge: {
     color: "#FFFFFF",
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: "900",
     marginTop: 6,
+  },
+  metricValueMedium: {
+    color: "#FFFFFF",
+    fontSize: 26,
+    fontWeight: "900",
+    marginTop: 6,
+  },
+  metricSubLabel: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 4,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   secondaryMetricCard: {
     backgroundColor: "#111C35",
@@ -84,6 +99,8 @@ const styles = StyleSheet.create({
   },
   secondaryMetricLeft: {
     justifyContent: "center",
+    flex: 1,
+    paddingRight: 10,
   },
   reboundsRow: {
     flexDirection: "row",
@@ -96,11 +113,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   reboundsSubtext: {
-    color: "#FFFFFF",
-    fontSize: 15,
+    color: "#94A3B8",
+    fontSize: 13,
     fontWeight: "600",
     marginLeft: 6,
-    opacity: 0.9,
   },
   reboundsLevelIndicator: {
     flexDirection: "row",
