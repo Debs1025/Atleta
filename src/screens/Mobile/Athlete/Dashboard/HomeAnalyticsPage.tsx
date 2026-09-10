@@ -13,19 +13,40 @@ import { Coach } from "../Teams/Teams";
 export interface TeamAffiliation {
   team_id: string;
   team_name: string;
-  sport_type: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD";
+  sport_type: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD" | "TRACK & FIELD" | string;
   division?: string;
   head_coach: Coach;
   is_verified: boolean;
 }
 
 export interface AthleteAnalytics {
-  points_per_game: number;
-  assists_per_game: number;
-  rebounds_per_game: number;
-  field_goal_percentage: number;
-  free_throw_percentage: number;
-  last_5_games_scores: number[];
+  // Basketball
+  points_per_game?: number;
+  assists_per_game?: number;
+  rebounds_per_game?: number;
+  field_goal_percentage?: number;
+  free_throw_percentage?: number;
+  last_5_games_scores?: number[];
+
+  // Swimming
+  best_time?: string | number;
+  best_time_formatted?: string;
+  split_time?: string | number;
+  split_time_formatted?: string;
+  total_distance_m?: number;
+  lap_count?: number;
+  turn_efficiency_pct?: number;
+  stroke_efficiency_pct?: number;
+  recent_swim_times?: (number | string)[];
+
+  // Track & Field
+  top_sprint_time?: string | number;
+  top_sprint_formatted?: string;
+  top_distance_m?: number;
+  average_pace?: string;
+  attempt_success_pct?: number;
+  reaction_efficiency_pct?: number;
+  recent_track_marks?: (number | string)[];
 }
 
 export interface EligibleDocument {
@@ -45,7 +66,7 @@ export interface AthleteProfile {
   birthdate: string;
   gender?: string;
   province?: string;
-  category: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD";
+  category: "BASKETBALL" | "SWIMMING" | "TRACK AND FIELD" | "TRACK & FIELD" | string;
   height_cm: number;
   weight_kg: number;
   wingspan_cm: number;
@@ -81,6 +102,11 @@ export function HomeAnalyticsPage({
   }
 
   const category = profile?.category || "BASKETBALL";
+  const normSport = String(category).toUpperCase().trim();
+  const isSwimming = normSport.includes("SWIM");
+  const isTrackField = normSport.includes("TRACK") || normSport.includes("FIELD");
+  const isBasketball = !isSwimming && !isTrackField;
+
   const team = profile?.current_affiliation || {
     team_id: "",
     team_name: "Unassigned Team",
@@ -89,25 +115,82 @@ export function HomeAnalyticsPage({
     is_verified: false,
   };
 
-  // Default performance metrics
-  const analytics = profile?.analytics || {
-    points_per_game: 0,
-    assists_per_game: 0,
-    rebounds_per_game: 0,
-    field_goal_percentage: 0,
-    free_throw_percentage: 0,
-    last_5_games_scores: [0, 0, 0, 0, 0],
-  };
+  const analytics = profile?.analytics || {};
 
-  const points = analytics.points_per_game ?? 0;
-  const assists = analytics.assists_per_game ?? 0;
-  const rebounds = analytics.rebounds_per_game ?? 0;
-  const fgPct = analytics.field_goal_percentage ?? 0;
-  const ftPct = analytics.free_throw_percentage ?? 0;
+  // --- SPORT-SPECIFIC METRIC DERIVATIONS ---
+  // 1. Basketball Metrics
+  const bballPoints = Number(analytics.points_per_game ?? 0);
+  const bballAssists = Number(analytics.assists_per_game ?? 0);
+  const bballRebounds = Number(analytics.rebounds_per_game ?? 0);
+  const bballFgPct = Number(analytics.field_goal_percentage ?? 0);
+  const bballFtPct = Number(analytics.free_throw_percentage ?? 0);
+  const bballScores =
+    Array.isArray(analytics.last_5_games_scores) && analytics.last_5_games_scores.length > 0
+      ? analytics.last_5_games_scores
+      : [0, 0, 0, 0, 0];
 
-  const rawScores = analytics.last_5_games_scores;
-  const scores = rawScores && rawScores.length > 0 ? rawScores : [0, 0, 0, 0, 0];
-  const maxScore = Math.max(...scores, 0);
+  // 2. Swimming Metrics
+  const swimBestTime =
+    analytics.best_time_formatted ||
+    (analytics.best_time
+      ? typeof analytics.best_time === "number"
+        ? `${analytics.best_time.toFixed(2)}s`
+        : `${analytics.best_time}`
+      : "00.00s");
+  const swimSplitTime =
+    analytics.split_time_formatted ||
+    (analytics.split_time
+      ? typeof analytics.split_time === "number"
+        ? `${analytics.split_time.toFixed(2)}s`
+        : `${analytics.split_time}`
+      : "00.00s");
+  const swimDistanceM = Number(analytics.total_distance_m ?? analytics.lap_count ?? 0);
+  const swimTurnEff = Number(analytics.turn_efficiency_pct ?? analytics.field_goal_percentage ?? 0);
+  const swimStrokeEff = Number(analytics.stroke_efficiency_pct ?? analytics.free_throw_percentage ?? 0);
+  const rawSwimHistory =
+    analytics.recent_swim_times && analytics.recent_swim_times.length > 0
+      ? analytics.recent_swim_times
+      : analytics.last_5_games_scores && analytics.last_5_games_scores.length > 0
+      ? analytics.last_5_games_scores
+      : [0, 0, 0, 0, 0];
+  const swimScores = rawSwimHistory.map((v) =>
+    typeof v === "number" ? v : parseFloat(String(v)) || 0
+  );
+
+  // 3. Track & Field Metrics
+  const trackSprintTime =
+    analytics.top_sprint_formatted ||
+    (analytics.top_sprint_time
+      ? typeof analytics.top_sprint_time === "number"
+        ? `${analytics.top_sprint_time.toFixed(2)}s`
+        : `${analytics.top_sprint_time}`
+      : "00.00s");
+  const trackTopDistance =
+    typeof analytics.top_distance_m === "number" && analytics.top_distance_m > 0
+      ? `${analytics.top_distance_m.toFixed(2)}m`
+      : analytics.top_distance_m
+      ? `${analytics.top_distance_m}m`
+      : "0.00m";
+  const trackAvgPace = analytics.average_pace || "0:00";
+  const trackAttemptEff = Number(analytics.attempt_success_pct ?? analytics.field_goal_percentage ?? 0);
+  const trackReactionEff = Number(analytics.reaction_efficiency_pct ?? analytics.free_throw_percentage ?? 0);
+  const rawTrackHistory =
+    analytics.recent_track_marks && analytics.recent_track_marks.length > 0
+      ? analytics.recent_track_marks
+      : analytics.last_5_games_scores && analytics.last_5_games_scores.length > 0
+      ? analytics.last_5_games_scores
+      : [0, 0, 0, 0, 0];
+  const trackScores = rawTrackHistory.map((v) =>
+    typeof v === "number" ? v : parseFloat(String(v)) || 0
+  );
+
+  // Active chart scores
+  const activeScores = isSwimming
+    ? swimScores
+    : isTrackField
+    ? trackScores
+    : bballScores;
+  const maxScore = Math.max(...activeScores, 0);
 
   return (
     <ScrollView
@@ -129,94 +212,267 @@ export function HomeAnalyticsPage({
         <View style={styles.activeUnderline} />
       </View>
 
-      {/* Metrics */}
-      <View style={styles.metricsGridRow}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>POINTS / GAME</Text>
-          <Text style={styles.metricValueLarge}>{points}</Text>
-        </View>
+      {/* --- SPORT-SPECIFIC PRIMARY METRICS GRID --- */}
+      {isSwimming ? (
+        <View style={styles.metricsGridRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>BEST TIME</Text>
+            <Text style={styles.metricValueMedium}>{swimBestTime}</Text>
+            <Text style={styles.metricSubLabel}>Fastest Finish</Text>
+          </View>
 
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>ASSISTS</Text>
-          <Text style={styles.metricValueLarge}>{assists}</Text>
-        </View>
-      </View>
-
-      {/* Secondary Metrics */}
-      <View style={styles.secondaryMetricCard}>
-        <View style={styles.secondaryMetricLeft}>
-          <Text style={styles.metricLabel}>REBOUNDS AVG</Text>
-          <View style={styles.reboundsRow}>
-            <Text style={styles.reboundsValue}>{rebounds}</Text>
-            <Text style={styles.reboundsSubtext}>Per Game</Text>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>SPLIT TIME</Text>
+            <Text style={styles.metricValueMedium}>{swimSplitTime}</Text>
+            <Text style={styles.metricSubLabel}>Top Interval</Text>
           </View>
         </View>
-        <View style={styles.reboundsLevelIndicator}>
-          {[1, 2, 3, 4].map((barIndex) => {
-            const isActive = rebounds > 0 && barIndex <= Math.min(4, Math.ceil(rebounds / 2));
-            return (
+      ) : isTrackField ? (
+        <View style={styles.metricsGridRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>TOP SPRINT</Text>
+            <Text style={styles.metricValueMedium}>{trackSprintTime}</Text>
+            <Text style={styles.metricSubLabel}>Fastest Mark</Text>
+          </View>
+
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>TOP DISTANCE</Text>
+            <Text style={styles.metricValueMedium}>{trackTopDistance}</Text>
+            <Text style={styles.metricSubLabel}>Best Jump / Throw</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.metricsGridRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>POINTS / GAME</Text>
+            <Text style={styles.metricValueLarge}>{bballPoints}</Text>
+            <Text style={styles.metricSubLabel}>Scoring Average</Text>
+          </View>
+
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>ASSISTS</Text>
+            <Text style={styles.metricValueLarge}>{bballAssists}</Text>
+            <Text style={styles.metricSubLabel}>Playmaking</Text>
+          </View>
+        </View>
+      )}
+
+      {/* --- SPORT-SPECIFIC SECONDARY METRIC CARD --- */}
+      {isSwimming ? (
+        <View style={styles.secondaryMetricCard}>
+          <View style={styles.secondaryMetricLeft}>
+            <Text style={styles.metricLabel}>TOTAL DISTANCE & LAPS</Text>
+            <View style={styles.reboundsRow}>
+              <Text style={styles.reboundsValue}>
+                {swimDistanceM > 0 ? swimDistanceM.toLocaleString() : 0}
+              </Text>
+              <Text style={styles.reboundsSubtext}>Meters Swam</Text>
+            </View>
+          </View>
+          <View style={styles.reboundsLevelIndicator}>
+            {[1, 2, 3, 4].map((barIndex) => {
+              const isActive =
+                swimDistanceM > 0 && barIndex <= Math.min(4, Math.ceil(swimDistanceM / 250));
+              return (
+                <View
+                  key={barIndex}
+                  style={[
+                    styles.levelBar,
+                    isActive ? styles.levelBarActive : styles.levelBarInactive,
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </View>
+      ) : isTrackField ? (
+        <View style={styles.secondaryMetricCard}>
+          <View style={styles.secondaryMetricLeft}>
+            <Text style={styles.metricLabel}>AVERAGE PACE / SPLIT</Text>
+            <View style={styles.reboundsRow}>
+              <Text style={styles.reboundsValue}>{trackAvgPace}</Text>
+              <Text style={styles.reboundsSubtext}>Min / Km</Text>
+            </View>
+          </View>
+          <View style={styles.reboundsLevelIndicator}>
+            {[1, 2, 3, 4].map((barIndex) => {
+              const isActive = barIndex <= (trackAvgPace !== "0:00" ? 3 : 1);
+              return (
+                <View
+                  key={barIndex}
+                  style={[
+                    styles.levelBar,
+                    isActive ? styles.levelBarActive : styles.levelBarInactive,
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.secondaryMetricCard}>
+          <View style={styles.secondaryMetricLeft}>
+            <Text style={styles.metricLabel}>REBOUNDS AVG</Text>
+            <View style={styles.reboundsRow}>
+              <Text style={styles.reboundsValue}>{bballRebounds}</Text>
+              <Text style={styles.reboundsSubtext}>Per Game</Text>
+            </View>
+          </View>
+          <View style={styles.reboundsLevelIndicator}>
+            {[1, 2, 3, 4].map((barIndex) => {
+              const isActive =
+                bballRebounds > 0 && barIndex <= Math.min(4, Math.ceil(bballRebounds / 2));
+              return (
+                <View
+                  key={barIndex}
+                  style={[
+                    styles.levelBar,
+                    isActive ? styles.levelBarActive : styles.levelBarInactive,
+                  ]}
+                />
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* --- SPORT-SPECIFIC EFFICIENCY PROGRESS SECTION --- */}
+      {isSwimming ? (
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.cyanAccentBar} />
+            <Text style={styles.sectionTitleText}>STROKE & TURN EFFICIENCY</Text>
+          </View>
+
+          {/* Turn & Breakout % */}
+          <View style={styles.progressItem}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressLabelText}>Turn & Breakout Rating</Text>
+              <Text style={styles.progressValueText}>{swimTurnEff}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
               <View
-                key={barIndex}
                 style={[
-                  styles.levelBar,
-                  isActive ? styles.levelBarActive : styles.levelBarInactive,
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(0, swimTurnEff))}%` },
                 ]}
               />
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Shooting Efficiency */}
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionTitleRow}>
-          <View style={styles.cyanAccentBar} />
-          <Text style={styles.sectionTitleText}>SHOOTING EFFICIENCY</Text>
-        </View>
-
-        {/* Field Goal % */}
-        <View style={styles.progressItem}>
-          <View style={styles.progressHeaderRow}>
-            <Text style={styles.progressLabelText}>Field Goal %</Text>
-            <Text style={styles.progressValueText}>{fgPct}%</Text>
+            </View>
           </View>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.min(100, Math.max(0, fgPct))}%` },
-              ]}
-            />
+
+          {/* Stroke Rate Consistency % */}
+          <View style={styles.progressItem}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressLabelText}>Stroke Rate Consistency</Text>
+              <Text style={styles.progressValueText}>{swimStrokeEff}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(0, swimStrokeEff))}%` },
+                ]}
+              />
+            </View>
           </View>
         </View>
-
-        {/* Free Throw % */}
-        <View style={styles.progressItem}>
-          <View style={styles.progressHeaderRow}>
-            <Text style={styles.progressLabelText}>Free Throw %</Text>
-            <Text style={styles.progressValueText}>{ftPct}%</Text>
+      ) : isTrackField ? (
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.cyanAccentBar} />
+            <Text style={styles.sectionTitleText}>TRACK & EVENT EFFICIENCY</Text>
           </View>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.min(100, Math.max(0, ftPct))}%` },
-              ]}
-            />
+
+          {/* Attempt / Clearance Success % */}
+          <View style={styles.progressItem}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressLabelText}>Attempt / Clearance Success</Text>
+              <Text style={styles.progressValueText}>{trackAttemptEff}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(0, trackAttemptEff))}%` },
+                ]}
+              />
+            </View>
+          </View>
+
+          {/* Reaction Time Accuracy % */}
+          <View style={styles.progressItem}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressLabelText}>Reaction Time Accuracy</Text>
+              <Text style={styles.progressValueText}>{trackReactionEff}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(0, trackReactionEff))}%` },
+                ]}
+              />
+            </View>
           </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.cyanAccentBar} />
+            <Text style={styles.sectionTitleText}>SHOOTING EFFICIENCY</Text>
+          </View>
 
-      {/* Last Games */}
+          {/* Field Goal % */}
+          <View style={styles.progressItem}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressLabelText}>Field Goal %</Text>
+              <Text style={styles.progressValueText}>{bballFgPct}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(0, bballFgPct))}%` },
+                ]}
+              />
+            </View>
+          </View>
+
+          {/* Free Throw % */}
+          <View style={styles.progressItem}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressLabelText}>Free Throw %</Text>
+              <Text style={styles.progressValueText}>{bballFtPct}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.max(0, bballFtPct))}%` },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* --- SPORT-SPECIFIC PERFORMANCE CHART --- */}
       <View style={styles.graphCard}>
-        <Text style={styles.graphSubHeading}>LAST GAMES</Text>
+        <Text style={styles.graphSubHeading}>
+          {isSwimming
+            ? "RECENT RACE FINISHES"
+            : isTrackField
+            ? "RECENT EVENT PERFORMANCE"
+            : "LAST GAMES"}
+        </Text>
         <View style={styles.barsContainer}>
-          {scores.map((score, index) => {
-            const isMostRecent = index === scores.length - 1;
+          {activeScores.map((score, index) => {
+            const isMostRecent = index === activeScores.length - 1;
             const barHeightPct =
               maxScore > 0 && score > 0
                 ? Math.max(15, Math.min(100, (score / maxScore) * 85))
-                : 8;
+                : 10;
+            const prefix = isSwimming ? "R" : isTrackField ? "E" : "G";
             return (
               <View key={index} style={styles.barColumn}>
                 <View style={styles.barTrackArea}>
@@ -234,7 +490,7 @@ export function HomeAnalyticsPage({
                     isMostRecent && styles.gameLabelTextHighest,
                   ]}
                 >
-                  G{index + 1}
+                  {prefix}{index + 1}
                 </Text>
               </View>
             );
@@ -242,7 +498,7 @@ export function HomeAnalyticsPage({
         </View>
       </View>
 
-      {/* My Team */}
+      {/* --- TEAM & COACH SECTION --- */}
       <View style={styles.sectionBlock}>
         <View style={styles.sectionTitleRow}>
           <View style={styles.cyanAccentBar} />
@@ -358,4 +614,5 @@ function HomeSkeletonLoader() {
 
 export const AthleteHomePage = HomeAnalyticsPage;
 export const AthleteAnalyticsPage = HomeAnalyticsPage;
+
 

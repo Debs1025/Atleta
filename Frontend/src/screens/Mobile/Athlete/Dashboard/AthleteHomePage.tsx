@@ -47,6 +47,19 @@ export const initialAthleteProfile: AthleteProfile = {
     field_goal_percentage: 0,
     free_throw_percentage: 0,
     last_5_games_scores: [],
+    best_time_formatted: "00.00s",
+    split_time_formatted: "00.00s",
+    total_distance_m: 0,
+    lap_count: 0,
+    turn_efficiency_pct: 0,
+    stroke_efficiency_pct: 0,
+    recent_swim_times: [],
+    top_sprint_formatted: "00.00s",
+    top_distance_m: 0,
+    average_pace: "0:00",
+    attempt_success_pct: 0,
+    reaction_efficiency_pct: 0,
+    recent_track_marks: [],
   },
   eligible_documents: [],
 };
@@ -145,6 +158,42 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           weekly_logs: weeklyLogsGrouped,
         };
 
+        const sportCategory = (raw.sport_type || raw.category || raw.sport || "BASKETBALL").toUpperCase();
+        const isSwim = sportCategory.includes("SWIM");
+        const isTrack = sportCategory.includes("TRACK") || sportCategory.includes("FIELD");
+
+        let finishTime = "00.00s";
+        if (stats.best_time_formatted) finishTime = String(stats.best_time_formatted);
+        else if (stats.finish_time_ms) finishTime = `${(Number(stats.finish_time_ms) / 1000).toFixed(2)}s`;
+        else if (stats.best_time) finishTime = `${stats.best_time}s`;
+        else if (stats.finish_time) finishTime = `${stats.finish_time}s`;
+
+        let splitTime = "00.00s";
+        if (stats.split_time_formatted) splitTime = String(stats.split_time_formatted);
+        else if (stats.split_times_ms) splitTime = `${(Number(stats.split_times_ms) / 1000).toFixed(2)}s`;
+        else if (stats.split_time) splitTime = `${stats.split_time}s`;
+
+        let sprintTime = "00.00s";
+        if (stats.top_sprint_formatted) sprintTime = String(stats.top_sprint_formatted);
+        else if (stats.finish_time_ms) sprintTime = `${(Number(stats.finish_time_ms) / 1000).toFixed(2)}s`;
+        else if (stats.top_sprint_time) sprintTime = `${stats.top_sprint_time}s`;
+        else if (stats.best_time) sprintTime = `${stats.best_time}s`;
+
+        const swimDist = Number(stats.total_distance_m ?? stats.distance_meters ?? stats.distance ?? stats.total_distance ?? 0);
+        const trackDist = Number(stats.top_distance_m ?? stats.distance_meters ?? stats.distance ?? 0);
+        let pace = "0:00";
+        if (stats.average_pace) pace = String(stats.average_pace);
+        else if (stats.split_times_ms) pace = `${(Number(stats.split_times_ms) / 1000).toFixed(2)}s`;
+        else if (stats.pace) pace = String(stats.pace);
+
+        const turnEff = Number(stats.turn_efficiency_pct ?? stats.turn_efficiency ?? stats.efficiency ?? stats.fg_pct ?? 0);
+        const strokeEff = Number(stats.stroke_efficiency_pct ?? stats.stroke_efficiency ?? stats.consistency ?? stats.ft_pct ?? 0);
+        const attemptEff = Number(stats.attempt_success_pct ?? stats.attempt_success ?? stats.fg_pct ?? 0);
+        const reactionEff = Number(stats.reaction_efficiency_pct ?? stats.reaction_efficiency ?? stats.ft_pct ?? 0);
+
+        const swimHistory = stats.recent_swim_times || stats.recent_times || stats.last_races || stats.last_5_games_scores || [];
+        const trackHistory = stats.recent_track_marks || stats.recent_marks || stats.last_events || stats.last_5_games_scores || [];
+
         const mappedProfile: AthleteProfile = {
           athlete_id: raw.athlete_id || raw.user_id || "ath_me",
           first_name: (raw.first_name || raw.user?.first_name || "").toUpperCase(),
@@ -152,7 +201,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           birthdate: raw.birthdate || raw.birth_date || raw.user?.birthdate || "",
           gender: (raw.gender || raw.user?.gender || "").toUpperCase(),
           province: (raw.province || raw.location || raw.user?.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase(),
-          category: (raw.sport_type || raw.category || raw.sport || "BASKETBALL").toUpperCase() as any,
+          category: sportCategory as any,
           height_cm: Number(phys.height_cm ?? phys.height ?? raw.height_cm ?? raw.height ?? 0),
           weight_kg: Number(phys.weight_kg ?? phys.weight ?? raw.weight_kg ?? raw.weight ?? 0),
           wingspan_cm: Number(phys.wingspan_cm ?? phys.wingspan ?? raw.wingspan_cm ?? raw.wingspan ?? 0),
@@ -161,7 +210,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           current_affiliation: {
             team_id: raw.current_affiliation?.team_id || raw.team_id || "",
             team_name: raw.current_affiliation?.team_name || raw.team_name || (raw.team_id ? "Assigned Team" : "Unassigned Team"),
-            sport_type: (raw.current_affiliation?.sport_type || raw.sport_type || raw.category || "BASKETBALL").toUpperCase() as any,
+            sport_type: (raw.current_affiliation?.sport_type || raw.sport_type || sportCategory).toUpperCase() as any,
             division: raw.current_affiliation?.division || raw.division || "",
             head_coach: raw.current_affiliation?.head_coach || raw.head_coach || {
               coach_id: "",
@@ -179,6 +228,21 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             field_goal_percentage: Number(stats.field_goal_percentage ?? stats.fg_pct ?? stats.fg_percentage ?? 0),
             free_throw_percentage: Number(stats.free_throw_percentage ?? stats.ft_pct ?? stats.ft_percentage ?? 0),
             last_5_games_scores: stats.last_5_games_scores || stats.last_games || stats.recent_scores || [],
+            // Swimming
+            best_time_formatted: finishTime,
+            split_time_formatted: splitTime,
+            total_distance_m: swimDist,
+            lap_count: Number(stats.lap_count ?? 0),
+            turn_efficiency_pct: turnEff,
+            stroke_efficiency_pct: strokeEff,
+            recent_swim_times: swimHistory,
+            // Track & Field
+            top_sprint_formatted: sprintTime,
+            top_distance_m: trackDist,
+            average_pace: pace,
+            attempt_success_pct: attemptEff,
+            reaction_efficiency_pct: reactionEff,
+            recent_track_marks: trackHistory,
           },
           avatar_url: raw.avatar_url || raw.user?.avatar_url || "",
           workload_analytics: workloadAnalyticsObj,
