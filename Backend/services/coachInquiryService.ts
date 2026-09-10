@@ -178,17 +178,21 @@ export async function submitRecruitmentInquiry(
     throw new ServiceError(`Coach with ID '${coachId}' was not found.`, 404);
   }
 
+  const rawAthleteUid = athleteId.replace(/^ath_/, '');
+  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+  const athleteIds = Array.from(new Set([athleteId, rawAthleteUid, canonicalAthleteId].filter(Boolean)));
+  const coachIds = Array.from(new Set([coachId, coachProfile.coach_id, coachProfile.user_id].filter(Boolean)));
+
   // 2. Rate Limit Check: Max 10 requests/day per athlete
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
   const athleteInquiriesSnapshot = await db
     .collection('Scouting_Registry')
-    .where('athlete_id', '==', athleteId)
-    .where('initiated_by', '==', athleteId)
+    .where('athlete_id', 'in', athleteIds)
     .get();
 
   const recentCount = athleteInquiriesSnapshot.docs.filter((doc) => {
     const data = doc.data() as RecruitmentInquiry;
-    return new Date(data.date_initiated).getTime() >= oneDayAgoMs;
+    return athleteIds.includes(data.initiated_by) && new Date(data.date_initiated).getTime() >= oneDayAgoMs;
   }).length;
 
   if (recentCount >= 10) {
@@ -199,16 +203,12 @@ export async function submitRecruitmentInquiry(
   }
 
   // 3. Duplicate Active Inquiry Check (Sent or Accepted for same athlete + coach)
-  const activeSnapshot = await db
-    .collection('Scouting_Registry')
-    .where('athlete_id', '==', athleteId)
-    .where('coach_scout_id', '==', coachId)
-    .where('initiated_by', '==', athleteId)
-    .get();
-
-  const hasActiveInquiry = activeSnapshot.docs.some((doc) => {
+  const hasActiveInquiry = athleteInquiriesSnapshot.docs.some((doc) => {
     const data = doc.data() as RecruitmentInquiry;
-    return data.offer_status === 'Sent' || data.offer_status === 'Accepted';
+    const isTargetCoach = coachIds.includes(data.coach_scout_id);
+    const isSentByAthlete = athleteIds.includes(data.initiated_by);
+    const isActiveStatus = data.offer_status === 'Sent' || data.offer_status === 'Accepted';
+    return isTargetCoach && isSentByAthlete && isActiveStatus;
   });
 
   if (hasActiveInquiry) {

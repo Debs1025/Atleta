@@ -73,18 +73,33 @@ type ScreenState = "DIRECTORY" | "TEAM_DETAILS" | "COACH_PROFILE" | "INQUIRIES";
 interface TeamsProps {
   onNavigateTab?: (tabName: "HOME" | "COACHES" | "PROFILE") => void;
   onScreenStateChange?: (isSubScreen: boolean) => void;
+  athleteCategory?: string;
 }
 
-export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
+const getInitialSport = (cat?: string) => {
+  if (!cat) return "BASKETBALL";
+  const norm = cat.toUpperCase();
+  if (norm.includes("SWIM")) return "SWIMMING";
+  if (norm.includes("TRACK") || norm.includes("FIELD")) return "TRACK AND FIELD";
+  return "BASKETBALL";
+};
+
+export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: TeamsProps) {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>("DIRECTORY");
   const [teams, setTeams] = useState<TeamSchema[]>([]);
   const [inquiries, setInquiries] = useState<InquirySchema[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
   const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSport, setSelectedSport] = useState<string>("BASKETBALL");
+  const [selectedSport, setSelectedSport] = useState<string>(getInitialSport(athleteCategory));
   const [loading, setLoading] = useState(true);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
+
+  useEffect(() => {
+    if (athleteCategory) {
+      setSelectedSport(getInitialSport(athleteCategory));
+    }
+  }, [athleteCategory]);
 
   useEffect(() => {
     if (onScreenStateChange) {
@@ -134,8 +149,8 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
                 coach_id: t.coach_id || "",
                 full_name: (t.coach_name || "Head Coach").toUpperCase(),
                 role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
-                years_experience: "Experienced Coach",
-                quote: "Focused on developing fundamental athletic resilience and performance.",
+                years_experience: t.years_experience ? `${t.years_experience} Years` : "Experienced Coach",
+                quote: t.quote || "Dedicated to athletic excellence and player development.",
               },
             }));
           setTeams(mappedTeams);
@@ -229,17 +244,17 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
         institution: selectedTeam.team_name || "Athletic Program",
         role_title: selectedTeam.head_coach.role_title || "Head Coach",
         tags: [selectedTeam.sport_type, "VERIFIED COACH"],
-        years_experience: selectedTeam.head_coach.years_experience || "5+",
-        core_specialties: ["Tactical Strategy", "Physical Conditioning", "Talent Scouting"],
-        success_rate: "90%",
-        recruits_placed: "Certified Athletic Staff",
-        philosophy: selectedTeam.head_coach.quote || "Focused on developing fundamental athletic resilience and high performance.",
-        quote: selectedTeam.head_coach.quote || "Discipline and consistent effort drive championship execution.",
-        certificates: ["Professional Coaching Certification"],
+        years_experience: selectedTeam.head_coach.years_experience || "Not specified",
+        core_specialties: [],
+        success_rate: "Not specified",
+        recruits_placed: "",
+        philosophy: selectedTeam.head_coach.quote || "Not specified",
+        quote: selectedTeam.head_coach.quote || "Not specified",
+        certificates: [],
         contact_info: {
-          email: "coach@atleta.com",
-          facebook: selectedTeam.head_coach.full_name || "Coach",
-          phone: "Contact via App",
+          email: "Not specified",
+          facebook: "Not specified",
+          phone: "Not specified",
         },
       });
     }
@@ -261,17 +276,17 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
         institution: inst,
         role_title: c.role_title || `${sport} HEAD COACH`,
         tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
-        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience}+` : "5+",
-        core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) ? c.core_specialties : ["Tactical Strategy", "Physical Conditioning", "Talent Scouting"],
-        success_rate: c.success_rate ? `${c.success_rate}%` : "90%",
-        recruits_placed: c.recruits_placed || "Certified Athletic Staff",
-        philosophy: c.philosophy || c.bio || `${fullName} brings extensive athletic experience and tactical discipline. The coaching approach focuses on athlete development and high performance.`,
-        quote: c.quote || "Discipline and consistent effort drive championship execution.",
-        certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : ["Professional Coaching Certification"],
+        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
+        core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
+        success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
+        recruits_placed: c.recruits_placed || "",
+        philosophy: c.philosophy || c.bio || "Not specified",
+        quote: c.quote || "Not specified",
+        certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
         contact_info: {
-          email: c.email || "coach@atleta.com",
-          facebook: c.facebook || fullName,
-          phone: c.contact_number || c.phone || "Contact via App",
+          email: c.email || c.contact_info?.email || "Not specified",
+          facebook: c.facebook || c.contact_info?.facebook || "Not specified",
+          phone: c.contact_number || c.phone || c.contact_info?.phone || "Not specified",
         },
       });
     }
@@ -310,17 +325,17 @@ export function Teams({ onNavigateTab, onScreenStateChange }: TeamsProps) {
       institution: selectedTeam.team_name || "Athletic Program",
       role_title: selectedTeam.head_coach.role_title || "Head Coach",
       tags: [selectedTeam.sport_type, "VERIFIED COACH"],
-      years_experience: selectedTeam.head_coach.years_experience || "5+",
-      core_specialties: ["Tactical Strategy", "Physical Conditioning"],
-      success_rate: "90%",
-      recruits_placed: "Certified Athletic Staff",
-      philosophy: selectedTeam.head_coach.quote || "Dedicated to player development.",
-      quote: selectedTeam.head_coach.quote || "Discipline and consistent effort drive championship execution.",
-      certificates: ["Professional Coaching Certification"],
+      years_experience: selectedTeam.head_coach.years_experience || "Not specified",
+      core_specialties: [],
+      success_rate: "Not specified",
+      recruits_placed: "",
+      philosophy: selectedTeam.head_coach.quote || "Not specified",
+      quote: selectedTeam.head_coach.quote || "Not specified",
+      certificates: [],
       contact_info: {
-        email: "coach@atleta.com",
-        facebook: selectedTeam.head_coach.full_name || "Coach",
-        phone: "Contact via App",
+        email: "Not specified",
+        facebook: "Not specified",
+        phone: "Not specified",
       },
     } : null);
 

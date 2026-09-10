@@ -61,12 +61,34 @@ export async function registerUserService(
   const rawRole = (data.role as string) || 'Athlete';
   const firestoreRole = normalizeRole(rawRole);
 
-  // 1. Create Firebase Auth user
-  const userRecord = await auth.createUser({
-    email,
-    password,
-    displayName: `${first_name} ${last_name}`,
-  });
+  const cleanEmail = email.trim().toLowerCase();
+
+  // 1. Check if email already exists in Firestore Users collection
+  const existingUserSnap = await db.collection('Users').where('email', '==', cleanEmail).limit(1).get();
+  if (!existingUserSnap.empty) {
+    const err: any = new Error('Email already in use. Please log in using your existing credentials.');
+    err.code = 'auth/email-already-in-use';
+    err.status = 400;
+    throw err;
+  }
+
+  // 2. Create Firebase Auth user
+  let userRecord;
+  try {
+    userRecord = await auth.createUser({
+      email,
+      password,
+      displayName: `${first_name} ${last_name}`,
+    });
+  } catch (authErr: any) {
+    if (authErr.code === 'auth/email-already-exists' || authErr.code === 'auth/email-already-in-use') {
+      const err: any = new Error('Email already in use. Please log in using your existing credentials.');
+      err.code = 'auth/email-already-in-use';
+      err.status = 400;
+      throw err;
+    }
+    throw authErr;
+  }
 
   const uid = userRecord.uid;
   const now = new Date();

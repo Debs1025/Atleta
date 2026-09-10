@@ -53,17 +53,17 @@ export function CoachProfileScreen({
             institution: inst,
             role_title: c.role_title || `${sport} HEAD COACH`,
             tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
-            years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience}+` : "5+",
-            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) ? c.core_specialties : ["Tactical Strategy", "Physical Conditioning", "Talent Scouting"],
-            success_rate: c.success_rate ? `${c.success_rate}%` : "90%",
-            recruits_placed: c.recruits_placed || "Certified Athletic Staff",
-            philosophy: c.philosophy || c.bio || `${fullName} brings extensive athletic experience and tactical discipline. The coaching approach focuses on athlete development and high performance.`,
-            quote: c.quote || "Discipline and consistent effort drive championship execution.",
-            certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (c.certificates || ["Professional Coaching Certification"]),
+            years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
+            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
+            success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
+            recruits_placed: c.recruits_placed || "",
+            philosophy: c.philosophy || c.bio || "Not specified",
+            quote: c.quote || "Not specified",
+            certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
             contact_info: {
-              email: c.email || c.contact_info?.email || "coach@atleta.com",
-              facebook: c.facebook || c.contact_info?.facebook || fullName,
-              phone: c.contact_number || c.phone || c.contact_info?.phone || "Contact via App",
+              email: c.email || c.contact_info?.email || "Not specified",
+              facebook: c.facebook || c.contact_info?.facebook || "Not specified",
+              phone: c.contact_number || c.phone || c.contact_info?.phone || "Not specified",
             },
           };
           setCoachData(mapped);
@@ -167,23 +167,27 @@ export function CoachProfileScreen({
             <View style={styles.metricCard}>
               <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
               <View style={styles.specialtiesList}>
-                {coachData.core_specialties.map((item, idx) => (
-                  <View key={idx} style={styles.specialtyItemCard}>
-                    <Ionicons
-                      name={
-                        idx === 0
-                          ? "basketball-outline"
-                          : idx === 1
-                          ? "fitness-outline"
-                          : "body-outline"
-                      }
-                      size={16}
-                      color="#38BDF8"
-                      style={styles.specialtyIcon}
-                    />
-                    <Text style={styles.specialtyText}>{item}</Text>
-                  </View>
-                ))}
+                {coachData.core_specialties.length === 0 ? (
+                  <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No specialties specified</Text>
+                ) : (
+                  coachData.core_specialties.map((item, idx) => (
+                    <View key={idx} style={styles.specialtyItemCard}>
+                      <Ionicons
+                        name={
+                          idx === 0
+                            ? "basketball-outline"
+                            : idx === 1
+                            ? "fitness-outline"
+                            : "body-outline"
+                        }
+                        size={16}
+                        color="#38BDF8"
+                        style={styles.specialtyIcon}
+                      />
+                      <Text style={styles.specialtyText}>{item}</Text>
+                    </View>
+                  ))
+                )}
               </View>
             </View>
 
@@ -191,7 +195,7 @@ export function CoachProfileScreen({
             <View style={styles.metricCardCenter}>
               <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
               <Text style={styles.metricBigValue}>{coachData.success_rate}</Text>
-              <Text style={styles.metricSubtext}>{coachData.recruits_placed}</Text>
+              {coachData.recruits_placed ? <Text style={styles.metricSubtext}>{coachData.recruits_placed}</Text> : null}
             </View>
           </View>
 
@@ -212,11 +216,15 @@ export function CoachProfileScreen({
           {/* Certificates Container */}
           <View style={styles.certificatesCard}>
             <Text style={styles.metricCardLabel}>CERTIFICATES</Text>
-            {coachData.certificates.map((cert, idx) => (
-              <View key={idx} style={styles.certBox}>
-                <Text style={styles.certText}>{cert}</Text>
-              </View>
-            ))}
+            {coachData.certificates.length === 0 ? (
+              <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No certificates listed</Text>
+            ) : (
+              coachData.certificates.map((cert, idx) => (
+                <View key={idx} style={styles.certBox}>
+                  <Text style={styles.certText}>{cert}</Text>
+                </View>
+              ))
+            )}
           </View>
 
           {/* Contact Information Box */}

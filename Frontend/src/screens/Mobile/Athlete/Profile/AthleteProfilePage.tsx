@@ -72,36 +72,87 @@ const MONTH_NAMES = [
 const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 const YEARS_LIST = Array.from({ length: 57 }, (_, i) => 1970 + i);
 
+const REQUIRED_DOCUMENT_SLOTS: Array<{
+  id: string;
+  title: string;
+  category: EligibleDocument["category"];
+}> = [
+  { id: "doc_psa", title: "PSA Birth Certificate", category: "BIRTH_CERTIFICATE" },
+  { id: "doc_residency", title: "Proof of Residency", category: "OTHER" },
+  { id: "doc_medical", title: "Medical Clearance", category: "MEDICAL_CLEARANCE" },
+  { id: "doc_school_id", title: "Valid School / Student ID", category: "SCHOOL_ID" },
+];
+
 function normalizeDocuments(input: any): EligibleDocument[] {
+  const existingList: EligibleDocument[] = [];
+
   if (Array.isArray(input)) {
-    return input.map((item: any, idx: number) => ({
-      id: item.id || `doc_${idx}`,
-      title: item.title || item.name || "Uploaded Document",
-      category: item.category || "OTHER",
-      fileName: item.name || item.fileName || item.file_name,
-      fileUri: item.url || item.fileUri || item.uri,
-      status: String(item.status || "PENDING").toUpperCase() as any,
-      uploadedAt: item.uploaded_at || item.uploadedAt,
-    }));
+    input.forEach((item: any, idx: number) => {
+      if (!item) return;
+      existingList.push({
+        id: item.id || `doc_${idx}`,
+        title: item.title || item.name || "Uploaded Document",
+        category: item.category || "OTHER",
+        fileName: item.name || item.fileName || item.file_name,
+        fileUri: item.url || item.fileUri || item.uri,
+        status: String(item.status || "PENDING").toUpperCase() as any,
+        uploadedAt: item.uploaded_at || item.uploadedAt,
+      });
+    });
+  } else if (input && typeof input === "object") {
+    Object.keys(input).forEach((key) => {
+      const item = input[key];
+      if (!item) return;
+      existingList.push({
+        id: item.id || `doc_${key}`,
+        title: item.title || (key === "psa_birth_certificate" ? "PSA Birth Certificate" : key === "proof_of_residency" ? "Proof of Residency" : String(key).replace(/_/g, " ").toUpperCase()),
+        category: item.category || (key === "psa_birth_certificate" ? "BIRTH_CERTIFICATE" : "OTHER"),
+        fileName: item.name || item.fileName || item.file_name,
+        fileUri: item.url || item.fileUri || item.uri,
+        status: String(item.status || "PENDING").toUpperCase() as any,
+        uploadedAt: item.uploaded_at || item.uploadedAt,
+      });
+    });
   }
-  if (input && typeof input === "object") {
-    const keys = Object.keys(input);
-    if (keys.length > 0) {
-      return keys.map((key) => {
-        const item = input[key] || {};
-        return {
-          id: item.id || `doc_${key}`,
-          title: item.title || (key === "psa_birth_certificate" ? "PSA Birth Certificate" : key === "proof_of_residency" ? "Proof of Residency" : String(key).replace(/_/g, " ").toUpperCase()),
-          category: item.category || (key === "psa_birth_certificate" ? "BIRTH_CERTIFICATE" : "OTHER"),
-          fileName: item.name || item.fileName || item.file_name,
-          fileUri: item.url || item.fileUri || item.uri,
-          status: String(item.status || "PENDING").toUpperCase() as any,
-          uploadedAt: item.uploaded_at || item.uploadedAt,
-        };
+
+  // Merge with REQUIRED_DOCUMENT_SLOTS so all required options always remain visible
+  const result: EligibleDocument[] = [];
+
+  REQUIRED_DOCUMENT_SLOTS.forEach((slot) => {
+    const matched = existingList.find(
+      (doc) =>
+        doc.id === slot.id ||
+        doc.category === slot.category ||
+        doc.title.toLowerCase().includes(slot.title.toLowerCase()) ||
+        slot.title.toLowerCase().includes(doc.title.toLowerCase())
+    );
+
+    if (matched) {
+      result.push({
+        ...slot,
+        ...matched,
+        id: matched.id || slot.id,
+        title: matched.title || slot.title,
+      });
+    } else {
+      result.push({
+        id: slot.id,
+        title: slot.title,
+        category: slot.category,
+        status: "PENDING",
       });
     }
-  }
-  return [];
+  });
+
+  // Append any extra custom uploaded documents
+  existingList.forEach((doc) => {
+    const alreadyInResult = result.some((r) => r.id === doc.id || (doc.fileName && r.fileName === doc.fileName));
+    if (!alreadyInResult) {
+      result.push(doc);
+    }
+  });
+
+  return result;
 }
 
 export function AthleteProfilePage({
@@ -333,7 +384,15 @@ export function AthleteProfilePage({
           type: pickedAsset.mimeType || "image/jpeg",
         } as any);
         formData.append("avatar_url", pickedAsset.uri);
-        requestMultipart("/athletes/profile", formData).catch(() => null);
+        const res: any = await requestMultipart("/athletes/profile", formData).catch(() => null);
+        if (res?.athlete?.avatar_url || res?.avatar_url) {
+          const finalUrl = res.athlete?.avatar_url || res.avatar_url;
+          setAvatarUri(finalUrl);
+          onUpdateProfile({
+            ...updated,
+            avatar_url: finalUrl,
+          });
+        }
       }
     } catch (error) {
       console.log("Error picking avatar image:", error);
@@ -353,6 +412,18 @@ export function AthleteProfilePage({
         const asset = result.assets[0];
         const isPdf = asset.name?.toLowerCase().endsWith(".pdf") || asset.mimeType?.includes("pdf");
         const mime = asset.mimeType || (isPdf ? "application/pdf" : "image/jpeg");
+
+        let docType = "psa_birth_certificate";
+        const targetDoc = documents.find((d) => d.id === docId);
+        if (targetDoc) {
+          if (targetDoc.category === "BIRTH_CERTIFICATE" || targetDoc.title.toLowerCase().includes("psa") || targetDoc.title.toLowerCase().includes("birth")) {
+            docType = "psa_birth_certificate";
+          } else if (targetDoc.title.toLowerCase().includes("residency") || targetDoc.title.toLowerCase().includes("proof")) {
+            docType = "proof_of_residency";
+          } else {
+            docType = targetDoc.title.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+          }
+        }
 
         setDocuments((prevDocs) =>
           prevDocs.map((doc) =>
@@ -379,7 +450,7 @@ export function AthleteProfilePage({
             name: asset.name || (isPdf ? "document.pdf" : "document.jpg"),
             type: mime,
           } as any);
-          formData.append("doc_type", "psa_birth_certificate");
+          formData.append("doc_type", docType);
           await requestMultipart("/athletes/documents", formData).catch(() => null);
         }
       }
@@ -542,11 +613,13 @@ export function AthleteProfilePage({
     const safeWeight = !isNaN(parsedWeight) && parsedWeight >= 0 ? parsedWeight : (profile.weight_kg ?? 0);
     const safeWingspan = !isNaN(parsedWingspan) && parsedWingspan >= 0 ? parsedWingspan : (profile.wingspan_cm ?? 0);
 
+    const safeBirthdate = (birthdate || profile.birthdate || "").trim();
+
     const updated: AthleteProfile = {
       ...profile,
       first_name: firstName,
       last_name: lastName,
-      birthdate: birthdate,
+      birthdate: safeBirthdate,
       gender: gender,
       province: province,
       category: category,
@@ -572,7 +645,7 @@ export function AthleteProfilePage({
         sport_type: category,
         gender: gender,
         province: province,
-        birthdate: birthdate,
+        birthdate: safeBirthdate,
         avatar_url: avatarUri,
       });
     } catch (e) {
@@ -1167,22 +1240,31 @@ export function AthleteProfilePage({
 
           {docsDrawerOpen && (
             <View style={styles.drawerContent}>
+              {!isEditing && (
+                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0F172A", padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: "#1E293B" }}>
+                  <Ionicons name="lock-closed-outline" size={14} color="#38BDF8" style={{ marginRight: 6 }} />
+                  <Text style={{ color: "#94A3B8", fontSize: 11, flex: 1 }}>Documents are in read-only mode. Tap "Edit Athlete Profile" below to upload or edit files.</Text>
+                </View>
+              )}
+
               <View style={styles.documentsHeaderRow}>
                 <Text style={styles.documentsSubtitleText}>
                   Official verification documents for league eligibility.
                 </Text>
-                <Pressable
-                  style={styles.addDocButton}
-                  onPress={() => {
-                    setNewDocTitle("");
-                    setNewDocAsset(null);
-                    setAddDocError("");
-                    setShowAddDocModal(true);
-                  }}
-                >
-                  <Ionicons name="add-circle-outline" size={14} color="#38BDF8" />
-                  <Text style={styles.addDocButtonText}>Add Document</Text>
-                </Pressable>
+                {isEditing && (
+                  <Pressable
+                    style={styles.addDocButton}
+                    onPress={() => {
+                      setNewDocTitle("");
+                      setNewDocAsset(null);
+                      setAddDocError("");
+                      setShowAddDocModal(true);
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={14} color="#38BDF8" />
+                    <Text style={styles.addDocButtonText}>Add Document</Text>
+                  </Pressable>
+                )}
               </View>
 
               <View style={styles.documentsCardList}>
@@ -1195,7 +1277,7 @@ export function AthleteProfilePage({
                   </View>
                 ) : (
                   (documents || []).map((doc) => (
-                    <View key={doc.id} style={styles.documentItemCard}>
+                    <View key={doc.id} style={[styles.documentItemCard, !isEditing && { opacity: 0.85 }]}>
                       <View style={styles.docHeaderRow}>
                         <View style={styles.docTitleGroup}>
                           <Ionicons
@@ -1211,10 +1293,11 @@ export function AthleteProfilePage({
                             size={18}
                             color="#38BDF8"
                           />
-                          {/* Editable Document Title */}
+                          {/* Document Title */}
                           <TextInput
-                            style={styles.docTitleInput}
+                            style={[styles.docTitleInput, !isEditing && { color: "#CBD5E1" }]}
                             value={doc.title}
+                            editable={isEditing}
                             onChangeText={(newTitle) => {
                               setDocuments((prevDocs) =>
                                 (prevDocs || []).map((d) =>
@@ -1222,14 +1305,14 @@ export function AthleteProfilePage({
                                 )
                               );
                             }}
-                            placeholder="Enter document name (e.g. PSA Birth Certificate)"
+                            placeholder="Enter document name"
                             placeholderTextColor="#64748B"
                           />
-                          <Ionicons name="pencil-sharp" size={12} color="#38BDF8" />
+                          {isEditing && <Ionicons name="pencil-sharp" size={12} color="#38BDF8" />}
                         </View>
 
                         {/* Delete Button */}
-                        {(documents || []).length > 1 && (
+                        {isEditing && (documents || []).length > 1 && (
                           <Pressable
                             style={styles.deleteDocButton}
                             onPress={() => {
@@ -1247,7 +1330,7 @@ export function AthleteProfilePage({
                       <View style={styles.docFileDetailsRow}>
                         {doc.fileName ? (
                           <View style={styles.docFileMeta}>
-                            <Ionicons name="document-attach" size={14} color="#64748B" />
+                            <Ionicons name="document-attach" size={14} color="#38BDF8" />
                             <Text style={styles.docFileNameText} numberOfLines={1}>
                               {doc.fileName}
                             </Text>
@@ -1263,15 +1346,24 @@ export function AthleteProfilePage({
 
                         {/* Upload / Replace Action Button */}
                         <Pressable
-                          style={styles.uploadDocActionButton}
+                          style={[
+                            styles.uploadDocActionButton,
+                            !isEditing && { opacity: 0.4, borderColor: "#334155" },
+                          ]}
+                          disabled={!isEditing}
                           onPress={() => handlePickDocument(doc.id)}
                         >
                           <Ionicons
                             name={doc.fileName ? "refresh-outline" : "cloud-upload-outline"}
                             size={14}
-                            color="#38BDF8"
+                            color={isEditing ? "#38BDF8" : "#64748B"}
                           />
-                          <Text style={styles.uploadDocActionButtonText}>
+                          <Text
+                            style={[
+                              styles.uploadDocActionButtonText,
+                              !isEditing && { color: "#64748B" },
+                            ]}
+                          >
                             {doc.fileName ? "Replace" : "Upload"}
                           </Text>
                         </Pressable>
@@ -1303,6 +1395,13 @@ export function AthleteProfilePage({
 
           {passwordDrawerOpen && (
             <View style={styles.drawerContent}>
+              {!isEditing && (
+                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0F172A", padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: "#1E293B" }}>
+                  <Ionicons name="lock-closed-outline" size={14} color="#38BDF8" style={{ marginRight: 6 }} />
+                  <Text style={{ color: "#94A3B8", fontSize: 11, flex: 1 }}>Security settings are in read-only mode. Tap "Edit Athlete Profile" below to change password.</Text>
+                </View>
+              )}
+
               {(() => {
                 const providerStr = String(profile.auth_provider || (profile as any).provider || "").toLowerCase();
                 const isSocialUser = providerStr === "google" || providerStr === "facebook";
@@ -1326,10 +1425,11 @@ export function AthleteProfilePage({
                     {/* Current Password Field */}
                     <View style={styles.fieldGroup}>
                       <Text style={styles.fieldLabel}>CURRENT PASSWORD</Text>
-                      <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
+                      <View style={[styles.inputWrapper, isEditing ? styles.inputWrapperEditable : { opacity: 0.6 }]}>
                         <TextInput
                           style={styles.textInput}
                           value={currentPassword}
+                          editable={isEditing}
                           onChangeText={(val) => {
                             setCurrentPassword(val);
                             setPasswordError("");
@@ -1351,10 +1451,11 @@ export function AthleteProfilePage({
                     {/* New Password Field */}
                     <View style={styles.fieldGroup}>
                       <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
-                      <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
+                      <View style={[styles.inputWrapper, isEditing ? styles.inputWrapperEditable : { opacity: 0.6 }]}>
                         <TextInput
                           style={styles.textInput}
                           value={newPassword}
+                          editable={isEditing}
                           onChangeText={(val) => {
                             setNewPassword(val);
                             setPasswordError("");
@@ -1376,10 +1477,11 @@ export function AthleteProfilePage({
                     {/* Confirm New Password Field */}
                     <View style={styles.fieldGroup}>
                       <Text style={styles.fieldLabel}>CONFIRM NEW PASSWORD</Text>
-                      <View style={[styles.inputWrapper, styles.inputWrapperEditable]}>
+                      <View style={[styles.inputWrapper, isEditing ? styles.inputWrapperEditable : { opacity: 0.6 }]}>
                         <TextInput
                           style={styles.textInput}
                           value={confirmPassword}
+                          editable={isEditing}
                           onChangeText={(val) => {
                             setConfirmPassword(val);
                             setPasswordError("");
@@ -1413,9 +1515,12 @@ export function AthleteProfilePage({
 
                     {/* Submit Button */}
                     <Pressable
-                      style={styles.updatePasswordButton}
+                      style={[
+                        styles.updatePasswordButton,
+                        !isEditing && { opacity: 0.4, backgroundColor: "#334155" },
+                      ]}
                       onPress={handleChangePassword}
-                      disabled={passwordLoading}
+                      disabled={!isEditing || passwordLoading}
                     >
                       <Ionicons name="key-outline" size={16} color="#080F21" style={{ marginRight: 6 }} />
                       <Text style={styles.updatePasswordButtonText}>
