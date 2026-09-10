@@ -43,13 +43,15 @@ export function CoachProfileScreen({
           const c = res.profile || res.coach || res;
           const firstName = c.first_name || "";
           const lastName = c.last_name || "";
-          const fullName = c.full_name || `${firstName} ${lastName}`.trim() || "Coach Profile";
+          const derivedName = `${firstName} ${lastName}`.trim();
+          const rawFullName = c.full_name || derivedName || "";
+          const resolvedFullName = (rawFullName && rawFullName.trim().toLowerCase() !== "coach") ? rawFullName : (derivedName || "Coach Profile");
           const inst = c.current_institution || c.institution || "Athletic Program";
-          const sport = (c.sport_type || "Basketball").toUpperCase();
+          const sport = (c.sport_type || "Sports").toUpperCase();
 
           const mapped: CoachProfileData = {
             coach_id: c.coach_id || coachId || "",
-            full_name: fullName.toUpperCase(),
+            full_name: resolvedFullName.toUpperCase(),
             institution: inst,
             role_title: c.role_title || `${sport} HEAD COACH`,
             tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],

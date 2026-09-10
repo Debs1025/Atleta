@@ -123,38 +123,56 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
     }
   }
 
-  // Enrich names from Users collection if needed
+  // Enrich names and attributes from Users collection
   let firstName = coachData.first_name || '';
   let lastName = coachData.last_name || '';
+  let fullName = coachData.full_name || '';
   let email = coachData.email || '';
   let contactNumber = coachData.contact_number || null;
+  let institution = coachData.current_institution || coachData.institution || '';
+  let quote = coachData.quote || null;
+  let experience = Number(coachData.years_of_experience || coachData.years_experience || 0);
 
-  if ((!firstName || !lastName || !email) && coachData.user_id) {
-    const userDoc = await db.collection('Users').doc(coachData.user_id).get();
+  const lookupIds = [coachData.user_id, rawUid, canonicalCoachId, coachId].filter(Boolean) as string[];
+  for (const uid of lookupIds) {
+    if (fullName && firstName && email && institution) break;
+    const userDoc = await db.collection('Users').doc(uid).get();
     if (userDoc.exists) {
       const u = userDoc.data()!;
-      firstName = firstName || u.first_name || 'Coach';
+      firstName = firstName || u.first_name || '';
       lastName = lastName || u.last_name || '';
+      fullName = fullName || u.full_name || '';
       email = email || u.email || '';
       contactNumber = contactNumber || u.contact_number || null;
+      institution = institution || u.current_institution || u.institution || '';
+      quote = quote || u.quote || null;
+      experience = experience || Number(u.years_of_experience || u.years_experience || 0);
+    }
+  }
+
+  if (!fullName) {
+    if (firstName || lastName) {
+      fullName = `${firstName} ${lastName}`.trim();
+    } else {
+      fullName = 'No Coach Assigned';
     }
   }
 
   const profile: CoachPublicProfile = {
     coach_id: coachData.coach_id || coachId,
-    user_id: coachData.user_id || coachId,
-    first_name: firstName || 'Coach',
-    last_name: lastName || '',
-    full_name: `${firstName || 'Coach'} ${lastName || ''}`.trim(),
-    email: email || 'coach@atleta.com',
+    user_id: coachData.user_id || rawUid,
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+    email: email || 'Not specified',
     contact_number: contactNumber,
-    years_of_experience: coachData.years_of_experience || 5,
-    current_institution: coachData.current_institution || 'Collegiate Athletics',
-    quote: coachData.quote || null,
-    specialties: coachData.specialties || ['Player Development'],
+    years_of_experience: experience,
+    current_institution: institution || 'Athletic Program',
+    quote: quote,
+    specialties: coachData.specialties || coachData.core_specialties || [],
     success_rate: coachData.success_rate || null,
     professional_documents: coachData.professional_documents || [],
-    sport_type: coachData.sport_type || 'Basketball',
+    sport_type: coachData.sport_type || 'Sports',
     avatar_url: coachData.avatar_url || null,
     team_id: coachData.team_id || null,
     teams_managed: coachData.teams_managed || [],

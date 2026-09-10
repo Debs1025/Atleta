@@ -147,7 +147,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
               region: t.region || "NCR",
               head_coach: {
                 coach_id: t.coach_id || "",
-                full_name: (t.coach_name || "Head Coach").toUpperCase(),
+                full_name: (t.coach_name && t.coach_name.trim().toLowerCase() !== "coach" ? t.coach_name : "Head Coach").toUpperCase(),
                 role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
                 years_experience: t.years_experience ? `${t.years_experience} Years` : "Experienced Coach",
                 quote: t.quote || "Dedicated to athletic excellence and player development.",
@@ -321,7 +321,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   if (currentScreen === "COACH_PROFILE") {
     const coachToDisplay = selectedCoach || (selectedTeam ? {
       coach_id: selectedTeam.head_coach.coach_id,
-      full_name: selectedTeam.head_coach.full_name || "Coach",
+      full_name: (selectedTeam.head_coach.full_name && selectedTeam.head_coach.full_name.toLowerCase() !== "coach") ? selectedTeam.head_coach.full_name : "Head Coach",
       institution: selectedTeam.team_name || "Athletic Program",
       role_title: selectedTeam.head_coach.role_title || "Head Coach",
       tags: [selectedTeam.sport_type, "VERIFIED COACH"],
