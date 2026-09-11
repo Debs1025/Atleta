@@ -3,6 +3,7 @@ import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
 import { ForgotPassword } from './Authentication/ForgotPassword';
 import { AdminHomePage } from './SysAdmin/Dashboard/AdminHomePage';
+import { SportPage } from './SysAdmin/Sports_Management/SportPage';
 import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
 import { SchedulePage } from './Officials/Schedule/SchedulePage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
@@ -23,6 +24,8 @@ function App() {
         <Route path="/admin/dashboard" element={<AdminHomePage />} />
         <Route path="/admin/admission" element={<AdminHomePage />} />
         <Route path="/admin/coaches" element={<AdminHomePage />} />
+        <Route path="/admin/sports" element={<SportPage />} />
+        <Route path="/admin/sport-configuration" element={<SportPage />} />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/dashboard" element={<OfficialHomePage />} />
 

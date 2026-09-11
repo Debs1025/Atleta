@@ -261,4 +261,61 @@ export interface AdminCoachQueueResponse {
   queue: AdminCoachQueueItem[];
 }
 
+export type MeasurementCategory =
+  | 'CUMULATIVE TOTAL'
+  | 'PERCENTAGE'
+  | 'TIME (MS)'
+  | 'DISTANCE (M)'
+  | 'COUNT';
 
+export interface DynamicStatRow {
+  id: string; // client-side unique id for key mapping
+  stat_name_key: string; // e.g. "TOTAL_POINTS", "FIELD_GOAL_ACCURACY"
+  measurement_category: MeasurementCategory;
+  formula?: string; // e.g. "(FG_MADE / FG_ATTEMPTED) * 100" or "SPLIT_1 + SPLIT_2"
+}
+
+export interface SportConfigurationForm {
+  sport_name: string; // e.g. "BASKETBALL_PRO"
+  short_identifier: string; // e.g. "BKT_01"
+  configurable_stats: DynamicStatRow[];
+  scoring_rules?: Record<string, unknown>;
+  positions?: string[];
+}
+
+export interface BackendConfigurableStat {
+  stat_name_key: string;
+  measurement_category: 'Cumulative Total' | 'Percentage' | 'Time (ms)' | 'Distance (m)' | 'Count';
+  label?: string;
+  description?: string;
+  formula?: string;
+}
+
+export interface SportConfiguration {
+  sport_id: string;
+  sport_name: string;
+  short_identifier: string;
+  configurable_stats: BackendConfigurableStat[];
+  stat_schema?: Record<string, { measurement_category: string; display_label?: string; formula?: string }>;
+  positions?: string[];
+  scoring_rules?: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SportsListResponse {
+  message?: string;
+  total_sports: number;
+  sports: SportConfiguration[];
+}
+
+export interface CreateSportPayload {
+  sport_name: string;
+  short_identifier: string;
+  configurable_stats: BackendConfigurableStat[];
+  stat_schema?: Record<string, { measurement_category: string; display_label?: string }>;
+  positions?: string[];
+  scoring_rules?: Record<string, unknown>;
+  is_active?: boolean;
+}

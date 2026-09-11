@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ClipboardCheck,
   DraftingCompass,
-  Users,
   LogOut,
   AlertCircle,
   X,
@@ -11,7 +10,7 @@ import {
 import { clearAuthSession } from '../../api/client';
 import { styles } from './styles/Sidebar';
 
-export type SysAdminTab = 'AUDIT_QUEUE' | 'SPORT_ARCHITECTURE' | 'USER_MANAGEMENT';
+export type SysAdminTab = 'AUDIT_QUEUE' | 'SPORT_MANAGER' | 'SPORT_ARCHITECTURE';
 
 interface SidebarProps {
   activeTab?: SysAdminTab;
@@ -19,8 +18,7 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { key: 'AUDIT_QUEUE' as SysAdminTab, label: 'AUDIT QUEUE', to: '/admin/dashboard', Icon: ClipboardCheck },
-  { key: 'SPORT_ARCHITECTURE' as SysAdminTab, label: 'SPORT ARCHITECTURE', to: '/admin/dashboard', Icon: DraftingCompass },
-  { key: 'USER_MANAGEMENT' as SysAdminTab, label: 'USER MANAGEMENT', to: '/admin/dashboard', Icon: Users },
+  { key: 'SPORT_MANAGER' as SysAdminTab, label: 'SPORT MANAGER', to: '/admin/sports', Icon: DraftingCompass },
 ] as const;
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab = 'AUDIT_QUEUE' }) => {
@@ -41,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab = 'AUDIT_QUEUE' }) =
         <div style={styles.topSection}>
           <nav style={styles.nav}>
             {NAV_ITEMS.map(({ key, label, to, Icon }) => {
-              const isActive = activeTab === key;
+              const isActive = activeTab === key || (key === 'SPORT_MANAGER' && activeTab === 'SPORT_ARCHITECTURE');
               const isHovered = hovered === key && !isActive;
 
               return (

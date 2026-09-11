@@ -10,6 +10,9 @@ import type {
   CreateMatchPayload,
   AdminLoginPayload,
   AdminCoachQueueResponse,
+  SportConfiguration,
+  SportsListResponse,
+  CreateSportPayload,
 } from './types';
 
 const BASE_URL = (import.meta.env.VITE_ATLETA_API || '').replace(/\/+$/, '');
@@ -1089,4 +1092,74 @@ export const fetchBrowseTeams = async (sport?: string): Promise<any[]> => {
   } catch {}
   return [];
 };
+
+// ─── SPORTS MANAGEMENT  ───────────────────────────────────────────────────
+
+export const getSports = async (activeOnly = false, forceRefresh = false): Promise<SportsListResponse> => {
+  const cacheKey = `sports_catalog_${activeOnly}`;
+  const cached = getCachedData<SportsListResponse>(cacheKey);
+  if (cached && !forceRefresh) return cached;
+
+  const token = getStoredToken();
+  const query = activeOnly ? '?active=true' : '';
+  const res = await fetch(`${BASE_URL}/sports${query}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await handleResponse<SportsListResponse>(res);
+  setCachedData(cacheKey, data);
+  return data;
+};
+
+export const getSportById = async (sportId: string): Promise<{ message?: string; sport: SportConfiguration }> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/sports/${encodeURIComponent(sportId)}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  return handleResponse<{ message?: string; sport: SportConfiguration }>(res);
+};
+
+export const createSport = async (payload: CreateSportPayload): Promise<{ message: string; sport: SportConfiguration }> => {
+  const token = getStoredToken();
+  const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `idemp_${Date.now()}_${Math.random()}`;
+
+  const res = await fetch(`${BASE_URL}/sports`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await handleResponse<{ message: string; sport: SportConfiguration }>(res);
+  invalidateCache('sports_catalog');
+  return data;
+};
+
+export const updateSport = async (
+  sportId: string,
+  payload: Partial<CreateSportPayload> & { active?: boolean }
+): Promise<{ message: string; sport: SportConfiguration }> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/sports/${encodeURIComponent(sportId)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await handleResponse<{ message: string; sport: SportConfiguration }>(res);
+  invalidateCache('sports_catalog');
+  return data;
+};
+
 
