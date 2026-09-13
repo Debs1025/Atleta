@@ -43,6 +43,9 @@ export function CoachEditProfile({
     full_name: currentProfile.full_name,
     email: currentProfile.email,
     sports_focus: currentProfile.sports_focus,
+    current_institution: currentProfile.current_institution || "",
+    regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
+    national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
   });
 
   const [avatarUri, setAvatarUri] = useState<string | undefined>(currentProfile.avatar_url);
@@ -59,6 +62,9 @@ export function CoachEditProfile({
       full_name: currentProfile.full_name,
       email: currentProfile.email,
       sports_focus: currentProfile.sports_focus,
+      current_institution: currentProfile.current_institution || "",
+      regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
+      national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
     });
     setAvatarUri(currentProfile.avatar_url);
     setDocuments(currentProfile.uploaded_documents || []);
@@ -247,6 +253,9 @@ export function CoachEditProfile({
       full_name: form.full_name.trim(),
       sport_type: canonicalSportType,
       sports_focus: form.sports_focus,
+      current_institution: form.current_institution.trim(),
+      regional_affiliation: form.regional_affiliation.trim(),
+      national_sports_league: form.national_sports_league.trim(),
       email: form.email.trim(),
       avatar_url: avatarUri,
       uploaded_documents: documents,
@@ -400,6 +409,51 @@ export function CoachEditProfile({
               })}
             </View>
           )}
+        </View>
+
+        {/* CURRENT INSTITUTION */}
+        <View style={styles.formFieldContainer}>
+          <Text style={styles.inputLabel}>CURRENT INSTITUTION</Text>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.textInput}
+              value={form.current_institution}
+              onChangeText={(text) => setForm((prev) => ({ ...prev, current_institution: text }))}
+              placeholder="e.g. Ateneo de Naga University"
+              placeholderTextColor="#64748B"
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
+
+        {/* REGIONAL AFFILIATION */}
+        <View style={styles.formFieldContainer}>
+          <Text style={styles.inputLabel}>REGIONAL AFFILIATION</Text>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.textInput}
+              value={form.regional_affiliation}
+              onChangeText={(text) => setForm((prev) => ({ ...prev, regional_affiliation: text }))}
+              placeholder="e.g. Bicol Regional Athletic Association (BRAA)"
+              placeholderTextColor="#64748B"
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
+
+        {/* NATIONAL SPORTS LEAGUE */}
+        <View style={styles.formFieldContainer}>
+          <Text style={styles.inputLabel}>NATIONAL SPORTS LEAGUE</Text>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.textInput}
+              value={form.national_sports_league}
+              onChangeText={(text) => setForm((prev) => ({ ...prev, national_sports_league: text }))}
+              placeholder="e.g. Batang Pinoy / Palarong Pambansa"
+              placeholderTextColor="#64748B"
+              autoCapitalize="words"
+            />
+          </View>
         </View>
 
         {/* CREDENTIALS UPLOADER BOX */}

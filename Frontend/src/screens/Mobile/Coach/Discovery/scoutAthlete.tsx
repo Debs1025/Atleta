@@ -204,16 +204,16 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
           <View style={styles.contactRow}>
             <Ionicons name="mail-outline" size={18} color="#94A3B8" />
             <Text style={styles.contactText}>
-              {currentAthlete.full_name.toLowerCase().replace(/\s+/g, '.')}@anhs.edu.ph
+              {currentAthlete.contact_info?.email || 'N/A'}
             </Text>
           </View>
           <View style={styles.contactRow}>
             <Ionicons name="logo-facebook" size={18} color="#94A3B8" />
-            <Text style={styles.contactText}>{currentAthlete.full_name}</Text>
+            <Text style={styles.contactText}>{currentAthlete.contact_info?.facebook || currentAthlete.full_name}</Text>
           </View>
           <View style={styles.contactRow}>
             <Ionicons name="call-outline" size={18} color="#94A3B8" />
-            <Text style={styles.contactText}>+67000</Text>
+            <Text style={styles.contactText}>{currentAthlete.contact_info?.phone || 'N/A'}</Text>
           </View>
         </View>
 

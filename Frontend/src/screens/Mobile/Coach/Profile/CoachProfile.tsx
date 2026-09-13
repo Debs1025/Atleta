@@ -110,6 +110,10 @@ export function CoachProfile({
               });
             }
 
+            const institution = profileRes.current_institution || profileRes.institution || profile.current_institution || "";
+            const regionalAffiliation = profileRes.regional_affiliation || profile.regional_affiliation || "";
+            const nationalLeague = profileRes.national_sports_league || profile.national_sports_league || "";
+
             const updated: CoachProfileState = {
               coach_id: profileRes.coach_id || profileRes.user_id || profile.coach_id,
               user_id: profileRes.user_id || profile.user_id,
@@ -120,9 +124,12 @@ export function CoachProfile({
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
               avatar_url: profileRes.avatar_url || profile.avatar_url,
-              regional_affiliations: profileRes.regional_affiliations || profile.regional_affiliations || {
-                association_name: "National Sports League",
-                office_name: profileRes.current_institution || "Sports Office",
+              current_institution: institution,
+              regional_affiliation: regionalAffiliation,
+              national_sports_league: nationalLeague,
+              regional_affiliations: {
+                association_name: regionalAffiliation || nationalLeague || "",
+                office_name: institution || "",
               },
               credentials: profileRes.certifications || profile.credentials || DEFAULT_COACH_PROFILE.credentials,
               uploaded_documents: profileRes.uploaded_documents || profile.uploaded_documents || DEFAULT_COACH_PROFILE.uploaded_documents,
@@ -230,21 +237,32 @@ export function CoachProfile({
               <Text style={styles.roleTitleText}>{profile.role_title}</Text>
             </View>
 
+            {/* CURRENT INSTITUTION CARD */}
+            <View style={styles.cardContainer}>
+              <Text style={styles.cyanSubLabel}>CURRENT INSTITUTION</Text>
+              <View style={styles.affiliationItemRow}>
+                <Ionicons name="business-outline" size={18} color="#00C8FF" />
+                <Text style={styles.affiliationItemText}>
+                  {profile.current_institution || "No Institution Specified"}
+                </Text>
+              </View>
+            </View>
+
             {/* REGIONAL AFFILIATION CARD */}
             <View style={styles.cardContainer}>
-              <Text style={styles.cyanSubLabel}>REGIONAL AFFILIATION</Text>
+              <Text style={styles.cyanSubLabel}>REGIONAL AFFILIATION & LEAGUE</Text>
 
               <View style={styles.affiliationItemRow}>
                 <Ionicons name="location-outline" size={18} color="#00C8FF" />
                 <Text style={styles.affiliationItemText}>
-                  {profile.regional_affiliations?.association_name || "Bicol Region Athletic Association (BRAA)"}
+                  {profile.regional_affiliation || profile.regional_affiliations?.association_name || "No Regional Affiliation"}
                 </Text>
               </View>
 
               <View style={[styles.affiliationItemRow, { marginBottom: 0 }]}>
-                <Ionicons name="business-outline" size={18} color="#00C8FF" />
+                <Ionicons name="trophy-outline" size={18} color="#00C8FF" />
                 <Text style={styles.affiliationItemText}>
-                  {profile.regional_affiliations?.office_name || "Albay Provincial Sports Office"}
+                  {profile.national_sports_league || profile.regional_affiliations?.office_name || "No League Specified"}
                 </Text>
               </View>
             </View>

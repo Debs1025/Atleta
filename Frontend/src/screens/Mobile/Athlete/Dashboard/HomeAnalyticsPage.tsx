@@ -44,8 +44,6 @@ export interface AthleteAnalytics {
   top_sprint_formatted?: string;
   top_distance_m?: number;
   average_pace?: string;
-  attempt_success_pct?: number;
-  reaction_efficiency_pct?: number;
   recent_track_marks?: (number | string)[];
 }
 
@@ -126,8 +124,8 @@ export function HomeAnalyticsPage({
   const bballFtPct = Number(analytics.free_throw_percentage ?? 0);
   const bballScores =
     Array.isArray(analytics.last_5_games_scores) && analytics.last_5_games_scores.length > 0
-      ? analytics.last_5_games_scores
-      : [0, 0, 0, 0, 0];
+      ? analytics.last_5_games_scores.filter((s) => typeof s === "number" && s > 0)
+      : [];
 
   // 2. Swimming Metrics
   const swimBestTime =
@@ -152,10 +150,10 @@ export function HomeAnalyticsPage({
       ? analytics.recent_swim_times
       : analytics.last_5_games_scores && analytics.last_5_games_scores.length > 0
       ? analytics.last_5_games_scores
-      : [0, 0, 0, 0, 0];
-  const swimScores = rawSwimHistory.map((v) =>
-    typeof v === "number" ? v : parseFloat(String(v)) || 0
-  );
+      : [];
+  const swimScores = rawSwimHistory
+    .map((v) => (typeof v === "number" ? v : parseFloat(String(v)) || 0))
+    .filter((s) => s > 0);
 
   // 3. Track & Field Metrics
   const trackSprintTime =
@@ -172,17 +170,15 @@ export function HomeAnalyticsPage({
       ? `${analytics.top_distance_m}m`
       : "0.00m";
   const trackAvgPace = analytics.average_pace || "0:00";
-  const trackAttemptEff = Number(analytics.attempt_success_pct ?? analytics.field_goal_percentage ?? 0);
-  const trackReactionEff = Number(analytics.reaction_efficiency_pct ?? analytics.free_throw_percentage ?? 0);
   const rawTrackHistory =
     analytics.recent_track_marks && analytics.recent_track_marks.length > 0
       ? analytics.recent_track_marks
       : analytics.last_5_games_scores && analytics.last_5_games_scores.length > 0
       ? analytics.last_5_games_scores
-      : [0, 0, 0, 0, 0];
-  const trackScores = rawTrackHistory.map((v) =>
-    typeof v === "number" ? v : parseFloat(String(v)) || 0
-  );
+      : [];
+  const trackScores = rawTrackHistory
+    .map((v) => (typeof v === "number" ? v : parseFloat(String(v)) || 0))
+    .filter((s) => s > 0);
 
   // Active chart scores
   const activeScores = isSwimming
@@ -376,46 +372,7 @@ export function HomeAnalyticsPage({
             </View>
           </View>
         </View>
-      ) : isTrackField ? (
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.cyanAccentBar} />
-            <Text style={styles.sectionTitleText}>TRACK & EVENT EFFICIENCY</Text>
-          </View>
-
-          {/* Attempt / Clearance Success % */}
-          <View style={styles.progressItem}>
-            <View style={styles.progressHeaderRow}>
-              <Text style={styles.progressLabelText}>Attempt / Clearance Success</Text>
-              <Text style={styles.progressValueText}>{trackAttemptEff}%</Text>
-            </View>
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.min(100, Math.max(0, trackAttemptEff))}%` },
-                ]}
-              />
-            </View>
-          </View>
-
-          {/* Reaction Time Accuracy % */}
-          <View style={styles.progressItem}>
-            <View style={styles.progressHeaderRow}>
-              <Text style={styles.progressLabelText}>Reaction Time Accuracy</Text>
-              <Text style={styles.progressValueText}>{trackReactionEff}%</Text>
-            </View>
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.min(100, Math.max(0, trackReactionEff))}%` },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
-      ) : (
+      ) : isTrackField ? null : (
         <View style={styles.sectionBlock}>
           <View style={styles.sectionTitleRow}>
             <View style={styles.cyanAccentBar} />
@@ -465,37 +422,45 @@ export function HomeAnalyticsPage({
             ? "RECENT EVENT PERFORMANCE"
             : "LAST GAMES"}
         </Text>
-        <View style={styles.barsContainer}>
-          {activeScores.map((score, index) => {
-            const isMostRecent = index === activeScores.length - 1;
-            const barHeightPct =
-              maxScore > 0 && score > 0
-                ? Math.max(15, Math.min(100, (score / maxScore) * 85))
-                : 10;
-            const prefix = isSwimming ? "R" : isTrackField ? "E" : "G";
-            return (
-              <View key={index} style={styles.barColumn}>
-                <View style={styles.barTrackArea}>
-                  <View
+        {activeScores.length === 0 ? (
+          <View style={{ paddingVertical: 20, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: "#64748B", fontSize: 13, fontWeight: "600" }}>
+              No recent match records logged yet.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.barsContainer}>
+            {activeScores.map((score, index) => {
+              const isMostRecent = index === activeScores.length - 1;
+              const barHeightPct =
+                maxScore > 0 && score > 0
+                  ? Math.max(15, Math.min(100, (score / maxScore) * 85))
+                  : 15;
+              const prefix = isSwimming ? "R" : isTrackField ? "E" : "G";
+              return (
+                <View key={index} style={styles.barColumn}>
+                  <View style={styles.barTrackArea}>
+                    <View
+                      style={[
+                        styles.graphPillBar,
+                        { height: `${barHeightPct}%` },
+                        isMostRecent ? styles.graphPillBarHighest : styles.graphPillBarNormal,
+                      ]}
+                    />
+                  </View>
+                  <Text
                     style={[
-                      styles.graphPillBar,
-                      { height: `${barHeightPct}%` },
-                      isMostRecent ? styles.graphPillBarHighest : styles.graphPillBarNormal,
+                      styles.gameLabelText,
+                      isMostRecent && styles.gameLabelTextHighest,
                     ]}
-                  />
+                  >
+                    {prefix}{index + 1}
+                  </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.gameLabelText,
-                    isMostRecent && styles.gameLabelTextHighest,
-                  ]}
-                >
-                  {prefix}{index + 1}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       {/* --- TEAM & COACH SECTION --- */}

@@ -88,7 +88,7 @@ const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
   birthdate: "",
   gender: "Male",
   province: "",
-  sport_type: "Basketball",
+  sport_type: "" as any,
   terms_accepted: false
 };
 
@@ -102,6 +102,8 @@ const DEFAULT_COACH_VALUES: CoachSignupValues = {
   certification_license_num: "",
   years_of_experience: 0,
   current_institution: "",
+  regional_affiliation: "",
+  national_sports_league: "",
   eligible_documents: null,
   terms_accepted: false
 };
@@ -439,6 +441,8 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
         if (values.certification_license_num) body.append("certification_license_num", values.certification_license_num);
         body.append("years_of_experience", String(values.years_of_experience));
         body.append("current_institution", values.current_institution);
+        body.append("regional_affiliation", values.regional_affiliation);
+        if (values.national_sports_league) body.append("national_sports_league", values.national_sports_league);
 
         if (documentFile) {
           const docIdentifier = documentFile.name || documentFile.uri || "eligible-document.png";
@@ -513,7 +517,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
         setLoading(false);
       }
     } else {
-      const valid = await coachForm.trigger(["years_of_experience", "current_institution", "terms_accepted"]);
+      const valid = await coachForm.trigger(["years_of_experience", "current_institution", "regional_affiliation", "terms_accepted"]);
       if (!valid) {
         setFeedback({ tone: "error", message: "Please fill in all required profile details." });
         return;
@@ -532,7 +536,9 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           role: "Coach",
           certification_license_num: values.certification_license_num,
           years_of_experience: values.years_of_experience,
-          current_institution: values.current_institution
+          current_institution: values.current_institution,
+          regional_affiliation: values.regional_affiliation,
+          national_sports_league: values.national_sports_league
         });
         const token = extractAuthToken(result);
         const savedRole = extractAuthRole(result) || "coach";
@@ -669,7 +675,9 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
             <View>
               <FormField control={coachForm.control} name="certification_license_num" label="Certification License Number" placeholder="Optional" error={coachErrors.certification_license_num?.message} />
               <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
-              <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="School, club, or program" error={coachErrors.current_institution?.message} />
+              <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="e.g. Ateneo de Naga University" error={coachErrors.current_institution?.message} />
+              <FormField control={coachForm.control} name="regional_affiliation" label="Regional Affiliation" placeholder="e.g. Bicol Regional Athletic Association (BRAA)" error={coachErrors.regional_affiliation?.message} />
+              <FormField control={coachForm.control} name="national_sports_league" label="National Sports League" placeholder="e.g. Batang Pinoy / Palarong Pambansa (Optional)" error={coachErrors.national_sports_league?.message} />
 
               <View style={styles.documentBox}>
                 <Text style={styles.documentLabel}>Eligible Documents</Text>
@@ -692,6 +700,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               </View>
             </View>
           ) : null}
+
 
           <Text style={authScreenStyles.footer}>
             Already have an account? <Text style={authScreenStyles.footerLink} onPress={onGoLogin}>Log In</Text>

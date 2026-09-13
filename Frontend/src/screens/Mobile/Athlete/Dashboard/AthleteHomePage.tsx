@@ -57,8 +57,6 @@ export const initialAthleteProfile: AthleteProfile = {
     top_sprint_formatted: "00.00s",
     top_distance_m: 0,
     average_pace: "0:00",
-    attempt_success_pct: 0,
-    reaction_efficiency_pct: 0,
     recent_track_marks: [],
   },
   eligible_documents: [],
@@ -188,9 +186,6 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
         const turnEff = Number(stats.turn_efficiency_pct ?? stats.turn_efficiency ?? stats.efficiency ?? stats.fg_pct ?? 0);
         const strokeEff = Number(stats.stroke_efficiency_pct ?? stats.stroke_efficiency ?? stats.consistency ?? stats.ft_pct ?? 0);
-        const attemptEff = Number(stats.attempt_success_pct ?? stats.attempt_success ?? stats.fg_pct ?? 0);
-        const reactionEff = Number(stats.reaction_efficiency_pct ?? stats.reaction_efficiency ?? stats.ft_pct ?? 0);
-
         const swimHistory = stats.recent_swim_times || stats.recent_times || stats.last_races || stats.last_5_games_scores || [];
         const trackHistory = stats.recent_track_marks || stats.recent_marks || stats.last_events || stats.last_5_games_scores || [];
 
@@ -240,8 +235,6 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             top_sprint_formatted: sprintTime,
             top_distance_m: trackDist,
             average_pace: pace,
-            attempt_success_pct: attemptEff,
-            reaction_efficiency_pct: reactionEff,
             recent_track_marks: trackHistory,
           },
           avatar_url: raw.avatar_url || raw.user?.avatar_url || "",
@@ -480,6 +473,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           <Teams
             onNavigateTab={(tab) => setActiveTab(tab)}
             onScreenStateChange={(isSubScreen) => setHideParentBars(isSubScreen)}
+            athleteCategory={profile.category}
           />
         )}
       </View>

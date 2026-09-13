@@ -165,7 +165,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   // Filters & Modals
-  const [activeSportFilter, setActiveSportFilter] = useState<string>("BASKETBALL");
+  const [activeSportFilter, setActiveSportFilter] = useState<string>("ALL");
   const [showFabOverlay, setShowFabOverlay] = useState(false);
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -553,8 +553,25 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
     fetchCoachDashboardData();
 
+    const notifInterval = setInterval(async () => {
+      try {
+        const notifsRes = await requestAuthenticatedJson("/notifications").catch(() => null);
+        if (isMounted && notifsRes) {
+          const rawNotifs: any[] = Array.isArray(notifsRes?.notifications)
+            ? notifsRes.notifications
+            : Array.isArray(notifsRes)
+            ? notifsRes
+            : [];
+          setNotificationsList(rawNotifs);
+          const unreadCount = rawNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
+          setUnreadNotifCount(unreadCount);
+        }
+      } catch {}
+    }, 10000);
+
     return () => {
       isMounted = false;
+      clearInterval(notifInterval);
     };
   }, []);
 
@@ -565,7 +582,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   );
 
   const availableSportCategories = useMemo(() => {
-    return ["BASKETBALL", "TRACK AND FIELD", "SWIMMING", "ALL"];
+    return ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
   }, []);
 
   // Memoized Filtered Players for Dashboard

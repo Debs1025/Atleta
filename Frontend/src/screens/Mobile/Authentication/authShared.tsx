@@ -119,6 +119,8 @@ export const coachSignupSchema = z.object({
   certification_license_num: z.string().trim().max(100, "License number is too long.").optional().or(z.literal("")),
   years_of_experience: z.coerce.number({ invalid_type_error: "Years of experience is required." }).int().min(0).max(60),
   current_institution: z.string().trim().min(1, "Current institution is required.").max(255, "Current institution is too long."),
+  regional_affiliation: z.string().trim().min(1, "Regional affiliation is required.").max(255, "Regional affiliation is too long."),
+  national_sports_league: z.string().trim().max(255, "League name is too long.").optional().or(z.literal("")),
   eligible_documents: z
     .object({
       name: z.string().optional(),

@@ -23,7 +23,10 @@ export interface CoachProfileState {
   role_title: string; // e.g., "BASKETBALL COACH"
   sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
   avatar_url?: string;
-  regional_affiliations: {
+  current_institution?: string;
+  regional_affiliation?: string;
+  national_sports_league?: string;
+  regional_affiliations?: {
     association_name: string;
     office_name: string;
   };
@@ -33,56 +36,32 @@ export interface CoachProfileState {
     total_athletes: number;
     metric_logs: number;
   };
-  last_updated: string; // e.g., "OCT 24, 2023"
+  last_updated: string;
 }
 
-// With sample datas
 export const DEFAULT_COACH_PROFILE: CoachProfileState = {
-  coach_id: "coach_erick_001",
-  user_id: "usr_coach_01",
-  first_name: "Erick Nathaniel",
-  last_name: "De Belen",
-  full_name: "ERICK NATHANIEL S. DE BELEN",
-  email: "coach@gmail.com",
-  role_title: "BASKETBALL COACH",
+  coach_id: "",
+  user_id: "",
+  first_name: "Coach",
+  last_name: "",
+  full_name: "Coach",
+  email: "",
+  role_title: "COACH",
   sports_focus: "BASKETBALL",
+  current_institution: "",
+  regional_affiliation: "",
+  national_sports_league: "",
   regional_affiliations: {
-    association_name: "Bicol Region Athletic Association (BRAA)",
-    office_name: "Albay Provincial Sports Office",
+    association_name: "",
+    office_name: "",
   },
-  credentials: [
-    {
-      id: "cred_1",
-      title: "Certified Basketball Coach",
-      type: "certified",
-      icon_name: "shield-check",
-    },
-    {
-      id: "cred_2",
-      title: "Athlete Roster Manager",
-      type: "manager",
-      icon_name: "user-plus",
-    },
-    {
-      id: "cred_3",
-      title: "Bachelors In Sport Sciences",
-      type: "degree",
-      icon_name: "star",
-    },
-  ],
-  uploaded_documents: [
-    {
-      id: "doc_1",
-      file_name: "Coaching License.pdf",
-      file_type: "PDF",
-      file_url: "file://coaching_license.pdf",
-    },
-  ],
+  credentials: [],
+  uploaded_documents: [],
   system_statistics: {
-    total_athletes: 42,
-    metric_logs: 156,
+    total_athletes: 0,
+    metric_logs: 0,
   },
-  last_updated: "OCT 24, 2023",
+  last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
 };
 
 export interface UserCoach {

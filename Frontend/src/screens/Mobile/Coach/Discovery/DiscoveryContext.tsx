@@ -127,9 +127,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 calculated_per: per,
                 efficiency_pct: eff,
                 contact_info: {
-                  email: a.email || 'athlete@atleta.ph',
-                  phone: a.contact_number || '+63 900 000 0000',
-                  facebook: a.facebook || 'N/A',
+                  email: a.email || a.contact_email || 'N/A',
+                  phone: a.contact_number || a.phone || 'N/A',
+                  facebook: a.facebook || a.social_link || 'N/A',
                 },
                 jersey_number: String(a.jersey_number || '0'),
                 avatar_url: a.avatar_url,

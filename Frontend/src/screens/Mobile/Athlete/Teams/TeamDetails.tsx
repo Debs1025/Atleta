@@ -33,11 +33,13 @@ export function TeamDetailsScreen({
         if (isMounted && res) {
           const rawCoach = res.coach || res.head_coach || {};
           const rosterList = Array.isArray(res.roster) ? res.roster : Array.isArray(res.roster_list) ? res.roster_list : propTeam.roster_athletes;
+          const rawCoachName = rawCoach.full_name || rawCoach.name || propTeam.head_coach?.full_name || "";
+          const resolvedCoachName = (rawCoachName && rawCoachName.trim().toLowerCase() !== "coach") ? rawCoachName : "HEAD COACH";
           const mappedCoach = {
             coach_id: rawCoach.coach_id || propTeam.head_coach?.coach_id || "",
-            full_name: (rawCoach.full_name || rawCoach.name || propTeam.head_coach?.full_name || "Head Coach").toUpperCase(),
+            full_name: resolvedCoachName.toUpperCase(),
             role_title: (rawCoach.role_title || rawCoach.current_institution || propTeam.head_coach?.role_title || "HEAD COACH").toUpperCase(),
-            years_experience: rawCoach.years_of_experience ? `${rawCoach.years_of_experience} Years` : propTeam.head_coach?.years_experience || "Head Coach",
+            years_experience: rawCoach.years_of_experience ? `${rawCoach.years_of_experience} Years` : propTeam.head_coach?.years_experience || "Experienced Coach",
             quote: rawCoach.quote || propTeam.head_coach?.quote || "Dedicated to building high-performance athletic resilience.",
           };
 
