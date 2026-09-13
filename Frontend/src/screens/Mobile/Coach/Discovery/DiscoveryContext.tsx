@@ -350,8 +350,8 @@ const DiscoveryContext = createContext<DiscoveryContextType | undefined>(undefin
 export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [athletes, setAthletes] = useState<AthleteDiscoveryItem[]>([]);
   const [scoutingProposals, setScoutingProposals] = useState<ScoutingProposalItem[]>([]);
-  const [teams] = useState<DiscoveryTeamItem[]>([]);
-  const [events] = useState<DiscoveryEventItem[]>([]);
+  const [teams, setTeams] = useState<DiscoveryTeamItem[]>(INITIAL_TEAMS);
+  const [events, setEvents] = useState<DiscoveryEventItem[]>(INITIAL_EVENTS);
 
   const [activeTab, setActiveTab] = useState<DiscoveryTab>('PLAYERS');
   const [activeSportFilter, setActiveSportFilter] = useState<SportCategoryFilter>('BASKETBALL');
@@ -365,14 +365,16 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     let isMounted = true;
     (async () => {
       try {
-        const [athletesRes, proposalsRes]: [any, any] = await Promise.all([
+        const [athletesRes, proposalsRes, teamsRes]: [any, any, any] = await Promise.all([
           requestAuthenticatedJson('/athletes').catch(() => null),
           requestAuthenticatedJson('/scouting/proposals/list').catch(() => null),
+          requestAuthenticatedJson('/teams').catch(() => null),
         ]);
 
         if (isMounted) {
-          if (Array.isArray(athletesRes) && athletesRes.length > 0) {
-            const mapped: AthleteDiscoveryItem[] = athletesRes.map((a: any) => ({
+          const rawAthletes = athletesRes?.athletes || (Array.isArray(athletesRes) ? athletesRes : []);
+          if (Array.isArray(rawAthletes) && rawAthletes.length > 0) {
+            const mapped: AthleteDiscoveryItem[] = rawAthletes.map((a: any) => ({
               athlete_id: a.athlete_id || a.user_id,
               full_name: a.full_name || `${a.first_name || ''} ${a.last_name || ''}`.trim() || 'Athlete',
               province: a.location || a.province || 'Albay',
@@ -406,8 +408,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             setAthletes([]);
           }
 
-          if (Array.isArray(proposalsRes)) {
-            const mappedProposals: ScoutingProposalItem[] = proposalsRes.map((p: any) => ({
+          const rawProposals = proposalsRes?.proposals || (Array.isArray(proposalsRes) ? proposalsRes : []);
+          if (Array.isArray(rawProposals)) {
+            const mappedProposals: ScoutingProposalItem[] = rawProposals.map((p: any) => ({
               scout_id: p.scout_id || p.id,
               athlete_id: p.athlete_id,
               athlete_name: p.athlete_details?.first_name
@@ -419,6 +422,21 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               created_at: p.created_at || new Date().toISOString().split('T')[0],
             }));
             setScoutingProposals(mappedProposals);
+          }
+
+          const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+          if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+            const mappedTeams: DiscoveryTeamItem[] = rawTeams.map((t: any) => ({
+              team_id: t.team_id || t.id,
+              team_name: t.team_name || 'Team',
+              sport_category: (t.sport_type?.toUpperCase() || 'BASKETBALL') as SportCategoryFilter,
+              division_tag: `${(t.sport_type?.toUpperCase() || 'BASKETBALL')} • ${t.division || 'DIVISION I'}`,
+              description: t.description || `Official ${t.sport_type || 'varsity'} program.`,
+              head_coach: t.head_coach || 'Head Coach',
+              season_record: typeof t.season_record === 'object' ? `${t.season_record?.wins || 0} - ${t.season_record?.losses || 0}` : (t.season_record || '0 - 0'),
+              roster: Array.isArray(t.roster_list) ? t.roster_list : [],
+            }));
+            setTeams(mappedTeams);
           }
         }
       } catch (err) {

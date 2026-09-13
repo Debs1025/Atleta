@@ -102,32 +102,44 @@ export function MyTeamsPage({
 
         {/* Managed Teams List Cards */}
         <View style={{ gap: 16 }}>
-          {filteredTeams.map((team) => (
-            <TouchableOpacity
-              key={team.team_id}
-              style={styles.teamCard}
-              onPress={() => onSelectTeam(team)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.sportBadge}>
-                <Text style={styles.sportBadgeText}>{team.sport_type}</Text>
-              </View>
-
-              <View style={styles.cardBodyRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.teamName}>{team.team_name}</Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Ionicons name="calendar-outline" size={16} color="#64748B" />
-                    <Text style={styles.playerCountText}>
-                      {`${team.roster_list.length} ${team.roster_list.length === 1 ? "Player" : "Players"}`}
-                    </Text>
-                  </View>
+          {filteredTeams.length === 0 ? (
+            <View style={{ paddingVertical: 36, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="shield-outline" size={42} color="#64748B" />
+              <Text style={{ color: "#F8FAFC", fontSize: 15, fontWeight: "700", marginTop: 10 }}>
+                No Teams Found
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4, textAlign: "center", paddingHorizontal: 20 }}>
+                {searchQuery ? "No teams matched your search criteria." : "You haven't created any teams yet. Tap below to create your first team."}
+              </Text>
+            </View>
+          ) : (
+            filteredTeams.map((team) => (
+              <TouchableOpacity
+                key={team.team_id}
+                style={styles.teamCard}
+                onPress={() => onSelectTeam(team)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.sportBadge}>
+                  <Text style={styles.sportBadgeText}>{team.sport_type}</Text>
                 </View>
 
-                <Ionicons name="chevron-forward" size={20} color="#64748B" />
-              </View>
-            </TouchableOpacity>
-          ))}
+                <View style={styles.cardBodyRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.teamName}>{team.team_name}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Ionicons name="calendar-outline" size={16} color="#64748B" />
+                      <Text style={styles.playerCountText}>
+                        {`${team.roster_list.length} ${team.roster_list.length === 1 ? "Player" : "Players"}`}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Ionicons name="chevron-forward" size={20} color="#64748B" />
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         {/* CREATE NEW TEAM + BUTTON (Inline at bottom of teams list, not fixed) */}

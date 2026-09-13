@@ -1,4 +1,5 @@
 {
+  "name": "atleta-backend",
   "version": 2,
   "builds": [
     {

@@ -266,11 +266,13 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };
+            const rawAthletes = athletesRes?.athletes || (Array.isArray(athletesRes) ? athletesRes : []);
             setCoachProfile(updatedProfileState);
           }
 
-          if (Array.isArray(teamsRes) && teamsRes.length > 0) {
-            const mappedTeams: Team[] = teamsRes.map((t: any) => ({
+          const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+          if (Array.isArray(rawTeams) && rawTeams.length > 0) {
+            const mappedTeams: Team[] = rawTeams.map((t: any) => ({
               team_id: t.team_id || t.id,
               team_name: t.team_name || "Team",
               sport_type: (t.sport_type?.toUpperCase() || "BASKETBALL") as Team["sport_type"],
@@ -299,8 +301,9 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             setTeams([]);
           }
 
-          if (Array.isArray(athletesRes) && athletesRes.length > 0) {
-            const mappedPool: RosterAthlete[] = athletesRes.map((a: any) => ({
+          const rawAthletes = athletesRes?.athletes || (Array.isArray(athletesRes) ? athletesRes : []);
+          if (Array.isArray(rawAthletes) && rawAthletes.length > 0) {
+            const mappedPool: RosterAthlete[] = rawAthletes.map((a: any) => ({
               athlete_id: a.athlete_id || a.user_id || 'ath_01',
               user_id: a.user_id || a.athlete_id || 'usr_01',
               full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
@@ -314,7 +317,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
             }));
             setAthletesPool(mappedPool);
 
-            const mappedPerf: AthletePerformanceProfile[] = athletesRes.map((a: any) => ({
+            const mappedPerf: AthletePerformanceProfile[] = rawAthletes.map((a: any) => ({
               athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}`,
               user_id: a.user_id || a.athlete_id || "",
               full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
@@ -363,6 +366,12 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
                 psa_verified: !!a.documents?.psa_birth_certificate || true,
                 residency_verified: !!a.documents?.proof_of_residency || true,
               },
+              contact_info: {
+                email: a.email || "athlete@atleta.ph",
+                phone: a.contact_number || "+63 900 000 0000",
+                emergency_contact: "+63 900 000 0000",
+              },
+              avatar_url: a.avatar_url,
             }));
             setPerfAthletes(mappedPerf);
             if (mappedPerf[0]) {
@@ -374,7 +383,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
           }
         }
       } catch (err) {
-        console.warn("Failed to load coach dashboard live data:", err);
+        console.warn("Live coach dashboard fetch error:", err);
       }
     };
 
@@ -392,9 +401,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   );
 
   const availableSportCategories = useMemo(() => {
-    const focus = (coachProfile.sports_focus || "BASKETBALL").toUpperCase();
-    return [focus];
-  }, [coachProfile.sports_focus]);
+    return SPORT_CATEGORIES;
+  }, []);
 
   // Memoized Filtered Players for Dashboard
   const filteredDashboardPlayers = useMemo(() => {

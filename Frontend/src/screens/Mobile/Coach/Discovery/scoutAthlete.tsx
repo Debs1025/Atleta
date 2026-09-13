@@ -47,13 +47,12 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
     setShowSuccessModal(true);
 
     try {
-      await requestAuthenticatedJson("/inquiries/submit", "POST", {
+      await requestAuthenticatedJson("/scouting/proposals", "POST", {
         athlete_id: currentAthlete.athlete_id,
-        inquiry_type: "RECRUITMENT",
-        message: `Coach submitted a scouting inquiry for ${currentAthlete.full_name}`,
+        offer_details: `Coach scouting proposal for ${currentAthlete.full_name}`,
       });
     } catch (err) {
-      console.warn("Backend scouting inquiry error:", err);
+      console.warn("Backend scouting proposal error:", err);
     }
   };
 

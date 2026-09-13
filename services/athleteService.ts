@@ -138,8 +138,18 @@ export async function updateAthleteProfile(
   athleteId: string,
   updateData: Partial<Record<string, unknown>>,
 ) {
-  const profileRef = db.collection('Athlete_Profiles').doc(athleteId);
-  const doc = await profileRef.get();
+  const rawUid = athleteId.replace(/^ath_/, '');
+  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+
+  let profileRef = db.collection('Athlete_Profiles').doc(canonicalAthleteId);
+  let doc = await profileRef.get();
+  if (!doc.exists) {
+    const rawDoc = await db.collection('Athlete_Profiles').doc(rawUid).get();
+    if (rawDoc.exists) {
+      profileRef = db.collection('Athlete_Profiles').doc(rawUid);
+      doc = rawDoc;
+    }
+  }
 
   const payload: Record<string, any> = {
     ...updateData,
@@ -197,6 +207,18 @@ export async function uploadAthleteDocument(
   docType: 'psa_birth_certificate' | 'proof_of_residency',
   file?: Express.Multer.File,
 ) {
+  const rawUid = athleteId.replace(/^ath_/, '');
+  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+
+  let profileRef = db.collection('Athlete_Profiles').doc(canonicalAthleteId);
+  const doc = await profileRef.get();
+  if (!doc.exists) {
+    const rawDoc = await db.collection('Athlete_Profiles').doc(rawUid).get();
+    if (rawDoc.exists) {
+      profileRef = db.collection('Athlete_Profiles').doc(rawUid);
+    }
+  }
+
   const documentMeta: AthleteDocument = {
     name: file?.originalname || `${docType}.pdf`,
     mimeType: file?.mimetype || 'application/pdf',
@@ -204,8 +226,6 @@ export async function uploadAthleteDocument(
     status: 'Pending',
     uploaded_at: new Date().toISOString().split('T')[0],
   };
-
-  const profileRef = db.collection('Athlete_Profiles').doc(athleteId);
 
   await profileRef.set(
     {

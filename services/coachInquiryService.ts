@@ -238,10 +238,12 @@ export async function submitRecruitmentInquiry(
  * Responds in under 200ms.
  */
 export async function getAthleteInquiries(athleteId: string): Promise<EnrichedInquiry[]> {
+  const strippedId = athleteId.replace(/^ath_/, '');
+  const candidateIds = Array.from(new Set([athleteId, strippedId, `ath_${strippedId}`]));
+
   const snapshot = await db
     .collection('Scouting_Registry')
-    .where('athlete_id', '==', athleteId)
-    .where('initiated_by', '==', athleteId)
+    .where('athlete_id', 'in', candidateIds)
     .get();
 
   const inquiries: RecruitmentInquiry[] = [];

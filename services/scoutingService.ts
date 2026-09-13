@@ -340,10 +340,13 @@ export async function dispatchRecruitmentProposal(
  * Retrieve sent recruitment proposals.
  */
 export async function getRecruitmentProposals(coachId: string): Promise<any[]> {
+  const strippedCoachId = coachId.replace(/^coach_/, '');
+  const candidateCoachIds = Array.from(new Set([coachId, strippedCoachId, `coach_${strippedCoachId}`]));
+
   const proposalsSnapshot = await db
     .collection('Scouting_Registry')
-    .where('coach_scout_id', '==', coachId)
-    .where('initiated_by', '==', coachId)
+    .where('coach_scout_id', 'in', candidateCoachIds)
+    .where('initiated_by', 'in', candidateCoachIds)
     .get();
 
   const proposals: any[] = [];

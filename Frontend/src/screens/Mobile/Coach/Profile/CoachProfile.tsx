@@ -104,8 +104,9 @@ export function CoachProfile({
                 : "BASKETBALL";
 
             let totalAthletesCount = 0;
-            if (Array.isArray(teamsRes)) {
-              teamsRes.forEach((t: any) => {
+            const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+            if (Array.isArray(rawTeams)) {
+              rawTeams.forEach((t: any) => {
                 totalAthletesCount += Array.isArray(t.roster_list) ? t.roster_list.length : 0;
               });
             }
