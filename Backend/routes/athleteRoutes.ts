@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { authenticate } from '../middlewares/authMiddleware';
+import { authenticate, optionalAuth } from '../middlewares/authMiddleware';
 import {
   getAthleteHome,
   getAthlete,
@@ -26,9 +26,9 @@ const upload = multer({
 router.post('/register-athlete', upload.single('eligible_documents'), registerAthlete);
 router.post('/register', upload.single('eligible_documents'), registerAthlete);
 router.post('/', upload.single('eligible_documents'), registerAthlete);
-router.get('/search', authenticate, searchAthletesHandler);
-router.get('/list', authenticate, searchAthletesHandler);
-router.get('/', authenticate, searchAthletesHandler);
+router.get('/search', optionalAuth, searchAthletesHandler);
+router.get('/list', optionalAuth, searchAthletesHandler);
+router.get('/', optionalAuth, searchAthletesHandler);
 
 // Clean Token-Based Routes (No Athlete ID required in URL)
 router.get('/home', authenticate, getAthleteHome);
@@ -45,7 +45,7 @@ router.get('/profile', authenticate, getAthlete);
 router.get('/me', authenticate, getAthlete);
 router.patch('/profile', authenticate, updateAthlete);
 router.patch('/me', authenticate, updateAthlete);
-router.post('/documents', authenticate, upload.single('document'), uploadDocument);
+router.post('/documents', authenticate, upload.any(), uploadDocument);
 
 // Parameterized Routes (Backward-compatible and for Coach/Scouting queries)
 router.get('/:athleteId/home', authenticate, getAthleteHome);
@@ -60,6 +60,6 @@ router.post('/:athleteId/sync-offline', authenticate, syncAthleteOfflineBatchHan
 router.get('/:athleteId/offline-snapshot', authenticate, getAthleteOfflineSnapshotHandler);
 router.get('/:athleteId', getAthlete);
 router.patch('/:athleteId', authenticate, updateAthlete);
-router.post('/:athleteId/documents', authenticate, upload.single('document'), uploadDocument);
+router.post('/:athleteId/documents', authenticate, upload.any(), uploadDocument);
 
 export default router;

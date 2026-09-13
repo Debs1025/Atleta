@@ -17,6 +17,7 @@ import {
 } from './athleteService';
 import { getPublicCoachProfile, submitRecruitmentInquiry, respondToRecruitmentInquiry } from './coachInquiryService';
 import { getAllSportsService } from './sportService';
+import { getCoachManagedAthletes } from './teamService';
 import { eventBus, EVENTS } from '../utils/eventBus';
 
 export class ServiceError extends Error {
@@ -520,26 +521,29 @@ export async function getCoachOfflineSnapshotService(coachId: string): Promise<C
   const sports = await getAllSportsService().catch(() => []);
 
   // Fetch upcoming / recent matches
-  let matchDocs: any[] = [];
+  const matchMap = new Map<string, any>();
   const matchSnap = await db.collection('Match_Logs').where('logged_by_coach_id', '==', coachId).get().catch(() => null);
-  if (matchSnap && !matchSnap.empty) {
-    matchDocs = matchSnap.docs.map(d => d.data());
-  } else {
-    const allMatchesSnap = await db.collection('Match_Logs').limit(20).get().catch(() => null);
-    if (allMatchesSnap) {
-      matchDocs = allMatchesSnap.docs.map(d => d.data());
-    }
+  if (matchSnap) {
+    matchSnap.docs.forEach(d => matchMap.set(d.id, d.data()));
   }
-  const scheduledMatches = matchDocs;
+  const allMatchesSnap = await db.collection('Match_Logs').limit(30).get().catch(() => null);
+  if (allMatchesSnap) {
+    allMatchesSnap.docs.forEach(d => matchMap.set(d.id, d.data()));
+  }
+  const scheduledMatches = Array.from(matchMap.values());
 
   // Fetch recent sRPE workload logs
   const wlSnap = await db.collection('Workload_Analysis').where('logged_by_coach_id', '==', coachId).limit(30).get().catch(() => null);
   const recentWorkload = wlSnap ? wlSnap.docs.map(d => d.data()) : [];
 
+  // Fetch all handled athletes (both on teams and unassigned)
+  const handledAthletes = await getCoachManagedAthletes(coachId).catch(() => []);
+
   const snapshotData = {
     coach_profile: profile,
     teams,
     rosters,
+    handled_athletes: handledAthletes,
     sports_configurations: sports,
     scheduled_matches: scheduledMatches,
     recent_workload_logs: recentWorkload,
