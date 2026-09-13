@@ -502,7 +502,7 @@ export async function certifyValidationService(
   // Invalidate athlete caches and notify listeners of certified match stats
   const roster = Array.from(new Set([
     ...(matchData.roster_athletes || []),
-    ...(auditData.roster_athletes || []),
+    ...((auditData as any).roster_athletes || []),
     ...(dto.scoresheet_data?.player_stats ? dto.scoresheet_data.player_stats.map((p: any) => p.athlete_id) : []),
   ])).filter(Boolean);
 
