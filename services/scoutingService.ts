@@ -381,9 +381,9 @@ export async function getRecruitmentProposals(coachId: string): Promise<any[]> {
   return proposals.sort((a, b) => new Date(b.date_initiated).getTime() - new Date(a.date_initiated).getTime());
 }
 
-// In-memory cache for coach scouting profiles (60 seconds TTL)
+// In-memory cache for coach scouting profiles (2 seconds TTL)
 const scoutingProfileCache = new Map<string, { data: any; cachedAt: number }>();
-const SCOUTING_CACHE_TTL_MS = 60 * 1000;
+const SCOUTING_CACHE_TTL_MS = 2 * 1000;
 
 /**
  * Retrieve complete athlete profile for coaching evaluation.
@@ -402,6 +402,8 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
   }
 
   const strippedId = athleteId.replace(/^ath_/, '');
+  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+  const candidateIds = Array.from(new Set([athleteId, strippedId, canonicalAthleteId]));
 
   // Parallel fetch to guarantee < 200ms response time
   const [profileDoc, userDoc, metricsSnapshot, workloadSnapshot] = await Promise.all([
@@ -413,8 +415,8 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
       if (doc.exists) return doc;
       return db.collection('Users').doc(strippedId).get();
     }),
-    db.collection('Performance_Metrics').where('athlete_id', 'in', [athleteId, strippedId, `ath_${strippedId}`]).get(),
-    db.collection('Workload_Analysis').where('athlete_id', 'in', [athleteId, strippedId, `ath_${strippedId}`]).get(),
+    db.collection('Performance_Metrics').where('athlete_id', 'in', candidateIds).get(),
+    db.collection('Workload_Analysis').where('athlete_id', 'in', candidateIds).get(),
   ]);
 
   if (!profileDoc.exists && !userDoc.exists) {
@@ -445,6 +447,24 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
   const careerPer = efficiencies.length > 0
     ? parseFloat((efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length).toFixed(2))
     : (profileData.stats?.efficiency_rating || 0);
+
+  // Aggregated totals and averages
+  let totalPts = 0;
+  let totalReb = 0;
+  let totalAst = 0;
+  let totalBlk = 0;
+  const totalGames = metricsDocs.length;
+  for (const m of metricsDocs) {
+    const s = m.sport_stats || {};
+    totalPts += Number(s.points || 0);
+    totalReb += Number((s.offensive_rebounds || 0) + (s.defensive_rebounds || 0) || s.rebounds || 0);
+    totalAst += Number(s.assists || 0);
+    totalBlk += Number(s.blocks || 0);
+  }
+  const ppg = totalGames > 0 ? parseFloat((totalPts / totalGames).toFixed(1)) : (profileData.stats?.ppg || 0);
+  const rpg = totalGames > 0 ? parseFloat((totalReb / totalGames).toFixed(1)) : (profileData.stats?.rpg || 0);
+  const apg = totalGames > 0 ? parseFloat((totalAst / totalGames).toFixed(1)) : (profileData.stats?.apg || 0);
+  const bpg = totalGames > 0 ? parseFloat((totalBlk / totalGames).toFixed(1)) : (profileData.stats?.bpg || 0);
 
   // Radar chart metrics (speed, power, agility, iq, endurance)
   let latestRadar = metricsDocs.find((m: any) => m.radar_scores)?.radar_scores;
@@ -544,8 +564,44 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
     psa_status: isPsaVerified ? 'Verified' : 'Pending',
     academic_status: isAcademicVerified ? 'Verified' : 'Pending',
     residency_status: isResidencyVerified ? 'Verified' : 'Pending',
-    // Note: Raw file URLs intentionally redacted for coach scouting view
   };
+
+  // Build real recent matches from Performance_Metrics + Match_Logs
+  const recentMatches: any[] = [];
+  if (metricsDocs.length > 0) {
+    const recentMetrics = [...metricsDocs]
+      .sort((a: any, b: any) => new Date(b.timestamp || b.date || 0).getTime() - new Date(a.timestamp || a.date || 0).getTime())
+      .slice(0, 5);
+    const matchIds = Array.from(new Set(recentMetrics.map((m: any) => m.match_id).filter(Boolean)));
+    const matchDocs = await Promise.all(
+      matchIds.map(async (id) => {
+        let mDoc = await db.collection('Match_Logs_Official').doc(id).get();
+        if (!mDoc.exists) {
+          mDoc = await db.collection('Match_Logs').doc(id).get();
+        }
+        return mDoc;
+      }),
+    );
+    const matchMap = new Map<string, any>();
+    matchDocs.forEach((d) => {
+      if (d.exists) matchMap.set(d.id, d.data());
+    });
+
+    for (const rm of recentMetrics) {
+      const match = matchMap.get(rm.match_id) || {};
+      const matchDate = rm.timestamp || rm.date || match.match_date || new Date().toISOString();
+      recentMatches.push({
+        id: rm.match_id || `m_${rm.metric_id}`,
+        opponent: match.opponent_team_name || match.away_team_name || match.home_team_name || 'Opponent Team',
+        result: match.game_result || 'Win',
+        score: match.score || `${match.home_score || 0} - ${match.away_score || 0}`,
+        date: String(matchDate).split('T')[0],
+        points: rm.sport_stats?.points || 0,
+      });
+    }
+  } else if (profileData.recent_matches && Array.isArray(profileData.recent_matches)) {
+    recentMatches.push(...profileData.recent_matches);
+  }
 
   const result = {
     athlete_id: athleteId,
@@ -555,7 +611,7 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
     full_name: fullName,
     email: userData.email || profileData.email || '',
     phone_number: userData.phone_number || profileData.phone_number || null,
-    province: profileData.province || userData.province || 'NCR',
+    province: profileData.province || userData.province || 'Camarines Sur',
     birthdate: profileData.birthdate || userData.birthdate || '2001-08-14',
     gender: profileData.gender || userData.gender || 'Male',
     sport_type: profileData.sport_type || userData.sport_type || 'Basketball',
@@ -584,14 +640,25 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
 
     career_per: careerPer,
 
-    recent_matches: profileData.recent_matches || [
-      { id: 'm1', opponent: 'Ateneo Blue Eagles', result: 'Win', score: '88 - 82', date: '2026-07-25' },
-      { id: 'm2', opponent: 'La Salle Green Archers', result: 'Win', score: '94 - 90', date: '2026-07-18' },
-    ],
+    stats: {
+      ppg,
+      rpg,
+      apg,
+      bpg,
+      efficiency_rating: careerPer,
+      games_played: totalGames,
+    },
 
-    achievements: profileData.achievements || [
-      { title: 'Season MVP', year: '2025', content: 'Awarded Most Valuable Player in National Collegiate League.' },
-    ],
+    averages: {
+      ppg,
+      rpg,
+      apg,
+      bpg,
+    },
+
+    recent_matches: recentMatches,
+
+    achievements: profileData.achievements || [],
   };
 
   // Cache response for ultra-fast subsequent retrievals
