@@ -43,14 +43,14 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
   const userData = userDoc.exists ? userDoc.data()! : {};
   const profileData = profileDoc.exists ? profileDoc.data()! : {};
 
-  const firstName = userData.first_name || profileData.first_name || 'Athlete';
-  const lastName = userData.last_name || profileData.last_name || 'User';
+  const firstName = userData.first_name || profileData.first_name || '';
+  const lastName = userData.last_name || profileData.last_name || '';
 
   const phys = profileData.physical_profile || {};
-  const heightCm = phys.height_cm || profileData.height_cm || profileData.physical_attributes?.height_cm || 188;
-  const weightKg = phys.weight_kg || profileData.weight_kg || profileData.physical_attributes?.weight_kg || 85;
-  const wingspanCm = phys.wingspan_cm || profileData.wingspan_cm || profileData.physical_attributes?.wingspan_cm || 195;
-  const verticalCm = phys.vertical_cm || profileData.vertical_cm || profileData.physical_attributes?.vertical_cm || 88;
+  const heightCm = phys.height_cm || profileData.height_cm || profileData.physical_attributes?.height_cm || 0;
+  const weightKg = phys.weight_kg || profileData.weight_kg || profileData.physical_attributes?.weight_kg || 0;
+  const wingspanCm = phys.wingspan_cm || profileData.wingspan_cm || profileData.physical_attributes?.wingspan_cm || 0;
+  const verticalCm = phys.vertical_cm || profileData.vertical_cm || profileData.physical_attributes?.vertical_cm || 0;
 
   const bmi = calculateBMI(weightKg, heightCm);
   const apeIndex = calculateApeIndex(wingspanCm, heightCm);
@@ -134,12 +134,12 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
     first_name: firstName,
     last_name: lastName,
     full_name: `${firstName} ${lastName}`.trim(),
-    avatar_url: profileData.avatar_url || 'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400',
-    birthdate: profileData.birthdate || userData.birthdate || '2001-08-14',
-    gender: profileData.gender || userData.gender || 'Male',
-    position: profileData.position || 'Point Guard',
-    location: profileData.province || userData.province || 'Camarines Sur, PH',
-    sport_type: profileData.sport_type || userData.sport_type || 'Basketball',
+    avatar_url: profileData.avatar_url || userData.avatar_url || '',
+    birthdate: profileData.birthdate || userData.birthdate || '',
+    gender: profileData.gender || userData.gender || '',
+    position: profileData.position || '',
+    location: profileData.province || userData.province || profileData.location || '',
+    sport_type: profileData.sport_type || userData.sport_type || '',
 
     physical_attributes: {
       height_cm: heightCm,
@@ -179,18 +179,7 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
       },
     },
 
-    documents: profileData.documents || {
-      psa_birth_certificate: profileData.psa_birth_certificate || {
-        name: 'PSA_BirthCertificate.pdf',
-        status: 'Pending',
-        uploaded_at: '2026-01-10',
-      },
-      proof_of_residency: profileData.proof_of_residency || {
-        name: 'Barangay_Certificate.pdf',
-        status: 'Pending',
-        uploaded_at: '2026-01-12',
-      },
-    },
+    documents: profileData.documents || null,
 
     achievements: profileData.achievements || [],
   };
@@ -224,10 +213,10 @@ export async function updateAthleteProfile(
   // Auto-package physical attributes and recompute sports science metrics (BMI & Ape Index)
   if (payload.height_cm !== undefined || payload.weight_kg !== undefined || payload.wingspan_cm !== undefined || payload.vertical_cm !== undefined) {
     const existing = doc.exists ? (doc.data()?.physical_profile || {}) : {};
-    const height = payload.height_cm !== undefined ? Number(payload.height_cm) : (existing.height_cm || 188);
-    const weight = payload.weight_kg !== undefined ? Number(payload.weight_kg) : (existing.weight_kg || 85);
-    const wingspan = payload.wingspan_cm !== undefined ? Number(payload.wingspan_cm) : (existing.wingspan_cm || 195);
-    const vertical = payload.vertical_cm !== undefined ? Number(payload.vertical_cm) : (existing.vertical_cm || 85);
+    const height = payload.height_cm !== undefined ? Number(payload.height_cm) : (existing.height_cm || 0);
+    const weight = payload.weight_kg !== undefined ? Number(payload.weight_kg) : (existing.weight_kg || 0);
+    const wingspan = payload.wingspan_cm !== undefined ? Number(payload.wingspan_cm) : (existing.wingspan_cm || 0);
+    const vertical = payload.vertical_cm !== undefined ? Number(payload.vertical_cm) : (existing.vertical_cm || 0);
 
     payload.physical_profile = {
       height_cm: height,
@@ -236,8 +225,8 @@ export async function updateAthleteProfile(
       vertical_cm: vertical,
     };
 
-    const bmi = height > 0 ? parseFloat((weight / Math.pow(height / 100, 2)).toFixed(1)) : 22.5;
-    const apeIndex = height > 0 ? parseFloat((wingspan / height).toFixed(2)) : 1.02;
+    const bmi = (height > 0 && weight > 0) ? parseFloat((weight / Math.pow(height / 100, 2)).toFixed(1)) : 0;
+    const apeIndex = (height > 0 && wingspan > 0) ? parseFloat((wingspan / height).toFixed(2)) : 0;
 
     payload.computed_metrics = {
       bmi,
@@ -530,24 +519,6 @@ export async function getAthleteHomeSummary(athleteId: string, bypassCache: bool
     if (profileData.analytics?.scoring_trend) {
       scoringTrend = profileData.analytics.scoring_trend;
     }
-
-    if (athleteId === 'ath_test_user_101') {
-      ppg = 22.4;
-      rpg = 6.8;
-      apg = 8.2;
-      bpg = 1.1;
-      fgPct = 48.5;
-      threePct = 38.2;
-      ftPct = 84.1;
-      efficiencyRating = 24.6;
-      fiveGameTrend = [
-        { id: 'm1', opponent: 'Ateneo Blue Eagles', result: 'Win', score: '88 - 82', date: '2026-07-25', points: 28 },
-        { id: 'm2', opponent: 'La Salle Green Archers', result: 'Win', score: '94 - 90', date: '2026-07-18', points: 31 },
-        { id: 'm3', opponent: 'UP Fighting Maroons', result: 'Lose', score: '79 - 83', date: '2026-07-11', points: 19 },
-        { id: 'm4', opponent: 'UST Growling Tigers', result: 'Win', score: '102 - 91', date: '2026-07-04', points: 24 },
-        { id: 'm5', opponent: 'FEU Tamaraws', result: 'Win', score: '85 - 78', date: '2026-06-27', points: 22 },
-      ];
-    }
   }
 
   const efgPct = parseFloat((fgPct + 0.5 * threePct).toFixed(1));
@@ -596,16 +567,6 @@ export async function getAthleteHomeSummary(athleteId: string, bypassCache: bool
           break;
         }
       }
-    }
-
-    if (!currentTeamSummary && athleteId === 'ath_test_user_101') {
-      currentTeamSummary = {
-        team_id: 't-101',
-        team_name: 'Adamson Falcons',
-        coach_name: 'Coach Nash Racela',
-        record: '18 - 4',
-        jersey_number: 7,
-      };
     }
   }
 

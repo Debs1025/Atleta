@@ -255,9 +255,11 @@ export async function getAthleteWorkloadSummary(athleteId: string): Promise<any>
   const loads28d = loads.slice(0, 28);
 
   const acuteLoad = loads7d.length > 0 ? round(mean(loads7d)) : 0;
-  const chronicLoad = loads28d.length > 0 ? round(mean(loads28d)) : (acuteLoad || 400);
-  const acwrRatio = chronicLoad > 0 ? round(acuteLoad / chronicLoad) : 1.0;
-  const risk = classifyRiskLevel(acwrRatio);
+  const chronicLoad = loads28d.length > 0 ? round(mean(loads28d)) : acuteLoad;
+  const acwrRatio = chronicLoad > 0 ? round(acuteLoad / chronicLoad) : 0;
+  const risk = entries.length === 0
+    ? { level: 'NONE' as any, description: 'No workload logged yet.' }
+    : classifyRiskLevel(acwrRatio);
 
   return {
     athlete_id: athleteId,

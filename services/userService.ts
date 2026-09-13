@@ -96,23 +96,23 @@ export async function registerUserService(
   if (firestoreRole === 'Athlete') {
     const athleteId = `ath_${uid}`;
     
-    const birthdate = String(data.birthdate || data.date_of_birth || '2001-01-01').trim();
-    const gender = String(data.gender || 'Male').trim();
-    const province = String(data.province || 'Camarines Sur').trim();
-    const sportType = String(data.sport_type || 'Basketball').trim();
-    const position = String(data.position || 'Unassigned').trim();
+    const birthdate = String(data.birthdate || data.date_of_birth || '').trim();
+    const gender = String(data.gender || '').trim();
+    const province = String(data.province || '').trim();
+    const sportType = String(data.sport_type || '').trim();
+    const position = String(data.position || '').trim();
     const jerseyNumber = data.jersey_number !== undefined ? Number(data.jersey_number) : null;
     const recruitmentStatus = data.recruitment_status ? String(data.recruitment_status).trim() : 'Available';
     const rank = data.rank !== undefined ? data.rank : data.leaderboard_rank !== undefined ? data.leaderboard_rank : null;
 
     const physInput = (data.physical_profile as any) || (data.physical_attributes as any) || {};
-    const heightCm = Number(data.height_cm || physInput.height_cm || 188);
-    const weightKg = Number(data.weight_kg || physInput.weight_kg || 85);
-    const wingspanCm = Number(data.wingspan_cm || physInput.wingspan_cm || 195);
-    const verticalCm = Number(data.vertical_cm || physInput.vertical_cm || 85);
+    const heightCm = Number(data.height_cm || physInput.height_cm || 0);
+    const weightKg = Number(data.weight_kg || physInput.weight_kg || 0);
+    const wingspanCm = Number(data.wingspan_cm || physInput.wingspan_cm || 0);
+    const verticalCm = Number(data.vertical_cm || physInput.vertical_cm || 0);
 
-    const bmi = heightCm > 0 ? parseFloat((weightKg / Math.pow(heightCm / 100, 2)).toFixed(1)) : 22.5;
-    const apeIndex = heightCm > 0 ? parseFloat((wingspanCm / heightCm).toFixed(2)) : 1.02;
+    const bmi = (heightCm > 0 && weightKg > 0) ? parseFloat((weightKg / Math.pow(heightCm / 100, 2)).toFixed(1)) : 0;
+    const apeIndex = (heightCm > 0 && wingspanCm > 0) ? parseFloat((wingspanCm / heightCm).toFixed(2)) : 0;
 
     const physicalProfile = {
       height_cm: heightCm,

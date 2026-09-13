@@ -53,47 +53,6 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
         ...userDoc.data(),
       };
     } else {
-      // Known fallback mock coach profiles for demo
-      const mockCoaches: Record<string, CoachPublicProfile> = {
-        'coach-001': {
-          coach_id: 'coach-001',
-          user_id: 'user-coach-001',
-          first_name: 'Nash',
-          last_name: 'Racela',
-          full_name: 'Coach Nash Racela',
-          email: 'nash.racela@adamson.edu.ph',
-          contact_number: '09171112233',
-          years_of_experience: 15,
-          current_institution: 'Adamson University',
-          quote: 'Hard work beats talent when talent doesn\'t work hard.',
-          specialties: ['Offensive Systems', 'Player Development', 'Tactical Pressing'],
-          success_rate: 78.5,
-          professional_documents: ['FIBA_Level2_License.pdf', 'UAAP_Coach_Certification.pdf'],
-          sport_type: 'Basketball',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-        },
-        'coach-002': {
-          coach_id: 'coach-002',
-          user_id: 'user-coach-002',
-          first_name: 'Tab',
-          last_name: 'Baldwin',
-          full_name: 'Coach Tab Baldwin',
-          email: 'tab.baldwin@ateneo.edu.ph',
-          contact_number: '09172223344',
-          years_of_experience: 25,
-          current_institution: 'Ateneo de Manila University',
-          quote: 'Details make champions.',
-          specialties: ['Defensive Systems', 'International Scouting'],
-          success_rate: 85.0,
-          professional_documents: ['FIBA_Master_Coach.pdf'],
-          sport_type: 'Basketball',
-          avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-        },
-      };
-
-      if (mockCoaches[coachId]) {
-        return mockCoaches[coachId];
-      }
       return null; // Signals 404 Not Found
     }
   }
@@ -108,7 +67,7 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
     const userDoc = await db.collection('Users').doc(coachData.user_id).get();
     if (userDoc.exists) {
       const u = userDoc.data()!;
-      firstName = firstName || u.first_name || 'Coach';
+      firstName = firstName || u.first_name || '';
       lastName = lastName || u.last_name || '';
       email = email || u.email || '';
       contactNumber = contactNumber || u.contact_number || null;
@@ -118,18 +77,18 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
   return {
     coach_id: coachData.coach_id || coachId,
     user_id: coachData.user_id || coachId,
-    first_name: firstName || 'Coach',
+    first_name: firstName || '',
     last_name: lastName || '',
-    full_name: `${firstName || 'Coach'} ${lastName || ''}`.trim(),
-    email: email || 'coach@atleta.com',
+    full_name: `${firstName} ${lastName}`.trim() || 'Coach',
+    email: email || '',
     contact_number: contactNumber,
-    years_of_experience: coachData.years_of_experience || 5,
-    current_institution: coachData.current_institution || 'Collegiate Athletics',
+    years_of_experience: coachData.years_of_experience || 0,
+    current_institution: coachData.current_institution || '',
     quote: coachData.quote || null,
-    specialties: coachData.specialties || ['Player Development'],
+    specialties: coachData.specialties || [],
     success_rate: coachData.success_rate || null,
     professional_documents: coachData.professional_documents || [],
-    sport_type: coachData.sport_type || 'Basketball',
+    sport_type: coachData.sport_type || '',
     avatar_url: coachData.avatar_url || null,
     team_id: coachData.team_id || null,
     teams_managed: coachData.teams_managed || [],

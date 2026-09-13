@@ -432,14 +432,14 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
 
   // Physical profile & computed metrics
   const phys = profileData.physical_profile || {};
-  const heightCm = Number(phys.height_cm || profileData.height_cm || 188);
-  const weightKg = Number(phys.weight_kg || profileData.weight_kg || 85);
-  const wingspanCm = Number(phys.wingspan_cm || profileData.wingspan_cm || 195);
-  const verticalCm = Number(phys.vertical_cm || profileData.vertical_cm || 85);
+  const heightCm = Number(phys.height_cm || profileData.height_cm || 0);
+  const weightKg = Number(phys.weight_kg || profileData.weight_kg || 0);
+  const wingspanCm = Number(phys.wingspan_cm || profileData.wingspan_cm || 0);
+  const verticalCm = Number(phys.vertical_cm || profileData.vertical_cm || 0);
 
-  const heightM = heightCm > 0 ? heightCm / 100 : 1.88;
-  const bmi = Math.round((weightKg / (heightM * heightM)) * 10) / 10;
-  const apeIndex = heightCm > 0 ? Math.round((wingspanCm / heightCm) * 100) / 100 : 1.04;
+  const heightM = heightCm > 0 ? heightCm / 100 : 0;
+  const bmi = (heightM > 0 && weightKg > 0) ? Math.round((weightKg / (heightM * heightM)) * 10) / 10 : 0;
+  const apeIndex = (heightCm > 0 && wingspanCm > 0) ? Math.round((wingspanCm / heightCm) * 100) / 100 : 0;
 
   // Efficiency & Performance metrics
   const metricsDocs = metricsSnapshot.docs.map((d) => d.data());
@@ -527,14 +527,14 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
     // Default optimal workload indicators for scouting evaluation
     workloadAnalytics = {
       total_entries: 0,
-      acute_load: 450,
-      chronic_load: 400,
-      acwr_ratio: 1.13,
-      risk_level: 'MODERATE',
-      risk_description: 'Optimal training zone. Keep up the balanced workload!',
-      monotony_score: 1.2,
-      strain_score: 540,
-      daily_loads_7d: [65, 70, 60, 80, 55, 60, 60],
+      acute_load: 0,
+      chronic_load: 0,
+      acwr_ratio: 0,
+      risk_level: 'NONE',
+      risk_description: 'No workload logged yet.',
+      monotony_score: 0,
+      strain_score: 0,
+      daily_loads_7d: [],
       daily_loads_28d: [],
     };
   }
@@ -611,14 +611,14 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
     full_name: fullName,
     email: userData.email || profileData.email || '',
     phone_number: userData.phone_number || profileData.phone_number || null,
-    province: profileData.province || userData.province || 'Camarines Sur',
-    birthdate: profileData.birthdate || userData.birthdate || '2001-08-14',
-    gender: profileData.gender || userData.gender || 'Male',
-    sport_type: profileData.sport_type || userData.sport_type || 'Basketball',
-    position: profileData.position || 'Unassigned',
+    province: profileData.province || userData.province || '',
+    birthdate: profileData.birthdate || userData.birthdate || '',
+    gender: profileData.gender || userData.gender || '',
+    sport_type: profileData.sport_type || userData.sport_type || '',
+    position: profileData.position || '',
     jersey_number: profileData.jersey_number ?? null,
     recruitment_status: profileData.recruitment_status || 'Available',
-    avatar_url: profileData.avatar_url || userData.avatar_url || 'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=400',
+    avatar_url: profileData.avatar_url || userData.avatar_url || '',
 
     physical_attributes: {
       height_cm: heightCm,
