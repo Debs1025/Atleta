@@ -13,6 +13,7 @@ import validationRoutes from './validationRoutes';
 import adminRoutes from './adminRoutes';
 import sportRoutes from './sportRoutes';
 import syncRoutes from './syncRoutes';
+import scoresheetRoutes from './scoresheetRoutes';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.use('/inquiries', inquiryRoutes);
 router.use('/matches', matchRoutes);
 router.use('/scouting', scoutingRoutes);
 router.use('/validations', validationRoutes);
+router.use('/scoresheets', scoresheetRoutes);
 router.use('/sports', sportRoutes);
 router.use('/sync', syncRoutes);
 

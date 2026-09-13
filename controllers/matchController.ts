@@ -90,6 +90,25 @@ export async function scanStandaloneScoresheet(req: AuthRequest, res: Response):
   }
 }
 
+export async function parsePdfScoresheetHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const file = extractFile(req);
+    const { parsePdfScoresheetService } = await import('../services/matchService');
+    const result = await parsePdfScoresheetService(file);
+    res.status(200).json({
+      message: 'PDF scoresheet processed and parsed successfully.',
+      ...result,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('parsePdfScoresheetHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
 export async function getBoxscore(req: AuthRequest, res: Response): Promise<void> {
   try {
     const matchId = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;

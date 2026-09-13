@@ -273,6 +273,7 @@ export async function getOfficialProfile(uid: string) {
     user_id: rawUid,
     full_legal_name: userData.full_legal_name || userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
     email: userData.email,
+    contact_number: userData.contact_number || null,
     role: 'Official',
     organization_name: profileData.organization_name || userData.organization_name || userData.organization || 'General Tournament Association',
     official_license_number: profileData.official_license_number || userData.official_license_number || 'OFF-LIC-2026',
@@ -281,4 +282,65 @@ export async function getOfficialProfile(uid: string) {
     is_active: userData.is_active !== undefined ? userData.is_active : true,
     created_at: userData.created_at || new Date().toISOString(),
   };
+}
+
+/**
+ * Update official profile information (Users & Official_Profiles collections).
+ */
+export async function updateOfficialProfileService(uid: string, payload: any) {
+  const rawUid = uid.replace(/^off_/, '');
+  const officialId = `off_${rawUid}`;
+  const now = new Date();
+
+  const userUpdates: Record<string, any> = {
+    updated_at: now,
+  };
+
+  const profileUpdates: Record<string, any> = {
+    updated_at: now,
+  };
+
+  if (payload.full_legal_name || payload.full_name) {
+    const fullName = (payload.full_legal_name || payload.full_name).trim();
+    userUpdates.full_legal_name = fullName;
+    userUpdates.full_name = fullName;
+
+    const nameParts = fullName.split(' ');
+    userUpdates.first_name = nameParts[0] || 'Official';
+    userUpdates.last_name = nameParts.slice(1).join(' ') || 'User';
+  } else if (payload.first_name || payload.last_name) {
+    if (payload.first_name) userUpdates.first_name = payload.first_name.trim();
+    if (payload.last_name) userUpdates.last_name = payload.last_name.trim();
+    userUpdates.full_name = `${userUpdates.first_name || ''} ${userUpdates.last_name || ''}`.trim();
+    userUpdates.full_legal_name = userUpdates.full_name;
+  }
+
+  if (payload.contact_number !== undefined) {
+    userUpdates.contact_number = payload.contact_number;
+  }
+
+  if (payload.organization_name !== undefined) {
+    const org = payload.organization_name.trim();
+    userUpdates.organization_name = org;
+    userUpdates.organization = org;
+    profileUpdates.organization_name = org;
+  }
+
+  if (payload.official_license_number !== undefined) {
+    userUpdates.official_license_number = payload.official_license_number.trim();
+    profileUpdates.official_license_number = payload.official_license_number.trim();
+  }
+
+  if (payload.assigned_tournaments !== undefined) {
+    userUpdates.assigned_tournaments = payload.assigned_tournaments;
+    profileUpdates.assigned_tournaments = payload.assigned_tournaments;
+  }
+
+  const batch = db.batch();
+  batch.set(db.collection('Users').doc(rawUid), userUpdates, { merge: true });
+  batch.set(db.collection('Official_Profiles').doc(officialId), profileUpdates, { merge: true });
+  batch.set(db.collection('Official_Profiles').doc(rawUid), profileUpdates, { merge: true });
+  await batch.commit();
+
+  return await getOfficialProfile(rawUid);
 }

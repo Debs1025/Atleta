@@ -5,6 +5,7 @@ import {
   submitMatch,
   uploadScoresheet,
   scanStandaloneScoresheet,
+  parsePdfScoresheetHandler,
   getBoxscore,
   getMatchDetailsHandler,
 } from '../controllers/matchController';
@@ -24,9 +25,11 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 },
 });
 
-// Standalone OCR Scoresheet Scanner (No match ID needed - accepts any field name)
+// Standalone OCR Scoresheet Scanner (Image, PDF, CSV)
 router.post('/scan-scoresheet', authenticate, upload.any(), scanStandaloneScoresheet);
 router.post('/ocr/scan', authenticate, upload.any(), scanStandaloneScoresheet);
+router.post('/ocr/pdf', authenticate, upload.any(), parsePdfScoresheetHandler);
+router.post('/scoresheet/pdf', authenticate, upload.any(), parsePdfScoresheetHandler);
 router.post('/scoresheet', authenticate, upload.any(), scanStandaloneScoresheet);
 
 // Match Endpoints (Named and Root Routes)

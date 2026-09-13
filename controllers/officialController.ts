@@ -148,3 +148,31 @@ export async function getOfficialProfileHandler(req: AuthRequest, res: Response)
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }
+
+export async function updateOfficialProfileHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user || req.user.role !== 'Official') {
+      res.status(401).json({ error: 'Unauthorized. Official role required.' });
+      return;
+    }
+
+    const { validateUpdateOfficialProfile } = await import('../validators/officialValidator');
+    const errors = validateUpdateOfficialProfile(req.body);
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
+      return;
+    }
+
+    const uid = req.user.uid;
+    const { updateOfficialProfileService } = await import('../services/officialService');
+    const updatedProfile = await updateOfficialProfileService(uid, req.body);
+
+    res.status(200).json({
+      message: 'Official profile updated successfully.',
+      profile: updatedProfile,
+    });
+  } catch (error: any) {
+    console.error('Update official profile error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}

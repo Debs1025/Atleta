@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middlewares/authMiddleware';
 import {
   getOfficialProfileHandler,
+  updateOfficialProfileHandler,
   getOfficialSettingsHandler,
   updateOfficialSettingsHandler,
 } from '../controllers/officialController';
@@ -16,8 +17,16 @@ const router = Router();
 
 // Profile & Identity (Named and Root Routes)
 router.get('/profile', authenticate, getOfficialProfileHandler);
+router.patch('/profile', authenticate, updateOfficialProfileHandler);
+router.put('/profile', authenticate, updateOfficialProfileHandler);
+
 router.get('/me', authenticate, getOfficialProfileHandler);
+router.patch('/me', authenticate, updateOfficialProfileHandler);
+router.get('/me/profile', authenticate, getOfficialProfileHandler);
+router.patch('/me/profile', authenticate, updateOfficialProfileHandler);
+
 router.get('/', authenticate, getOfficialProfileHandler);
+router.patch('/', authenticate, updateOfficialProfileHandler);
 
 // Tournament Management Operations & Dashboard
 router.get('/dashboard', authenticate, getDashboardHandler);

@@ -42,14 +42,20 @@ export function validateCreateOfficialMatch(
     errors.push({ field: 'match_date', message: 'Match date (match_date) is required.' });
   }
 
-  // location (Required)
-  const location = typeof data.location === 'string' ? data.location.trim() : '';
+  // venue or location (Required)
+  const venue = typeof data.venue === 'string' ? data.venue.trim() : (typeof data.location === 'string' ? data.location.trim() : '');
+  if (!venue) {
+    errors.push({ field: 'venue', message: 'Venue (venue or location) is required.' });
+  }
+
+  // location (Required - fallback to venue if not specified)
+  const location = typeof data.location === 'string' ? data.location.trim() : venue;
   if (!location) {
     errors.push({ field: 'location', message: 'Location is required.' });
   }
 
-  // opponent_team_name / away_team_name (Required)
-  const opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : (typeof data.away_team_id === 'string' ? data.away_team_id.trim() : '');
+  // opponent_team_name / away_team_name / away_team_id (Required)
+  const opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : (typeof data.away_team_name === 'string' ? data.away_team_name.trim() : (typeof data.away_team_id === 'string' ? data.away_team_id.trim() : ''));
   if (!opponent) {
     errors.push({ field: 'opponent_team_name', message: 'Opponent team name or away team ID is required.' });
   }

@@ -320,18 +320,29 @@ export async function submitMatchSession(
     home_score: homeScore,
     away_score: awayScore,
     logged_by_coach_id: coachId,
+    created_by_role: 'COACH',
+    is_official: false,
     sport_type: payload.sport_type,
+    event_name: payload.event_name || (payload.sport_type === 'Basketball' ? 'Regular Match' : 'Meet Event'),
     match_type: payload.match_type.trim(),
     match_date: payload.match_date,
     location: payload.location.trim(),
+    venue: payload.venue || payload.location.trim(),
     game_result: homeScore >= awayScore ? 'WIN' : 'LOSS',
+    coaches: payload.coaches || [{ coach_id: coachId, team_name: homeTeamName, role: 'Head Coach' }],
+    assigned_coaches: payload.assigned_coaches || [coachId],
     home_roster_athletes: homeRosterIds,
     away_roster_athletes: awayRosterIds,
     roster_athletes: [...homeRosterIds, ...awayRosterIds],
+    athlete_rosters: payload.athlete_rosters || enrichedPlayerStats,
     player_stats: enrichedPlayerStats,
-    notes: payload.notes ? payload.notes.trim() : `OCR Logged: ${homeTeamName} vs ${oppTeamName} (${homeScore} - ${awayScore})`,
+    scoresheet_data: payload.scoresheet_data || undefined,
+    scoresheet_url: payload.scoresheet_url || '',
+    notes: payload.notes ? payload.notes.trim() : `Logged: ${homeTeamName} vs ${oppTeamName} (${homeScore} - ${awayScore})`,
     idempotency_key: key,
     timestamp: now,
+    created_at: now,
+    updated_at: now,
   };
 
   // Execute atomic batch write: Match Log + Performance Metrics + Idempotency Record
@@ -449,6 +460,23 @@ function extractJsonFromAiText(content: string): any {
   }
 }
 
+async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
+  try {
+    const pdfPkg = require('pdf-parse');
+    if (pdfPkg.PDFParse) {
+      const parser = new pdfPkg.PDFParse({ data: buffer });
+      const res = await parser.getText();
+      return res?.text || '';
+    } else if (typeof pdfPkg === 'function') {
+      const res = await pdfPkg(buffer);
+      return res?.text || '';
+    }
+  } catch (err: any) {
+    console.warn('⚠️ [PDF EXTRACTION] Direct text extraction skipped, falling back to vision mode:', err.message);
+  }
+  return '';
+}
+
 const OCR_MODEL_WATERFALL = [
   'gemini-3.5-flash-lite',
   'gemini-3.6-flash',
@@ -535,6 +563,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
 
   try {
     const mimeType = file.mimetype || 'image/jpeg';
+    const isPdf = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
     let requestBody: any;
 
     if (mimeType === 'text/csv' || mimeType === 'application/vnd.ms-excel' || filename.endsWith('.csv')) {
@@ -560,6 +589,63 @@ Important:
           responseMimeType: 'application/json',
         },
       };
+    } else if (isPdf) {
+      const extractedPdfText = await extractTextFromPdfBuffer(file.buffer);
+
+      if (extractedPdfText.trim().length > 30) {
+        const promptText = `Analyze this basketball/multi-sport scoresheet PDF text carefully:
+${extractedPdfText}
+
+Extract the data into this exact JSON format:
+{
+  "team_scores": [
+    {"team": "HOME_TEAM", "score": 0, "is_home": true},
+    {"team": "AWAY_TEAM", "score": 0, "is_home": false}
+  ],
+  "player_summary": [
+    {"player_name": "Full Name", "team_name": "TeamName", "jersey_number": 0, "points": 0, "rebounds": 0, "assists": 0, "fouls": 0}
+  ]
+}
+
+Important:
+- Return ONLY valid JSON, nothing else.`;
+
+        requestBody = {
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+        };
+      } else {
+        // Send PDF base64 directly to Gemini
+        const base64Pdf = file.buffer.toString('base64');
+        const promptText = `Look at this scoresheet PDF carefully. Extract the team scores and player summary into JSON:
+{
+  "team_scores": [
+    {"team": "HOME_TEAM", "score": 0, "is_home": true},
+    {"team": "AWAY_TEAM", "score": 0, "is_home": false}
+  ],
+  "player_summary": [
+    {"player_name": "Full Name", "team_name": "TeamName", "jersey_number": 0, "points": 0, "rebounds": 0, "assists": 0, "fouls": 0}
+  ]
+}
+Return ONLY valid JSON.`;
+
+        requestBody = {
+          contents: [
+            {
+              parts: [
+                { text: promptText },
+                {
+                  inlineData: {
+                    mimeType: 'application/pdf',
+                    data: base64Pdf,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+        };
+      }
     } else {
       let sendBuffer = file.buffer;
       let sendMime = mimeType;
@@ -728,6 +814,7 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File): Prom
 
   const mimeType = file.mimetype || 'image/jpeg';
   const filename = file.originalname || 'scoresheet.png';
+  const isPdf = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
   let requestBody: any;
 
   if (mimeType === 'text/csv' || mimeType === 'application/vnd.ms-excel' || filename.endsWith('.csv')) {
@@ -775,6 +862,106 @@ Important:
       contents: [{ parts: [{ text: promptText }] }],
       generationConfig: { responseMimeType: 'application/json' },
     };
+  } else if (isPdf) {
+    const extractedPdfText = await extractTextFromPdfBuffer(file.buffer);
+
+    if (extractedPdfText.trim().length > 30) {
+      const promptText = `Analyze this basketball/multi-sport scoresheet PDF text carefully:
+${extractedPdfText}
+
+Extract the data into this exact JSON format:
+{
+  "match_info": {
+    "sport_type": "Basketball",
+    "event_name": "Tournament / Game Event",
+    "opponent_team_name": "Opponent Team",
+    "home_team_name": "Home Team",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
+  },
+  "team_scores": [
+    {"team": "Team A", "score": 0},
+    {"team": "Team B", "score": 0}
+  ],
+  "player_summary": [
+    {
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
+      "blocks": 0,
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
+    }
+  ]
+}
+
+Important:
+- Return ONLY the JSON object, nothing else.`;
+
+      requestBody = {
+        contents: [{ parts: [{ text: promptText }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      };
+    } else {
+      const base64Pdf = file.buffer.toString('base64');
+      const promptText = `Analyze this scoresheet PDF carefully.
+Extract the match overview, final team scores, and individual player statistics into this exact JSON format:
+{
+  "match_info": {
+    "sport_type": "Basketball",
+    "event_name": "Tournament / League Name",
+    "opponent_team_name": "Opponent Team Name",
+    "home_team_name": "Home Team Name",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
+  },
+  "team_scores": [
+    {"team": "TeamName", "score": 0}
+  ],
+  "player_summary": [
+    {
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
+      "blocks": 0,
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
+    }
+  ]
+}
+Return ONLY the JSON object.`;
+
+      requestBody = {
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: base64Pdf,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      };
+    }
   } else {
     let sendBuffer = file.buffer;
     let sendMime = mimeType;
@@ -891,11 +1078,21 @@ Important:
 
 
 /**
+ * Dedicated PDF Scoresheet Parser Service
+ */
+export async function parsePdfScoresheetService(file?: Express.Multer.File): Promise<any> {
+  return await scanScoresheetStandalone(file);
+}
+
+/**
  * Fetch compiled match stats and computed efficiency metrics.
  * GET /api/v1/matches/:matchId/boxscore
  */
 export async function getMatchBoxscore(matchId: string): Promise<BoxscoreResponse> {
-  const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  let matchDoc = await db.collection('Match_Logs_Official').doc(matchId).get();
+  if (!matchDoc.exists) {
+    matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  }
 
   if (!matchDoc.exists) {
     throw new ServiceError(`Match with ID '${matchId}' was not found.`, 404);
@@ -994,7 +1191,10 @@ export async function getMatchBoxscore(matchId: string): Promise<BoxscoreRespons
  * 1. Requests referencing a non-existent match ID return HTTP 404 Not Found.
  */
 export async function getMatchResultDetails(matchId: string): Promise<any> {
-  const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  let matchDoc = await db.collection('Match_Logs_Official').doc(matchId).get();
+  if (!matchDoc.exists) {
+    matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  }
   if (!matchDoc.exists) {
     throw new ServiceError(`Match with ID '${matchId}' was not found.`, 404);
   }

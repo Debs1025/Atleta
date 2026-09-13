@@ -88,6 +88,7 @@ let authInstance: Auth;
 
 try {
   dbInstance = getFirestore();
+  dbInstance.settings({ ignoreUndefinedProperties: true });
 } catch (e: any) {
   console.warn('⚠️ Firestore initialization warning:', e?.message || e);
   dbInstance = {} as Firestore;
