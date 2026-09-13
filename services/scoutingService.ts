@@ -444,26 +444,26 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
   const efficiencies = metricsDocs.map((m: any) => Number(m.calculated_player_efficiency || 0)).filter((v: number) => !isNaN(v));
   const careerPer = efficiencies.length > 0
     ? parseFloat((efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length).toFixed(2))
-    : (profileData.stats?.efficiency_rating || 24.6);
+    : (profileData.stats?.efficiency_rating || 0);
 
   // Radar chart metrics (speed, power, agility, iq, endurance)
   let latestRadar = metricsDocs.find((m: any) => m.radar_scores)?.radar_scores;
   if (!latestRadar && profileData.analytics?.radar_competencies) {
     const r = profileData.analytics.radar_competencies;
     latestRadar = {
-      speed: r.speed || 88,
-      power: r.power || 82,
-      agility: r.agility || 85,
-      iq: r.iq || 92,
-      endurance: r.endurance || r.tech || 89,
+      speed: r.speed || 0,
+      power: r.power || 0,
+      agility: r.agility || 0,
+      iq: r.iq || 0,
+      endurance: r.endurance || r.tech || 0,
     };
   }
   const radarScores = latestRadar || {
-    speed: 85,
-    power: 82,
-    agility: 86,
-    iq: 90,
-    endurance: 84,
+    speed: 0,
+    power: 0,
+    agility: 0,
+    iq: 0,
+    endurance: 0,
   };
 
   // Workload indicators
@@ -471,12 +471,12 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
   let workloadAnalytics: any;
   if (workloadEntries.length > 0) {
     const sorted = [...workloadEntries].sort((a: any, b: any) => new Date(b.entry_date || b.created_at).getTime() - new Date(a.entry_date || a.created_at).getTime());
-    const loads = sorted.map((e: any) => Number(e.daily_load || (e.acute_load || 400)));
+    const loads = sorted.map((e: any) => Number(e.daily_load || (e.acute_load || 0)));
     const acute = loads.slice(0, 7);
     const chronic = loads.slice(0, 28);
     const acuteAvg = acute.reduce((a, b) => a + b, 0) / (acute.length || 1);
     const chronicAvg = chronic.reduce((a, b) => a + b, 0) / (chronic.length || 1);
-    const acwr = chronicAvg > 0 ? parseFloat((acuteAvg / chronicAvg).toFixed(2)) : 1.12;
+    const acwr = chronicAvg > 0 ? parseFloat((acuteAvg / chronicAvg).toFixed(2)) : 0;
 
     let riskLevel = 'MODERATE';
     let riskDesc = 'Optimal training zone. Keep up the balanced workload!';
@@ -504,7 +504,7 @@ export async function getFullScoutingAthleteProfile(athleteId: string): Promise<
       daily_loads_28d: loads.slice(0, 28),
     };
   } else {
-    // Default optimal workload indicators
+    // Default optimal workload indicators for scouting evaluation
     workloadAnalytics = {
       total_entries: 0,
       acute_load: 450,

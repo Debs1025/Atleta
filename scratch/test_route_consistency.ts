@@ -46,10 +46,10 @@ async function runTests() {
     // ─── 1. Health & Root ───────────────────────────────────────────
     console.log('--- 1. Health & Root API Endpoints ---');
     const rootRes = await request('GET', '/');
-    assert(rootRes.status === 200 && rootRes.data.success, 'GET / returns 200 success');
+    assert(rootRes.status === 200 && (rootRes.data as any).success, 'GET / returns 200 success');
 
     const healthRes = await request('GET', '/health');
-    assert(healthRes.status === 200 && healthRes.data.status === 'healthy', 'GET /health returns 200 healthy');
+    assert(healthRes.status === 200 && (healthRes.data as any).status === 'healthy', 'GET /health returns 200 healthy');
 
     // ─── 2. Teams Endpoints (Named & Root) ──────────────────────────
     console.log('\n--- 2. Teams Endpoints ---');

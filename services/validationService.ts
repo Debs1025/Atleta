@@ -20,6 +20,7 @@ import {
   calculateIndividualSportMetrics,
   calculateDynamicSportMetrics,
 } from './matchService';
+import { eventBus, EVENTS } from '../utils/eventBus';
 
 export interface CertifyValidationDto {
   context_notes?: string;
@@ -497,6 +498,17 @@ export async function certifyValidationService(
   batch.set(matchOffRef, updatedMatch, { merge: true });
   batch.set(matchRef, updatedMatch, { merge: true });
   await batch.commit();
+
+  // Invalidate athlete caches and notify listeners of certified match stats
+  const roster = Array.from(new Set([
+    ...(matchData.roster_athletes || []),
+    ...(auditData.roster_athletes || []),
+    ...(dto.scoresheet_data?.player_stats ? dto.scoresheet_data.player_stats.map((p: any) => p.athlete_id) : []),
+  ])).filter(Boolean);
+
+  for (const athId of roster) {
+    eventBus.emit(EVENTS.MATCH_CERTIFIED, { athlete_id: athId });
+  }
 
   return {
     message: 'Match validation successfully certified and record locked to read-only.',
