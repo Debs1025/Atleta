@@ -18,7 +18,6 @@ const router = Router();
 // Profile & Identity (Named and Root Routes)
 router.get('/profile', authenticate, getOfficialProfileHandler);
 router.patch('/profile', authenticate, updateOfficialProfileHandler);
-router.put('/profile', authenticate, updateOfficialProfileHandler);
 
 router.get('/me', authenticate, getOfficialProfileHandler);
 router.patch('/me', authenticate, updateOfficialProfileHandler);
@@ -43,8 +42,6 @@ router.get('/me/settings', authenticate, getOfficialSettingsHandler);
 router.get('/settings', authenticate, getOfficialSettingsHandler);
 router.patch('/me/settings', authenticate, updateOfficialSettingsHandler);
 router.patch('/settings', authenticate, updateOfficialSettingsHandler);
-router.put('/me/settings', authenticate, updateOfficialSettingsHandler);
-router.put('/settings', authenticate, updateOfficialSettingsHandler);
 
 export default router;
 

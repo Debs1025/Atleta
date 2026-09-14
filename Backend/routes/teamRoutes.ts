@@ -30,7 +30,6 @@ router.post('/:teamId/roster', authenticate, updateRosterHandler);
 router.get('/details/:teamId', authenticate, getTeam);
 router.get('/:teamId', authenticate, getTeam);
 router.patch('/:teamId', authenticate, updateTeamHandler);
-router.put('/:teamId', authenticate, updateTeamHandler);
 
 export default router;
 

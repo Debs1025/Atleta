@@ -23,7 +23,6 @@ router.post('/', requireSystemAdmin, createSportHandler);
 // Sport Detail & Modification
 router.get('/:sportId', authenticate, getSportByIdHandler);
 router.patch('/:sportId', requireSystemAdmin, updateSportHandler);
-router.put('/:sportId', requireSystemAdmin, updateSportHandler);
 
 export default router;
 
