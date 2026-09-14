@@ -9,7 +9,7 @@ export async function submitAuditRequestController(req: AuthRequest, res: Respon
   const matchId = String(req.params.matchId);
 
   try {
-    const audit = await submitAuditRequest(coachId, matchId, req.body?.match || req.body);
+    const audit = await submitAuditRequest(coachId, matchId);
     res.status(201).json({
       message: 'Official audit request submitted successfully.',
       audit,

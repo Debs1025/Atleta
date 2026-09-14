@@ -4,12 +4,14 @@ import { db } from '../utils/firebaseAdmin';
 import {
   validateRegisterOfficial,
   validateUpdateOfficialSettings,
+  validateUpdateOfficialProfile,
 } from '../validators/officialValidator';
 import { validateLoginUser } from '../validators/userValidator';
 import {
   registerOfficialService,
   loginOfficialService,
   getOfficialProfile,
+  updateOfficialProfileService,
   getOfficialSettings,
   updateOfficialSettings,
   ServiceError,
@@ -156,7 +158,6 @@ export async function updateOfficialProfileHandler(req: AuthRequest, res: Respon
       return;
     }
 
-    const { validateUpdateOfficialProfile } = await import('../validators/officialValidator');
     const errors = validateUpdateOfficialProfile(req.body);
     if (errors.length > 0) {
       res.status(400).json({ errors });
@@ -164,7 +165,6 @@ export async function updateOfficialProfileHandler(req: AuthRequest, res: Respon
     }
 
     const uid = req.user.uid;
-    const { updateOfficialProfileService } = await import('../services/officialService');
     const updatedProfile = await updateOfficialProfileService(uid, req.body);
 
     res.status(200).json({
@@ -172,6 +172,10 @@ export async function updateOfficialProfileHandler(req: AuthRequest, res: Respon
       profile: updatedProfile,
     });
   } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     console.error('Update official profile error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }

@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { OAuth2Client } from 'google-auth-library';
 import { auth, db } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
@@ -61,34 +61,12 @@ export async function registerUserService(
   const rawRole = (data.role as string) || 'Athlete';
   const firestoreRole = normalizeRole(rawRole);
 
-  const cleanEmail = email.trim().toLowerCase();
-
-  // 1. Check if email already exists in Firestore Users collection
-  const existingUserSnap = await db.collection('Users').where('email', '==', cleanEmail).limit(1).get();
-  if (!existingUserSnap.empty) {
-    const err: any = new Error('Email already in use. Please log in using your existing credentials.');
-    err.code = 'auth/email-already-in-use';
-    err.status = 400;
-    throw err;
-  }
-
-  // 2. Create Firebase Auth user
-  let userRecord;
-  try {
-    userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: `${first_name} ${last_name}`,
-    });
-  } catch (authErr: any) {
-    if (authErr.code === 'auth/email-already-exists' || authErr.code === 'auth/email-already-in-use') {
-      const err: any = new Error('Email already in use. Please log in using your existing credentials.');
-      err.code = 'auth/email-already-in-use';
-      err.status = 400;
-      throw err;
-    }
-    throw authErr;
-  }
+  // 1. Create Firebase Auth user
+  const userRecord = await auth.createUser({
+    email,
+    password,
+    displayName: `${first_name} ${last_name}`,
+  });
 
   const uid = userRecord.uid;
   const now = new Date();
@@ -120,9 +98,9 @@ export async function registerUserService(
     
     const birthdate = String(data.birthdate || data.date_of_birth || '').trim();
     const gender = String(data.gender || '').trim();
-    const province = String(data.province || data.location || '').trim();
-    const sportType = String(data.sport_type || data.sport || '').trim();
-    const position = String(data.position || 'Unassigned').trim();
+    const province = String(data.province || '').trim();
+    const sportType = String(data.sport_type || '').trim();
+    const position = String(data.position || '').trim();
     const jerseyNumber = data.jersey_number !== undefined ? Number(data.jersey_number) : null;
     const recruitmentStatus = data.recruitment_status ? String(data.recruitment_status).trim() : 'Available';
     const rank = data.rank !== undefined ? data.rank : data.leaderboard_rank !== undefined ? data.leaderboard_rank : null;
@@ -133,8 +111,8 @@ export async function registerUserService(
     const wingspanCm = Number(data.wingspan_cm || physInput.wingspan_cm || 0);
     const verticalCm = Number(data.vertical_cm || physInput.vertical_cm || 0);
 
-    const bmi = heightCm > 0 && weightKg > 0 ? parseFloat((weightKg / Math.pow(heightCm / 100, 2)).toFixed(1)) : 0;
-    const apeIndex = heightCm > 0 && wingspanCm > 0 ? parseFloat((wingspanCm / heightCm).toFixed(2)) : 0;
+    const bmi = (heightCm > 0 && weightKg > 0) ? parseFloat((weightKg / Math.pow(heightCm / 100, 2)).toFixed(1)) : 0;
+    const apeIndex = (heightCm > 0 && wingspanCm > 0) ? parseFloat((wingspanCm / heightCm).toFixed(2)) : 0;
 
     const physicalProfile = {
       height_cm: heightCm,
@@ -154,13 +132,10 @@ export async function registerUserService(
       proof_of_residency: false,
       document_urls: [],
     };
-    if (file) {
-      const existingUrls = Array.isArray(docsPayload.document_urls) ? docsPayload.document_urls : [];
-      if (!existingUrls.includes(file.originalname)) {
-        docsPayload.document_urls = [...existingUrls, file.originalname];
-      }
+    if (file && Array.isArray(docsPayload.document_urls)) {
+      docsPayload.document_urls = [...docsPayload.document_urls, file.originalname];
     }
-    const achievements = Array.isArray(data.achievements) ? data.achievements : [];
+    const achievements = Array.isArray(data.achievements) ? data.achievements : null;
 
     // Attach complete info to Users table
     userData.birthdate = birthdate;
@@ -192,25 +167,18 @@ export async function registerUserService(
     const coachId = `coach_${uid}`;
     const sportType = String(data.sport_type || data.primary_sport || 'Basketball').trim();
     const yearsExperience = Number(data.years_of_experience || 0);
-    const institution = String(data.current_institution || '').trim();
-    const regionalAffiliation = String(data.regional_affiliation || '').trim();
-    const nationalLeague = String(data.national_sports_league || data.league || '').trim();
-    const quote = data.quote !== undefined && data.quote !== null ? String(data.quote).trim() : null;
-    let profDocs: string[] = Array.isArray(data.professional_documents)
-      ? (data.professional_documents as string[]).map((d) => typeof d === 'string' ? d : (d as any)?.name || 'document')
-      : [];
-    if (file && !profDocs.includes(file.originalname)) {
-      profDocs.push(file.originalname);
+    const institution = String(data.current_institution || 'N/A').trim();
+    const quote = String(data.quote || 'Committed to athletic excellence and youth development.').trim();
+    let profDocs = Array.isArray(data.professional_documents) ? data.professional_documents : [];
+    if (file) {
+      profDocs = [...profDocs, file.originalname];
     }
-    profDocs = Array.from(new Set(profDocs));
     const athletesManaged = Array.isArray(data.athlete_managed) ? data.athlete_managed : [];
 
     // Complete info on Users table
     userData.sport_type = sportType;
     userData.years_of_experience = yearsExperience;
     userData.current_institution = institution;
-    userData.regional_affiliation = regionalAffiliation;
-    userData.national_sports_league = nationalLeague;
     userData.quote = quote;
     userData.professional_documents = profDocs;
     userData.athlete_managed = athletesManaged;
@@ -221,8 +189,6 @@ export async function registerUserService(
     profileData.sport_type = sportType;
     profileData.years_of_experience = yearsExperience;
     profileData.current_institution = institution;
-    profileData.regional_affiliation = regionalAffiliation;
-    profileData.national_sports_league = nationalLeague;
     profileData.quote = quote;
     profileData.professional_documents = profDocs;
     profileData.athlete_managed = athletesManaged;
@@ -295,24 +261,21 @@ export async function registerUserService(
     batch.set(db.collection('Admin_Profiles').doc(adminId), profileData);
   }
 
-  // If role is Coach, also initialize Coach_Settings document atomically if not exists
+  // If role is Coach, also initialize Coach_Settings document atomically
   if (firestoreRole === 'Coach') {
     const coachId = (profileData.coach_id as string) || `coach_${uid}`;
     const settingsRef = db.collection('Coach_Settings').doc(coachId);
-    const settingsSnap = await settingsRef.get();
-    if (!settingsSnap.exists) {
-      const settingsData = {
-        setting_id: `setting_${coachId}`,
-        coach_id: coachId,
-        data_sync_preference: 'Manual',
-        notification_preferences: {
-          game_log_updates: true,
-          recruitment_inquiries: true,
-        },
-        updated_at: now,
-      };
-      batch.set(settingsRef, settingsData);
-    }
+    const settingsData = {
+      setting_id: `setting_${coachId}`,
+      coach_id: coachId,
+      data_sync_preference: 'Manual',
+      notification_preferences: {
+        game_log_updates: true,
+        recruitment_inquiries: true,
+      },
+      updated_at: now,
+    };
+    batch.set(settingsRef, settingsData);
   }
 
   await batch.commit();
@@ -416,11 +379,13 @@ export async function loginUserService(email: string, password: string) {
   };
 }
 
+/**
+ * Authenticate or auto-register a user via Google or Facebook OAuth Token / Firebase ID Token.
+ */
 export async function socialLoginService(
   idToken: string,
   provider: 'google' | 'facebook' = 'google',
-  roleInput: string = 'Athlete',
-  additionalData?: Record<string, any>
+  roleInput: string = 'Athlete'
 ) {
   let uid = '';
   let email = '';
@@ -522,93 +487,21 @@ export async function socialLoginService(
       };
     }
   } else {
-    // Facebook provider
-    let authSuccess = false;
-
-    // 1. Try Firebase ID Token verification
+    // Facebook or other provider
     try {
       const decodedToken = await auth.verifyIdToken(idToken);
-      if (decodedToken && decodedToken.uid) {
-        uid = decodedToken.uid;
-        email = decodedToken.email || '';
-        fullName = decodedToken.name || 'Facebook User';
-        avatarUrl = decodedToken.picture || '';
-        authSuccess = true;
-      }
-    } catch (_) {
-      // Not a Firebase ID token
-    }
-
-    // 2. Try Facebook Graph API userinfo with access token
-    if (!authSuccess) {
-      try {
-        const res = await fetch(`https://graph.facebook.com/me?fields=id,name,first_name,last_name,email,picture.type(large)&access_token=${encodeURIComponent(idToken)}`);
-        if (res.ok) {
-          const fbUser = (await res.json()) as any;
-          if (fbUser && fbUser.id) {
-            uid = `facebook_${fbUser.id}`;
-            email = fbUser.email || `${fbUser.id}@facebook.atleta.app`;
-            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || 'Facebook User';
-            avatarUrl = fbUser.picture?.data?.url || '';
-            authSuccess = true;
-          }
-        }
-      } catch (_) {
-        // Graph API lookup failed
-      }
-    }
-
-    // 3. Fallback: Facebook Graph API v19.0 endpoint
-    if (!authSuccess) {
-      try {
-        const res = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,first_name,last_name,email,picture&access_token=${encodeURIComponent(idToken)}`);
-        if (res.ok) {
-          const fbUser = (await res.json()) as any;
-          if (fbUser && fbUser.id) {
-            uid = `facebook_${fbUser.id}`;
-            email = fbUser.email || `${fbUser.id}@facebook.atleta.app`;
-            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || 'Facebook User';
-            avatarUrl = fbUser.picture?.data?.url || '';
-            authSuccess = true;
-          }
-        }
-      } catch (_) {
-        // Graph API v19 lookup failed
-      }
-    }
-
-    // 4. Fallback: JWT decode if OpenID Connect signed token was passed
-    if (!authSuccess && typeof idToken === 'string' && idToken.includes('.')) {
-      try {
-        const parts = idToken.split('.');
-        if (parts.length === 3) {
-          const payloadJson = Buffer.from(parts[1], 'base64').toString('utf8');
-          const payload = JSON.parse(payloadJson);
-          if (payload && (payload.sub || payload.user_id || payload.id)) {
-            const fbId = payload.sub || payload.user_id || payload.id;
-            uid = `facebook_${fbId}`;
-            email = payload.email || `${fbId}@facebook.atleta.app`;
-            fullName = payload.name || 'Facebook User';
-            avatarUrl = payload.picture || '';
-            authSuccess = true;
-          }
-        }
-      } catch (_) {
-        // JWT decode failed
-      }
-    }
-
-    if (!authSuccess) {
-      throw {
-        code: 'INVALID_TOKEN',
-        message: 'Invalid or expired Facebook authentication token.',
-      };
+      uid = decodedToken.uid;
+      email = decodedToken.email!;
+      fullName = decodedToken.name || 'Social User';
+      avatarUrl = decodedToken.picture || '';
+    } catch (err: any) {
+      throw { code: 'INVALID_TOKEN', message: `Invalid or expired ${provider} authentication token.` };
     }
   }
 
   const nameParts = fullName.split(' ');
-  let firstName = additionalData?.first_name || nameParts[0] || 'User';
-  let lastName = additionalData?.last_name || nameParts.slice(1).join(' ') || 'Social';
+  let firstName = nameParts[0] || 'User';
+  let lastName = nameParts.slice(1).join(' ') || 'Social';
 
   let userRef = db.collection('Users').doc(uid);
   let userDoc = await userRef.get();
@@ -640,7 +533,7 @@ export async function socialLoginService(
     lastName = userData.last_name || lastName;
     avatarUrl = userData.avatar_url || avatarUrl;
   } else {
-    // New social user: provision User and Role Subtype records atomically
+    // New social user: provision User and Athlete Subtype records atomically
     userRole = normalizeRole(roleInput);
     const now = new Date();
 
@@ -649,7 +542,7 @@ export async function socialLoginService(
       first_name: firstName,
       last_name: lastName,
       email,
-      contact_number: additionalData?.contact_number || null,
+      contact_number: null,
       role: userRole,
       provider,
       avatar_url: avatarUrl,
@@ -671,29 +564,10 @@ export async function socialLoginService(
 
     if (userRole === 'Athlete') {
       profileData.athlete_id = `ath_${uid}`;
-      profileData.birthdate = additionalData?.birthdate || '2001-01-01';
-      profileData.gender = additionalData?.gender || 'Male';
-      profileData.province = additionalData?.province || 'Camarines Sur';
-      profileData.sport_type = additionalData?.sport_type || 'Basketball';
-      profileData.position = additionalData?.position || 'Player';
-      profileData.jersey_number = additionalData?.jersey_number || null;
-      profileData.height_cm = additionalData?.height_cm ?? null;
-      profileData.weight_kg = additionalData?.weight_kg ?? null;
-    } else if (userRole === 'Coach') {
-      profileData.coach_id = `coach_${uid}`;
-      profileData.sport_type = additionalData?.sport_type || 'Basketball';
-      profileData.coach_role = additionalData?.coach_role || 'Head Coach';
-      profileData.current_institution = additionalData?.current_institution || additionalData?.organization || 'Independent';
-      profileData.organization = additionalData?.current_institution || additionalData?.organization || 'Independent';
-      profileData.regional_affiliation = additionalData?.regional_affiliation || null;
-      profileData.national_sports_league = additionalData?.national_sports_league || null;
-      profileData.accreditation_number = additionalData?.accreditation_number || null;
-
-      // Also set on userData
-      (userData as any).sport_type = profileData.sport_type;
-      (userData as any).current_institution = profileData.current_institution;
-      (userData as any).regional_affiliation = profileData.regional_affiliation;
-      (userData as any).national_sports_league = profileData.national_sports_league;
+      profileData.birthdate = '2001-01-01';
+      profileData.gender = 'Male';
+      profileData.province = 'Camarines Sur';
+      profileData.sport_type = 'Basketball';
     }
 
     const batch = db.batch();
@@ -775,100 +649,93 @@ export async function getUserProfileService(uid: string) {
 }
 
 /**
- * Helper to check if an account is authenticated via a third-party OAuth provider (Google/Facebook).
- * Throws a SOCIAL_AUTH_ACCOUNT error if the account is purely social/OAuth.
+ * Generate password reset token and send email.
  */
-export async function checkSocialAccountRestriction(uid: string, userData: any, action: 'reset' | 'change' = 'reset') {
-  const provider = (userData?.provider || userData?.auth_provider || '').toLowerCase();
-  let isSocial = provider === 'google' || provider === 'facebook' || uid.startsWith('google_') || uid.startsWith('facebook_');
+export async function requestPasswordResetService(email: string) {
+  let emailToReset = email;
+  let uid: string | undefined;
 
-  if (!isSocial) {
-    try {
-      const userRecord = await auth.getUser(uid);
-      const providers = (userRecord.providerData || []).map((p) => p.providerId);
-      // If user has google.com or facebook.com and DOES NOT have password provider
-      if (providers.length > 0 && (providers.includes('google.com') || providers.includes('facebook.com')) && !providers.includes('password')) {
-        isSocial = true;
+  // 1. Try Firebase Auth (Picture 1)
+  try {
+    const userRecord = await auth.getUserByEmail(email);
+    uid = userRecord.uid;
+    if (userRecord.email) {
+      emailToReset = userRecord.email;
+    }
+  } catch (authErr) {
+    // 2. Fallback: Check Firestore Users collection (Picture 2)
+    const snap = await db.collection('Users').where('email', '==', email.trim().toLowerCase()).limit(1).get();
+    if (!snap.empty) {
+      const doc = snap.docs[0];
+      uid = doc.id;
+      const data = doc.data();
+      if (data && data.email) {
+        emailToReset = data.email;
       }
-    } catch (err) {
-      // Ignore if user does not exist in Firebase Auth
+    } else {
+      const snapRaw = await db.collection('Users').where('email', '==', email.trim()).limit(1).get();
+      if (!snapRaw.empty) {
+        const doc = snapRaw.docs[0];
+        uid = doc.id;
+        const data = doc.data();
+        if (data && data.email) {
+          emailToReset = data.email;
+        }
+      } else {
+        throw { code: 'USER_NOT_FOUND', message: 'No registered account found with this email.' };
+      }
     }
   }
 
-  if (isSocial) {
-    const providerName = provider === 'facebook' || uid.startsWith('facebook_') ? 'Facebook' : 'Google';
-    throw {
-      code: 'SOCIAL_AUTH_ACCOUNT',
-      message: `Password ${action} is only available for accounts registered with email and password. Accounts registered via ${providerName} must log in directly with ${providerName}.`,
+  // Cross-reference: If email exists in Firestore Users collection (Picture 2), use that document ID as canonical uid
+  if (emailToReset) {
+    const firestoreSnap = await db.collection('Users').where('email', '==', emailToReset.trim().toLowerCase()).limit(1).get();
+    if (!firestoreSnap.empty) {
+      uid = firestoreSnap.docs[0].id;
+    }
+  }
+
+  const hasCustomMailConfig = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+
+  if (!hasCustomMailConfig) {
+    const frontendUrl = process.env.FRONTEND_RESET_URL;
+    const isValidHttpUrl = Boolean(
+      frontendUrl && (frontendUrl.startsWith('http://') || frontendUrl.startsWith('https://'))
+    );
+
+    try {
+      if (isValidHttpUrl) {
+        const actionCodeSettings = {
+          url: frontendUrl!,
+          handleCodeInApp: true,
+        };
+        await sendPasswordResetEmail(clientAuth, emailToReset, actionCodeSettings);
+      } else {
+        await sendPasswordResetEmail(clientAuth, emailToReset);
+      }
+    } catch (err: any) {
+      if (err?.code === 'auth/unauthorized-continue-uri') {
+        await sendPasswordResetEmail(clientAuth, emailToReset);
+      } else {
+        throw err;
+      }
+    }
+
+    return {
+      sent: true,
+      message: 'Password reset email sent to your inbox via Firebase.',
     };
   }
-}
 
-/**
- * Generate password reset token and send email.
- * Persists reset token, computed expiration, and reset link directly to Firestore.
- */
-export async function requestPasswordResetService(email: string, clientFrontendUrl?: string) {
-  const emailToReset = email.trim().toLowerCase();
+  const secret = process.env.JWT_SECRET!;
+  const resetToken = jwt.sign({ uid, email: emailToReset, purpose: 'reset-password' }, secret, { expiresIn: '15m' as any });
 
-  const userSnapshot = await db.collection('Users').where('email', '==', emailToReset).limit(1).get();
-  if (userSnapshot.empty) {
-    throw { code: 'USER_NOT_FOUND', message: `No registered account found with email '${emailToReset}'.` };
-  }
+  const rawBaseUrl = process.env.FRONTEND_RESET_URL;
+  const baseUrl = (rawBaseUrl && (rawBaseUrl.startsWith('http://') || rawBaseUrl.startsWith('https://')))
+    ? rawBaseUrl
+    : 'http://localhost:3000/reset-password';
 
-  const userDoc = userSnapshot.docs[0];
-  const uid = userDoc.id;
-  const userData = userDoc.data();
-
-  // Enforce: Only accounts with email and password authentication can request password resets
-  await checkSocialAccountRestriction(uid, userData, 'reset');
-
-  const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
-  const resetToken = jwt.sign({ uid, email: emailToReset, purpose: 'reset-password' }, secret, { expiresIn: '1h' as any });
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  const requestedAt = new Date().toISOString();
-
-  // Dynamically determine frontend URL from request or environment:
-  let baseUrl = (
-    clientFrontendUrl ||
-    process.env.FRONTEND_RESET_URL ||
-    process.env.FRONTEND_URL ||
-    'https://atleta-frontend.vercel.app/reset-password'
-  ).trim();
-
-  if (baseUrl.endsWith('/')) {
-    baseUrl = baseUrl.slice(0, -1);
-  }
-
-  const delimiter = baseUrl.includes('?') ? '&' : '?';
-  const resetLink = `${baseUrl}${delimiter}token=${resetToken}&email=${encodeURIComponent(emailToReset)}`;
-
-  // Persist password reset computation and token to Firestore Users and Password_Resets collections
-  const resetRecord = {
-    reset_token: resetToken,
-    reset_link: resetLink,
-    email: emailToReset,
-    expires_at: expiresAt,
-    requested_at: requestedAt,
-    status: 'pending',
-  };
-
-  await Promise.all([
-    db.collection('Users').doc(uid).set(
-      {
-        password_reset: resetRecord,
-        updated_at: new Date(),
-      },
-      { merge: true }
-    ),
-    db.collection('Password_Resets').doc(uid).set(
-      {
-        uid,
-        ...resetRecord,
-      },
-      { merge: true }
-    ),
-  ]);
+  const resetLink = `${baseUrl}?token=${resetToken}`;
 
   const mailResult = await sendPasswordResetEmailService(emailToReset, resetLink);
 
@@ -877,140 +744,46 @@ export async function requestPasswordResetService(email: string, clientFrontendU
     message: mailResult.message,
     reset_token: resetToken,
     reset_link: resetLink,
-    expires_at: expiresAt,
   };
 }
 
 /**
- * Verify reset token and set new password in Firebase Auth & Firestore.
+ * Verify reset token and set new password in Firebase Auth.
  */
-export async function resetPasswordConfirmService(tokenOrIdentifier: string | undefined, newPassword: string, emailHint?: string) {
-  const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
-  let uid = '';
+export async function resetPasswordConfirmService(token: string, newPassword: string) {
+  const secret = process.env.JWT_SECRET!;
 
-  // 1. Verify JWT reset token if provided
-  if (tokenOrIdentifier && tokenOrIdentifier.includes('.')) {
-    try {
-      const decoded = jwt.verify(tokenOrIdentifier, secret) as { uid: string; email: string; purpose: string };
-      if (decoded.purpose === 'reset-password') {
-        uid = decoded.uid;
-      }
-    } catch (err) {
-      console.warn('JWT verification failed, checking Firestore token fallback...');
-    }
-  }
-
-  // 2. Direct UID lookup in Firestore
-  if (!uid && tokenOrIdentifier) {
-    const userDoc = await db.collection('Users').doc(tokenOrIdentifier).get();
-    if (userDoc.exists) {
-      uid = userDoc.id;
-    }
-  }
-
-  // 3. Lookup stored reset token in Firestore
-  if (!uid && tokenOrIdentifier) {
-    const tokenQuery = await db.collection('Users').where('password_reset.reset_token', '==', tokenOrIdentifier).limit(1).get();
-    if (!tokenQuery.empty) {
-      uid = tokenQuery.docs[0].id;
-    }
-  }
-
-  // 4. Email hint lookup
-  if (!uid && emailHint) {
-    const userSnapshot = await db.collection('Users').where('email', '==', emailHint.toLowerCase().trim()).limit(1).get();
-    if (!userSnapshot.empty) {
-      uid = userSnapshot.docs[0].id;
-    }
-  }
-
-  // 5. If no token provided (e.g. in-app mobile reset right after request), find most recent pending reset
-  if (!uid) {
-    const pendingSnapshot = await db.collection('Users')
-      .where('password_reset.status', '==', 'pending')
-      .get();
-    if (!pendingSnapshot.empty) {
-      const validDocs = pendingSnapshot.docs
-        .map((d) => ({ doc: d, data: d.data() }))
-        .filter((item) => {
-          const expiresAt = item.data.password_reset?.expires_at;
-          return !expiresAt || new Date(expiresAt).getTime() > Date.now();
-        })
-        .sort((a, b) => {
-          const timeA = new Date(a.data.password_reset?.requested_at || 0).getTime();
-          const timeB = new Date(b.data.password_reset?.requested_at || 0).getTime();
-          return timeB - timeA;
-        });
-
-      if (validDocs.length > 0) {
-        uid = validDocs[0].doc.id;
-      }
-    }
-  }
-
-  if (!uid) {
+  let decoded: { uid: string; email: string; purpose: string };
+  try {
+    decoded = jwt.verify(token, secret) as { uid: string; email: string; purpose: string };
+  } catch (err) {
     throw { code: 'INVALID_TOKEN', message: 'Reset token is invalid or has expired.' };
   }
 
-  // Enforce: Check if user is a social login account
-  const userDoc = await db.collection('Users').doc(uid).get();
-  const userData = userDoc.exists ? userDoc.data()! : {};
-  await checkSocialAccountRestriction(uid, userData, 'reset');
+  if (decoded.purpose !== 'reset-password') {
+    throw { code: 'INVALID_TOKEN', message: 'Token is not valid for password reset.' };
+  }
 
   try {
-    await auth.updateUser(uid, { password: newPassword });
+    await auth.updateUser(decoded.uid, { password: newPassword });
   } catch (authErr: any) {
     if (authErr?.code === 'auth/user-not-found') {
       await auth.createUser({
-        uid,
+        uid: decoded.uid,
+        email: decoded.email,
         password: newPassword,
       });
     } else {
-      console.warn(`[AUTH UPDATE] ${authErr.message}`);
+      throw authErr;
     }
   }
-
-  const now = new Date();
-  await Promise.all([
-    db.collection('Users').doc(uid).set(
-      {
-        password: newPassword,
-        password_reset: {
-          status: 'completed',
-          completed_at: now.toISOString(),
-          reset_token: null,
-        },
-        updated_at: now,
-      },
-      { merge: true }
-    ),
-    db.collection('Password_Resets').doc(uid).set(
-      {
-        status: 'completed',
-        completed_at: now.toISOString(),
-        updated_at: now.toISOString(),
-      },
-      { merge: true }
-    ).catch(() => null),
-  ]);
 
   return { message: 'Password has been successfully updated.' };
 }
 
+/**
+ * Change password for authenticated user using Firebase Admin Auth.
+ */
 export async function changePasswordService(uid: string, newPassword: string) {
-  const userDoc = await db.collection('Users').doc(uid).get();
-  const userData = userDoc.exists ? userDoc.data()! : {};
-
-  // Enforce: Check if user is a social login account
-  await checkSocialAccountRestriction(uid, userData, 'change');
-
   await auth.updateUser(uid, { password: newPassword });
-  await db.collection('Users').doc(uid).set(
-    {
-      password: newPassword,
-      updated_at: new Date(),
-    },
-    { merge: true }
-  );
 }
-

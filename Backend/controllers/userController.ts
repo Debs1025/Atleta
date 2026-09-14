@@ -36,12 +36,7 @@ export async function registerUser(req: AuthRequest, res: Response): Promise<voi
       ...result,
     });
   } catch (error: any) {
-    if (
-      error.code === 'auth/email-already-exists' ||
-      error.code === 'auth/email-already-in-use' ||
-      error.message?.includes('already in use') ||
-      error.message?.includes('already exists')
-    ) {
+    if (error.code === 'auth/email-already-exists') {
       res.status(409).json({ error: 'A user with this email already exists.' });
       return;
     }
@@ -67,12 +62,7 @@ export async function registerCoach(req: AuthRequest, res: Response): Promise<vo
       ...result,
     });
   } catch (error: any) {
-    if (
-      error.code === 'auth/email-already-exists' ||
-      error.code === 'auth/email-already-in-use' ||
-      error.message?.includes('already in use') ||
-      error.message?.includes('already exists')
-    ) {
+    if (error.code === 'auth/email-already-exists') {
       res.status(409).json({ error: 'A coach with this email already exists.' });
       return;
     }
@@ -121,17 +111,17 @@ export async function loginUser(req: AuthRequest, res: Response): Promise<void> 
 export async function socialLogin(req: Request, res: Response): Promise<void> {
   try {
     const body = (req.body || {}) as Record<string, any>;
-    const idToken = body.id_token || body.token || body.idToken || body.access_token || body.accessToken || body.credential;
+    const idToken = body.id_token || body.token;
     const provider = body.provider;
     const role = body.role;
 
     if (!idToken) {
-      res.status(400).json({ error: 'id_token (Firebase ID token or Access Token from Google/Facebook) is required.' });
+      res.status(400).json({ error: 'id_token (Firebase ID token from Google/Facebook) is required.' });
       return;
     }
 
     const providerType = provider === 'facebook' ? 'facebook' : 'google';
-    const result = await socialLoginService(idToken, providerType, role || 'Athlete', body);
+    const result = await socialLoginService(idToken, providerType, role || 'Athlete');
 
     res.status(200).json({
       message: `${providerType.toUpperCase()} login successful.`,
@@ -170,17 +160,9 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
     }
 
     const { email } = req.body;
-    const clientFrontendUrl = req.body?.frontend_url
-      || req.body?.redirect_url
-      || req.body?.reset_url;
-
-    const result = await requestPasswordResetService(email, clientFrontendUrl);
+    const result = await requestPasswordResetService(email);
     res.status(200).json(result);
   } catch (error: any) {
-    if (error.code === 'SOCIAL_AUTH_ACCOUNT') {
-      res.status(400).json({ error: error.message, code: 'SOCIAL_AUTH_ACCOUNT' });
-      return;
-    }
     if (error.code === 'USER_NOT_FOUND') {
       res.status(404).json({ error: error.message });
       return;
@@ -196,22 +178,18 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
 
 export async function resetPassword(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const token = (req.body?.token || req.params?.token || req.query?.token || req.headers?.authorization?.replace(/^Bearer\s+/i, '') || req.user?.uid) as string;
-    const new_password = (req.body?.new_password || req.body?.password) as string;
-    const emailHint = (req.body?.email || req.query?.email) as string | undefined;
+    const token = (req.body.token || req.params.token || req.query.token) as string;
+    const new_password = (req.body.new_password || req.body.password) as string;
 
-    if (!new_password || new_password.length < 6) {
-      res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    const errors = validatePasswordResetConfirm({ token, new_password });
+    if (errors.length > 0) {
+      res.status(400).json({ errors });
       return;
     }
 
-    const result = await resetPasswordConfirmService(token, new_password, emailHint);
+    const result = await resetPasswordConfirmService(token, new_password);
     res.status(200).json(result);
   } catch (error: any) {
-    if (error.code === 'SOCIAL_AUTH_ACCOUNT') {
-      res.status(400).json({ error: error.message, code: 'SOCIAL_AUTH_ACCOUNT' });
-      return;
-    }
     if (error.code === 'INVALID_TOKEN') {
       res.status(400).json({ error: error.message });
       return;
@@ -242,10 +220,6 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
       message: 'Password updated successfully.',
     });
   } catch (error: any) {
-    if (error.code === 'SOCIAL_AUTH_ACCOUNT') {
-      res.status(400).json({ error: error.message, code: 'SOCIAL_AUTH_ACCOUNT' });
-      return;
-    }
     console.error('ChangePassword error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }

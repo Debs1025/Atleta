@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middlewares/authMiddleware';
 import {
   getPendingValidationsHandler,
+  getOfficialMatchesHandler,
   certifyValidationHandler,
   createOfficialMatchHandler,
   deleteMatchHandler,
@@ -17,6 +18,8 @@ const router = Router();
 // Official Match Creation under /validations
 router.post('/official', authenticate, createOfficialMatchHandler);
 router.post('/matches/official', authenticate, createOfficialMatchHandler);
+router.get('/matches', authenticate, getOfficialMatchesHandler);
+router.get('/matches/official', authenticate, getOfficialMatchesHandler);
 
 // Pending Validations Queue (Named and Root Routes)
 router.get('/pending', authenticate, getPendingValidationsHandler);

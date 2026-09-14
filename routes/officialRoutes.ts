@@ -12,6 +12,7 @@ import {
   getOfficialNotificationsHandler,
   markAllOfficialNotificationsAsReadHandler,
 } from '../controllers/officialDashboardController';
+import { getOfficialMatchesHandler } from '../controllers/validationController';
 
 const router = Router();
 
@@ -27,9 +28,11 @@ router.patch('/me/profile', authenticate, updateOfficialProfileHandler);
 router.get('/', authenticate, getOfficialProfileHandler);
 router.patch('/', authenticate, updateOfficialProfileHandler);
 
-// Tournament Management Operations & Dashboard
+// Tournament Management Operations, Matches & Dashboard
 router.get('/dashboard', authenticate, getDashboardHandler);
 router.get('/schedules', authenticate, getSchedulesHandler);
+router.get('/matches', authenticate, getOfficialMatchesHandler);
+router.get('/matches/all', authenticate, getOfficialMatchesHandler);
 
 // Tournament Official Notifications
 router.get('/notifications', authenticate, getOfficialNotificationsHandler);

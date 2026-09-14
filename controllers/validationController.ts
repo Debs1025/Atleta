@@ -6,6 +6,7 @@ import {
 } from '../validators/validationValidator';
 import {
   createOfficialMatchService,
+  getOfficialMatchesService,
   getPendingValidationsService,
   certifyValidationService,
   deleteMatchService,
@@ -35,6 +36,28 @@ export async function createOfficialMatchHandler(req: AuthRequest, res: Response
       return;
     }
     console.error('createOfficialMatchHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function getOfficialMatchesHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const officialId = req.user?.uid ? `off_${req.user.uid.replace(/^off_/, '')}` : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+
+    const matches = await getOfficialMatchesService(officialId, status);
+    res.status(200).json({
+      success: true,
+      official_id: officialId,
+      total_matches: matches.length,
+      matches,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getOfficialMatchesHandler error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

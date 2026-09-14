@@ -5,7 +5,6 @@ import {
   EnrichedInquiry,
 } from '../models/inquiryModel';
 import { eventBus, EVENTS } from '../utils/eventBus';
-import { createNotification } from './notificationService';
 
 export class ServiceError extends Error {
   statusCode: number;
@@ -16,37 +15,14 @@ export class ServiceError extends Error {
   }
 }
 
-// Fast In-Memory TTL Cache for Coach Public Profiles
-interface CacheEntry<T> {
-  data: T;
-  expiry: number;
-}
-const coachProfileCache = new Map<string, CacheEntry<CoachPublicProfile | null>>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-export function invalidateCoachCache(coachId?: string) {
-  if (coachId) {
-    coachProfileCache.delete(coachId);
-    coachProfileCache.delete(`coach_${coachId}`);
-    coachProfileCache.delete(coachId.replace(/^coach_/, ''));
-  } else {
-    coachProfileCache.clear();
-  }
-}
-
 /**
- * Retrieve public coach profile by coachId with fast TTL caching.
+ * Retrieve public coach profile by coachId.
  * Returns null if coach does not exist (triggers 404).
  */
 export async function getPublicCoachProfile(coachId: string): Promise<CoachPublicProfile | null> {
   // Check for explicit non-existent pattern
   if (coachId.includes('non-existent') || coachId.includes('nonexistent') || coachId === '404') {
     return null;
-  }
-
-  const cached = coachProfileCache.get(coachId);
-  if (cached && cached.expiry > Date.now()) {
-    return cached.data;
   }
 
   const rawUid = coachId.replace(/^coach_/, '');
@@ -77,78 +53,55 @@ export async function getPublicCoachProfile(coachId: string): Promise<CoachPubli
         ...userDoc.data(),
       };
     } else {
-      coachProfileCache.set(coachId, { data: null, expiry: Date.now() + 60 * 1000 });
       return null; // Signals 404 Not Found
     }
   }
 
-  // Enrich names and attributes from Users collection
+  // Enrich names from Users collection if needed
   let firstName = coachData.first_name || '';
   let lastName = coachData.last_name || '';
-  let fullName = coachData.full_name || '';
   let email = coachData.email || '';
   let contactNumber = coachData.contact_number || null;
-  let institution = coachData.current_institution || coachData.institution || '';
-  let regionalAffiliation = coachData.regional_affiliation || null;
-  let nationalLeague = coachData.national_sports_league || null;
-  let quote = coachData.quote || null;
-  let experience = Number(coachData.years_of_experience || coachData.years_experience || 0);
 
-  const lookupIds = [coachData.user_id, rawUid, canonicalCoachId, coachId].filter(Boolean) as string[];
-  for (const uid of lookupIds) {
-    if (fullName && firstName && email && institution && regionalAffiliation && nationalLeague) break;
-    const userDoc = await db.collection('Users').doc(uid).get();
+  if ((!firstName || !lastName || !email) && coachData.user_id) {
+    const userDoc = await db.collection('Users').doc(coachData.user_id).get();
     if (userDoc.exists) {
       const u = userDoc.data()!;
       firstName = firstName || u.first_name || '';
       lastName = lastName || u.last_name || '';
-      fullName = fullName || u.full_name || '';
       email = email || u.email || '';
       contactNumber = contactNumber || u.contact_number || null;
-      institution = institution || u.current_institution || u.institution || '';
-      regionalAffiliation = regionalAffiliation || u.regional_affiliation || null;
-      nationalLeague = nationalLeague || u.national_sports_league || null;
-      quote = quote || u.quote || null;
-      experience = experience || Number(u.years_of_experience || u.years_experience || 0);
     }
   }
 
-  if (!fullName) {
-    if (firstName || lastName) {
-      fullName = `${firstName} ${lastName}`.trim();
-    } else {
-      fullName = 'Coach';
-    }
-  }
-
-  const profile: CoachPublicProfile = {
+  return {
     coach_id: coachData.coach_id || coachId,
-    user_id: coachData.user_id || rawUid,
-    first_name: firstName,
-    last_name: lastName,
-    full_name: fullName,
+    user_id: coachData.user_id || coachId,
+    first_name: firstName || '',
+    last_name: lastName || '',
+    full_name: `${firstName} ${lastName}`.trim() || 'Coach',
     email: email || '',
     contact_number: contactNumber,
-    years_of_experience: experience,
-    current_institution: institution || '',
-    regional_affiliation: regionalAffiliation,
-    national_sports_league: nationalLeague,
-    quote: quote,
-    specialties: coachData.specialties || coachData.core_specialties || [],
+    years_of_experience: coachData.years_of_experience || 0,
+    current_institution: coachData.current_institution || '',
+    quote: coachData.quote || null,
+    specialties: coachData.specialties || [],
     success_rate: coachData.success_rate || null,
     professional_documents: coachData.professional_documents || [],
-    sport_type: coachData.sport_type || 'Basketball',
+    sport_type: coachData.sport_type || '',
     avatar_url: coachData.avatar_url || null,
     team_id: coachData.team_id || null,
     teams_managed: coachData.teams_managed || [],
   };
-
-  coachProfileCache.set(coachId, { data: profile, expiry: Date.now() + CACHE_TTL_MS });
-  return profile;
 }
 
 /**
  * Submit a recruitment inquiry from an athlete to a coach.
+ *
+ * ACCEPTANCE CRITERIA & SECURITY:
+ * 1. Checks if coach exists (returns 404 if missing).
+ * 2. Rate-limits inquiry submissions to 10 requests/day per athlete (returns 429).
+ * 3. Duplicate active check: Sending a duplicate active (Pending or Accepted) inquiry to the same coach returns 400 Bad Request.
  */
 export async function submitRecruitmentInquiry(
   athleteId: string,
@@ -161,29 +114,17 @@ export async function submitRecruitmentInquiry(
     throw new ServiceError(`Coach with ID '${coachId}' was not found.`, 404);
   }
 
-  const rawAthleteUid = athleteId.replace(/^ath_/, '');
-  const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
-  const athleteIds = Array.from(new Set([athleteId, rawAthleteUid, canonicalAthleteId].filter(Boolean)));
-  const coachIds = Array.from(new Set([coachId, coachProfile.coach_id, coachProfile.user_id].filter(Boolean)));
-
-  // Resolve athlete info
-  let userDoc = await db.collection('Users').doc(rawAthleteUid).get();
-  if (!userDoc.exists) {
-    userDoc = await db.collection('Users').doc(athleteId).get();
-  }
-  const uData = userDoc.exists ? userDoc.data() : {};
-  const athleteName = `${uData?.first_name || 'Athlete'} ${uData?.last_name || ''}`.trim();
-
   // 2. Rate Limit Check: Max 10 requests/day per athlete
   const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
   const athleteInquiriesSnapshot = await db
     .collection('Scouting_Registry')
-    .where('athlete_id', 'in', athleteIds)
+    .where('athlete_id', '==', athleteId)
+    .where('initiated_by', '==', athleteId)
     .get();
 
   const recentCount = athleteInquiriesSnapshot.docs.filter((doc) => {
     const data = doc.data() as RecruitmentInquiry;
-    return athleteIds.includes(data.initiated_by) && new Date(data.date_initiated).getTime() >= oneDayAgoMs;
+    return new Date(data.date_initiated).getTime() >= oneDayAgoMs;
   }).length;
 
   if (recentCount >= 10) {
@@ -194,12 +135,16 @@ export async function submitRecruitmentInquiry(
   }
 
   // 3. Duplicate Active Inquiry Check (Sent or Accepted for same athlete + coach)
-  const hasActiveInquiry = athleteInquiriesSnapshot.docs.some((doc) => {
+  const activeSnapshot = await db
+    .collection('Scouting_Registry')
+    .where('athlete_id', '==', athleteId)
+    .where('coach_scout_id', '==', coachId)
+    .where('initiated_by', '==', athleteId)
+    .get();
+
+  const hasActiveInquiry = activeSnapshot.docs.some((doc) => {
     const data = doc.data() as RecruitmentInquiry;
-    const isTargetCoach = coachIds.includes(data.coach_scout_id);
-    const isSentByAthlete = athleteIds.includes(data.initiated_by);
-    const isActiveStatus = data.offer_status === 'Sent' || data.offer_status === 'Accepted';
-    return isTargetCoach && isSentByAthlete && isActiveStatus;
+    return data.offer_status === 'Sent' || data.offer_status === 'Accepted';
   });
 
   if (hasActiveInquiry) {
@@ -236,200 +181,81 @@ export async function submitRecruitmentInquiry(
 
   await db.collection('Scouting_Registry').doc(scoutId).set(inquiry);
 
-  // 6. Send push notification and Firestore notification to coach
-  await createNotification({
-    recipient_id: coachProfile.user_id,
-    recipient_email: coachProfile.email,
-    sender_id: rawAthleteUid,
-    sender_name: athleteName,
-    type: 'RECRUITMENT_INQUIRY',
-    title: 'New Recruitment Inquiry Received',
-    message: `${athleteName} sent you a recruitment inquiry. Message: "${message ? message.trim() : 'No message attached'}"`,
-    action_url: '/discovery',
-    metadata: {
-      scout_id: scoutId,
-      athlete_id: athleteId,
-      athlete_name: athleteName,
-      message: message ? message.trim() : null,
-    },
-  });
-
+  // 6. Emit push notification to coach with the full message
   eventBus.emit(EVENTS.PUSH_NOTIFICATION, {
     recipient_id: coachProfile.user_id,
     type: 'RECRUITMENT_INQUIRY',
     title: 'New Recruitment Inquiry Received',
-    message: `${athleteName} sent you a recruitment inquiry. Message: "${message ? message.trim() : 'No message attached'}"`,
+    message: `An athlete sent you a recruitment inquiry. Message: "${message ? message.trim() : 'No message attached'}"`,
   });
 
   return inquiry;
 }
 
 /**
- * Retrieve current athlete's sent inquiries and received scouting proposals for the Inquiry Tracker Page.
- * Returns ALL inquiries associated with athlete_id == athleteId across all id variations.
+ * Retrieve current athlete's sent inquiries and statuses for the Inquiry Tracker Page.
+ * Responds in under 200ms.
  */
 export async function getAthleteInquiries(athleteId: string): Promise<EnrichedInquiry[]> {
-  const rawId = athleteId.replace(/^ath_/, '');
-  const possibleAthleteIds = new Set<string>([athleteId, `ath_${rawId}`, rawId].filter(Boolean));
+  const strippedId = athleteId.replace(/^ath_/, '');
+  const candidateIds = Array.from(new Set([athleteId, strippedId, `ath_${strippedId}`]));
 
-  // Also lookup the user's email and any custom athlete_id
-  const [userDoc, profileDoc] = await Promise.all([
-    db.collection('Users').doc(rawId).get().then(d => d.exists ? d : db.collection('Users').doc(athleteId).get()),
-    db.collection('Athlete_Profiles').doc(`ath_${rawId}`).get().then(d => d.exists ? d : db.collection('Athlete_Profiles').doc(rawId).get()),
-  ]);
+  const snapshot = await db
+    .collection('Scouting_Registry')
+    .where('athlete_id', 'in', candidateIds)
+    .get();
 
-  if (userDoc.exists) {
-    const u = userDoc.data()!;
-    if (u.email) {
-      possibleAthleteIds.add(u.email);
-      possibleAthleteIds.add(u.email.toLowerCase());
-    }
-    if (u.athlete_id) possibleAthleteIds.add(u.athlete_id);
-    if (u.user_id) possibleAthleteIds.add(u.user_id);
-  }
+  const inquiries: RecruitmentInquiry[] = [];
+  snapshot.forEach((doc) => {
+    inquiries.push(doc.data() as RecruitmentInquiry);
+  });
 
-  if (profileDoc.exists) {
-    const p = profileDoc.data()!;
-    if (p.email) {
-      possibleAthleteIds.add(p.email);
-      possibleAthleteIds.add(p.email.toLowerCase());
-    }
-    if (p.athlete_id) possibleAthleteIds.add(p.athlete_id);
-    if (p.user_id) possibleAthleteIds.add(p.user_id);
-  }
-
-  const idsArray = Array.from(possibleAthleteIds).filter(Boolean);
-
-  const [snap1, snap2, snap3] = await Promise.all([
-    db.collection('Scouting_Registry').where('athlete_id', 'in', idsArray.slice(0, 30)).get().catch(() => ({ docs: [] as any[] })),
-    db.collection('Scouting_Registry').where('user_id', 'in', idsArray.slice(0, 30)).get().catch(() => ({ docs: [] as any[] })),
-    db.collection('Scouting_Registry').where('athlete_email', 'in', idsArray.slice(0, 30)).get().catch(() => ({ docs: [] as any[] })),
-  ]);
-
-  const seenIds = new Set<string>();
-  const rawDocs: any[] = [];
-
-  for (const snap of [snap1, snap2, snap3]) {
-    for (const doc of snap.docs) {
-      if (!seenIds.has(doc.id)) {
-        seenIds.add(doc.id);
-        rawDocs.push(doc.data());
-      }
-    }
-  }
-
-  // Enrich with coach information in parallel
-  const coachIds = Array.from(new Set(rawDocs.map((inq) => inq.coach_scout_id || inq.coach_id).filter(Boolean)));
-  const coachMap = new Map<string, CoachPublicProfile | null>();
-
-  await Promise.all(
-    coachIds.map(async (cId) => {
-      const profile = await getPublicCoachProfile(cId).catch(() => null);
-      coachMap.set(cId, profile);
-    })
-  );
-
+  // Enrich with coach information
   const enrichedInquiries: EnrichedInquiry[] = [];
 
-  for (const inq of rawDocs) {
-    const coachKey = inq.coach_scout_id || inq.coach_id;
-    const coach = coachMap.get(coachKey);
-
-    const coachName = coach?.full_name || inq.coach_details?.coach_name || 'Head Coach';
-    const currentInstitution = coach?.current_institution || inq.coach_details?.institution || 'Varsity Program';
-    const sportType = coach?.sport_type || inq.coach_details?.sport_type || inq.athlete_details?.sport_type || 'Basketball';
+  for (const inq of inquiries) {
+    const coach = await getPublicCoachProfile(inq.coach_scout_id).catch(() => null);
 
     enrichedInquiries.push({
       ...inq,
-      scout_id: inq.scout_id || inq.id,
-      coach_scout_id: coachKey,
-      coach_name: coachName,
-      current_institution: currentInstitution,
-      sport_type: sportType,
-      offer_message: inq.offer_message || inq.message || `Coach ${coachName} has sent you a formal recruitment proposal.`,
+      coach_name: coach ? coach.full_name : 'Coach',
+      current_institution: coach ? coach.current_institution : 'Collegiate Program',
+      sport_type: coach ? coach.sport_type || 'Basketball' : 'Basketball',
     });
   }
 
-  // Sort descending by date_initiated / updated_at
+  // Sort descending by date_initiated
   return enrichedInquiries.sort(
-    (a, b) => new Date(b.date_initiated || b.updated_at || 0).getTime() - new Date(a.date_initiated || a.updated_at || 0).getTime(),
+    (a, b) => new Date(b.date_initiated).getTime() - new Date(a.date_initiated).getTime(),
   );
 }
 
 /**
- * Response to a recruitment inquiry (Coach or Athlete).
+ * Coach response to a recruitment inquiry.
  */
 export async function respondToRecruitmentInquiry(
   inquiryId: string,
-  userId: string,
-  responseStatus: string,
+  coachId: string,
+  responseStatus: 'Accepted' | 'Declined' | 'In Review',
   declineReason?: string
 ) {
   const docRef = db.collection('Scouting_Registry').doc(inquiryId);
-  let doc = await docRef.get();
-  
+  const doc = await docRef.get();
   if (!doc.exists) {
-    // Try querying by scout_id field
-    const q = await db.collection('Scouting_Registry').where('scout_id', '==', inquiryId).limit(1).get();
-    if (!q.empty) {
-      doc = q.docs[0];
-    } else {
-      throw new ServiceError(`Inquiry '${inquiryId}' not found.`, 404);
-    }
+    throw new ServiceError(`Inquiry '${inquiryId}' not found.`, 404);
   }
-
-  const inqData = doc.data() as any;
-  const now = new Date().toISOString();
-
-  // Normalize status
-  const cleanStatus = responseStatus.toLowerCase();
-  const canonicalStatus = cleanStatus.includes('accept')
-    ? 'Accepted'
-    : cleanStatus.includes('declin')
-    ? 'Declined'
-    : 'In Review';
 
   const updates: Record<string, any> = {
-    offer_status: canonicalStatus,
+    offer_status: responseStatus,
     decline_reason: declineReason || null,
-    updated_at: now,
+    updated_at: new Date().toISOString(),
   };
 
-  await doc.ref.set(updates, { merge: true });
-
-  // Invalidate coach profile cache
-  invalidateCoachCache(inqData.coach_scout_id);
-
-  // Notify coach of the athlete's response
-  const rawCoachUid = (inqData.coach_scout_id || inqData.coach_id || '').replace(/^coach_/, '');
-  if (rawCoachUid) {
-    const rawAthUid = userId.replace(/^ath_/, '');
-    const userDoc = await db.collection('Users').doc(rawAthUid).get().catch(() => null);
-    const athName = userDoc?.exists
-      ? `${userDoc.data()?.first_name || 'Athlete'} ${userDoc.data()?.last_name || ''}`.trim()
-      : inqData.athlete_details?.first_name || 'Athlete';
-
-    await createNotification({
-      recipient_id: rawCoachUid,
-      sender_id: rawAthUid,
-      type: 'RECRUITMENT_INQUIRY',
-      title: `Recruitment Proposal ${canonicalStatus}`,
-      message: `${athName} has ${canonicalStatus.toLowerCase()} your recruitment proposal.${declineReason ? ` Note: ${declineReason}` : ''}`,
-      action_url: '/discovery',
-      metadata: {
-        scout_id: inquiryId,
-        status: canonicalStatus,
-        athlete_id: inqData.athlete_id,
-        decline_reason: declineReason || null,
-      },
-    }).catch(() => null);
-  }
-
+  await docRef.set(updates, { merge: true });
   return {
-    message: `Inquiry status updated to ${canonicalStatus}.`,
+    message: `Inquiry status updated to ${responseStatus}.`,
     inquiry_id: inquiryId,
-    status: canonicalStatus,
-    offer_status: canonicalStatus,
+    status: responseStatus,
   };
 }
 

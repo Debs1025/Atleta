@@ -2,6 +2,7 @@ import { db } from '../utils/firebaseAdmin';
 import { ServiceError } from '../validators/matchValidator';
 import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
+import { generateCustomAuditId } from '../utils/idGenerator';
 
 export interface OfficialAudit {
   validation_id: string;
@@ -22,53 +23,41 @@ export interface OfficialAudit {
 export async function submitAuditRequest(
   coachId: string,
   matchId: string,
-  fallbackMatchData?: any
 ): Promise<OfficialAudit> {
+  const matchOffRef = db.collection('Match_Logs_Official').doc(matchId);
   const matchRef = db.collection('Match_Logs').doc(matchId);
-  const matchDoc = await matchRef.get();
 
-  let matchData = matchDoc.exists ? matchDoc.data()! : null;
+  let matchDoc = await matchOffRef.get();
+  if (!matchDoc.exists) {
+    matchDoc = await matchRef.get();
+  }
 
-  if (matchData && matchData.team_id && matchData.team_id !== 'team_default') {
-    const teamDoc = await db.collection('Teams').doc(matchData.team_id).get();
-    if (teamDoc.exists) {
-      const teamData = teamDoc.data()!;
-      const isOwner =
-        teamData.coach_id === coachId ||
-        teamData.coach_id === `coach_${coachId}` ||
-        teamData.coach_id?.replace('coach_', '') === coachId ||
-        matchData.logged_by_coach_id === coachId ||
-        matchData.coach_id === coachId;
-      if (!isOwner && teamData.coach_id && teamData.coach_id !== coachId) {
-        throw new ServiceError('Unauthorized. You do not manage the team for this match.', 403);
-      }
+  if (!matchDoc.exists) {
+    throw new ServiceError(`Match with ID '${matchId}' not found.`, 404);
+  }
+
+  const matchData = matchDoc.data()!;
+  const teamId = matchData.team_id || matchData.home_team_id;
+
+  if (!teamId) {
+    throw new ServiceError('Team ID is missing from the match record.', 400);
+  }
+
+  const teamDoc = await db.collection('Teams').doc(teamId).get();
+  if (teamDoc.exists) {
+    const teamData = teamDoc.data()!;
+    // Verify that the coach manages this team
+    const isOwner =
+      teamData.coach_id === coachId ||
+      teamData.coach_id === `coach_${coachId}` ||
+      teamData.coach_id.replace('coach_', '') === coachId;
+
+    if (!isOwner) {
+      throw new ServiceError('Unauthorized. You do not manage the team for this match.', 403);
     }
   }
 
-  if (!matchData) {
-    // If the match does not exist in Firestore yet, automatically seed it into Match_Logs
-    matchData = {
-      match_id: matchId,
-      team_id: fallbackMatchData?.team_id || 'team_default',
-      home_team_name: fallbackMatchData?.home_team_name || fallbackMatchData?.home_team || 'Home Team',
-      away_team_name: fallbackMatchData?.away_team_name || fallbackMatchData?.away_team || 'Away Team',
-      league_name: fallbackMatchData?.league_name || 'BATANG PINOY',
-      sport_type: fallbackMatchData?.sport_type || 'BASKETBALL',
-      match_date: fallbackMatchData?.match_date || new Date().toISOString(),
-      location: fallbackMatchData?.location || 'Metro Sports Arena',
-      notes: Array.isArray(fallbackMatchData?.coach_notes)
-        ? fallbackMatchData.coach_notes.join(' ')
-        : fallbackMatchData?.notes || '',
-      audit_status: 'Pending',
-      verification_status: 'Pending',
-      is_certified: false,
-      logged_by_coach_id: coachId,
-      created_at: new Date().toISOString(),
-    };
-    await matchRef.set(matchData);
-  }
-
-  const auditId = crypto.randomUUID();
+  const auditId = await generateCustomAuditId();
   const now = new Date().toISOString();
 
   const auditData: OfficialAudit = {
@@ -77,7 +66,7 @@ export async function submitAuditRequest(
     match_id: matchId,
     requested_by_coach_id: coachId,
     requested_by: coachId,
-    official_id: null,
+    official_id: matchData.official_id || null,
     status: 'Pending',
     verification_status: 'Pending',
     requested_at: now,
@@ -89,10 +78,8 @@ export async function submitAuditRequest(
 
   batch.set(auditRef, auditData);
   batch.set(validationRef, auditData);
-  batch.update(matchRef, {
-    audit_status: 'Pending',
-    verification_status: 'Pending',
-  });
+  batch.set(matchRef, { audit_status: 'Pending', verification_status: 'Pending' }, { merge: true });
+  batch.set(matchOffRef, { audit_status: 'Pending', verification_status: 'Pending' }, { merge: true });
 
   await batch.commit();
 
@@ -106,14 +93,17 @@ export async function generateMatchPdfBuffer(
   coachId: string,
   matchId: string,
 ): Promise<Buffer> {
-  const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  let matchDoc = await db.collection('Match_Logs_Official').doc(matchId).get();
+  if (!matchDoc.exists) {
+    matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  }
 
   if (!matchDoc.exists) {
     throw new ServiceError(`Match with ID '${matchId}' not found.`, 404);
   }
 
   const matchData = matchDoc.data()!;
-  const teamId = matchData.team_id;
+  const teamId = matchData.team_id || matchData.home_team_id;
 
   if (!teamId) {
     throw new ServiceError('Team ID is missing from the match record.', 400);

@@ -94,48 +94,95 @@ export async function createOfficialMatchService(
   const awayTeamId = data.away_team_id || data.opponent_team_name || (isIndividualSport ? 'team_individual' : 'team_away_default');
   const awayTeamName = (data.away_team_name || data.opponent_team_name || defaultAway).trim();
 
-  // 6. Resolve Coaches Details
+  // 6. Resolve Coaches Details (Task 2 Fix: Handle any coach format safely without crashing)
   let enrichedCoaches: MatchCoachParticipant[] = [];
-  const assignedCoachIds: string[] = Array.isArray(data.assigned_coaches) ? [...data.assigned_coaches] : [];
+  const assignedCoachIds: string[] = [];
 
-  if (Array.isArray(data.coaches) && data.coaches.length > 0) {
-    enrichedCoaches = data.coaches.map((c) => {
-      if (c.coach_id && !assignedCoachIds.includes(c.coach_id)) {
-        assignedCoachIds.push(c.coach_id);
+  const rawCoachList: any[] = [];
+  const payloadAny = data as any;
+  if (Array.isArray(payloadAny.coaches)) {
+    rawCoachList.push(...payloadAny.coaches);
+  }
+  if (Array.isArray(payloadAny.assigned_coaches)) {
+    rawCoachList.push(...payloadAny.assigned_coaches);
+  } else if (typeof payloadAny.assigned_coaches === 'string' && payloadAny.assigned_coaches.trim()) {
+    rawCoachList.push(payloadAny.assigned_coaches.trim());
+  }
+  if (payloadAny.assigned_coach) {
+    if (Array.isArray(payloadAny.assigned_coach)) {
+      rawCoachList.push(...payloadAny.assigned_coach);
+    } else {
+      rawCoachList.push(payloadAny.assigned_coach);
+    }
+  }
+  if (payloadAny.coach_id) {
+    rawCoachList.push(payloadAny.coach_id);
+  }
+
+  for (const item of rawCoachList) {
+    if (!item) continue;
+    if (typeof item === 'string') {
+      const cid = item.trim();
+      if (cid && !assignedCoachIds.includes(cid)) {
+        assignedCoachIds.push(cid);
       }
-      return {
-        coach_id: c.coach_id,
-        user_id: c.user_id || c.coach_id.replace(/^coach_/, ''),
-        full_name: c.full_name || 'Coach',
-        email: c.email || '',
-        contact_number: c.contact_number || '',
-        team_id: c.team_id || (c.team_name === awayTeamName ? awayTeamId : homeTeamId),
-        team_name: c.team_name || homeTeamName,
-        role: c.role || 'Head Coach',
-      };
-    });
-  } else if (assignedCoachIds.length > 0) {
-    // Fetch details for assigned coach IDs in parallel
-    const coachDocs = await Promise.all(
-      assignedCoachIds.map(async (cid) => {
+    } else if (typeof item === 'object') {
+      const cid = (item.coach_id || item.id || item.user_id || '').trim();
+      if (cid && !assignedCoachIds.includes(cid)) {
+        assignedCoachIds.push(cid);
+      }
+      enrichedCoaches.push({
+        coach_id: cid || `coach_${Date.now()}`,
+        user_id: item.user_id || (cid ? cid.replace(/^coach_/, '') : ''),
+        full_name: item.full_name || item.name || item.coach_name || 'Coach',
+        email: item.email || '',
+        contact_number: item.contact_number || item.phone || '',
+        team_id: item.team_id || (item.team_name === awayTeamName ? awayTeamId : homeTeamId),
+        team_name: item.team_name || (item.team_id === awayTeamId ? awayTeamName : homeTeamName),
+        role: item.role || 'Head Coach',
+      });
+    }
+  }
+
+  // If coach IDs are present but not yet in enrichedCoaches, fetch details with safe error catch
+  for (const cid of assignedCoachIds) {
+    if (!enrichedCoaches.some((c) => c.coach_id === cid)) {
+      try {
         const rawUid = cid.replace(/^coach_/, '');
-        const uDoc = await db.collection('Users').doc(rawUid).get();
-        const pDoc = await db.collection('Coach_Profiles').doc(cid).get();
-        const uData = uDoc.exists ? uDoc.data() : null;
-        const pData = pDoc.exists ? pDoc.data() : null;
-        return {
+        const [uDoc, pDoc] = await Promise.all([
+          db.collection('Users').doc(rawUid).get().catch(() => null),
+          db.collection('Coach_Profiles').doc(cid).get().catch(() => null),
+        ]);
+        const uData = uDoc && uDoc.exists ? uDoc.data() : null;
+        const pData = pDoc && pDoc.exists ? pDoc.data() : null;
+        enrichedCoaches.push({
           coach_id: cid,
           user_id: rawUid,
-          full_name: uData?.full_legal_name || uData?.full_name || `${uData?.first_name || ''} ${uData?.last_name || ''}`.trim() || 'Coach',
+          full_name:
+            uData?.full_legal_name ||
+            uData?.full_name ||
+            `${uData?.first_name || ''} ${uData?.last_name || ''}`.trim() ||
+            'Head Coach',
           email: uData?.email || '',
           contact_number: uData?.contact_number || '',
           team_id: pData?.team_id || homeTeamId,
           team_name: homeTeamName,
           role: 'Head Coach',
-        };
-      })
-    );
-    enrichedCoaches = coachDocs;
+        });
+      } catch (err: any) {
+        console.warn(`⚠️ [COACH RESOLVE] Fallback for coach ${cid}:`, err?.message || err);
+        enrichedCoaches.push({
+          coach_id: cid,
+          user_id: cid.replace(/^coach_/, ''),
+          full_name: 'Assigned Coach',
+          email: '',
+          contact_number: '',
+          team_id: homeTeamId,
+          team_name: homeTeamName,
+          role: 'Head Coach',
+        });
+      }
+    }
   }
 
   // 7. Resolve Athlete Rosters and Multi-Sport Stats
@@ -224,22 +271,22 @@ export async function createOfficialMatchService(
     {
       team_id: homeTeamId,
       team_name: homeTeamName,
-      coach_id: enrichedCoaches.find(c => c.team_name === homeTeamName || c.team_id === homeTeamId)?.coach_id,
-      coach_name: enrichedCoaches.find(c => c.team_name === homeTeamName || c.team_id === homeTeamId)?.full_name,
+      coach_id: enrichedCoaches.find(c => c.team_name === homeTeamName || c.team_id === homeTeamId)?.coach_id || (assignedCoachIds[0] || undefined),
+      coach_name: enrichedCoaches.find(c => c.team_name === homeTeamName || c.team_id === homeTeamId)?.full_name || 'Head Coach',
       score: data.home_score !== undefined ? data.home_score : 0,
       roster: athleteRosters.filter(a => a.team_name === homeTeamName || a.team_id === homeTeamId),
     },
     {
       team_id: awayTeamId,
       team_name: awayTeamName,
-      coach_id: enrichedCoaches.find(c => c.team_name === awayTeamName || c.team_id === awayTeamId)?.coach_id,
-      coach_name: enrichedCoaches.find(c => c.team_name === awayTeamName || c.team_id === awayTeamId)?.full_name,
+      coach_id: enrichedCoaches.find(c => c.team_name === awayTeamName || c.team_id === awayTeamId)?.coach_id || (assignedCoachIds[1] || undefined),
+      coach_name: enrichedCoaches.find(c => c.team_name === awayTeamName || c.team_id === awayTeamId)?.full_name || (isIndividualSport ? 'Individual Coach' : 'Away Coach'),
       score: data.away_score !== undefined ? data.away_score : 0,
       roster: athleteRosters.filter(a => a.team_name === awayTeamName || a.team_id === awayTeamId),
     },
   ];
 
-  // 9. Construct Official Match Log Document
+  // 9. Construct Official Match Log Document (Task 4: Root-level official_id strictly injected)
   const matchLog: MatchLog = {
     match_id: matchId,
     team_id: homeTeamId,
@@ -298,7 +345,7 @@ export async function createOfficialMatchService(
     created_at: now,
   };
 
-  // 11. Construct Official Schedule Document (Fix for Schedule Sync)
+  // 11. Construct Official Schedule Document
   const scheduleDoc: any = {
     schedule_id: scheduleId,
     match_id: matchId,
@@ -330,20 +377,18 @@ export async function createOfficialMatchService(
     updated_at: now,
   };
 
-  // 12. Execute Atomic Multi-Collection Batch Write
+  // 12. Execute Atomic Multi-Collection Batch Write (Task 3 Fix: Exclusively target Match_Logs_Official)
   const batch = db.batch();
 
-  // (a) Segregated Official collection
+  // (a) Exclusively target Match_Logs_Official (NO LEAKAGE to Match_Logs)
   batch.set(db.collection('Match_Logs_Official').doc(matchId), sanitizeForFirestore(matchLog));
-  // (b) Mirrored Match_Logs collection with created_by_role: 'OFFICIAL'
-  batch.set(db.collection('Match_Logs').doc(matchId), sanitizeForFirestore(matchLog));
-  // (c) Linked Official_Schedules collection
+  // (b) Linked Official_Schedules collection
   batch.set(db.collection('Official_Schedules').doc(scheduleId), sanitizeForFirestore(scheduleDoc));
-  // (d) Linked Official_Audits & Official_Validations collections
+  // (c) Linked Official_Audits & Official_Validations collections
   batch.set(db.collection('Official_Audits').doc(validationId), sanitizeForFirestore(auditDoc));
   batch.set(db.collection('Official_Validations').doc(validationId), sanitizeForFirestore(auditDoc));
 
-  // (e) Performance metrics
+  // (d) Performance metrics
   for (const metric of performanceMetrics) {
     batch.set(db.collection('Performance_Metrics').doc(metric.metric_id), sanitizeForFirestore(metric));
   }
@@ -373,7 +418,65 @@ export async function createOfficialMatchService(
 }
 
 /**
- * Retrieves all pending match verification / audit requests referencing Match_Logs_Official and Match_Logs.
+ * Retrieve official matches directly from Match_Logs_Official (Task 4).
+ * Root-level official_id is strictly indexed and returned for Home & All Matches pages.
+ */
+export async function getOfficialMatchesService(officialId?: string, statusFilter?: string) {
+  let query: any = db.collection('Match_Logs_Official');
+
+  if (officialId && officialId !== 'all') {
+    const rawUid = officialId.replace(/^off_/, '');
+    const canonicalOffId = `off_${rawUid}`;
+
+    const [snap1, snap2, snap3] = await Promise.all([
+      db.collection('Match_Logs_Official').where('official_id', '==', canonicalOffId).get(),
+      db.collection('Match_Logs_Official').where('official_id', '==', rawUid).get(),
+      db.collection('Match_Logs_Official').where('assigned_officials', 'array-contains', canonicalOffId).get(),
+    ]);
+
+    const seenIds = new Set<string>();
+    const matches: any[] = [];
+    [...snap1.docs, ...snap2.docs, ...snap3.docs].forEach((doc) => {
+      if (!seenIds.has(doc.id)) {
+        seenIds.add(doc.id);
+        const data = doc.data();
+        matches.push({
+          ...data,
+          match_id: data.match_id || doc.id,
+          official_id: data.official_id || canonicalOffId,
+        });
+      }
+    });
+
+    if (matches.length > 0) {
+      let filtered = matches;
+      if (statusFilter) {
+        filtered = matches.filter(m => (m.audit_status || m.verification_status || m.status || '').toLowerCase() === statusFilter.toLowerCase());
+      }
+      return filtered.sort((a, b) => new Date(b.created_at || b.timestamp || 0).getTime() - new Date(a.created_at || a.timestamp || 0).getTime());
+    }
+  }
+
+  // Fallback: Retrieve all official matches
+  const snapshot = await query.get();
+  let matches = snapshot.docs.map((doc: any) => {
+    const data = doc.data();
+    return {
+      ...data,
+      match_id: data.match_id || doc.id,
+      official_id: data.official_id || (Array.isArray(data.assigned_officials) ? data.assigned_officials[0] : null),
+    };
+  });
+
+  if (statusFilter) {
+    matches = matches.filter((m: any) => (m.audit_status || m.verification_status || m.status || '').toLowerCase() === statusFilter.toLowerCase());
+  }
+
+  return matches.sort((a: any, b: any) => new Date(b.created_at || b.timestamp || 0).getTime() - new Date(a.created_at || a.timestamp || 0).getTime());
+}
+
+/**
+ * Retrieves all pending match verification / audit requests referencing Match_Logs_Official.
  */
 export async function getPendingValidationsService() {
   const snapshot = await db
@@ -462,17 +565,15 @@ export async function certifyValidationService(
   }
 
   // Resolve official_id
-  let officialId = auditData.official_id;
   const rawOfficialUid = officialUid.replace(/^off_/, '');
   const canonicalOffUid = `off_${rawOfficialUid}`;
+  let officialId: string = auditData.official_id || canonicalOffUid;
   let profileDoc = await db.collection('Official_Profiles').doc(canonicalOffUid).get();
   if (!profileDoc.exists) {
     profileDoc = await db.collection('Official_Profiles').doc(rawOfficialUid).get();
   }
-  if (profileDoc.exists) {
-    officialId = profileDoc.data()?.official_id || canonicalOffUid;
-  } else {
-    officialId = canonicalOffUid;
+  if (profileDoc.exists && profileDoc.data()?.official_id) {
+    officialId = profileDoc.data()!.official_id;
   }
 
   const now = new Date().toISOString();
@@ -488,8 +589,9 @@ export async function certifyValidationService(
     certified_at: now,
   };
 
-  // 5. Update Match_Logs & Match_Logs_Official record to lock to read-only
+  // 5. Update Match_Logs_Official record to lock to read-only (Task 4: Root-level official_id strictly injected)
   const updatedMatch: Partial<MatchLog> = {
+    official_id: officialId,
     is_certified: true,
     is_locked: true,
     audit_status: 'Approved',

@@ -15,6 +15,7 @@ import {
 } from '../controllers/auditController';
 import {
   createOfficialMatchHandler,
+  getOfficialMatchesHandler,
   deleteMatchHandler,
 } from '../controllers/validationController';
 
@@ -40,6 +41,9 @@ router.post('/log-match', authenticate, submitMatch);
 router.post('/', authenticate, submitMatch);
 
 // Official Match Endpoints
+router.get('/official', authenticate, getOfficialMatchesHandler);
+router.get('/official/all', authenticate, getOfficialMatchesHandler);
+router.get('/official-matches', authenticate, getOfficialMatchesHandler);
 router.post('/official', authenticate, createOfficialMatchHandler);
 router.post('/create-official', authenticate, createOfficialMatchHandler);
 

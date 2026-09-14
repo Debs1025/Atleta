@@ -45,9 +45,6 @@ export interface AthleteProfile {
     year: string;
     content: string;
   }[] | null;
-  workload_analytics?: any;
-  workload?: any;
-  workload_target?: any;
   created_at: Date;
   updated_at: Date;
 }
@@ -60,8 +57,6 @@ export interface CoachProfile {
   certification_license_num?: string | null;
   years_of_experience: number;
   current_institution: string;
-  regional_affiliation?: string | null;
-  national_sports_league?: string | null;
   quote?: string | null;
   specialties?: string[];
   sport_type?: string;
@@ -91,7 +86,10 @@ export interface OfficialProfile {
   official_id: string;
   user_id: string;
   organization_name: string;
-  certification_status: 'Pending' | 'Verified';
+  official_license_number?: string;
+  assigned_tournaments?: string[];
+  certification_status: 'Pending' | 'Verified' | 'Certified';
+  is_active?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -112,6 +110,20 @@ export interface RegisterOfficialDto {
   email: string;
   password: string;
   organization_name: string;
+  official_license_number?: string;
+  assigned_tournaments?: string[];
+}
+
+// Update Official profile request body
+export interface UpdateOfficialProfileDto {
+  full_legal_name?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  contact_number?: string;
+  organization_name?: string;
+  official_license_number?: string;
+  assigned_tournaments?: string[];
 }
 
 // Update Official settings preferences

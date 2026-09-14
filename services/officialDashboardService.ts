@@ -31,9 +31,9 @@ export async function getOfficialDashboardMetrics(officialId: string) {
   let pendingAuditsDocs: any[] = [];
 
   try {
-    // Run count queries in parallel across Official_Audits and Match_Logs_Official / Match_Logs
+    // Run count queries in parallel across Official_Audits and Match_Logs_Official
     const [matchesCount, pendingCountRes, auditedCountRes, pendingAudits] = await Promise.all([
-      db.collection('Match_Logs').count().get(),
+      db.collection('Match_Logs_Official').count().get(),
       db.collection('Official_Audits').where('status', '==', 'Pending').count().get(),
       db.collection('Official_Audits').where('status', 'in', ['Approved', 'Rejected']).count().get(),
       db.collection('Official_Audits').where('status', '==', 'Pending').get()
@@ -46,7 +46,7 @@ export async function getOfficialDashboardMetrics(officialId: string) {
   } catch (err) {
     // Fallback using document snapshot size
     const [matchesSnap, pendingAuditsSnap, auditedSnap] = await Promise.all([
-      db.collection('Match_Logs').get(),
+      db.collection('Match_Logs_Official').get(),
       db.collection('Official_Audits').where('status', '==', 'Pending').get(),
       db.collection('Official_Audits').where('status', 'in', ['Approved', 'Rejected']).get()
     ]);
