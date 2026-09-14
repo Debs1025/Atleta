@@ -22,79 +22,139 @@ export interface EnrichedOfficialSchedule extends OfficialSchedule {
 
 /**
  * Retrieve aggregated metrics (total matches, pending count, audited count) and new match audit queues.
- * Optimised to respond under 200ms by running queries in parallel.
+ * Unified across Match_Logs_Official, Official_Audits, and Official_Schedules with strict ownership indexing.
  */
 export async function getOfficialDashboardMetrics(officialId: string) {
-  let totalMatches = 0;
-  let pendingCount = 0;
-  let auditedCount = 0;
-  let pendingAuditsDocs: any[] = [];
+  const rawUid = officialId.replace(/^off_/, '');
+  const canonicalOffUid = `off_${rawUid}`;
 
   try {
-    // Run count queries in parallel across Official_Audits and Match_Logs_Official
-    const [matchesCount, pendingCountRes, auditedCountRes, pendingAudits] = await Promise.all([
-      db.collection('Match_Logs_Official').count().get(),
-      db.collection('Official_Audits').where('status', '==', 'Pending').count().get(),
-      db.collection('Official_Audits').where('status', 'in', ['Approved', 'Rejected']).count().get(),
-      db.collection('Official_Audits').where('status', '==', 'Pending').get()
+    // 1. Parallel fetch of all matches, audits, and schedules for this official
+    const [officialMatchesSnap1, officialMatchesSnap2, auditsSnap1, auditsSnap2, schedulesSnap1, schedulesSnap2] = await Promise.all([
+      db.collection('Match_Logs_Official').where('official_id', '==', canonicalOffUid).get().catch(() => null),
+      db.collection('Match_Logs_Official').where('official_id', '==', rawUid).get().catch(() => null),
+      db.collection('Official_Audits').where('official_id', '==', canonicalOffUid).get().catch(() => null),
+      db.collection('Official_Audits').where('official_id', '==', rawUid).get().catch(() => null),
+      db.collection('Official_Schedules').where('official_id', '==', canonicalOffUid).get().catch(() => null),
+      db.collection('Official_Schedules').where('official_id', '==', rawUid).get().catch(() => null),
     ]);
 
-    totalMatches = matchesCount.data().count;
-    pendingCount = pendingCountRes.data().count;
-    auditedCount = auditedCountRes.data().count;
-    pendingAuditsDocs = pendingAudits.docs;
-  } catch (err) {
-    // Fallback using document snapshot size
-    const [matchesSnap, pendingAuditsSnap, auditedSnap] = await Promise.all([
-      db.collection('Match_Logs_Official').get(),
-      db.collection('Official_Audits').where('status', '==', 'Pending').get(),
-      db.collection('Official_Audits').where('status', 'in', ['Approved', 'Rejected']).get()
-    ]);
+    const matchesMap = new Map<string, any>();
 
-    totalMatches = matchesSnap.size;
-    pendingCount = pendingAuditsSnap.size;
-    auditedCount = auditedSnap.size;
-    pendingAuditsDocs = pendingAuditsSnap.docs;
-  }
+    // Index all Match_Logs_Official
+    [...(officialMatchesSnap1?.docs || []), ...(officialMatchesSnap2?.docs || [])].forEach((doc) => {
+      const data = doc.data();
+      matchesMap.set(doc.id, {
+        ...data,
+        match_id: data.match_id || doc.id,
+        official_id: data.official_id || canonicalOffUid,
+      });
+    });
 
-  // Populate match details for each audit request in the pending queue in parallel
-  const matchIds = Array.from(new Set(pendingAuditsDocs.map(d => d.data().match_id).filter(Boolean)));
-  const matchDocs = await Promise.all(
-    matchIds.map(async (id) => {
-      let mDoc = await db.collection('Match_Logs_Official').doc(id).get();
-      if (!mDoc.exists) {
-        mDoc = await db.collection('Match_Logs').doc(id).get();
-      }
-      return mDoc;
-    })
-  );
-
-  const matchesMap = new Map<string, any>();
-  matchDocs.forEach(mDoc => {
-    if (mDoc.exists) {
-      matchesMap.set(mDoc.id, mDoc.data());
+    // If official specific queries returned 0 (e.g. global view), fallback to all official match records
+    if (matchesMap.size === 0) {
+      const allOfficialMatchesSnap = await db.collection('Match_Logs_Official').limit(50).get().catch(() => null);
+      (allOfficialMatchesSnap?.docs || []).forEach((doc) => {
+        const data = doc.data();
+        matchesMap.set(doc.id, {
+          ...data,
+          match_id: data.match_id || doc.id,
+          official_id: data.official_id || canonicalOffUid,
+        });
+      });
     }
-  });
 
-  const auditQueue = pendingAuditsDocs.map(d => {
-    const auditData = d.data();
+    // Index Audits
+    const auditsMap = new Map<string, any>();
+    [...(auditsSnap1?.docs || []), ...(auditsSnap2?.docs || [])].forEach((doc) => {
+      const data = doc.data();
+      auditsMap.set(data.match_id || doc.id, {
+        audit_id: data.audit_id || data.validation_id || doc.id,
+        validation_id: data.validation_id || data.audit_id || doc.id,
+        match_id: data.match_id,
+        status: data.status || 'Pending',
+        requested_at: data.requested_at || data.created_at || new Date().toISOString(),
+        official_id: data.official_id || canonicalOffUid,
+      });
+    });
+
+    // Index Schedules
+    const schedulesMap = new Map<string, any>();
+    [...(schedulesSnap1?.docs || []), ...(schedulesSnap2?.docs || [])].forEach((doc) => {
+      const data = doc.data();
+      if (data.match_id) {
+        schedulesMap.set(data.match_id, data);
+      }
+    });
+
+    // Build unified list of all unique match records
+    let totalMatches = matchesMap.size;
+    let pendingCount = 0;
+    let auditedCount = 0;
+    const auditQueue: any[] = [];
+
+    matchesMap.forEach((matchData, mId) => {
+      const audit = auditsMap.get(mId);
+      const schedule = schedulesMap.get(mId);
+
+      const rawStatus = (audit?.status || matchData.audit_status || matchData.verification_status || matchData.status || (matchData.is_certified ? 'Approved' : 'Pending')).toLowerCase();
+      const isAudited = rawStatus === 'approved' || rawStatus === 'audited' || rawStatus === 'certified' || matchData.is_certified === true;
+      const displayStatus = isAudited ? 'AUDITED' : 'PENDING';
+
+      if (isAudited) {
+        auditedCount++;
+      } else {
+        pendingCount++;
+      }
+
+      // Resolve coach name for display
+      let coachDisplay = 'Official Assigned';
+      if (Array.isArray(matchData.coaches) && matchData.coaches.length > 0) {
+        coachDisplay = matchData.coaches[0]?.full_name || coachDisplay;
+      } else if (schedule && Array.isArray(schedule.coaches) && schedule.coaches.length > 0) {
+        coachDisplay = schedule.coaches[0]?.full_name || coachDisplay;
+      } else if (matchData.home_team?.coach_name) {
+        coachDisplay = matchData.home_team.coach_name;
+      }
+
+      const matchClass = matchData.event_name
+        ? `${matchData.home_team_name || 'Home'} vs. ${matchData.away_team_name || 'Away'} (${matchData.event_name})`
+        : `${matchData.home_team_name || 'HOME TEAM'} vs. ${matchData.away_team_name || matchData.opponent_team_name || 'OPPONENT'}`;
+
+      auditQueue.push({
+        audit_id: audit?.audit_id || `AUDIT-${mId}`,
+        validation_id: audit?.validation_id || `AUDIT-${mId}`,
+        match_id: mId,
+        match_class: matchClass,
+        sport: matchData.sport_type || 'Basketball',
+        coach: coachDisplay,
+        status: displayStatus,
+        requested_by: audit?.requested_by || matchData.official_id || canonicalOffUid,
+        requested_at: audit?.requested_at || matchData.created_at || matchData.timestamp || new Date().toISOString(),
+        match_details: matchData,
+      });
+    });
+
+    // Sort audit queue: most recent first
+    auditQueue.sort((a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime());
+
     return {
-      audit_id: auditData.audit_id || auditData.validation_id,
-      validation_id: auditData.validation_id || auditData.audit_id,
-      match_id: auditData.match_id,
-      requested_by: auditData.requested_by,
-      status: auditData.status,
-      requested_at: auditData.requested_at || auditData.created_at,
-      match_details: matchesMap.get(auditData.match_id) || null
+      total_matches: totalMatches,
+      pending_count: pendingCount,
+      audited_count: auditedCount,
+      audit_queue: auditQueue,
+      matches: Array.from(matchesMap.values()),
     };
-  });
-
-  return {
-    total_matches: totalMatches,
-    pending_count: pendingCount,
-    audited_count: auditedCount,
-    audit_queue: auditQueue
-  };
+  } catch (err: any) {
+    console.error('getOfficialDashboardMetrics error:', err);
+    return {
+      total_matches: 0,
+      pending_count: 0,
+      audited_count: 0,
+      audit_queue: [],
+      matches: [],
+    };
+  }
 }
 
 /**
@@ -149,8 +209,10 @@ export async function getOfficialSchedules(
     }
 
     // 2. Fetch and resolve deep Coach Details
-    let coachDetails: any[] = Array.isArray(data.coaches) ? [...data.coaches] : [];
-    if (coachDetails.length === 0 && matchData && Array.isArray(matchData.coaches)) {
+    let coachDetails: any[] = [];
+    if (Array.isArray(data.coaches) && data.coaches.length > 0) {
+      coachDetails = [...data.coaches];
+    } else if (matchData && Array.isArray(matchData.coaches) && matchData.coaches.length > 0) {
       coachDetails = [...matchData.coaches];
     }
 
@@ -161,22 +223,57 @@ export async function getOfficialSchedules(
     if (coachDetails.length === 0 && assignedCoaches.length > 0) {
       const coachFetched = await Promise.all(
         assignedCoaches.map(async (cid) => {
-          const cUid = cid.replace(/^coach_/, '');
-          const uDoc = await db.collection('Users').doc(cUid).get();
-          const pDoc = await db.collection('Coach_Profiles').doc(cid).get();
-          const uData = uDoc.exists ? uDoc.data() : null;
-          const pData = pDoc.exists ? pDoc.data() : null;
-          return {
-            coach_id: cid,
-            full_name: uData?.full_legal_name || uData?.full_name || `${uData?.first_name || ''} ${uData?.last_name || ''}`.trim() || 'Head Coach',
-            email: uData?.email || '',
-            contact_number: uData?.contact_number || '',
-            organization: pData?.current_institution || uData?.organization_name || 'Athletics Department',
-            team_id: pData?.team_id || '',
-          };
+          const isIdFormat = cid.startsWith('coach_') || (!cid.includes(' ') && cid.length >= 20);
+          if (isIdFormat) {
+            const cUid = cid.replace(/^coach_/, '');
+            const [uDoc, pDoc] = await Promise.all([
+              db.collection('Users').doc(cUid).get().catch(() => null),
+              db.collection('Coach_Profiles').doc(cid).get().catch(() => null),
+            ]);
+            const uData = uDoc && uDoc.exists ? uDoc.data() : null;
+            const pData = pDoc && pDoc.exists ? pDoc.data() : null;
+            return {
+              coach_id: cid,
+              full_name: uData?.full_legal_name || uData?.full_name || `${uData?.first_name || ''} ${uData?.last_name || ''}`.trim() || 'Head Coach',
+              email: uData?.email || '',
+              contact_number: uData?.contact_number || '',
+              organization: pData?.current_institution || uData?.organization_name || 'Athletics Department',
+              team_id: pData?.team_id || '',
+            };
+          } else {
+            // Plain display name
+            return {
+              coach_id: `coach_${cid.toLowerCase().replace(/\s+/g, '_')}`,
+              full_name: cid,
+              email: '',
+              contact_number: '',
+              organization: 'Athletics Department',
+              team_id: '',
+            };
+          }
         })
       );
       coachDetails = coachFetched;
+    }
+
+    // Fallback if home_team / away_team has coach_name
+    if (coachDetails.length === 0) {
+      if (data.home_team?.coach_name && data.home_team.coach_name !== 'Head Coach') {
+        coachDetails.push({
+          coach_id: `coach_home_${doc.id}`,
+          full_name: data.home_team.coach_name,
+          role: 'Head Coach',
+          team_name: data.home_team.team_name || 'Home Team',
+        });
+      }
+      if (data.away_team?.coach_name && data.away_team.coach_name !== 'Away Coach') {
+        coachDetails.push({
+          coach_id: `coach_away_${doc.id}`,
+          full_name: data.away_team.coach_name,
+          role: 'Head Coach',
+          team_name: data.away_team.team_name || 'Away Team',
+        });
+      }
     }
 
     const enriched: EnrichedOfficialSchedule = {

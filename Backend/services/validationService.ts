@@ -94,7 +94,7 @@ export async function createOfficialMatchService(
   const awayTeamId = data.away_team_id || data.opponent_team_name || (isIndividualSport ? 'team_individual' : 'team_away_default');
   const awayTeamName = (data.away_team_name || data.opponent_team_name || defaultAway).trim();
 
-  // 6. Resolve Coaches Details (Task 2 Fix: Handle any coach format safely without crashing)
+  // 6. Resolve Coaches Details (Safe parsing for IDs, display names, objects, and arrays)
   let enrichedCoaches: MatchCoachParticipant[] = [];
   const assignedCoachIds: string[] = [];
 
@@ -118,23 +118,38 @@ export async function createOfficialMatchService(
   if (payloadAny.coach_id) {
     rawCoachList.push(payloadAny.coach_id);
   }
+  if (payloadAny.coach_name && typeof payloadAny.coach_name === 'string') {
+    rawCoachList.push(payloadAny.coach_name.trim());
+  }
+  if (payloadAny.home_coach_name && typeof payloadAny.home_coach_name === 'string') {
+    rawCoachList.push({ full_name: payloadAny.home_coach_name.trim(), team_id: homeTeamId, team_name: homeTeamName });
+  }
+  if (payloadAny.away_coach_name && typeof payloadAny.away_coach_name === 'string') {
+    rawCoachList.push({ full_name: payloadAny.away_coach_name.trim(), team_id: awayTeamId, team_name: awayTeamName });
+  }
 
   for (const item of rawCoachList) {
     if (!item) continue;
     if (typeof item === 'string') {
-      const cid = item.trim();
-      if (cid && !assignedCoachIds.includes(cid)) {
-        assignedCoachIds.push(cid);
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+
+      // Check if item is already in assigned list
+      if (!assignedCoachIds.includes(trimmed)) {
+        assignedCoachIds.push(trimmed);
       }
     } else if (typeof item === 'object') {
+      const coachName = (item.full_name || item.name || item.coach_name || item.label || 'Coach').trim();
       const cid = (item.coach_id || item.id || item.user_id || '').trim();
-      if (cid && !assignedCoachIds.includes(cid)) {
-        assignedCoachIds.push(cid);
+      const resolvedCid = cid || `coach_${crypto.createHash('md5').update(coachName).digest('hex').substring(0, 10)}`;
+      
+      if (!assignedCoachIds.includes(resolvedCid)) {
+        assignedCoachIds.push(resolvedCid);
       }
       enrichedCoaches.push({
-        coach_id: cid || `coach_${Date.now()}`,
-        user_id: item.user_id || (cid ? cid.replace(/^coach_/, '') : ''),
-        full_name: item.full_name || item.name || item.coach_name || 'Coach',
+        coach_id: resolvedCid,
+        user_id: item.user_id || (cid ? cid.replace(/^coach_/, '') : resolvedCid),
+        full_name: coachName,
         email: item.email || '',
         contact_number: item.contact_number || item.phone || '',
         team_id: item.team_id || (item.team_name === awayTeamName ? awayTeamId : homeTeamId),
@@ -144,37 +159,68 @@ export async function createOfficialMatchService(
     }
   }
 
-  // If coach IDs are present but not yet in enrichedCoaches, fetch details with safe error catch
-  for (const cid of assignedCoachIds) {
-    if (!enrichedCoaches.some((c) => c.coach_id === cid)) {
+  // Resolve remaining coach string entries (can be Coach IDs or typed display names)
+  for (const coachEntry of assignedCoachIds) {
+    if (!enrichedCoaches.some((c) => c.coach_id === coachEntry || (c.full_name && c.full_name.toLowerCase() === coachEntry.toLowerCase()))) {
       try {
-        const rawUid = cid.replace(/^coach_/, '');
-        const [uDoc, pDoc] = await Promise.all([
-          db.collection('Users').doc(rawUid).get().catch(() => null),
-          db.collection('Coach_Profiles').doc(cid).get().catch(() => null),
-        ]);
-        const uData = uDoc && uDoc.exists ? uDoc.data() : null;
-        const pData = pDoc && pDoc.exists ? pDoc.data() : null;
+        const isIdFormat = coachEntry.startsWith('coach_') || (!coachEntry.includes(' ') && coachEntry.length >= 20);
+        let matchedUserDoc: any = null;
+        let matchedProfileDoc: any = null;
+
+        if (isIdFormat) {
+          const rawUid = coachEntry.replace(/^coach_/, '');
+          const [uDoc, pDoc] = await Promise.all([
+            db.collection('Users').doc(rawUid).get().catch(() => null),
+            db.collection('Coach_Profiles').doc(coachEntry).get().catch(() => null),
+          ]);
+          matchedUserDoc = uDoc && uDoc.exists ? uDoc.data() : null;
+          matchedProfileDoc = pDoc && pDoc.exists ? pDoc.data() : null;
+        } else {
+          // It's a typed display name (e.g. "Topex Robinson") -> query database for coach
+          const [nameSnap1, nameSnap2] = await Promise.all([
+            db.collection('Users').where('role', '==', 'Coach').where('full_name', '==', coachEntry).limit(1).get().catch(() => null),
+            db.collection('Users').where('role', '==', 'Coach').where('full_legal_name', '==', coachEntry).limit(1).get().catch(() => null),
+          ]);
+
+          if (nameSnap1 && !nameSnap1.empty) {
+            matchedUserDoc = nameSnap1.docs[0].data();
+            const coachUid = nameSnap1.docs[0].id;
+            const pDoc = await db.collection('Coach_Profiles').doc(`coach_${coachUid}`).get().catch(() => null);
+            matchedProfileDoc = pDoc && pDoc.exists ? pDoc.data() : null;
+          } else if (nameSnap2 && !nameSnap2.empty) {
+            matchedUserDoc = nameSnap2.docs[0].data();
+            const coachUid = nameSnap2.docs[0].id;
+            const pDoc = await db.collection('Coach_Profiles').doc(`coach_${coachUid}`).get().catch(() => null);
+            matchedProfileDoc = pDoc && pDoc.exists ? pDoc.data() : null;
+          }
+        }
+
+        const resolvedCoachId = matchedUserDoc
+          ? `coach_${matchedUserDoc.user_id || coachEntry}`
+          : (isIdFormat ? coachEntry : `coach_${crypto.createHash('md5').update(coachEntry).digest('hex').substring(0, 10)}`);
+
+        const resolvedCoachName =
+          matchedUserDoc?.full_legal_name ||
+          matchedUserDoc?.full_name ||
+          (isIdFormat ? 'Assigned Coach' : coachEntry);
+
         enrichedCoaches.push({
-          coach_id: cid,
-          user_id: rawUid,
-          full_name:
-            uData?.full_legal_name ||
-            uData?.full_name ||
-            `${uData?.first_name || ''} ${uData?.last_name || ''}`.trim() ||
-            'Head Coach',
-          email: uData?.email || '',
-          contact_number: uData?.contact_number || '',
-          team_id: pData?.team_id || homeTeamId,
-          team_name: homeTeamName,
+          coach_id: resolvedCoachId,
+          user_id: matchedUserDoc?.user_id || (isIdFormat ? coachEntry.replace(/^coach_/, '') : resolvedCoachId),
+          full_name: resolvedCoachName,
+          email: matchedUserDoc?.email || '',
+          contact_number: matchedUserDoc?.contact_number || '',
+          team_id: matchedProfileDoc?.team_id || (enrichedCoaches.length === 0 ? homeTeamId : awayTeamId),
+          team_name: enrichedCoaches.length === 0 ? homeTeamName : awayTeamName,
           role: 'Head Coach',
         });
       } catch (err: any) {
-        console.warn(`⚠️ [COACH RESOLVE] Fallback for coach ${cid}:`, err?.message || err);
+        console.warn(`⚠️ [COACH RESOLVE] Graceful fallback for coach '${coachEntry}':`, err?.message || err);
+        const fallbackId = `coach_${crypto.createHash('md5').update(coachEntry).digest('hex').substring(0, 10)}`;
         enrichedCoaches.push({
-          coach_id: cid,
-          user_id: cid.replace(/^coach_/, ''),
-          full_name: 'Assigned Coach',
+          coach_id: fallbackId,
+          user_id: fallbackId,
+          full_name: coachEntry,
           email: '',
           contact_number: '',
           team_id: homeTeamId,
