@@ -122,6 +122,14 @@ export async function respondToInquiryHandler(req: AuthRequest, res: Response): 
 
 export async function getCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
+    if (req.user?.role === 'Official') {
+      const { getOfficialSettings } = await import('../services/officialService');
+      const officialId = `off_${req.user.uid}`;
+      const settings = await getOfficialSettings(officialId);
+      res.status(200).json(settings);
+      return;
+    }
+
     const coachId = `coach_${req.user!.uid}`;
     const settings = await getCoachSettings(coachId);
     res.status(200).json(settings);
@@ -133,6 +141,22 @@ export async function getCoachSettingsHandler(req: AuthRequest, res: Response): 
 
 export async function updateCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
+    if (
+      req.user?.role === 'Official' ||
+      req.body.split_screen_defaults !== undefined ||
+      req.body.discrepancy_presets !== undefined ||
+      req.body.match_reminders !== undefined
+    ) {
+      const { updateOfficialSettings } = await import('../services/officialService');
+      const officialId = `off_${req.user!.uid}`;
+      const settings = await updateOfficialSettings(officialId, req.body);
+      res.status(200).json({
+        message: 'Official settings updated successfully.',
+        settings,
+      });
+      return;
+    }
+
     const coachId = `coach_${req.user!.uid}`;
     const errors = validateUpdateCoachSettings(req.body);
     if (errors.length > 0) {

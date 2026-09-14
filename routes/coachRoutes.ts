@@ -37,6 +37,8 @@ router.get('/me/settings', authenticate, getCoachSettingsHandler);
 router.get('/settings', authenticate, getCoachSettingsHandler);
 router.patch('/me/settings', authenticate, updateCoachSettingsHandler);
 router.patch('/settings', authenticate, updateCoachSettingsHandler);
+router.put('/me/settings', authenticate, updateCoachSettingsHandler);
+router.put('/settings', authenticate, updateCoachSettingsHandler);
 
 // Coach Profile Update
 router.patch('/me/profile', authenticate, updateCoachProfileHandler);

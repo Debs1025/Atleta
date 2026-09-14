@@ -9,14 +9,12 @@ import {
   respondToRecruitmentInquiry,
   ServiceError,
 } from '../services/coachInquiryService';
-import { dispatchRecruitmentProposal } from '../services/scoutingService';
 import {
   getCoachSettings,
   updateCoachSettings,
   updateCoachProfile,
   changeCoachPassword,
 } from '../services/coachSettingsService';
-import { getCoachManagedAthletes } from '../services/teamService';
 
 export async function getCoachProfileHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -43,20 +41,7 @@ export async function getCoachProfileHandler(req: AuthRequest, res: Response): P
 
 export async function submitInquiryHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const senderId = req.user!.uid;
-    const userRole = (req.user as any)?.role;
-    const rawTarget = req.body.athlete_id || req.body.receiver_id || req.body.recipient_id || req.body.target_athlete_id || req.body.email;
-
-    if (rawTarget && (userRole === 'Coach' || !req.body.coach_id)) {
-      const { message, offer_details } = req.body;
-      const proposal = await dispatchRecruitmentProposal(senderId, rawTarget, message || offer_details);
-      res.status(201).json({
-        message: 'Recruitment proposal submitted successfully.',
-        inquiry: proposal,
-        proposal,
-      });
-      return;
-    }
+    const athleteId = req.user!.uid;
 
     const errors = validateInquirySubmission(req.body);
     if (errors.length > 0) {
@@ -68,7 +53,7 @@ export async function submitInquiryHandler(req: AuthRequest, res: Response): Pro
     }
 
     const { coach_id, message } = req.body;
-    const inquiry = await submitRecruitmentInquiry(senderId, coach_id, message);
+    const inquiry = await submitRecruitmentInquiry(athleteId, coach_id, message);
 
     res.status(201).json({
       message: 'Recruitment inquiry submitted successfully.',
@@ -115,19 +100,14 @@ export async function respondToInquiryHandler(req: AuthRequest, res: Response): 
       return;
     }
 
-    const rawStatus = (status || '').toString().toLowerCase();
-    const isAccepted = rawStatus.includes('accept');
-    const isDeclined = rawStatus.includes('declin');
-
-    if (!isAccepted && !isDeclined) {
+    if (status !== 'Accepted' && status !== 'Declined') {
       res.status(400).json({ error: 'Status must be either "Accepted" or "Declined".' });
       return;
     }
 
-    const canonicalStatus = isAccepted ? 'Accepted' : 'Declined';
-    const updated = await respondToRecruitmentInquiry(inquiryId, userId, canonicalStatus, decline_reason);
+    const updated = await respondToRecruitmentInquiry(inquiryId, userId, status, decline_reason);
     res.status(200).json({
-      message: `Inquiry successfully ${canonicalStatus.toLowerCase()}.`,
+      message: `Inquiry successfully ${status.toLowerCase()}.`,
       inquiry: updated,
     });
   } catch (error: any) {
@@ -142,6 +122,14 @@ export async function respondToInquiryHandler(req: AuthRequest, res: Response): 
 
 export async function getCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
+    if (req.user?.role === 'Official') {
+      const { getOfficialSettings } = await import('../services/officialService');
+      const officialId = `off_${req.user.uid}`;
+      const settings = await getOfficialSettings(officialId);
+      res.status(200).json(settings);
+      return;
+    }
+
     const coachId = `coach_${req.user!.uid}`;
     const settings = await getCoachSettings(coachId);
     res.status(200).json(settings);
@@ -153,6 +141,22 @@ export async function getCoachSettingsHandler(req: AuthRequest, res: Response): 
 
 export async function updateCoachSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
+    if (
+      req.user?.role === 'Official' ||
+      req.body.split_screen_defaults !== undefined ||
+      req.body.discrepancy_presets !== undefined ||
+      req.body.match_reminders !== undefined
+    ) {
+      const { updateOfficialSettings } = await import('../services/officialService');
+      const officialId = `off_${req.user!.uid}`;
+      const settings = await updateOfficialSettings(officialId, req.body);
+      res.status(200).json({
+        message: 'Official settings updated successfully.',
+        settings,
+      });
+      return;
+    }
+
     const coachId = `coach_${req.user!.uid}`;
     const errors = validateUpdateCoachSettings(req.body);
     if (errors.length > 0) {
@@ -205,32 +209,6 @@ export async function changeCoachPasswordHandler(req: AuthRequest, res: Response
       return;
     }
     console.error('changeCoachPasswordHandler error:', error);
-    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
-  }
-}
-
-export async function getCoachManagedAthletesHandler(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const rawCoachParam = req.params.coachId;
-    const coachId = (Array.isArray(rawCoachParam) ? rawCoachParam[0] : rawCoachParam) || req.user?.uid;
-
-    if (!coachId) {
-      res.status(400).json({ error: 'Coach ID is required.' });
-      return;
-    }
-
-    const startTime = Date.now();
-    const athletes = await getCoachManagedAthletes(coachId);
-    const responseTimeMs = Date.now() - startTime;
-
-    res.set('X-Response-Time-Ms', String(responseTimeMs));
-    res.status(200).json({
-      coach_id: coachId,
-      total: athletes.length,
-      athletes,
-    });
-  } catch (error: any) {
-    console.error('getCoachManagedAthletesHandler error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

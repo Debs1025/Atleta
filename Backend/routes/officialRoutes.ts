@@ -43,6 +43,8 @@ router.get('/me/settings', authenticate, getOfficialSettingsHandler);
 router.get('/settings', authenticate, getOfficialSettingsHandler);
 router.patch('/me/settings', authenticate, updateOfficialSettingsHandler);
 router.patch('/settings', authenticate, updateOfficialSettingsHandler);
+router.put('/me/settings', authenticate, updateOfficialSettingsHandler);
+router.put('/settings', authenticate, updateOfficialSettingsHandler);
 
 export default router;
 
