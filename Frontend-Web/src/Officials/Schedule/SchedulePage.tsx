@@ -7,6 +7,9 @@ import {
   getCachedData,
   getMe,
   getOfficialSchedules,
+  isMatchCreatedByOfficial,
+  extractTeamString,
+  getCoachNameById,
 } from '../../api/client';
 import type { AuthUser, OfficialScheduleItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -14,6 +17,49 @@ import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/SchedulePage';
 
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+
+const resolveTeamNames = (item: any): { home: string; away: string } => {
+  if (!item) return { home: 'HOME TEAM', away: 'AWAY TEAM' };
+  const raw = item?.raw_match || {};
+  const logistics = item?.venue_logistics || {};
+
+  const home =
+    extractTeamString(item?.home_team) ||
+    extractTeamString(raw.home_team_name) ||
+    extractTeamString(raw.home_team) ||
+    extractTeamString(logistics.home_team) ||
+    extractTeamString(raw.team_id) ||
+    extractTeamString(raw.home_team_id) ||
+    (Array.isArray(raw.participating_teams) && raw.participating_teams[0] ? extractTeamString(raw.participating_teams[0]) : '') ||
+    '';
+
+  const away =
+    extractTeamString(item?.away_team) ||
+    extractTeamString(raw.opponent_team_name) ||
+    extractTeamString(raw.away_team_name) ||
+    extractTeamString(raw.away_team) ||
+    extractTeamString(logistics.away_team) ||
+    extractTeamString(raw.away_team_id) ||
+    (Array.isArray(raw.participating_teams) && raw.participating_teams[1] ? extractTeamString(raw.participating_teams[1]) : '') ||
+    '';
+
+  const matchClass = item?.match_class || raw?.game_name || raw?.match_type;
+  if ((!home || !away) && typeof matchClass === 'string' && (matchClass.includes(' vs. ') || matchClass.includes(' vs '))) {
+    const sep = matchClass.includes(' vs. ') ? ' vs. ' : ' vs ';
+    const parts = matchClass.split(sep);
+    const parsedHome = parts[0]?.trim();
+    const parsedAway = parts[1]?.replace(/\([^)]*\)/, '')?.trim();
+    return {
+      home: home || parsedHome || 'HOME TEAM',
+      away: away || parsedAway || 'AWAY TEAM',
+    };
+  }
+
+  return {
+    home: home || 'HOME TEAM',
+    away: away || 'AWAY TEAM',
+  };
+};
 
 export const SchedulePage: React.FC = () => {
   const navigate = useNavigate();
@@ -37,6 +83,64 @@ export const SchedulePage: React.FC = () => {
 
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayFormatted);
   const [selectedMatch, setSelectedMatch] = useState<OfficialScheduleItem | null>(null);
+  const [displayCoachName, setDisplayCoachName] = useState<string>('No Coach Assigned');
+
+  useEffect(() => {
+    if (!selectedMatch) {
+      setDisplayCoachName('No Coach Assigned');
+      return;
+    }
+
+    const rawList = Array.isArray(selectedMatch.assigned_coaches) && selectedMatch.assigned_coaches.length > 0
+      ? selectedMatch.assigned_coaches
+      : selectedMatch.coaches
+      ? (Array.isArray(selectedMatch.coaches) ? selectedMatch.coaches : [selectedMatch.coaches])
+      : selectedMatch.coach_name
+      ? [selectedMatch.coach_name]
+      : (selectedMatch as any)?.raw_match?.assigned_coaches
+      ? (selectedMatch as any).raw_match.assigned_coaches
+      : (selectedMatch as any)?.raw_match?.coaches
+      ? (selectedMatch as any).raw_match.coaches
+      : [];
+
+    const candidateCoaches = (Array.isArray(rawList) ? rawList : [rawList])
+      .map(String)
+      .map((c) => c.trim())
+      .filter((c) => {
+        if (!c) return false;
+        const lower = c.toLowerCase();
+        if (lower === 'official assigned' || lower.startsWith('coach off_') || lower.startsWith('off_') || lower.startsWith('official_')) return false;
+        return true;
+      });
+
+    if (candidateCoaches.length === 0) {
+      setDisplayCoachName('No Coach Assigned');
+      return;
+    }
+
+    let isMounted = true;
+    Promise.all(candidateCoaches.map((c) => getCoachNameById(c)))
+      .then((names) => {
+        if (!isMounted) return;
+        const valid = names.map((n) => n.trim()).filter(Boolean);
+        if (valid.length > 0) {
+          setDisplayCoachName(valid.join(', '));
+        } else {
+          const fallback = candidateCoaches
+            .map((c) => c.replace(/^coach[_\s]*/i, '').trim())
+            .filter((c) => !c.toLowerCase().startsWith('off_'))
+            .join(', ');
+          setDisplayCoachName(fallback || 'No Coach Assigned');
+        }
+      })
+      .catch(() => {
+        if (isMounted) setDisplayCoachName('No Coach Assigned');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedMatch]);
 
   const refreshSchedules = () => {
     getOfficialSchedules(month, year, true).then((res) => {
@@ -59,15 +163,17 @@ export const SchedulePage: React.FC = () => {
         setSchedules(list);
         // Find if match exists on selected date
         const matchOnDate = list.find((s) => {
-          if (!s?.scheduled_time) return false;
-          return s.scheduled_time.startsWith(todayFormatted);
+          const timeStr = s?.scheduled_time || (s as any)?.raw_match?.match_date || (s as any)?.match_date;
+          if (!timeStr) return false;
+          return timeStr.startsWith(todayFormatted) || timeStr.includes(todayFormatted);
         });
         if (matchOnDate) {
           setSelectedMatch(matchOnDate);
         } else if (list.length > 0) {
           setSelectedMatch(list[0]);
-          if (list[0].scheduled_time) {
-            setSelectedDateStr(list[0].scheduled_time.split('T')[0]);
+          const firstTime = list[0].scheduled_time || (list[0] as any).raw_match?.match_date || (list[0] as any).match_date;
+          if (firstTime) {
+            setSelectedDateStr(firstTime.split('T')[0]);
           }
         }
       }).catch(() => {}),
@@ -89,15 +195,8 @@ export const SchedulePage: React.FC = () => {
   const daysInMonth = new Date(year, month, 0).getDate();
   const totalCells = Math.ceil((firstDayIndex + daysInMonth) / 7) * 7;
 
-  const myOfficialIds = new Set(
-    [user?.uid, user?.user_id, (user as any)?.official_id, user?.uid ? `off_${user.uid}` : null].filter(Boolean) as string[]
-  );
-
   const safeSchedules = (Array.isArray(schedules) ? schedules : []).filter((s) => {
-    if (myOfficialIds.size === 0) return true;
-    const creator = s.official_id || (s as any).requested_by || (s as any).created_by;
-    const isAssigned = Array.isArray(s.assigned_officials) && s.assigned_officials.some((id) => myOfficialIds.has(id));
-    return (creator ? myOfficialIds.has(creator) : false) || isAssigned;
+    return isMatchCreatedByOfficial(s as any, user);
   });
 
   const onCellClick = (dayNum: number, matchesForDay: OfficialScheduleItem[]) => {
@@ -142,17 +241,7 @@ export const SchedulePage: React.FC = () => {
     'BASKETBALL'
   ).toUpperCase();
 
-  const detailsHomeTeam = String(
-    selectedMatch?.home_team ||
-    selectedMatch?.venue_logistics?.home_team ||
-    'HOME TEAM'
-  );
-
-  const detailsAwayTeam = String(
-    selectedMatch?.away_team ||
-    selectedMatch?.venue_logistics?.away_team ||
-    'AWAY TEAM'
-  );
+  const { home: detailsHomeTeam, away: detailsAwayTeam } = resolveTeamNames(selectedMatch);
 
   const homeInitial = detailsHomeTeam.trim() ? detailsHomeTeam.trim().charAt(0).toUpperCase() : 'H';
   const awayInitial = detailsAwayTeam.trim() ? detailsAwayTeam.trim().charAt(0).toUpperCase() : 'A';
@@ -168,33 +257,6 @@ export const SchedulePage: React.FC = () => {
     selectedMatch?.venue_logistics?.court ||
     '1'
   );
-
-  const assignedCoachesList = Array.isArray(selectedMatch?.assigned_coaches) && selectedMatch.assigned_coaches.length > 0
-    ? selectedMatch.assigned_coaches
-    : selectedMatch?.coaches
-    ? (Array.isArray(selectedMatch.coaches) ? selectedMatch.coaches : [selectedMatch.coaches])
-    : selectedMatch?.venue_logistics?.coaches
-    ? [selectedMatch.venue_logistics.coaches]
-    : [];
-
-  const cleanCoachName = (str: string) => {
-    if (!str || str === 'OFFICIAL ASSIGNED') return str;
-    return str
-      .split(',')
-      .map((c) => c.trim().replace(/^coach[_\s]*/i, ''))
-      .filter(Boolean)
-      .join(', ');
-  };
-
-  const rawCoachString = assignedCoachesList.length > 0
-    ? assignedCoachesList.join(', ')
-    : selectedMatch?.coach_name
-    ? selectedMatch.coach_name
-    : selectedMatch?.assigned_officials?.length
-    ? selectedMatch.assigned_officials.join(', ')
-    : 'OFFICIAL ASSIGNED';
-
-  const detailsCoach = cleanCoachName(rawCoachString) || rawCoachString;
 
   const selectedDayNum = selectedDateStr ? Number(selectedDateStr.split('-')[2]) : null;
 
@@ -255,10 +317,12 @@ export const SchedulePage: React.FC = () => {
                       // Matches for this day
                       const targetDatePrefix = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                       const matchesForDay = safeSchedules.filter((s) => {
-                        if (!s || !s.scheduled_time) return false;
-                        if (s.scheduled_time.startsWith(targetDatePrefix)) return true;
+                        if (!s) return false;
+                        const timeStr = s.scheduled_time || (s as any).raw_match?.match_date || (s as any).match_date || '';
+                        if (!timeStr) return false;
+                        if (timeStr.startsWith(targetDatePrefix) || timeStr.includes(targetDatePrefix)) return true;
                         try {
-                          const d = new Date(s.scheduled_time);
+                          const d = new Date(timeStr);
                           if (isNaN(d.getTime())) return false;
                           return (
                             (d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === dayNum) ||
@@ -296,7 +360,7 @@ export const SchedulePage: React.FC = () => {
                                 ? 'SW'
                                 : sport.includes('TRACK') || sport.includes('FIELD')
                                 ? 'TF'
-                                : 'BB';
+                                : '';
                               const badgeStyle =
                                 code === 'SW'
                                   ? styles.vbBadge
@@ -304,16 +368,15 @@ export const SchedulePage: React.FC = () => {
                                   ? styles.fbBadge
                                   : styles.bbBadge;
 
-                              const home = String(m?.home_team || m?.venue_logistics?.home_team || '').trim();
-                              const away = String(m?.away_team || m?.venue_logistics?.away_team || '').trim();
-                              const label = home && away ? `${home} vs. ${away}` : home || away || 'Event';
+                              const { home: mHome, away: mAway } = resolveTeamNames(m);
+                              const label = mHome && mAway ? `${mHome} vs. ${mAway}` : mHome || mAway || 'Event';
 
                               return (
                                 <div
                                   key={m?.schedule_id || idx}
                                   style={{ ...styles.matchBadge, ...badgeStyle }}
                                 >
-                                  <strong>{code}</strong> {label}
+                                  {code ? <strong>{code} </strong> : null}{label}
                                 </div>
                               );
                             })}
@@ -364,7 +427,7 @@ export const SchedulePage: React.FC = () => {
                           <div style={styles.officialsAvatars}>
                             <Users style={{ width: 16, height: 16, flexShrink: 0 }} />
                             <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B', textTransform: 'uppercase' }}>
-                              {detailsCoach}
+                              {displayCoachName}
                             </span>
                           </div>
                         </div>

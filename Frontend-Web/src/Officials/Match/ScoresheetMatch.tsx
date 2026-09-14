@@ -22,6 +22,8 @@ import {
   downloadCertifiedMatchPdf,
   markMatchAsCertified,
   isMatchLocallyCertified,
+  recordOfficialCreatedMatchId,
+  getStoredUser,
 } from '../../api/client';
 import type { MatchAuditDetail, BoxScoreRow, RaceResultRow } from '../../api/types';
 import { styles } from './styles/ScoresheetMatch';
@@ -129,6 +131,7 @@ export const ScoresheetMatch: React.FC = () => {
     setRaceResults(updated);
   };
 
+  // HANDLES CERTIFY AND MAKE SURE IT DOESN'T DISAPPEAR
   const handleCertify = async () => {
     if (!matchData) return;
     setActionLoading(true);
@@ -138,8 +141,22 @@ export const ScoresheetMatch: React.FC = () => {
         context_notes: typeof notes === 'string' ? notes : (Array.isArray(notes) ? (notes as any[]).join('\n') : ''),
         scoresheet_url: scoresheetUrl,
       });
-      if (cleanId) markMatchAsCertified(cleanId);
-      if (matchData.match_id) markMatchAsCertified(matchData.match_id);
+      const currentUser = getStoredUser();
+      const uId = currentUser?.uid;
+      if (cleanId) {
+        markMatchAsCertified(cleanId);
+        if (uId) recordOfficialCreatedMatchId(cleanId, uId);
+      }
+      if (matchData.match_id) {
+        const mKey = String(matchData.match_id).replace(/^#/, '');
+        markMatchAsCertified(mKey);
+        if (uId) recordOfficialCreatedMatchId(mKey, uId);
+      }
+      if (matchData.validation_id) {
+        const vKey = String(matchData.validation_id).replace(/^#/, '');
+        markMatchAsCertified(vKey);
+        if (uId) recordOfficialCreatedMatchId(vKey, uId);
+      }
       setActiveModal(null);
       await loadMatchData();
     } catch (err: any) {

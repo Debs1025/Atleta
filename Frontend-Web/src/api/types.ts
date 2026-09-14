@@ -111,6 +111,9 @@ export interface OfficialScheduleItem {
   assigned_coaches?: string[];
   coaches?: string;
   coach_name?: string;
+  requested_by?: string;
+  created_by?: string;
+  raw_match?: any;
 }
 
 export interface CreateMatchPayload {

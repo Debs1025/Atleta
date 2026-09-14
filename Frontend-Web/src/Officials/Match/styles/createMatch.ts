@@ -4,7 +4,9 @@ export const styles: Record<string, React.CSSProperties> = {
   shell: {
     display: 'flex',
     flexDirection: 'column',
-    minHeight: '100vh',
+    height: '100vh',
+    width: '100vw',
+    overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     fontFamily: '"Outfit", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
     color: '#0B132B',
@@ -12,14 +14,17 @@ export const styles: Record<string, React.CSSProperties> = {
   layoutBody: {
     display: 'flex',
     flex: 1,
-    minHeight: 'calc(100vh - 65px)',
+    height: 'calc(100vh - 58px)',
+    overflow: 'hidden',
   },
   contentArea: {
     flex: 1,
+    height: '100%',
     padding: '36px 48px 80px',
     backgroundColor: '#FFFFFF',
     overflowY: 'auto',
     maxWidth: '1280px',
+    boxSizing: 'border-box',
   },
   pageTitle: {
     fontSize: '34px',
