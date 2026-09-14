@@ -14,7 +14,6 @@ import {
   getStoredToken,
   getMe,
   createOfficialMatch,
-  uploadScoresheetFile,
   fetchBrowseTeams,
 } from '../../api/client';
 import type { AuthUser } from '../../api/types';
@@ -129,7 +128,7 @@ export const CreateMatch: React.FC = () => {
         return;
       }
       finalHome = validTeams[0];
-      finalAway = validTeams.slice(1).join(', ');
+      finalAway = validTeams.slice(1).join(', ') || 'Delegation 2';
       participating = validTeams;
     } else {
       if (!homeTeam.trim() || !awayTeam.trim()) {
@@ -185,14 +184,6 @@ export const CreateMatch: React.FC = () => {
       });
 
       const matchId = createdMatch?.match?.match_id || createdMatch?.match_id;
-
-      if (selectedFile && matchId) {
-        try {
-          await uploadScoresheetFile(matchId, selectedFile);
-        } catch (uploadErr: any) {
-          console.warn('Scoresheet upload warning:', uploadErr);
-        }
-      }
 
       const createdId = matchId || `MATCH-${Date.now()}`;
       const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -382,7 +373,7 @@ export const CreateMatch: React.FC = () => {
               {coaches.map((coach, idx) => (
                 <div key={idx} style={{ ...styles.fieldGroup, marginBottom: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={styles.fieldLabel}>ASSIGNED COACH / OFFICIAL {idx + 1}</label>
+                    <label style={styles.fieldLabel}>ASSIGNED COACH / TEAM {idx + 1}</label>
                     {coaches.length > 1 && (
                       <button
                         type="button"

@@ -649,6 +649,21 @@ export const isMatchCreatedByOfficial = (
 export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<any> => {
   const token = getStoredToken();
   const idempotencyKey = crypto.randomUUID();
+
+  const rawSport = String(payload.sport_type || '').trim().toLowerCase();
+  let normalizedSport = 'Basketball';
+  if (rawSport.includes('swim')) {
+    normalizedSport = 'Swimming';
+  } else if (rawSport.includes('track') || rawSport.includes('field')) {
+    normalizedSport = 'Track & Field';
+  } else if (rawSport.includes('basket')) {
+    normalizedSport = 'Basketball';
+  }
+
+  const home = String(payload.home_team_name || payload.team_id || 'Home Team').trim() || 'Home Team';
+  const away = String(payload.opponent_team_name || (payload as any).away_team_id || 'Opponent').trim() || 'Opponent';
+  const location = String(payload.location || payload.venue || 'Tournament Sports Complex').trim() || 'Tournament Sports Complex';
+
   const res = await fetch(`${BASE_URL}/matches/official`, {
     method: 'POST',
     headers: {
@@ -657,17 +672,22 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
-      team_id: payload.team_id || 'team_001',
-      sport_type: payload.sport_type || 'BASKETBALL',
+      team_id: home,
+      home_team_id: home,
+      home_team_name: home,
+      opponent_team_name: away,
+      away_team_id: away,
+      sport_type: normalizedSport,
       match_date: payload.match_date || new Date().toISOString(),
-      location: payload.location || payload.venue || 'Tournament Sports Complex',
+      location: location,
+      venue: location,
       court_number: payload.court_number || 1,
-      opponent_team_name: payload.opponent_team_name,
-      home_team_name: payload.home_team_name || 'Home Team',
-      participating_teams: payload.participating_teams,
-      game_name: payload.game_name,
-      coaches: payload.coaches,
-      assigned_coaches: payload.coaches,
+      participating_teams: Array.isArray(payload.participating_teams) && payload.participating_teams.length > 0
+        ? payload.participating_teams
+        : [home, away],
+      game_name: payload.game_name || `${home} vs ${away}`,
+      coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
+      assigned_coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
     }),
   });
   const data = await handleResponse<any>(res);
