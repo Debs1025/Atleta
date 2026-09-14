@@ -20,6 +20,8 @@ import {
   uploadScoresheetFile,
   getCachedData,
   downloadCertifiedMatchPdf,
+  markMatchAsCertified,
+  isMatchLocallyCertified,
 } from '../../api/client';
 import type { MatchAuditDetail, BoxScoreRow, RaceResultRow } from '../../api/types';
 import { styles } from './styles/ScoresheetMatch';
@@ -34,7 +36,10 @@ export const ScoresheetMatch: React.FC = () => {
 
   const [matchData, setMatchData] = useState<MatchAuditDetail | null>(() => cached || null);
   const [loading, setLoading] = useState(() => !cached);
-  const [notes, setNotes] = useState(() => cached?.audit_context_notes || '');
+  const [notes, setNotes] = useState<string>(() => {
+    const raw = cached?.audit_context_notes;
+    return typeof raw === 'string' ? raw : (Array.isArray(raw) ? (raw as any[]).join('\n') : '');
+  });
   const [scoresheetUrl, setScoresheetUrl] = useState<string | undefined>(() => cached?.scoresheet_url);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -69,7 +74,10 @@ export const ScoresheetMatch: React.FC = () => {
       const data = await getMatchAuditDetail(cleanId, false);
       if (data) {
         setMatchData(data);
-        setNotes((prev) => (prev ? prev : data.audit_context_notes || ''));
+        const resolvedNote = typeof data.audit_context_notes === 'string'
+          ? data.audit_context_notes
+          : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
+        setNotes((prev) => (prev ? prev : resolvedNote));
         setScoresheetUrl(data.scoresheet_url);
         setHomeRoster((prev) => (prev.length > 0 ? prev : data.home_team?.roster_stats || []));
         setAwayRoster((prev) => (prev.length > 0 ? prev : data.away_team?.roster_stats || []));
@@ -127,9 +135,11 @@ export const ScoresheetMatch: React.FC = () => {
     setActionError(null);
     try {
       await certifyMatchValidation(matchData.validation_id || matchData.match_id, {
-        context_notes: notes,
+        context_notes: typeof notes === 'string' ? notes : (Array.isArray(notes) ? (notes as any[]).join('\n') : ''),
         scoresheet_url: scoresheetUrl,
       });
+      if (cleanId) markMatchAsCertified(cleanId);
+      if (matchData.match_id) markMatchAsCertified(matchData.match_id);
       setActiveModal(null);
       await loadMatchData();
     } catch (err: any) {
@@ -177,9 +187,16 @@ export const ScoresheetMatch: React.FC = () => {
 
   const isIndividualSport = matchData?.sport_type
     ? matchData.sport_type.toLowerCase().includes('swim') ||
-      matchData.sport_type.toLowerCase().includes('track') ||
-      matchData.sport_type.toLowerCase().includes('field')
+    matchData.sport_type.toLowerCase().includes('track') ||
+    matchData.sport_type.toLowerCase().includes('field')
     : false;
+
+  const assignedList = Array.isArray(matchData?.assigned_coaches) && matchData.assigned_coaches.length > 0
+    ? matchData.assigned_coaches
+    : matchData?.coach_name
+      ? [matchData.coach_name]
+      : [];
+  const coachDisplay = assignedList.length > 0 ? assignedList.join(', ') : null;
 
   const homeScore = homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || matchData?.home_team.score || 0;
   const awayScore = awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || matchData?.away_team.score || 0;
@@ -204,7 +221,7 @@ export const ScoresheetMatch: React.FC = () => {
           </button>
         )}
       </div>
-        {/* temporary (will replace into dynamic stats based on sport) */}
+      {/* temporary (will replace into dynamic stats based on sport) */}
       <div style={styles.statsTableFrame}>
         <table style={styles.statsTable}>
           <thead>
@@ -487,193 +504,198 @@ export const ScoresheetMatch: React.FC = () => {
           </button>
         </div>
 
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
-              <Loader2 style={{ width: 36, height: 36, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
-            </div>
-          ) : matchData ? (
-            <>
-              {/* Header Box */}
-              <div style={styles.matchHeaderCard}>
-                <div style={styles.headerLeft}>
-                  <span style={styles.leagueCategory}>{matchData.league_class}</span>
-                  <h1 style={styles.matchupTitle}>
-                    {isIndividualSport
-                      ? matchData.game_name || `${matchData.home_team.name} • ${matchData.sport_type}`
-                      : `${matchData.home_team.name} VS. ${matchData.away_team.name}`}
-                  </h1>
-                  <div style={styles.matchDateTime}>
-                    <Calendar style={{ width: 15, height: 15, color: '#64748B' }} />
-                    <span>{matchData.match_date_formatted}</span>
-                    {matchData.is_certified && (
-                      <span style={{ ...styles.badgeWin, marginLeft: '12px' }}>
-                        CERTIFIED OFFICIAL RECORD
-                      </span>
-                    )}
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+            <Loader2 style={{ width: 36, height: 36, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+          </div>
+        ) : matchData ? (
+          <>
+            {/* Header Box */}
+            <div style={styles.matchHeaderCard}>
+              <div style={styles.headerLeft}>
+                <span style={styles.leagueCategory}>{matchData.league_class}</span>
+                <h1 style={styles.matchupTitle}>
+                  {isIndividualSport
+                    ? matchData.game_name || `${matchData.home_team.name} • ${matchData.sport_type}`
+                    : `${matchData.home_team.name} VS. ${matchData.away_team.name}`}
+                </h1>
+                <div style={styles.matchDateTime}>
+                  <Calendar style={{ width: 15, height: 15, color: '#64748B' }} />
+                  <span>{matchData.match_date_formatted}</span>
+                  {coachDisplay && (
+                    <span style={{ marginLeft: '12px', color: '#64748B', fontWeight: 600 }}>
+                      • Coach: <strong style={{ color: '#0B132B' }}>{coachDisplay}</strong>
+                    </span>
+                  )}
+                  {matchData.is_certified && (
+                    <span style={{ ...styles.badgeWin, marginLeft: '12px' }}>
+                      OFFICIAL MATCH
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Scoreboard / Competitors Box */}
+              {!isIndividualSport ? (
+                <div style={styles.scoreboardTile}>
+                  <div style={styles.scoreTeamBlock}>
+                    <span style={styles.scoreTeamLabel}>{matchData.home_team.name}</span>
+                    <span style={styles.scoreValue}>{homeScore}</span>
+                    <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
+                      {homeScore >= awayScore ? 'WIN' : 'LOSE'}
+                    </span>
+                  </div>
+                  <span style={styles.scoreDivider}>-</span>
+                  <div style={styles.scoreTeamBlock}>
+                    <span style={styles.scoreTeamLabel}>{matchData.away_team.name}</span>
+                    <span style={styles.scoreValue}>{awayScore}</span>
+                    <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
+                      {awayScore > homeScore ? 'WIN' : 'LOSE'}
+                    </span>
                   </div>
                 </div>
-
-                {/* Scoreboard / Competitors Box */}
-                {!isIndividualSport ? (
-                  <div style={styles.scoreboardTile}>
-                    <div style={styles.scoreTeamBlock}>
-                      <span style={styles.scoreTeamLabel}>{matchData.home_team.name}</span>
-                      <span style={styles.scoreValue}>{homeScore}</span>
-                      <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
-                        {homeScore >= awayScore ? 'WIN' : 'LOSE'}
-                      </span>
-                    </div>
-                    <span style={styles.scoreDivider}>-</span>
-                    <div style={styles.scoreTeamBlock}>
-                      <span style={styles.scoreTeamLabel}>{matchData.away_team.name}</span>
-                      <span style={styles.scoreValue}>{awayScore}</span>
-                      <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
-                        {awayScore > homeScore ? 'WIN' : 'LOSE'}
-                      </span>
-                    </div>
+              ) : (
+                <div style={styles.scoreboardTile}>
+                  <div style={styles.scoreTeamBlock}>
+                    <span style={styles.scoreTeamLabel}>SPORT</span>
+                    <span style={{ ...styles.scoreValue, fontSize: '20px', textTransform: 'uppercase' }}>
+                      {matchData.sport_type}
+                    </span>
+                    <span style={styles.badgeWin}>TIMED EVENT</span>
                   </div>
-                ) : (
-                  <div style={styles.scoreboardTile}>
-                    <div style={styles.scoreTeamBlock}>
-                      <span style={styles.scoreTeamLabel}>SPORT</span>
-                      <span style={{ ...styles.scoreValue, fontSize: '20px', textTransform: 'uppercase' }}>
-                        {matchData.sport_type}
+                </div>
+              )}
+            </div>
+
+            {/* Data Tables */}
+            {isIndividualSport ? (
+              renderIndividualRaceTable()
+            ) : (
+              <>
+                {renderTeamStatsTable(matchData.home_team.name, homeRoster, 'home', homeScore)}
+                {renderTeamStatsTable(matchData.away_team.name, awayRoster, 'away', awayScore)}
+              </>
+            )}
+
+            {/* Bottom Grid: Scoresheet Dropzone & Notes */}
+            <div style={styles.bottomGrid}>
+              <div style={styles.boxContainer}>
+                <span style={styles.boxLabel}>MATCH OFFICIAL SCORESHEET</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.csv"
+                  style={{ display: 'none' }}
+                  onChange={handleFileUpload}
+                />
+                <div style={styles.dropzone} onClick={() => fileInputRef.current?.click()}>
+                  {isUploading ? (
+                    <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+                  ) : (
+                    <Upload style={{ width: 28, height: 28, color: '#0B132B' }} />
+                  )}
+                  <span style={styles.dropzoneText}>
+                    {isUploading
+                      ? 'PROCESSING SCORESHEET OCR...'
+                      : scoresheetUrl
+                        ? '[ UPLOAD REPLACEMENT SCORESHEET ]'
+                        : '[ UPLOAD SCORESHEET ]'}
+                  </span>
+                  <span style={styles.dropzoneSubtext}>
+                    MAXIMUM FILE SIZE: 25MB | FORMAT: PDF/CSV/PNG/JPG
+                  </span>
+                </div>
+
+                {uploadError && (
+                  <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>
+                    {uploadError}
+                  </div>
+                )}
+
+                {scoresheetUrl && (
+                  <div style={styles.scoresheetPreview}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FileText style={{ width: 16, height: 16, color: '#0B132B' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0B132B' }}>
+                        SCORESHEET ATTACHED
                       </span>
-                      <span style={styles.badgeWin}>TIMED EVENT</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal('PREVIEW')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                      <Eye style={{ width: 14, height: 14 }} />
+                      <span>PREVIEW</span>
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* Data Tables */}
-              {isIndividualSport ? (
-                renderIndividualRaceTable()
-              ) : (
-                <>
-                  {renderTeamStatsTable(matchData.home_team.name, homeRoster, 'home', homeScore)}
-                  {renderTeamStatsTable(matchData.away_team.name, awayRoster, 'away', awayScore)}
-                </>
-              )}
-
-              {/* Bottom Grid: Scoresheet Dropzone & Notes */}
-              <div style={styles.bottomGrid}>
-                <div style={styles.boxContainer}>
-                  <span style={styles.boxLabel}>MATCH OFFICIAL SCORESHEET</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.csv"
-                    style={{ display: 'none' }}
-                    onChange={handleFileUpload}
-                  />
-                  <div style={styles.dropzone} onClick={() => fileInputRef.current?.click()}>
-                    {isUploading ? (
-                      <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
-                    ) : (
-                      <Upload style={{ width: 28, height: 28, color: '#0B132B' }} />
-                    )}
-                    <span style={styles.dropzoneText}>
-                      {isUploading
-                        ? 'PROCESSING SCORESHEET OCR...'
-                        : scoresheetUrl
-                        ? '[ UPLOAD REPLACEMENT SCORESHEET ]'
-                        : '[ UPLOAD SCORESHEET ]'}
-                    </span>
-                    <span style={styles.dropzoneSubtext}>
-                      MAXIMUM FILE SIZE: 25MB | FORMAT: PDF/CSV/PNG/JPG
-                    </span>
-                  </div>
-
-                  {uploadError && (
-                    <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>
-                      {uploadError}
-                    </div>
-                  )}
-
-                  {scoresheetUrl && (
-                    <div style={styles.scoresheetPreview}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <FileText style={{ width: 16, height: 16, color: '#0B132B' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#0B132B' }}>
-                          SCORESHEET ATTACHED
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setActiveModal('PREVIEW')}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
-                      >
-                        <Eye style={{ width: 14, height: 14 }} />
-                        <span>PREVIEW</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div style={styles.boxContainer}>
-                  <span style={styles.boxLabel}>AUDIT CONTEXT NOTES</span>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    disabled={matchData.is_certified}
-                    placeholder="Comment any notes, official warnings, or manual point adjustments here..."
-                    style={styles.notesTextarea}
-                  />
-                </div>
+              <div style={styles.boxContainer}>
+                <span style={styles.boxLabel}>AUDIT CONTEXT NOTES</span>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={matchData.is_certified}
+                  placeholder="Comment any notes, official warnings, or manual point adjustments here..."
+                  style={styles.notesTextarea}
+                />
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div style={styles.actionsRow}>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal('REMOVE')}
-                  style={styles.removeBtn}
-                >
-                  REMOVE MATCH
-                </button>
+            {/* Action Buttons */}
+            <div style={styles.actionsRow}>
+              <button
+                type="button"
+                onClick={() => setActiveModal('REMOVE')}
+                style={styles.removeBtn}
+              >
+                REMOVE MATCH
+              </button>
 
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  {!matchData.is_certified ? (
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveModal('CERTIFY')}
+                    style={styles.certifyBtn}
+                  >
+                    CERTIFY MATCH
+                  </button>
+                ) : (
+                  <>
                     <button
                       type="button"
-                      onClick={() => setActiveModal('CERTIFY')}
-                      style={styles.certifyBtn}
+                      onClick={handleDownloadPdf}
+                      disabled={isDownloadingPdf}
+                      style={styles.downloadPdfBtn}
                     >
-                      CERTIFY MATCH
+                      {isDownloadingPdf ? (
+                        <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <Download style={{ width: 15, height: 15 }} />
+                      )}
+                      <span>DOWNLOAD CERTIFIED SCORESHEET PDF</span>
                     </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleDownloadPdf}
-                        disabled={isDownloadingPdf}
-                        style={styles.downloadPdfBtn}
-                      >
-                        {isDownloadingPdf ? (
-                          <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
-                        ) : (
-                          <Download style={{ width: 15, height: 15 }} />
-                        )}
-                        <span>DOWNLOAD CERTIFIED SCORESHEET PDF</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled
-                        style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
-                      >
-                        MATCH CERTIFIED
-                      </button>
-                    </>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      disabled
+                      style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
+                    >
+                      MATCH CERTIFIED
+                    </button>
+                  </>
+                )}
               </div>
-            </>
-          ) : (
-            <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
-              Match record not found.
             </div>
-          )}
-        </main>
+          </>
+        ) : (
+          <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
+            Match record not found.
+          </div>
+        )}
+      </main>
 
       {/* Confirmation & Preview Modals */}
       {activeModal === 'CERTIFY' && (

@@ -108,6 +108,9 @@ export interface OfficialScheduleItem {
   match_class?: string;
   home_team?: string;
   away_team?: string;
+  assigned_coaches?: string[];
+  coaches?: string;
+  coach_name?: string;
 }
 
 export interface CreateMatchPayload {
@@ -179,6 +182,8 @@ export interface MatchAuditDetail {
   audit_context_notes?: string;
   is_certified?: boolean;
   is_locked?: boolean;
+  assigned_coaches?: string[];
+  coach_name?: string;
 }
 
 export interface MatchSummaryItem {

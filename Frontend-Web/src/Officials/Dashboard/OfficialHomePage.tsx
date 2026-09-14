@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import {
@@ -7,11 +7,14 @@ import {
   getCachedData,
   getMe,
   getOfficialDashboard,
+  getAllOfficialMatchesMaster,
   getOfficialSettings,
   prefetchAllOfficialAuditMatches,
   prefetchMatchAuditDetail,
+  isMatchCreatedByOfficial,
+  isMatchLocallyCertified,
 } from '../../api/client';
-import type { AuthUser, OfficialDashboardResponse } from '../../api/types';
+import type { AuthUser, OfficialDashboardResponse, MatchSummaryItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/OfficialHomePage';
@@ -24,10 +27,14 @@ export const OfficialHomePage: React.FC = () => {
   const [dashboard, setDashboard] = useState<OfficialDashboardResponse | null>(
     () => getCachedData<OfficialDashboardResponse>('official_dashboard')
   );
+  const [masterMatches, setMasterMatches] = useState<MatchSummaryItem[]>(
+    () => getCachedData<MatchSummaryItem[]>('all_official_matches_master') || []
+  );
   const [loading, setLoading] = useState(() => !getCachedData('official_dashboard'));
 
   const refreshDashboard = () => {
-    getOfficialDashboard(true).then((res) => setDashboard(res)).catch(() => {});
+    getOfficialDashboard(true).then((res) => setDashboard(res)).catch(() => { });
+    getAllOfficialMatchesMaster(true).then((res) => setMasterMatches(res || [])).catch(() => { });
   };
 
   useEffect(() => {
@@ -37,38 +44,105 @@ export const OfficialHomePage: React.FC = () => {
     }
 
     Promise.all([
-      getMe().then((res) => setUser(res)).catch(() => {}),
-      getOfficialDashboard().then((res) => setDashboard(res)).catch(() => {}),
-      getOfficialSettings().catch(() => {}),
-      prefetchAllOfficialAuditMatches().catch(() => {}),
+      getMe().then((res) => setUser(res)).catch(() => { }),
+      getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
+      getAllOfficialMatchesMaster().then((res) => setMasterMatches(res || [])).catch(() => { }),
+      getOfficialSettings().catch(() => { }),
+      prefetchAllOfficialAuditMatches().catch(() => { }),
     ]).finally(() => setLoading(false));
   }, [navigate]);
 
   // Filter matches specifically created/assigned to current official
-  const currentOfficialIds = new Set(
+  const currentOfficialIds = useMemo(() => new Set(
     [
       user?.uid,
       user?.user_id,
       (user as any)?.official_id,
-      user?.uid ? `off_${user.uid}` : null,
+      user?.uid ? `off_${user.uid.replace(/^off_/, '')}` : null,
+      user?.uid ? user.uid.replace(/^off_/, '') : null,
       user?.email,
     ].filter(Boolean) as string[]
-  );
+  ), [user]);
 
+  const officialMatches = useMemo(() => {
+    const list: MatchSummaryItem[] = masterMatches.filter((m) => isMatchCreatedByOfficial(m, user));
+    const existingIds = new Set(list.map((m) => m.match_id.replace(/^#/, '')));
 
-  const officialQueue = (dashboard?.audit_queue || []).filter((item: any) => {
-    const creator = item.requested_by || item.official_id || item.match_details?.official_id || item.match_details?.created_by;
-    return creator ? currentOfficialIds.has(creator) : false;
-  });
+    // Also include any items from dashboard.audit_queue if they belong to this official and aren't in masterMatches yet
+    (dashboard?.audit_queue || []).forEach((item: any, idx: number) => {
+      const match = item.match_details || {};
+      const rawId = String(match.match_id || item.match_id || `queue_${idx}`).replace(/^#/, '');
+      const fakeSummary: MatchSummaryItem = {
+        match_id: `#${rawId}`,
+        validation_id: item.audit_id || rawId,
+        match_class: match.home_team_name && match.away_team_name ? `${match.home_team_name} vs. ${match.away_team_name}` : 'Tournament Match',
+        sport: match.sport_type || 'Basketball',
+        coaches: '',
+        date_time: match.match_date || item.requested_at || new Date().toISOString(),
+        status: 'PENDING',
+        raw_match: { ...match, ...item },
+      };
 
-  const totalMatches = officialQueue.length;
+      const belongsToMe = isMatchCreatedByOfficial(fakeSummary, user) || (
+        (item.requested_by && currentOfficialIds.has(item.requested_by)) ||
+        (item.official_id && currentOfficialIds.has(item.official_id))
+      );
+
+      if (belongsToMe && !existingIds.has(rawId)) {
+        const isAudited = item.status === 'Approved' || item.status === 'Audited' || match.is_certified === true || isMatchLocallyCertified(rawId);
+        const assignedCoaches = Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0
+          ? match.assigned_coaches
+          : Array.isArray(match.coaches) && match.coaches.length > 0
+            ? match.coaches
+            : [];
+        const coach = assignedCoaches.length > 0
+          ? assignedCoaches.join(', ')
+          : match.coach_name
+            ? `Coach ${match.coach_name}`
+            : item.requested_by && !String(item.requested_by).startsWith('off_') && !String(item.requested_by).includes('@') && String(item.requested_by).length < 25
+              ? `Coach ${item.requested_by}`
+              : 'Assigned Coach';
+
+        list.push({
+          ...fakeSummary,
+          coaches: coach,
+          status: isAudited ? 'AUDITED' : 'PENDING',
+        });
+        existingIds.add(rawId);
+      }
+    });
+
+    // Ensure certified status is accurately reflected for all matches
+    list.forEach((m) => {
+      const cleanId = m.match_id.replace(/^#/, '');
+      if (isMatchLocallyCertified(cleanId)) {
+        m.status = 'AUDITED';
+      }
+    });
+
+    // Sort descending by date/time (newest matches first)
+    return list.sort((a, b) => {
+      const getT = (m: MatchSummaryItem) => {
+        const raw = m.raw_match || {};
+        const val = raw.created_at || raw.timestamp || raw.requested_at || raw.match_date;
+        return val ? new Date(val).getTime() : 0;
+      };
+      return getT(b) - getT(a);
+    });
+  }, [masterMatches, dashboard, user, currentOfficialIds]);
+
+  // Show the last 3 new matches instead of 1 only
+  const newMatchesList = useMemo(() => {
+    return officialMatches.slice(0, 3);
+  }, [officialMatches]);
+
+  const totalMatches = officialMatches.length;
   const pendingCount = String(
-    officialQueue.filter((i: any) => String(i.status || '').toUpperCase().includes('PENDING')).length
+    officialMatches.filter((i) => i.status === 'PENDING').length
   ).padStart(2, '0');
   const auditedCount = String(
-    officialQueue.filter((i: any) => !String(i.status || '').toUpperCase().includes('PENDING')).length
+    officialMatches.filter((i) => i.status === 'AUDITED').length
   ).padStart(2, '0');
-
 
   return (
     <div style={styles.shell}>
@@ -136,32 +210,26 @@ export const OfficialHomePage: React.FC = () => {
                       <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#0B132B' }} />
                     </td>
                   </tr>
-                ) : officialQueue.length > 0 ? (
-                  officialQueue.map((item, idx) => {
-
-                    const match = item.match_details || {};
-                    const rawId = match.match_id || item.match_id || `MATCH-${idx + 1}`;
-                    const matchId = rawId.startsWith('#') ? rawId : `#${rawId}`;
-                    const matchClass =
-                      match.home_team_name && match.away_team_name
-                        ? `${match.home_team_name} vs. ${match.away_team_name}`
-                        : item.match_id || 'Tournament Match';
-                    const sport = match.sport_type || 'Basketball';
-                    const coach = match.coach_name || item.requested_by || 'Assigned Coach';
+                ) : newMatchesList.length > 0 ? (
+                  newMatchesList.map((item, idx) => {
+                    const rawId = item.match_id.replace(/^#/, '');
+                    const isAudited = item.status === 'AUDITED' || isMatchLocallyCertified(rawId);
 
                     return (
                       <tr
-                        key={item.audit_id || idx}
+                        key={item.match_id || idx}
                         style={{ cursor: 'pointer' }}
                         onMouseEnter={() => prefetchMatchAuditDetail(rawId)}
-                        onClick={() => navigate(`/matches/${rawId.replace(/^#/, '')}`)}
+                        onClick={() => navigate(`/matches/${rawId}`)}
                       >
-                        <td style={{ ...styles.td, ...styles.tdMatchId }}>{matchId}</td>
-                        <td style={styles.td}>{matchClass}</td>
-                        <td style={styles.td}>{sport}</td>
-                        <td style={styles.td}>{coach}</td>
+                        <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
+                        <td style={styles.td}>{item.match_class}</td>
+                        <td style={styles.td}>{item.sport}</td>
+                        <td style={styles.td}>{item.coaches || 'Assigned Coach'}</td>
                         <td style={{ ...styles.td, borderRight: 'none' }}>
-                          <span style={styles.statusBadge}>PENDING</span>
+                          <span style={isAudited ? styles.statusAudited : styles.statusPending}>
+                            {isAudited ? 'AUDITED' : 'PENDING'}
+                          </span>
                         </td>
                       </tr>
                     );

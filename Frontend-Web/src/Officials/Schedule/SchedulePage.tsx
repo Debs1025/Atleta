@@ -89,7 +89,16 @@ export const SchedulePage: React.FC = () => {
   const daysInMonth = new Date(year, month, 0).getDate();
   const totalCells = Math.ceil((firstDayIndex + daysInMonth) / 7) * 7;
 
-  const safeSchedules = Array.isArray(schedules) ? schedules : [];
+  const myOfficialIds = new Set(
+    [user?.uid, user?.user_id, (user as any)?.official_id, user?.uid ? `off_${user.uid}` : null].filter(Boolean) as string[]
+  );
+
+  const safeSchedules = (Array.isArray(schedules) ? schedules : []).filter((s) => {
+    if (myOfficialIds.size === 0) return true;
+    const creator = s.official_id || (s as any).requested_by || (s as any).created_by;
+    const isAssigned = Array.isArray(s.assigned_officials) && s.assigned_officials.some((id) => myOfficialIds.has(id));
+    return (creator ? myOfficialIds.has(creator) : false) || isAssigned;
+  });
 
   const onCellClick = (dayNum: number, matchesForDay: OfficialScheduleItem[]) => {
     const formatted = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
@@ -159,6 +168,33 @@ export const SchedulePage: React.FC = () => {
     selectedMatch?.venue_logistics?.court ||
     '1'
   );
+
+  const assignedCoachesList = Array.isArray(selectedMatch?.assigned_coaches) && selectedMatch.assigned_coaches.length > 0
+    ? selectedMatch.assigned_coaches
+    : selectedMatch?.coaches
+    ? (Array.isArray(selectedMatch.coaches) ? selectedMatch.coaches : [selectedMatch.coaches])
+    : selectedMatch?.venue_logistics?.coaches
+    ? [selectedMatch.venue_logistics.coaches]
+    : [];
+
+  const cleanCoachName = (str: string) => {
+    if (!str || str === 'OFFICIAL ASSIGNED') return str;
+    return str
+      .split(',')
+      .map((c) => c.trim().replace(/^coach[_\s]*/i, ''))
+      .filter(Boolean)
+      .join(', ');
+  };
+
+  const rawCoachString = assignedCoachesList.length > 0
+    ? assignedCoachesList.join(', ')
+    : selectedMatch?.coach_name
+    ? selectedMatch.coach_name
+    : selectedMatch?.assigned_officials?.length
+    ? selectedMatch.assigned_officials.join(', ')
+    : 'OFFICIAL ASSIGNED';
+
+  const detailsCoach = cleanCoachName(rawCoachString) || rawCoachString;
 
   const selectedDayNum = selectedDateStr ? Number(selectedDateStr.split('-')[2]) : null;
 
@@ -324,9 +360,12 @@ export const SchedulePage: React.FC = () => {
                         <div style={styles.dashedDivider} />
 
                         <div style={styles.officialsSection}>
-                          <span style={styles.officialsLabel}>OFFICIALS ASSIGNED:</span>
+                          <span style={styles.officialsLabel}>COACHES:</span>
                           <div style={styles.officialsAvatars}>
-                            <Users style={{ width: 22, height: 22 }} />
+                            <Users style={{ width: 16, height: 16, flexShrink: 0 }} />
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B', textTransform: 'uppercase' }}>
+                              {detailsCoach}
+                            </span>
                           </div>
                         </div>
                       </div>

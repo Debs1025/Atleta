@@ -80,6 +80,33 @@ export const ScheduleMatch: React.FC<ScheduleMatchProps> = ({
     '1'
   );
 
+  const assignedCoachesList = Array.isArray(scheduleItem?.assigned_coaches) && scheduleItem.assigned_coaches.length > 0
+    ? scheduleItem.assigned_coaches
+    : scheduleItem?.coaches
+    ? (Array.isArray(scheduleItem.coaches) ? scheduleItem.coaches : [scheduleItem.coaches])
+    : scheduleItem?.venue_logistics?.coaches
+    ? [scheduleItem.venue_logistics.coaches]
+    : [];
+
+  const cleanCoachName = (str: string) => {
+    if (!str || str === 'OFFICIAL ASSIGNED') return str;
+    return str
+      .split(',')
+      .map((c) => c.trim().replace(/^coach[_\s]*/i, ''))
+      .filter(Boolean)
+      .join(', ');
+  };
+
+  const rawCoachString = assignedCoachesList.length > 0
+    ? assignedCoachesList.join(', ')
+    : scheduleItem?.coach_name
+    ? scheduleItem.coach_name
+    : scheduleItem?.assigned_officials?.length
+    ? scheduleItem.assigned_officials.join(', ')
+    : 'OFFICIAL ASSIGNED';
+
+  const coachDisplay = cleanCoachName(rawCoachString) || rawCoachString;
+
   return (
     <>
       <div style={styles.overlay} onClick={onClose} />
@@ -119,9 +146,12 @@ export const ScheduleMatch: React.FC<ScheduleMatchProps> = ({
               <div style={styles.dashedDivider} />
 
               <div style={styles.officialsSection}>
-                <span style={styles.officialsLabel}>OFFICIALS ASSIGNED:</span>
+                <span style={styles.officialsLabel}>COACHES:</span>
                 <div style={styles.officialsAvatars}>
-                  <Users style={{ width: 22, height: 22 }} />
+                  <Users style={{ width: 16, height: 16, flexShrink: 0 }} />
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B', textTransform: 'uppercase' }}>
+                    {coachDisplay}
+                  </span>
                 </div>
               </div>
             </div>

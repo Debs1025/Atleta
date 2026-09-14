@@ -147,7 +147,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       }
       return data;
     }
-  } catch {}
+  } catch { }
 
   try {
     const res = await fetch(`${BASE_URL}/admin/login`, {
@@ -163,7 +163,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       }
       return data;
     }
-  } catch {}
+  } catch { }
 
   // 3. Fallback to general user login route
   const res = await fetch(`${BASE_URL}/users/login`, {
@@ -193,7 +193,7 @@ export const loginAdmin = async (payload: AdminLoginPayload): Promise<AuthRespon
     if (res.ok) {
       data = await handleResponse<AuthResponse>(res);
     }
-  } catch {}
+  } catch { }
 
   // Fallback to general user login
   if (!data || !data.token) {
@@ -233,7 +233,7 @@ export const getAdminProfile = async (forceRefresh = false): Promise<any> => {
       setCachedData('admin_profile', data);
       return data;
     }
-  } catch {}
+  } catch { }
 
   return getMe(forceRefresh);
 };
@@ -258,7 +258,7 @@ export const getAdminCoachQueue = async (forceRefresh = false): Promise<AdminCoa
       setCachedData('admin_coach_queue', data);
       return data;
     }
-  } catch {}
+  } catch { }
 
   return cached || { total_pending: 0, queue: [] };
 };
@@ -391,17 +391,51 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
   const list: OfficialScheduleItem[] = Array.isArray(data)
     ? [...data]
     : Array.isArray(data?.schedules)
-    ? [...data.schedules]
-    : Array.isArray(data?.data)
-    ? [...data.data]
-    : [];
+      ? [...data.schedules]
+      : Array.isArray(data?.data)
+        ? [...data.data]
+        : [];
+
+  // Fetch Coaches from List
+  list.forEach((item) => {
+    const cleanMatchId = String(item.match_id || '').replace(/^#/, '');
+    const found = masterMatches.find((m) => String(m.match_id || '').replace(/^#/, '') === cleanMatchId);
+    if (found) {
+      const raw = found.raw_match || {};
+      const resolvedCoaches = Array.isArray(raw.assigned_coaches) && raw.assigned_coaches.length > 0
+        ? raw.assigned_coaches
+        : Array.isArray(raw.coaches) && raw.coaches.length > 0
+          ? raw.coaches
+          : found.coaches && found.coaches !== 'Official Assigned' && !found.coaches.startsWith('Coach off_')
+            ? [found.coaches]
+            : [];
+      if (!item.assigned_coaches || item.assigned_coaches.length === 0) {
+        item.assigned_coaches = resolvedCoaches;
+      }
+      if (!item.coaches && resolvedCoaches.length > 0) {
+        item.coaches = resolvedCoaches.join(', ');
+      }
+      if (!item.home_team && (raw.home_team_name || raw.home_team)) {
+        item.home_team = raw.home_team_name || raw.home_team;
+      }
+      if (!item.away_team && (raw.opponent_team_name || raw.away_team_name || raw.away_team)) {
+        item.away_team = raw.opponent_team_name || raw.away_team_name || raw.away_team;
+      }
+    }
+  });
 
   const existingIds = new Set(list.map((s) => String(s.match_id || '').replace(/^#/, '')));
+
+  const userMe = getStoredUser();
+  const myIds = new Set([userMe?.uid, userMe?.user_id, (userMe as any)?.official_id, userMe?.uid ? `off_${userMe.uid}` : null].filter(Boolean) as string[]);
 
   for (const m of masterMatches) {
     const rawId = String(m.match_id || '').replace(/^#/, '');
     if (!rawId || existingIds.has(rawId)) continue;
     const raw = m.raw_match || {};
+    const creator = raw.official_id || raw.requested_by || raw.created_by;
+    if (creator && myIds.size > 0 && !myIds.has(creator)) continue;
+
     const dateStr = raw.match_date || raw.timestamp || new Date().toISOString();
     const d = new Date(dateStr);
     const mMonth = !isNaN(d.getTime()) ? d.getMonth() + 1 : undefined;
@@ -416,6 +450,14 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
     const venue = raw.location || raw.venue || '';
     const court = raw.court_number || raw.court || '';
 
+    const resolvedCoaches = Array.isArray(raw.assigned_coaches) && raw.assigned_coaches.length > 0
+      ? raw.assigned_coaches
+      : Array.isArray(raw.coaches) && raw.coaches.length > 0
+        ? raw.coaches
+        : m.coaches && m.coaches !== 'Official Assigned' && !m.coaches.startsWith('Coach off_')
+          ? [m.coaches]
+          : [];
+
     list.push({
       schedule_id: `sched_${rawId}`,
       match_id: rawId,
@@ -428,6 +470,9 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
       sport: sport,
       home_team: home,
       away_team: away,
+      assigned_coaches: resolvedCoaches,
+      coaches: resolvedCoaches.length > 0 ? resolvedCoaches.join(', ') : m.coaches || '',
+      coach_name: raw.coach_name || (resolvedCoaches.length > 0 ? resolvedCoaches[0] : ''),
       venue_logistics: {
         location: venue,
         court: court,
@@ -435,13 +480,22 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
         home_team: home,
         away_team: away,
         time: dateStr,
+        coaches: resolvedCoaches.join(', '),
       },
     });
     existingIds.add(rawId);
   }
 
-  setCachedData(cacheKey, list);
-  return list;
+  const finalList = myIds.size > 0
+    ? list.filter((s) => {
+      const creator = s.official_id || (s as any).requested_by || (s as any).created_by;
+      const isAssigned = Array.isArray(s.assigned_officials) && s.assigned_officials.some((id) => myIds.has(id));
+      return (creator ? myIds.has(creator) : false) || isAssigned;
+    })
+    : list;
+
+  setCachedData(cacheKey, finalList);
+  return finalList;
 };
 
 export const getOfficialSettings = async (forceRefresh = false): Promise<OfficialSettings> => {
@@ -459,7 +513,7 @@ export const getOfficialSettings = async (forceRefresh = false): Promise<Officia
   setCachedData('official_settings', data);
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
-  } catch {}
+  } catch { }
   return data;
 };
 
@@ -477,8 +531,119 @@ export const updateOfficialSettings = async (settings: Partial<OfficialSettings>
   setCachedData('official_settings', data);
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
-  } catch {}
+  } catch { }
   return data;
+};
+
+export const getOfficialCreatedMatchIds = (uid?: string): Set<string> => {
+  const ids = new Set<string>();
+  if (!uid) return ids;
+  try {
+    const raw = localStorage.getItem(`atleta_created_matches_${uid}`);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        arr.forEach((id) => ids.add(String(id).replace(/^#/, '')));
+      }
+    }
+  } catch { }
+  return ids;
+};
+
+export const recordOfficialCreatedMatchId = (rawMatchId: string, uid?: string): void => {
+  if (!rawMatchId || !uid) return;
+  try {
+    const cleanId = String(rawMatchId).replace(/^#/, '');
+    const key = `atleta_created_matches_${uid}`;
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
+    if (!existing.includes(cleanId)) {
+      existing.push(cleanId);
+      localStorage.setItem(key, JSON.stringify(existing));
+    }
+  } catch { }
+};
+
+export const markMatchAsCertified = (rawMatchId: string): void => {
+  if (!rawMatchId) return;
+  try {
+    const cleanId = String(rawMatchId).replace(/^#/, '');
+    const key = 'atleta_certified_match_ids';
+    const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+    if (!existing.includes(cleanId)) {
+      existing.push(cleanId);
+      localStorage.setItem(key, JSON.stringify(existing));
+    }
+  } catch { }
+};
+
+export const isMatchLocallyCertified = (rawMatchId: string): boolean => {
+  if (!rawMatchId) return false;
+  try {
+    const cleanId = String(rawMatchId).replace(/^#/, '');
+    const key = 'atleta_certified_match_ids';
+    const existing: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(existing) && existing.includes(cleanId);
+  } catch {
+    return false;
+  }
+};
+
+export const isMatchCreatedByOfficial = (
+  item: import('./types').MatchSummaryItem,
+  user: import('./types').AuthUser | null
+): boolean => {
+  if (!user) return false;
+  const raw = item.raw_match || {};
+  const cleanId = String(item.match_id || raw.match_id || '').replace(/^#/, '');
+
+  // 1. Check local persistent created IDs
+  const myUid = user.uid || (user as any).user_id;
+  const createdIds = getOfficialCreatedMatchIds(myUid);
+  if (cleanId && createdIds.has(cleanId)) {
+    return true;
+  }
+
+  // 2. Check IDs for this official user
+  const userIds = [
+    user.uid,
+    user.user_id,
+    (user as any).official_id,
+    user.uid ? `off_${user.uid.replace(/^off_/, '')}` : null,
+    user.uid ? user.uid.replace(/^off_/, '') : null,
+    user.email,
+  ].filter(Boolean) as string[];
+
+  // Candidate creator/official fields on the match record
+  const matchOwners = [
+    raw.official_id,
+    raw.requested_by,
+    raw.created_by,
+    raw.certified_by,
+    (item as any).official_id,
+    (item as any).requested_by,
+    (item as any).created_by,
+  ].filter(Boolean) as string[];
+
+  for (const owner of matchOwners) {
+    const normOwner = String(owner).trim();
+    for (const myId of userIds) {
+      const normMyId = String(myId).trim();
+      if (normOwner === normMyId) return true;
+      if (normOwner.replace(/^off_/, '') === normMyId.replace(/^off_/, '')) return true;
+    }
+  }
+
+  // 3. Check assigned_officials array if present
+  const assigned = Array.isArray(raw.assigned_officials) ? raw.assigned_officials : [];
+  for (const off of assigned) {
+    const normOff = String(off).trim();
+    for (const myId of userIds) {
+      const normMyId = String(myId).trim();
+      if (normOff === normMyId || normOff.replace(/^off_/, '') === normMyId.replace(/^off_/, '')) return true;
+    }
+  }
+
+  return false;
 };
 
 export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<any> => {
@@ -506,6 +671,12 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
     }),
   });
   const data = await handleResponse<any>(res);
+  const createdId = data?.match?.match_id || data?.match_id;
+  const user = getStoredUser();
+  if (createdId && user?.uid) {
+    recordOfficialCreatedMatchId(createdId, user.uid);
+  }
+
   // Invalidate dashboard, schedules, and match queue caches so new match reflects instantly everywhere
   invalidateCache('official_dashboard');
   invalidateCache('official_schedules');
@@ -529,10 +700,10 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
   const rawList: any[] = Array.isArray(data)
     ? data
     : Array.isArray(data?.notifications)
-    ? data.notifications
-    : Array.isArray(data?.data)
-    ? data.data
-    : [];
+      ? data.notifications
+      : Array.isArray(data?.data)
+        ? data.data
+        : [];
 
   const notifications: import('./types').OfficialNotificationItem[] = rawList.map((n: any, idx: number) => ({
     notification_id: n.notification_id || `notif_${idx}`,
@@ -591,7 +762,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
         }
       }
     });
-  } catch {}
+  } catch { }
 
   const unread_count = typeof data?.unread_count === 'number'
     ? data.unread_count
@@ -629,7 +800,7 @@ export const markAllOfficialNotificationsAsRead = async (): Promise<void> => {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-      }).catch(() => {});
+      }).catch(() => { });
     }
   } catch {
   }
@@ -709,6 +880,32 @@ export const getAuditMatches = async (
     const allMatchesList: any[] = Array.isArray(matchesRes?.matches) ? matchesRes.matches : (Array.isArray(matchesRes) ? matchesRes : []);
     const pendingValidations: any[] = Array.isArray(pendingRes) ? pendingRes : [];
 
+    const userMe = getStoredUser();
+    const myIds = new Set([
+      userMe?.uid,
+      userMe?.user_id,
+      (userMe as any)?.official_id,
+      userMe?.uid ? `off_${userMe.uid.replace(/^off_/, '')}` : null,
+      userMe?.uid ? userMe.uid.replace(/^off_/, '') : null,
+      userMe?.email,
+    ].filter(Boolean) as string[]);
+
+    dashboardQueue.forEach((item) => {
+      const creator = item.requested_by || item.official_id;
+      if (creator && userMe?.uid && (myIds.has(creator) || myIds.has(String(creator).replace(/^off_/, '')))) {
+        const id = item.match_id || item.audit_id;
+        if (id) recordOfficialCreatedMatchId(id, userMe.uid);
+      }
+    });
+
+    pendingValidations.forEach((v) => {
+      const creator = v.requested_by || v.official_id;
+      if (creator && userMe?.uid && (myIds.has(creator) || myIds.has(String(creator).replace(/^off_/, '')))) {
+        const id = v.match_id || v.validation_id;
+        if (id) recordOfficialCreatedMatchId(id, userMe.uid);
+      }
+    });
+
     const combinedMap = new Map<string, import('./types').MatchSummaryItem>();
 
     const parseMatchItem = (raw: any, isAuditedOverride?: boolean) => {
@@ -720,6 +917,7 @@ export const getAuditMatches = async (
       const sRaw = String(raw.status || raw.verification_status || match.status || match.verification_status || '').toLowerCase().trim();
       const isCertified = Boolean(
         isAuditedOverride ||
+        isMatchLocallyCertified(key) ||
         match.is_certified === true ||
         String(match.is_certified) === 'true' ||
         match.is_locked === true ||
@@ -735,7 +933,30 @@ export const getAuditMatches = async (
       const awayTeam = (match.opponent_team_name || match.away_team_name || match.away_team || 'Opponent').toUpperCase();
       const sport = match.sport_type || match.sport || 'Basketball';
       const matchType = match.match_type ? ` (${match.match_type})` : '';
-      const coaches = match.assigned_coaches?.length ? match.assigned_coaches.join('\n') : (match.coach_name || raw.requested_by ? `Coach ${match.coach_name || raw.requested_by}` : 'Official Assigned');
+
+      const assignedList = Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0
+        ? match.assigned_coaches
+        : Array.isArray(raw.assigned_coaches) && raw.assigned_coaches.length > 0
+          ? raw.assigned_coaches
+          : Array.isArray(match.coaches) && match.coaches.length > 0
+            ? match.coaches
+            : Array.isArray(raw.coaches) && raw.coaches.length > 0
+              ? raw.coaches
+              : [];
+
+      let coaches = '';
+      if (assignedList.length > 0) {
+        coaches = assignedList.map((c: any) => String(c).trim()).filter(Boolean).join('\n');
+      } else if (match.coach_name) {
+        coaches = `Coach ${match.coach_name}`;
+      } else if (raw.coach_name) {
+        coaches = `Coach ${raw.coach_name}`;
+      } else if (raw.requested_by && !String(raw.requested_by).startsWith('off_') && !String(raw.requested_by).includes('@') && String(raw.requested_by).length < 25) {
+        coaches = `Coach ${raw.requested_by}`;
+      } else {
+        coaches = 'Official Assigned';
+      }
+
       const d = new Date(match.match_date || match.timestamp || raw.requested_at || Date.now());
       const dateFormatted = !isNaN(d.getTime())
         ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase()} / ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
@@ -744,7 +965,14 @@ export const getAuditMatches = async (
       if (combinedMap.has(key)) {
         const existing = combinedMap.get(key)!;
         if (isCertified) existing.status = 'AUDITED';
-        existing.raw_match = { ...existing.raw_match, ...match };
+        existing.raw_match = { ...existing.raw_match, ...match, ...raw };
+        if (
+          (!existing.coaches || existing.coaches === 'Official Assigned' || existing.coaches.startsWith('Coach off_')) &&
+          coaches &&
+          coaches !== 'Official Assigned'
+        ) {
+          existing.coaches = coaches;
+        }
       } else {
         combinedMap.set(key, {
           match_id: `#${key}`,
@@ -953,6 +1181,20 @@ export const getMatchAuditDetail = async (
     const homeTotals = computeTotals(homePlayers, homeScore);
     const awayTotals = computeTotals(awayPlayers, awayScore);
 
+    const cachedMaster = getCachedData<import('./types').MatchSummaryItem[]>('all_official_matches_master');
+    const cachedItem = cachedMaster?.find((m) => m.match_id.replace(/^#/, '') === matchId);
+    const cachedRaw = cachedItem?.raw_match || {};
+
+    const assignedCoaches: string[] =
+      (Array.isArray(pendingVal?.match_details?.assigned_coaches) && pendingVal.match_details.assigned_coaches.length > 0 ? pendingVal.match_details.assigned_coaches : null) ||
+      (Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0 ? match.assigned_coaches : null) ||
+      (Array.isArray(cachedRaw.assigned_coaches) && cachedRaw.assigned_coaches.length > 0 ? cachedRaw.assigned_coaches : null) ||
+      (Array.isArray(match.coaches) && match.coaches.length > 0 ? match.coaches : null) ||
+      (Array.isArray(cachedRaw.coaches) && cachedRaw.coaches.length > 0 ? cachedRaw.coaches : null) ||
+      (cachedItem?.coaches && cachedItem.coaches !== 'Official Assigned' && !cachedItem.coaches.startsWith('Coach off_') ? cachedItem.coaches.split('\n') : []);
+
+    const coachName = match.coach_name || cachedRaw.coach_name || (assignedCoaches.length > 0 ? assignedCoaches.join(', ') : undefined);
+
     const result: import('./types').MatchAuditDetail = {
       match_id: matchId,
       validation_id: validationId,
@@ -975,9 +1217,15 @@ export const getMatchAuditDetail = async (
         team_totals: awayTotals,
       },
       race_results: raceResults,
-      scoresheet_url: match.scoresheet_url || pendingVal?.scoresheet_url,
-      audit_context_notes: match.notes || pendingVal?.context_notes || '',
+      scoresheet_url: typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim() ? match.scoresheet_url.trim() : (typeof pendingVal?.scoresheet_url === 'string' ? pendingVal.scoresheet_url.trim() : undefined),
+      audit_context_notes: typeof match.notes === 'string'
+        ? match.notes
+        : Array.isArray(match.notes) && match.notes.length > 0
+          ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
+          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : ''),
       is_certified: Boolean(match.is_certified || match.is_locked),
+      assigned_coaches: assignedCoaches,
+      coach_name: coachName,
     };
 
     setCachedData(cacheKey, result);
@@ -991,7 +1239,7 @@ export const getMatchAuditDetail = async (
 export const prefetchMatchAuditDetail = (rawMatchId: string): void => {
   if (!rawMatchId) return;
   const matchId = rawMatchId.replace(/^#/, '');
-  getMatchAuditDetail(matchId, false).catch(() => {});
+  getMatchAuditDetail(matchId, false).catch(() => { });
 };
 
 export const certifyMatchValidation = async (
@@ -999,15 +1247,36 @@ export const certifyMatchValidation = async (
   payload: { context_notes?: string; scoresheet_url?: string }
 ): Promise<any> => {
   const token = getStoredToken();
+  const cleanPayload: Record<string, string> = {
+    context_notes: typeof payload.context_notes === 'string'
+      ? payload.context_notes
+      : Array.isArray(payload.context_notes)
+        ? (payload.context_notes as any[]).join('\n')
+        : String(payload.context_notes ?? ''),
+  };
+
+  if (typeof payload.scoresheet_url === 'string' && payload.scoresheet_url.trim().length > 0) {
+    cleanPayload.scoresheet_url = payload.scoresheet_url.trim();
+  }
+
   const res = await fetch(`${BASE_URL}/validations/${validationId}/certify`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(cleanPayload),
   });
   const data = await handleResponse<any>(res);
+  const user = getStoredUser();
+  if (validationId && user?.uid) {
+    recordOfficialCreatedMatchId(validationId, user.uid);
+  }
+  const cleanKey = String(validationId).replace(/^#/, '');
+  markMatchAsCertified(cleanKey);
+  if (data?.match_id) {
+    markMatchAsCertified(String(data.match_id).replace(/^#/, ''));
+  }
   invalidateCache();
   return data;
 };
@@ -1089,7 +1358,7 @@ export const fetchBrowseTeams = async (sport?: string): Promise<any[]> => {
       const data = await res.json();
       return Array.isArray(data.teams) ? data.teams : Array.isArray(data) ? data : [];
     }
-  } catch {}
+  } catch { }
   return [];
 };
 

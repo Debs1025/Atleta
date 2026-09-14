@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   getStoredToken,
+  getStoredUser,
   getAllOfficialMatchesMaster,
   getCachedData,
   prefetchMatchAuditDetail,
+  isMatchCreatedByOfficial,
 } from '../../api/client';
 import type { MatchSummaryItem } from '../../api/types';
 import { styles } from './styles/ViewAllMatch';
@@ -43,6 +45,7 @@ const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
 
 export const ViewAllMatch: React.FC = () => {
   const navigate = useNavigate();
+  const user = useMemo(() => getStoredUser(), []);
   const [activeTab, setActiveTab] = useState<'PENDING' | 'PROCESSED'>('PENDING');
   const [selectedSport, setSelectedSport] = useState<string>('ALL');
 
@@ -92,9 +95,12 @@ export const ViewAllMatch: React.FC = () => {
     []
   );
 
-  // Filter Sports and Pending/Processed
+  // Filter Sports, Pending/Processed, and ONLY matches created by this official user
   const displayedMatches = useMemo(() => {
     return allMatches.filter((item) => {
+      // Show only matches created by their own official user
+      if (!isMatchCreatedByOfficial(item, user)) return false;
+
       // Status Filter
       if (activeTab === 'PENDING' && item.status !== 'PENDING') return false;
       if (activeTab === 'PROCESSED' && item.status !== 'AUDITED') return false;
@@ -117,7 +123,7 @@ export const ViewAllMatch: React.FC = () => {
 
       return true;
     });
-  }, [allMatches, activeTab, selectedSport]);
+  }, [allMatches, activeTab, selectedSport, user]);
 
   const handleRowClick = (matchId: string) => {
     const cleanId = matchId.replace(/^#/, '');
