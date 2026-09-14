@@ -56,16 +56,9 @@ function getFirebaseCredential() {
   }
 
   // 4. Check for local serviceAccountKey.json file (Local development)
-  const possiblePaths = [
-    path.resolve(__dirname, '..', 'serviceAccountKey.json'),
-    path.resolve(__dirname, '..', '..', 'serviceAccountKey.json'),
-    path.resolve(process.cwd(), 'Backend', 'serviceAccountKey.json'),
-    path.resolve(process.cwd(), 'serviceAccountKey.json'),
-  ];
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      return cert(p);
-    }
+  const serviceAccountPath = path.resolve(__dirname, '..', 'serviceAccountKey.json');
+  if (fs.existsSync(serviceAccountPath)) {
+    return cert(serviceAccountPath);
   }
 
   console.warn('⚠️ No Firebase Admin credentials found! Please configure FIREBASE_SERVICE_ACCOUNT in Vercel.');
@@ -95,6 +88,7 @@ let authInstance: Auth;
 
 try {
   dbInstance = getFirestore();
+  dbInstance.settings({ ignoreUndefinedProperties: true });
 } catch (e: any) {
   console.warn('⚠️ Firestore initialization warning:', e?.message || e);
   dbInstance = {} as Firestore;
@@ -110,3 +104,23 @@ try {
 // Export Firestore and Auth instances
 export const db: Firestore = dbInstance;
 export const auth: Auth = authInstance;
+
+/**
+ * Recursively removes undefined fields and converts them safely for Firestore writes.
+ */
+export function sanitizeForFirestore<T = any>(obj: T): T {
+  if (obj === undefined) return null as any;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString() as any;
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item)) as any;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+    if (value !== undefined) {
+      result[key] = sanitizeForFirestore(value);
+    }
+  }
+  return result as T;
+}
+

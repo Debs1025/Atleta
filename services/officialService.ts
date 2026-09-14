@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db, auth } from '../utils/firebaseAdmin';
+import { db, auth, sanitizeForFirestore } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { OfficialProfile, OfficialSettings, RegisterOfficialDto, UpdateOfficialSettingsDto, User } from '../models/userModel';
@@ -241,14 +241,15 @@ export async function updateOfficialSettings(
   const updatedSettings: OfficialSettings = {
     setting_id: currentSettings.setting_id,
     official_id: canonicalOfficialId,
-    split_screen_defaults: payload.split_screen_defaults !== undefined ? payload.split_screen_defaults : currentSettings.split_screen_defaults,
-    discrepancy_presets: payload.discrepancy_presets !== undefined ? payload.discrepancy_presets : currentSettings.discrepancy_presets,
-    match_reminders: payload.match_reminders !== undefined ? payload.match_reminders : currentSettings.match_reminders,
+    split_screen_defaults: payload.split_screen_defaults !== undefined ? Boolean(payload.split_screen_defaults) : currentSettings.split_screen_defaults,
+    discrepancy_presets: payload.discrepancy_presets !== undefined ? Boolean(payload.discrepancy_presets) : currentSettings.discrepancy_presets,
+    match_reminders: payload.match_reminders !== undefined ? Boolean(payload.match_reminders) : currentSettings.match_reminders,
     updated_at: new Date().toISOString(),
   };
 
-  await db.collection('Official_Settings').doc(canonicalOfficialId).set(updatedSettings, { merge: true });
-  await db.collection('Official_Settings').doc(rawUid).set(updatedSettings, { merge: true });
+  const cleanSettings = sanitizeForFirestore(updatedSettings);
+  await db.collection('Official_Settings').doc(canonicalOfficialId).set(cleanSettings, { merge: true });
+  await db.collection('Official_Settings').doc(rawUid).set(cleanSettings, { merge: true });
   return updatedSettings;
 }
 
@@ -301,7 +302,7 @@ export async function updateOfficialProfileService(uid: string, payload: any) {
   };
 
   if (payload.full_legal_name || payload.full_name) {
-    const fullName = (payload.full_legal_name || payload.full_name).trim();
+    const fullName = String(payload.full_legal_name || payload.full_name).trim();
     userUpdates.full_legal_name = fullName;
     userUpdates.full_name = fullName;
 
@@ -309,37 +310,42 @@ export async function updateOfficialProfileService(uid: string, payload: any) {
     userUpdates.first_name = nameParts[0] || 'Official';
     userUpdates.last_name = nameParts.slice(1).join(' ') || 'User';
   } else if (payload.first_name || payload.last_name) {
-    if (payload.first_name) userUpdates.first_name = payload.first_name.trim();
-    if (payload.last_name) userUpdates.last_name = payload.last_name.trim();
+    if (payload.first_name) userUpdates.first_name = String(payload.first_name).trim();
+    if (payload.last_name) userUpdates.last_name = String(payload.last_name).trim();
     userUpdates.full_name = `${userUpdates.first_name || ''} ${userUpdates.last_name || ''}`.trim();
     userUpdates.full_legal_name = userUpdates.full_name;
   }
 
-  if (payload.contact_number !== undefined) {
-    userUpdates.contact_number = payload.contact_number;
+  const contactNumber = payload.contact_number !== undefined ? payload.contact_number : (payload.phone_number !== undefined ? payload.phone_number : payload.phone);
+  if (contactNumber !== undefined) {
+    userUpdates.contact_number = contactNumber ? String(contactNumber).trim() : null;
   }
 
-  if (payload.organization_name !== undefined) {
-    const org = payload.organization_name.trim();
+  const orgName = payload.organization_name !== undefined ? payload.organization_name : payload.organization;
+  if (orgName !== undefined) {
+    const org = String(orgName).trim();
     userUpdates.organization_name = org;
     userUpdates.organization = org;
     profileUpdates.organization_name = org;
   }
 
-  if (payload.official_license_number !== undefined) {
-    userUpdates.official_license_number = payload.official_license_number.trim();
-    profileUpdates.official_license_number = payload.official_license_number.trim();
+  const licenseNum = payload.official_license_number !== undefined ? payload.official_license_number : payload.license_number;
+  if (licenseNum !== undefined) {
+    const lic = String(licenseNum).trim();
+    userUpdates.official_license_number = lic;
+    profileUpdates.official_license_number = lic;
   }
 
-  if (payload.assigned_tournaments !== undefined) {
-    userUpdates.assigned_tournaments = payload.assigned_tournaments;
-    profileUpdates.assigned_tournaments = payload.assigned_tournaments;
+  const tournaments = payload.assigned_tournaments !== undefined ? payload.assigned_tournaments : payload.tournaments;
+  if (tournaments !== undefined) {
+    userUpdates.assigned_tournaments = tournaments;
+    profileUpdates.assigned_tournaments = tournaments;
   }
 
   const batch = db.batch();
-  batch.set(db.collection('Users').doc(rawUid), userUpdates, { merge: true });
-  batch.set(db.collection('Official_Profiles').doc(officialId), profileUpdates, { merge: true });
-  batch.set(db.collection('Official_Profiles').doc(rawUid), profileUpdates, { merge: true });
+  batch.set(db.collection('Users').doc(rawUid), sanitizeForFirestore(userUpdates), { merge: true });
+  batch.set(db.collection('Official_Profiles').doc(officialId), sanitizeForFirestore(profileUpdates), { merge: true });
+  batch.set(db.collection('Official_Profiles').doc(rawUid), sanitizeForFirestore(profileUpdates), { merge: true });
   await batch.commit();
 
   return await getOfficialProfile(rawUid);

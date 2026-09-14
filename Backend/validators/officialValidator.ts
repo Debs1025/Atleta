@@ -67,3 +67,32 @@ export function validateUpdateOfficialSettings(data: Record<string, unknown>): V
 
   return errors;
 }
+
+/**
+ * Validates official profile update payload.
+ */
+export function validateUpdateOfficialProfile(data: Record<string, unknown>): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  if (data.full_legal_name !== undefined && typeof data.full_legal_name !== 'string') {
+    errors.push({ field: 'full_legal_name', message: 'full_legal_name must be a string.' });
+  }
+
+  if (data.contact_number !== undefined && typeof data.contact_number !== 'string') {
+    errors.push({ field: 'contact_number', message: 'contact_number must be a string.' });
+  }
+
+  if (data.organization_name !== undefined && typeof data.organization_name !== 'string') {
+    errors.push({ field: 'organization_name', message: 'organization_name must be a string.' });
+  }
+
+  if (data.official_license_number !== undefined && typeof data.official_license_number !== 'string') {
+    errors.push({ field: 'official_license_number', message: 'official_license_number must be a string.' });
+  }
+
+  if (data.assigned_tournaments !== undefined && !Array.isArray(data.assigned_tournaments)) {
+    errors.push({ field: 'assigned_tournaments', message: 'assigned_tournaments must be an array of strings.' });
+  }
+
+  return errors;
+}

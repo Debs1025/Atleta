@@ -75,59 +75,37 @@ export function calculateBasketballMetrics(stats: Record<string, any>): {
  */
 export function calculateIndividualSportMetrics(stats: Record<string, any>): {
   efficiency: number;
-  enrichedStats: IndividualSportStats & Record<string, any>;
+  enrichedStats: IndividualSportStats;
 } {
-  const rawDist = stats.distance_meters || stats.distance || 100;
-  const distanceMeters = Number(String(rawDist).replace(/[^\d.]/g, '') || 100);
-  const distance = `${distanceMeters}m`;
-
-  let finishTimeMs = Number(stats.finish_time_ms || 0);
-  if (finishTimeMs === 0 && stats.timer_seconds) {
-    finishTimeMs = Math.round(Number(stats.timer_seconds) * 1000);
-  }
-  if (finishTimeMs === 0 && stats.time) {
-    const parts = String(stats.time).split(':');
-    if (parts.length === 2) {
-      finishTimeMs = (parseFloat(parts[0]) * 60 + parseFloat(parts[1])) * 1000;
-    } else {
-      finishTimeMs = (parseFloat(stats.time) || 0) * 1000;
-    }
-  }
-
-  const mins = Math.floor(finishTimeMs / 60000);
-  const secs = ((finishTimeMs % 60000) / 1000).toFixed(2);
-  const formattedTime = stats.formatted_time || (finishTimeMs > 0 ? `${mins > 0 ? mins + ':' : ''}${Number(secs) < 10 && mins > 0 ? '0' : ''}${secs}s` : '00:00.00');
-
-  const eventName = String(stats.event_name || `${distanceMeters}m Event`).trim();
-  const splitTimesMs = Array.isArray(stats.split_times_ms)
-    ? stats.split_times_ms.map(Number)
-    : Array.isArray(stats.split_times)
-    ? stats.split_times
-    : [];
+  const eventName = String(stats.event_name || '').trim();
+  const distanceMeters = Number(stats.distance_meters || 0);
+  const finishTimeMs = Number(stats.finish_time_ms || 0);
+  const splitTimesMs = Array.isArray(stats.split_times_ms) ? stats.split_times_ms.map(Number) : [];
   const isDisqualified = !!stats.is_disqualified;
 
   let efficiency = 0;
+
   if (!isDisqualified && finishTimeMs > 0) {
+    // Speed in meters per second
     const speedMps = distanceMeters / (finishTimeMs / 1000);
+    // Base efficiency scaled to 100 max
     const baseScore = speedMps * 12.5;
+
+    // Split consistency factor
     let splitFactor = 1.0;
-    if (Array.isArray(splitTimesMs) && splitTimesMs.length > 1 && typeof splitTimesMs[0] === 'number') {
+    if (splitTimesMs.length > 1) {
       const avgSplit = splitTimesMs.reduce((a, b) => a + b, 0) / splitTimesMs.length;
       const variance = splitTimesMs.reduce((sum, val) => sum + Math.abs(val - avgSplit), 0) / splitTimesMs.length;
-      splitFactor = Math.max(0.85, 1 - variance / (avgSplit || 1));
+      splitFactor = Math.max(0.85, 1 - variance / avgSplit);
     }
+
     efficiency = Number((baseScore * splitFactor).toFixed(2));
   }
 
-  const enrichedStats: any = {
+  const enrichedStats: IndividualSportStats = {
     event_name: eventName,
     distance_meters: distanceMeters,
-    distance: distance,
     finish_time_ms: finishTimeMs,
-    time: formattedTime,
-    formatted_time: formattedTime,
-    timer_seconds: finishTimeMs > 0 ? finishTimeMs / 1000 : (stats.timer_seconds || 0),
-    split_times: stats.split_times || [],
     split_times_ms: splitTimesMs,
     is_disqualified: isDisqualified,
   };
@@ -311,77 +289,22 @@ export async function submitMatchSession(
       stats: enrichedStats,
     });
 
-    // Ensure Athlete Profile exists in Athlete_Profiles and update their career averages
+    // Ensure Athlete Profile exists in Athlete_Profiles for both Home and Away players
     const athleteRef = db.collection('Athlete_Profiles').doc(athleteId);
     const athleteDoc = await athleteRef.get();
-    
-    const gamePts = Number(rawStats.points ?? rawStats.pts ?? 0);
-    const gameAst = Number(rawStats.assists ?? rawStats.ast ?? 0);
-    const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? 0);
-
     if (!athleteDoc.exists) {
       const nameParts = pName.split(/\s+/);
       await athleteRef.set({
         athlete_id: athleteId,
         first_name: nameParts[0] || 'Athlete',
         last_name: nameParts.slice(1).join(' ') || '',
-        full_name: pName,
         team_name: pTeam,
         team_id: isHomePlayer ? homeTeamId : oppTeamId,
         jersey_number: (item as any).jersey_number ?? null,
         sport_type: payload.sport_type,
         position: 'Player',
-        averages: {
-          ppg: gamePts,
-          apg: gameAst,
-          rpg: gameReb,
-          games_played: 1,
-          fg_percentage: 50,
-          three_pt_percentage: 38,
-          ft_percentage: 80,
-          per_score: 22,
-        },
-        scoring_trends_last_10: [gamePts],
         created_at: now,
-        updated_at: now,
       });
-    } else {
-      const currentData = athleteDoc.data() || {};
-      const currentAvg = currentData.averages || currentData.stats || {};
-      const prevGames = Number(currentAvg.games_played || 1);
-      const newGames = prevGames + 1;
-      
-      const prevPpg = Number(currentAvg.ppg || currentAvg.pts || gamePts);
-      const prevApg = Number(currentAvg.apg || currentAvg.ast || gameAst);
-      const prevRpg = Number(currentAvg.rpg || currentAvg.reb || gameReb);
-      
-      const newPpg = Number(((prevPpg * prevGames + gamePts) / newGames).toFixed(1));
-      const newApg = Number(((prevApg * prevGames + gameAst) / newGames).toFixed(1));
-      const newRpg = Number(((prevRpg * prevGames + gameReb) / newGames).toFixed(1));
-      
-      const prevTrends: number[] = Array.isArray(currentData.scoring_trends_last_10)
-        ? currentData.scoring_trends_last_10
-        : [prevPpg];
-      const newTrends = [...prevTrends, gamePts].slice(-10);
-
-      await athleteRef.set({
-        averages: {
-          ...currentAvg,
-          ppg: newPpg,
-          apg: newApg,
-          rpg: newRpg,
-          games_played: newGames,
-        },
-        stats: {
-          ...(currentData.stats || {}),
-          ppg: newPpg,
-          apg: newApg,
-          rpg: newRpg,
-          games_played: newGames,
-        },
-        scoring_trends_last_10: newTrends,
-        updated_at: now,
-      }, { merge: true });
     }
   }
 
@@ -397,18 +320,29 @@ export async function submitMatchSession(
     home_score: homeScore,
     away_score: awayScore,
     logged_by_coach_id: coachId,
+    created_by_role: 'COACH',
+    is_official: false,
     sport_type: payload.sport_type,
+    event_name: payload.event_name || (payload.sport_type === 'Basketball' ? 'Regular Match' : 'Meet Event'),
     match_type: payload.match_type.trim(),
     match_date: payload.match_date,
     location: payload.location.trim(),
+    venue: payload.venue || payload.location.trim(),
     game_result: homeScore >= awayScore ? 'WIN' : 'LOSS',
+    coaches: payload.coaches || [{ coach_id: coachId, team_name: homeTeamName, role: 'Head Coach' }],
+    assigned_coaches: payload.assigned_coaches || [coachId],
     home_roster_athletes: homeRosterIds,
     away_roster_athletes: awayRosterIds,
     roster_athletes: [...homeRosterIds, ...awayRosterIds],
+    athlete_rosters: payload.athlete_rosters || enrichedPlayerStats,
     player_stats: enrichedPlayerStats,
-    notes: payload.notes ? payload.notes.trim() : `OCR Logged: ${homeTeamName} vs ${oppTeamName} (${homeScore} - ${awayScore})`,
+    scoresheet_data: payload.scoresheet_data || undefined,
+    scoresheet_url: payload.scoresheet_url || '',
+    notes: payload.notes ? payload.notes.trim() : `Logged: ${homeTeamName} vs ${oppTeamName} (${homeScore} - ${awayScore})`,
     idempotency_key: key,
     timestamp: now,
+    created_at: now,
+    updated_at: now,
   };
 
   // Execute atomic batch write: Match Log + Performance Metrics + Idempotency Record
@@ -526,9 +460,28 @@ function extractJsonFromAiText(content: string): any {
   }
 }
 
+async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
+  try {
+    const pdfPkg = require('pdf-parse');
+    if (pdfPkg.PDFParse) {
+      const parser = new pdfPkg.PDFParse({ data: buffer });
+      const res = await parser.getText();
+      return res?.text || '';
+    } else if (typeof pdfPkg === 'function') {
+      const res = await pdfPkg(buffer);
+      return res?.text || '';
+    }
+  } catch (err: any) {
+    console.warn('⚠️ [PDF EXTRACTION] Direct text extraction skipped, falling back to vision mode:', err.message);
+  }
+  return '';
+}
+
 const OCR_MODEL_WATERFALL = [
-  'gemini-3.5-flash-lite',
-  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
   'gemini-flash-latest',
   'gemini-pro-latest',
   'gemini-3.5-flash',
@@ -602,16 +555,33 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
   require('dotenv').config();
   const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (!geminiKey) {
-    throw new ServiceError('GEMINI_API_KEY is not configured in .env', 500);
-  }
-
   if (!file || !file.buffer) {
     throw new ServiceError('No scoresheet file uploaded.', 400);
   }
 
+  // Update match record with scoresheet URL even if OCR key is missing
+  await db.collection('Match_Logs').doc(matchId).set({
+    scoresheet_url: scoresheetUrl,
+    updated_at: now,
+  }, { merge: true });
+
+  if (!geminiKey) {
+    console.warn('⚠️ [OCR] GEMINI_API_KEY is not configured in .env. Scoresheet saved without automatic OCR.');
+    return {
+      match_id: matchId,
+      scoresheet_url: scoresheetUrl,
+      parsed_tables: {
+        team_scores: [],
+        player_summary: [],
+      },
+      raw_ocr_text: 'OCR skipped (GEMINI_API_KEY not configured)',
+      processed_at: now,
+    };
+  }
+
   try {
     const mimeType = file.mimetype || 'image/jpeg';
+    const isPdf = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
     let requestBody: any;
 
     if (mimeType === 'text/csv' || mimeType === 'application/vnd.ms-excel' || filename.endsWith('.csv')) {
@@ -637,6 +607,63 @@ Important:
           responseMimeType: 'application/json',
         },
       };
+    } else if (isPdf) {
+      const extractedPdfText = await extractTextFromPdfBuffer(file.buffer);
+
+      if (extractedPdfText.trim().length > 30) {
+        const promptText = `Analyze this basketball/multi-sport scoresheet PDF text carefully:
+${extractedPdfText}
+
+Extract the data into this exact JSON format:
+{
+  "team_scores": [
+    {"team": "HOME_TEAM", "score": 0, "is_home": true},
+    {"team": "AWAY_TEAM", "score": 0, "is_home": false}
+  ],
+  "player_summary": [
+    {"player_name": "Full Name", "team_name": "TeamName", "jersey_number": 0, "points": 0, "rebounds": 0, "assists": 0, "fouls": 0}
+  ]
+}
+
+Important:
+- Return ONLY valid JSON, nothing else.`;
+
+        requestBody = {
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+        };
+      } else {
+        // Send PDF base64 directly to Gemini
+        const base64Pdf = file.buffer.toString('base64');
+        const promptText = `Look at this scoresheet PDF carefully. Extract the team scores and player summary into JSON:
+{
+  "team_scores": [
+    {"team": "HOME_TEAM", "score": 0, "is_home": true},
+    {"team": "AWAY_TEAM", "score": 0, "is_home": false}
+  ],
+  "player_summary": [
+    {"player_name": "Full Name", "team_name": "TeamName", "jersey_number": 0, "points": 0, "rebounds": 0, "assists": 0, "fouls": 0}
+  ]
+}
+Return ONLY valid JSON.`;
+
+        requestBody = {
+          contents: [
+            {
+              parts: [
+                { text: promptText },
+                {
+                  inlineData: {
+                    mimeType: 'application/pdf',
+                    data: base64Pdf,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+        };
+      }
     } else {
       let sendBuffer = file.buffer;
       let sendMime = mimeType;
@@ -799,12 +826,32 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File): Prom
   require('dotenv').config();
   const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (!geminiKey) {
-    throw new ServiceError('GEMINI_API_KEY is not configured in .env', 500);
-  }
-
   const mimeType = file.mimetype || 'image/jpeg';
   const filename = file.originalname || 'scoresheet.png';
+
+  if (!geminiKey) {
+    console.warn('⚠️ [OCR] GEMINI_API_KEY is not configured in .env. Returning blank template.');
+    return {
+      filename,
+      file_size_bytes: file.size,
+      parsed_at: new Date().toISOString(),
+      match_info: {
+        sport_type: 'Basketball',
+        event_name: 'Tournament Match',
+        opponent_team_name: 'Away Team',
+        home_team_name: 'Home Team',
+        game_result: 'WIN',
+        final_score: '0 - 0',
+      },
+      team_scores: [
+        { team: 'Home Team', score: 0 },
+        { team: 'Away Team', score: 0 },
+      ],
+      player_summary: [],
+      warning: 'GEMINI_API_KEY not configured. Please enter scores manually.',
+    };
+  }
+  const isPdf = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
   let requestBody: any;
 
   if (mimeType === 'text/csv' || mimeType === 'application/vnd.ms-excel' || filename.endsWith('.csv')) {
@@ -852,6 +899,106 @@ Important:
       contents: [{ parts: [{ text: promptText }] }],
       generationConfig: { responseMimeType: 'application/json' },
     };
+  } else if (isPdf) {
+    const extractedPdfText = await extractTextFromPdfBuffer(file.buffer);
+
+    if (extractedPdfText.trim().length > 30) {
+      const promptText = `Analyze this basketball/multi-sport scoresheet PDF text carefully:
+${extractedPdfText}
+
+Extract the data into this exact JSON format:
+{
+  "match_info": {
+    "sport_type": "Basketball",
+    "event_name": "Tournament / Game Event",
+    "opponent_team_name": "Opponent Team",
+    "home_team_name": "Home Team",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
+  },
+  "team_scores": [
+    {"team": "Team A", "score": 0},
+    {"team": "Team B", "score": 0}
+  ],
+  "player_summary": [
+    {
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
+      "blocks": 0,
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
+    }
+  ]
+}
+
+Important:
+- Return ONLY the JSON object, nothing else.`;
+
+      requestBody = {
+        contents: [{ parts: [{ text: promptText }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      };
+    } else {
+      const base64Pdf = file.buffer.toString('base64');
+      const promptText = `Analyze this scoresheet PDF carefully.
+Extract the match overview, final team scores, and individual player statistics into this exact JSON format:
+{
+  "match_info": {
+    "sport_type": "Basketball",
+    "event_name": "Tournament / League Name",
+    "opponent_team_name": "Opponent Team Name",
+    "home_team_name": "Home Team Name",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
+  },
+  "team_scores": [
+    {"team": "TeamName", "score": 0}
+  ],
+  "player_summary": [
+    {
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
+      "blocks": 0,
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
+    }
+  ]
+}
+Return ONLY the JSON object.`;
+
+      requestBody = {
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: base64Pdf,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+      };
+    }
   } else {
     let sendBuffer = file.buffer;
     let sendMime = mimeType;
@@ -931,48 +1078,81 @@ Important:
     };
   }
 
-  const content = await callGeminiWithWaterfall(requestBody, geminiKey);
-  const parsedData = extractJsonFromAiText(content);
+  try {
+    const content = await callGeminiWithWaterfall(requestBody, geminiKey);
+    const parsedData = extractJsonFromAiText(content);
 
-  if (Array.isArray(parsedData.player_summary)) {
-    parsedData.player_summary = parsedData.player_summary.map((p: any) => {
-      const computed = calculateBasketballMetrics({
-        points: Number(p.points || 0),
-        rebounds: Number(p.rebounds || 0),
-        assists: Number(p.assists || 0),
-        steals: Number(p.steals || 0),
-        blocks: Number(p.blocks || 0),
-        turnovers: Number(p.turnovers || 0),
-        fouls: Number(p.fouls || 0),
-        fg_made: Number(p.fg_made || 0),
-        fg_attempted: Number(p.fg_attempted || 0),
-        ft_made: Number(p.ft_made || 0),
-        ft_attempted: Number(p.ft_attempted || 0),
+    if (Array.isArray(parsedData.player_summary)) {
+      parsedData.player_summary = parsedData.player_summary.map((p: any) => {
+        const computed = calculateBasketballMetrics({
+          points: Number(p.points || 0),
+          rebounds: Number(p.rebounds || 0),
+          assists: Number(p.assists || 0),
+          steals: Number(p.steals || 0),
+          blocks: Number(p.blocks || 0),
+          turnovers: Number(p.turnovers || 0),
+          fouls: Number(p.fouls || 0),
+          fg_made: Number(p.fg_made || 0),
+          fg_attempted: Number(p.fg_attempted || 0),
+          ft_made: Number(p.ft_made || 0),
+          ft_attempted: Number(p.ft_attempted || 0),
+        });
+
+        return {
+          ...p,
+          calculated_efficiency: computed.efficiency,
+          true_shooting_pct: computed.trueShootingPct,
+        };
       });
+    }
 
-      return {
-        ...p,
-        calculated_efficiency: computed.efficiency,
-        true_shooting_pct: computed.trueShootingPct,
-      };
-    });
+    return {
+      filename,
+      file_size_bytes: file.size,
+      parsed_at: new Date().toISOString(),
+      ...parsedData,
+    };
+  } catch (ocrErr: any) {
+    console.warn('⚠️ [OCR] AI OCR failed, returning fallback template:', ocrErr.message);
+    return {
+      filename,
+      file_size_bytes: file.size,
+      parsed_at: new Date().toISOString(),
+      match_info: {
+        sport_type: 'Basketball',
+        event_name: 'Tournament Match',
+        opponent_team_name: 'Away Team',
+        home_team_name: 'Home Team',
+        game_result: 'WIN',
+        final_score: '0 - 0',
+      },
+      team_scores: [
+        { team: 'Home Team', score: 0 },
+        { team: 'Away Team', score: 0 },
+      ],
+      player_summary: [],
+      warning: `OCR extraction encountered an issue (${ocrErr.message}). Manual entry available.`,
+    };
   }
-
-  return {
-    filename,
-    file_size_bytes: file.size,
-    parsed_at: new Date().toISOString(),
-    ...parsedData,
-  };
 }
 
+
+/**
+ * Dedicated PDF Scoresheet Parser Service
+ */
+export async function parsePdfScoresheetService(file?: Express.Multer.File): Promise<any> {
+  return await scanScoresheetStandalone(file);
+}
 
 /**
  * Fetch compiled match stats and computed efficiency metrics.
  * GET /api/v1/matches/:matchId/boxscore
  */
 export async function getMatchBoxscore(matchId: string): Promise<BoxscoreResponse> {
-  const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  let matchDoc = await db.collection('Match_Logs_Official').doc(matchId).get();
+  if (!matchDoc.exists) {
+    matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  }
 
   if (!matchDoc.exists) {
     throw new ServiceError(`Match with ID '${matchId}' was not found.`, 404);
@@ -1071,7 +1251,10 @@ export async function getMatchBoxscore(matchId: string): Promise<BoxscoreRespons
  * 1. Requests referencing a non-existent match ID return HTTP 404 Not Found.
  */
 export async function getMatchResultDetails(matchId: string): Promise<any> {
-  const matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  let matchDoc = await db.collection('Match_Logs_Official').doc(matchId).get();
+  if (!matchDoc.exists) {
+    matchDoc = await db.collection('Match_Logs').doc(matchId).get();
+  }
   if (!matchDoc.exists) {
     throw new ServiceError(`Match with ID '${matchId}' was not found.`, 404);
   }
@@ -1220,25 +1403,18 @@ export async function getMatchResultDetails(matchId: string): Promise<any> {
   } else if (sportType === 'Swimming' || sportType === 'Track & Field') {
     const raceResults = playerMetrics.map((p, idx) => {
       const s = p.sport_stats || {};
-      let timeMs = Number(s.finish_time_ms || 0);
-      if (timeMs === 0 && s.timer_seconds) timeMs = Math.round(Number(s.timer_seconds) * 1000);
-      const rawDist = s.distance_meters || s.distance || 100;
-      const distanceMeters = Number(String(rawDist).replace(/[^\d.]/g, '') || 100);
-      const distance = `${distanceMeters}m`;
+      const timeMs = Number(s.finish_time_ms || 60000);
       const mins = Math.floor(timeMs / 60000);
       const secs = ((timeMs % 60000) / 1000).toFixed(2);
-      const formattedTime = s.formatted_time || s.time || (timeMs > 0 ? `${mins > 0 ? mins + ':' : ''}${Number(secs) < 10 && mins > 0 ? '0' : ''}${secs}s` : '00:00.00');
+      const formattedTime = `${mins > 0 ? mins + ':' : ''}${Number(secs) < 10 && mins > 0 ? '0' : ''}${secs}s`;
 
       return {
         athlete_id: p.athlete_id,
         athlete_name: `${p.first_name} ${p.last_name}`.trim(),
         placement_rank: s.placement_rank || (idx + 1),
-        distance_meters: distanceMeters,
-        distance: distance,
+        distance_meters: s.distance_meters || 100,
         finish_time_ms: timeMs,
         formatted_finish_time: formattedTime,
-        time: formattedTime,
-        split_times: s.split_times || [],
         split_times_ms: s.split_times_ms || [],
         is_disqualified: Boolean(s.is_disqualified),
         calculated_player_efficiency: p.calculated_player_efficiency,
@@ -1247,7 +1423,7 @@ export async function getMatchResultDetails(matchId: string): Promise<any> {
 
     sportSpecificDetails = {
       sport_category: sportType,
-      event_name: matchData.event_name || (playerMetrics[0]?.sport_stats?.event_name) || `${playerMetrics[0]?.sport_stats?.distance_meters || 100}m Event`,
+      event_name: matchData.event_name || (playerMetrics[0]?.sport_stats?.event_name) || '100m Final',
       race_results: raceResults,
     };
   } else {

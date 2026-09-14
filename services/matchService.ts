@@ -478,8 +478,10 @@ async function extractTextFromPdfBuffer(buffer: Buffer): Promise<string> {
 }
 
 const OCR_MODEL_WATERFALL = [
-  'gemini-3.5-flash-lite',
-  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
   'gemini-flash-latest',
   'gemini-pro-latest',
   'gemini-3.5-flash',
@@ -553,12 +555,28 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
   require('dotenv').config();
   const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (!geminiKey) {
-    throw new ServiceError('GEMINI_API_KEY is not configured in .env', 500);
-  }
-
   if (!file || !file.buffer) {
     throw new ServiceError('No scoresheet file uploaded.', 400);
+  }
+
+  // Update match record with scoresheet URL even if OCR key is missing
+  await db.collection('Match_Logs').doc(matchId).set({
+    scoresheet_url: scoresheetUrl,
+    updated_at: now,
+  }, { merge: true });
+
+  if (!geminiKey) {
+    console.warn('⚠️ [OCR] GEMINI_API_KEY is not configured in .env. Scoresheet saved without automatic OCR.');
+    return {
+      match_id: matchId,
+      scoresheet_url: scoresheetUrl,
+      parsed_tables: {
+        team_scores: [],
+        player_summary: [],
+      },
+      raw_ocr_text: 'OCR skipped (GEMINI_API_KEY not configured)',
+      processed_at: now,
+    };
   }
 
   try {
@@ -808,12 +826,31 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File): Prom
   require('dotenv').config();
   const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (!geminiKey) {
-    throw new ServiceError('GEMINI_API_KEY is not configured in .env', 500);
-  }
-
   const mimeType = file.mimetype || 'image/jpeg';
   const filename = file.originalname || 'scoresheet.png';
+
+  if (!geminiKey) {
+    console.warn('⚠️ [OCR] GEMINI_API_KEY is not configured in .env. Returning blank template.');
+    return {
+      filename,
+      file_size_bytes: file.size,
+      parsed_at: new Date().toISOString(),
+      match_info: {
+        sport_type: 'Basketball',
+        event_name: 'Tournament Match',
+        opponent_team_name: 'Away Team',
+        home_team_name: 'Home Team',
+        game_result: 'WIN',
+        final_score: '0 - 0',
+      },
+      team_scores: [
+        { team: 'Home Team', score: 0 },
+        { team: 'Away Team', score: 0 },
+      ],
+      player_summary: [],
+      warning: 'GEMINI_API_KEY not configured. Please enter scores manually.',
+    };
+  }
   const isPdf = mimeType === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
   let requestBody: any;
 
@@ -1041,39 +1078,62 @@ Important:
     };
   }
 
-  const content = await callGeminiWithWaterfall(requestBody, geminiKey);
-  const parsedData = extractJsonFromAiText(content);
+  try {
+    const content = await callGeminiWithWaterfall(requestBody, geminiKey);
+    const parsedData = extractJsonFromAiText(content);
 
-  if (Array.isArray(parsedData.player_summary)) {
-    parsedData.player_summary = parsedData.player_summary.map((p: any) => {
-      const computed = calculateBasketballMetrics({
-        points: Number(p.points || 0),
-        rebounds: Number(p.rebounds || 0),
-        assists: Number(p.assists || 0),
-        steals: Number(p.steals || 0),
-        blocks: Number(p.blocks || 0),
-        turnovers: Number(p.turnovers || 0),
-        fouls: Number(p.fouls || 0),
-        fg_made: Number(p.fg_made || 0),
-        fg_attempted: Number(p.fg_attempted || 0),
-        ft_made: Number(p.ft_made || 0),
-        ft_attempted: Number(p.ft_attempted || 0),
+    if (Array.isArray(parsedData.player_summary)) {
+      parsedData.player_summary = parsedData.player_summary.map((p: any) => {
+        const computed = calculateBasketballMetrics({
+          points: Number(p.points || 0),
+          rebounds: Number(p.rebounds || 0),
+          assists: Number(p.assists || 0),
+          steals: Number(p.steals || 0),
+          blocks: Number(p.blocks || 0),
+          turnovers: Number(p.turnovers || 0),
+          fouls: Number(p.fouls || 0),
+          fg_made: Number(p.fg_made || 0),
+          fg_attempted: Number(p.fg_attempted || 0),
+          ft_made: Number(p.ft_made || 0),
+          ft_attempted: Number(p.ft_attempted || 0),
+        });
+
+        return {
+          ...p,
+          calculated_efficiency: computed.efficiency,
+          true_shooting_pct: computed.trueShootingPct,
+        };
       });
+    }
 
-      return {
-        ...p,
-        calculated_efficiency: computed.efficiency,
-        true_shooting_pct: computed.trueShootingPct,
-      };
-    });
+    return {
+      filename,
+      file_size_bytes: file.size,
+      parsed_at: new Date().toISOString(),
+      ...parsedData,
+    };
+  } catch (ocrErr: any) {
+    console.warn('⚠️ [OCR] AI OCR failed, returning fallback template:', ocrErr.message);
+    return {
+      filename,
+      file_size_bytes: file.size,
+      parsed_at: new Date().toISOString(),
+      match_info: {
+        sport_type: 'Basketball',
+        event_name: 'Tournament Match',
+        opponent_team_name: 'Away Team',
+        home_team_name: 'Home Team',
+        game_result: 'WIN',
+        final_score: '0 - 0',
+      },
+      team_scores: [
+        { team: 'Home Team', score: 0 },
+        { team: 'Away Team', score: 0 },
+      ],
+      player_summary: [],
+      warning: `OCR extraction encountered an issue (${ocrErr.message}). Manual entry available.`,
+    };
   }
-
-  return {
-    filename,
-    file_size_bytes: file.size,
-    parsed_at: new Date().toISOString(),
-    ...parsedData,
-  };
 }
 
 

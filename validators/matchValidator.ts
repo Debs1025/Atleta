@@ -1,4 +1,5 @@
 import { ValidationError } from './userValidator';
+import { normalizeSportType } from './validationValidator';
 
 export class ServiceError extends Error {
   statusCode: number;
@@ -37,6 +38,9 @@ export function validateSubmitMatch(
   }
 
   // sport_type (Required)
+  if (typeof data.sport_type === 'string') {
+    data.sport_type = normalizeSportType(data.sport_type);
+  }
   const sportType = typeof data.sport_type === 'string' ? data.sport_type.trim() : '';
   if (!sportType) {
     errors.push({ field: 'sport_type', message: 'Sport category (sport_type) is required.' });
@@ -59,10 +63,15 @@ export function validateSubmitMatch(
     errors.push({ field: 'location', message: 'Location is required.' });
   }
 
-  // opponent_team_name (Required)
-  const opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : '';
+  // opponent_team_name (Required for team sports, auto-filled for individual sports)
+  let opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : '';
   if (!opponent) {
-    errors.push({ field: 'opponent_team_name', message: 'Opponent team name (opponent_team_name) is required.' });
+    if (sportType === 'Swimming' || sportType === 'Track & Field') {
+      data.opponent_team_name = 'Individual Competitors';
+      opponent = 'Individual Competitors';
+    } else {
+      errors.push({ field: 'opponent_team_name', message: 'Opponent team name (opponent_team_name) is required.' });
+    }
   }
 
   // game_result (Required: Enum "WIN" | "LOSS")

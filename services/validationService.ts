@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db } from '../utils/firebaseAdmin';
+import { db, sanitizeForFirestore } from '../utils/firebaseAdmin';
 import {
   MatchLog,
   OfficialAudit,
@@ -10,6 +10,7 @@ import {
   MatchTeamParticipant,
 } from '../models/matchModel';
 import { ServiceError } from '../validators/matchValidator';
+import { normalizeSportType } from '../validators/validationValidator';
 import {
   generateCustomMatchId,
   generateCustomScheduleId,
@@ -42,6 +43,13 @@ export async function createOfficialMatchService(
   const idempDoc = await idempRef.get();
   if (idempDoc.exists) {
     return idempDoc.data()?.response;
+  }
+
+  // Normalize sport_type
+  if (data.sport_type) {
+    data.sport_type = normalizeSportType(String(data.sport_type)) as any;
+  } else {
+    data.sport_type = 'Basketball' as any;
   }
 
   // 2. Fetch official profile to resolve canonical official_id
@@ -79,10 +87,12 @@ export async function createOfficialMatchService(
   const courtNumber = data.court_number || 'Court 1';
 
   // 5. Resolve Teams and Deep Participants
+  const isIndividualSport = data.sport_type === 'Swimming' || data.sport_type === 'Track & Field';
+  const defaultAway = isIndividualSport ? 'Individual Competitors' : 'Away Team';
   const homeTeamId = data.home_team_id || data.team_id || 'team_home_default';
   const homeTeamName = (data.home_team_name || data.team_id || 'Home Team').trim();
-  const awayTeamId = data.away_team_id || data.opponent_team_name || 'team_away_default';
-  const awayTeamName = (data.away_team_name || data.opponent_team_name || 'Away Team').trim();
+  const awayTeamId = data.away_team_id || data.opponent_team_name || (isIndividualSport ? 'team_individual' : 'team_away_default');
+  const awayTeamName = (data.away_team_name || data.opponent_team_name || defaultAway).trim();
 
   // 6. Resolve Coaches Details
   let enrichedCoaches: MatchCoachParticipant[] = [];
@@ -320,9 +330,6 @@ export async function createOfficialMatchService(
     updated_at: now,
   };
 
-  // Helper to remove undefined properties
-  const sanitizeForFirestore = (obj: any) => JSON.parse(JSON.stringify(obj));
-
   // 12. Execute Atomic Multi-Collection Batch Write
   const batch = db.batch();
 
@@ -493,10 +500,10 @@ export async function certifyValidationService(
   };
 
   const batch = db.batch();
-  batch.update(validationRef, updatedAudit);
-  batch.set(db.collection('Official_Validations').doc(validationId), updatedAudit, { merge: true });
-  batch.set(matchOffRef, updatedMatch, { merge: true });
-  batch.set(matchRef, updatedMatch, { merge: true });
+  batch.update(validationRef, sanitizeForFirestore(updatedAudit));
+  batch.set(db.collection('Official_Validations').doc(validationId), sanitizeForFirestore(updatedAudit), { merge: true });
+  batch.set(matchOffRef, sanitizeForFirestore(updatedMatch), { merge: true });
+  batch.set(matchRef, sanitizeForFirestore(updatedMatch), { merge: true });
   await batch.commit();
 
   // Invalidate athlete caches and notify listeners of certified match stats

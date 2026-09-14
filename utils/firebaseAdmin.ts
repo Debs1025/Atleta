@@ -104,3 +104,23 @@ try {
 // Export Firestore and Auth instances
 export const db: Firestore = dbInstance;
 export const auth: Auth = authInstance;
+
+/**
+ * Recursively removes undefined fields and converts them safely for Firestore writes.
+ */
+export function sanitizeForFirestore<T = any>(obj: T): T {
+  if (obj === undefined) return null as any;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString() as any;
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item)) as any;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+    if (value !== undefined) {
+      result[key] = sanitizeForFirestore(value);
+    }
+  }
+  return result as T;
+}
+

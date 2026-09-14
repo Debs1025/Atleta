@@ -1,7 +1,21 @@
 import { ValidationError } from './userValidator';
 
-const VALID_SPORTS = ['Basketball', 'Swimming', 'Track & Field'];
+export const VALID_SPORTS = ['Basketball', 'Swimming', 'Track & Field'];
 const VALID_RESULTS = ['WIN', 'LOSS'];
+
+/**
+ * Normalizes input sport type strings into canonical schema values.
+ * Handles uppercase inputs like BASKETBALL, SWIMMING, TRACK & FIELD, etc.
+ */
+export function normalizeSportType(sport: string): string {
+  const s = (sport || '').trim().toLowerCase();
+  if (s === 'basketball') return 'Basketball';
+  if (s === 'swimming') return 'Swimming';
+  if (s === 'track & field' || s === 'track and field' || s === 'track &amp; field' || s === 'track_and_field' || s === 'track') {
+    return 'Track & Field';
+  }
+  return (sport || '').trim();
+}
 
 /**
  * Validates official match creation payload (POST /api/v1/matches/official).
@@ -26,7 +40,10 @@ export function validateCreateOfficialMatch(
     errors.push({ field: 'team_id', message: 'Team ID (team_id or home_team_id) is required.' });
   }
 
-  // sport_type (Required)
+  // sport_type (Required, normalized)
+  if (typeof data.sport_type === 'string') {
+    data.sport_type = normalizeSportType(data.sport_type);
+  }
   const sportType = typeof data.sport_type === 'string' ? data.sport_type.trim() : '';
   if (!sportType) {
     errors.push({ field: 'sport_type', message: 'Sport type (sport_type) is required.' });
@@ -54,10 +71,16 @@ export function validateCreateOfficialMatch(
     errors.push({ field: 'location', message: 'Location is required.' });
   }
 
-  // opponent_team_name / away_team_name / away_team_id (Required)
-  const opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : (typeof data.away_team_name === 'string' ? data.away_team_name.trim() : (typeof data.away_team_id === 'string' ? data.away_team_id.trim() : ''));
+  // opponent_team_name / away_team_name / away_team_id (Required for team sports, auto-filled for individual sports)
+  let opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : (typeof data.away_team_name === 'string' ? data.away_team_name.trim() : (typeof data.away_team_id === 'string' ? data.away_team_id.trim() : ''));
   if (!opponent) {
-    errors.push({ field: 'opponent_team_name', message: 'Opponent team name or away team ID is required.' });
+    if (sportType === 'Swimming' || sportType === 'Track & Field') {
+      data.opponent_team_name = 'Individual Competitors';
+      data.away_team_name = 'Individual Competitors';
+      opponent = 'Individual Competitors';
+    } else {
+      errors.push({ field: 'opponent_team_name', message: 'Opponent team name or away team ID is required.' });
+    }
   }
 
   return errors;

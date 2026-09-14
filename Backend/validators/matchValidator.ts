@@ -1,4 +1,5 @@
 import { ValidationError } from './userValidator';
+import { normalizeSportType } from './validationValidator';
 
 export class ServiceError extends Error {
   statusCode: number;
@@ -10,7 +11,7 @@ export class ServiceError extends Error {
 }
 
 const VALID_SPORTS = ['Basketball', 'Swimming', 'Track & Field'];
-const VALID_RESULTS = ['WIN', 'LOSS', 'Win', 'Lose', 'Loss'];
+const VALID_RESULTS = ['WIN', 'LOSS'];
 
 /**
  * Validates match submission payload (POST /api/v1/matches).
@@ -22,7 +23,7 @@ export function validateSubmitMatch(
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
-  // Idempotency-Key header check (auto-generated if missing by controller)
+  // Idempotency-Key header check
   if (!idempotencyKey || typeof idempotencyKey !== 'string' || idempotencyKey.trim().length === 0) {
     errors.push({
       field: 'Idempotency-Key',
@@ -32,11 +33,14 @@ export function validateSubmitMatch(
 
   // team_id (Required)
   const teamId = typeof data.team_id === 'string' ? data.team_name || data.team_id : '';
-  if (!data.team_id && !data.team_name && !data.home_team_name) {
+  if (!data.team_id || typeof data.team_id !== 'string' || (data.team_id as string).trim().length === 0) {
     errors.push({ field: 'team_id', message: 'Team ID (team_id) is required.' });
   }
 
   // sport_type (Required)
+  if (typeof data.sport_type === 'string') {
+    data.sport_type = normalizeSportType(data.sport_type);
+  }
   const sportType = typeof data.sport_type === 'string' ? data.sport_type.trim() : '';
   if (!sportType) {
     errors.push({ field: 'sport_type', message: 'Sport category (sport_type) is required.' });
@@ -49,7 +53,7 @@ export function validateSubmitMatch(
   }
 
   // match_date (Required)
-  if (!data.match_date && !data.date_time) {
+  if (!data.match_date) {
     errors.push({ field: 'match_date', message: 'Match date (match_date) is required.' });
   }
 
@@ -59,21 +63,28 @@ export function validateSubmitMatch(
     errors.push({ field: 'location', message: 'Location is required.' });
   }
 
-  // opponent_team_name (Required)
-  const opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : '';
-  if (!opponent && !data.away_team_name) {
-    errors.push({ field: 'opponent_team_name', message: 'Opponent team name (opponent_team_name) is required.' });
+  // opponent_team_name (Required for team sports, auto-filled for individual sports)
+  let opponent = typeof data.opponent_team_name === 'string' ? data.opponent_team_name.trim() : '';
+  if (!opponent) {
+    if (sportType === 'Swimming' || sportType === 'Track & Field') {
+      data.opponent_team_name = 'Individual Competitors';
+      opponent = 'Individual Competitors';
+    } else {
+      errors.push({ field: 'opponent_team_name', message: 'Opponent team name (opponent_team_name) is required.' });
+    }
   }
 
   // game_result (Required: Enum "WIN" | "LOSS")
   const gameResult = typeof data.game_result === 'string' ? data.game_result.trim().toUpperCase() : '';
   if (!gameResult) {
     errors.push({ field: 'game_result', message: 'Game result (game_result) is required.' });
+  } else if (!VALID_RESULTS.includes(gameResult)) {
+    errors.push({ field: 'game_result', message: 'Game result must be either "WIN" or "LOSS".' });
   }
 
-  // player_stats or player_metrics (Required array)
-  if (!Array.isArray(data.player_stats) && !Array.isArray(data.player_metrics)) {
-    errors.push({ field: 'player_stats', message: 'player_stats or player_metrics array is required.' });
+  // player_stats (Required array)
+  if (!data.player_stats || !Array.isArray(data.player_stats)) {
+    errors.push({ field: 'player_stats', message: 'player_stats array is required.' });
   }
 
   return errors;

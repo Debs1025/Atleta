@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db, auth } from '../utils/firebaseAdmin';
+import { db, auth, sanitizeForFirestore } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { OfficialProfile, OfficialSettings, RegisterOfficialDto, UpdateOfficialSettingsDto, User } from '../models/userModel';
@@ -22,38 +22,16 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   const full_legal_name = data.full_legal_name.trim();
   const email = data.email.trim();
   const password = data.password;
-  const orgName = (data.organization_name || 'Independent Tournament Body').trim();
+  const orgName = data.organization_name.trim();
 
-  // 1. Seamlessly record or activate tournament/organization in Tournament_Registry (Non-blocking)
-  try {
-    const allOrgsSnap = await db.collection('Tournament_Registry').get();
-    const existingOrgDoc = allOrgsSnap.docs.find(doc => {
-      const d = doc.data();
-      return (
-        (d.organization_name && d.organization_name.toLowerCase() === orgName.toLowerCase()) ||
-        (d.name && d.name.toLowerCase() === orgName.toLowerCase()) ||
-        (d.tournament_name && d.tournament_name.toLowerCase() === orgName.toLowerCase()) ||
-        (d.acronym && d.acronym.toLowerCase() === orgName.toLowerCase()) ||
-        (doc.id && doc.id.toLowerCase() === orgName.toLowerCase())
-      );
-    });
+  // 1. Verify organization is active in Tournament_Registry
+  const registrySnapshot = await db.collection('Tournament_Registry')
+    .where('organization_name', '==', orgName)
+    .where('status', '==', 'Active')
+    .get();
 
-    const orgDocId = existingOrgDoc ? existingOrgDoc.id : `org_${orgName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-
-    if (!existingOrgDoc) {
-      await db.collection('Tournament_Registry').doc(orgDocId).set({
-        org_id: orgDocId,
-        organization_name: orgName,
-        name: orgName,
-        status: 'Active',
-        created_at: new Date().toISOString(),
-        registered_by: email,
-      }, { merge: true });
-    } else if ((existingOrgDoc.data().status || '').toLowerCase() !== 'active') {
-      await db.collection('Tournament_Registry').doc(orgDocId).update({ status: 'Active' });
-    }
-  } catch (regError) {
-    console.warn('Tournament_Registry auto-provisioning note (non-blocking):', regError);
+  if (registrySnapshot.empty) {
+    throw new ServiceError(`Organization '${orgName}' is not registered or active in the tournament registry.`, 400);
   }
 
   // 2. Create Firebase Auth user
@@ -263,14 +241,15 @@ export async function updateOfficialSettings(
   const updatedSettings: OfficialSettings = {
     setting_id: currentSettings.setting_id,
     official_id: canonicalOfficialId,
-    split_screen_defaults: payload.split_screen_defaults !== undefined ? payload.split_screen_defaults : currentSettings.split_screen_defaults,
-    discrepancy_presets: payload.discrepancy_presets !== undefined ? payload.discrepancy_presets : currentSettings.discrepancy_presets,
-    match_reminders: payload.match_reminders !== undefined ? payload.match_reminders : currentSettings.match_reminders,
+    split_screen_defaults: payload.split_screen_defaults !== undefined ? Boolean(payload.split_screen_defaults) : currentSettings.split_screen_defaults,
+    discrepancy_presets: payload.discrepancy_presets !== undefined ? Boolean(payload.discrepancy_presets) : currentSettings.discrepancy_presets,
+    match_reminders: payload.match_reminders !== undefined ? Boolean(payload.match_reminders) : currentSettings.match_reminders,
     updated_at: new Date().toISOString(),
   };
 
-  await db.collection('Official_Settings').doc(canonicalOfficialId).set(updatedSettings, { merge: true });
-  await db.collection('Official_Settings').doc(rawUid).set(updatedSettings, { merge: true });
+  const cleanSettings = sanitizeForFirestore(updatedSettings);
+  await db.collection('Official_Settings').doc(canonicalOfficialId).set(cleanSettings, { merge: true });
+  await db.collection('Official_Settings').doc(rawUid).set(cleanSettings, { merge: true });
   return updatedSettings;
 }
 
@@ -295,6 +274,7 @@ export async function getOfficialProfile(uid: string) {
     user_id: rawUid,
     full_legal_name: userData.full_legal_name || userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
     email: userData.email,
+    contact_number: userData.contact_number || null,
     role: 'Official',
     organization_name: profileData.organization_name || userData.organization_name || userData.organization || 'General Tournament Association',
     official_license_number: profileData.official_license_number || userData.official_license_number || 'OFF-LIC-2026',
@@ -303,4 +283,70 @@ export async function getOfficialProfile(uid: string) {
     is_active: userData.is_active !== undefined ? userData.is_active : true,
     created_at: userData.created_at || new Date().toISOString(),
   };
+}
+
+/**
+ * Update official profile information (Users & Official_Profiles collections).
+ */
+export async function updateOfficialProfileService(uid: string, payload: any) {
+  const rawUid = uid.replace(/^off_/, '');
+  const officialId = `off_${rawUid}`;
+  const now = new Date();
+
+  const userUpdates: Record<string, any> = {
+    updated_at: now,
+  };
+
+  const profileUpdates: Record<string, any> = {
+    updated_at: now,
+  };
+
+  if (payload.full_legal_name || payload.full_name) {
+    const fullName = String(payload.full_legal_name || payload.full_name).trim();
+    userUpdates.full_legal_name = fullName;
+    userUpdates.full_name = fullName;
+
+    const nameParts = fullName.split(' ');
+    userUpdates.first_name = nameParts[0] || 'Official';
+    userUpdates.last_name = nameParts.slice(1).join(' ') || 'User';
+  } else if (payload.first_name || payload.last_name) {
+    if (payload.first_name) userUpdates.first_name = String(payload.first_name).trim();
+    if (payload.last_name) userUpdates.last_name = String(payload.last_name).trim();
+    userUpdates.full_name = `${userUpdates.first_name || ''} ${userUpdates.last_name || ''}`.trim();
+    userUpdates.full_legal_name = userUpdates.full_name;
+  }
+
+  const contactNumber = payload.contact_number !== undefined ? payload.contact_number : (payload.phone_number !== undefined ? payload.phone_number : payload.phone);
+  if (contactNumber !== undefined) {
+    userUpdates.contact_number = contactNumber ? String(contactNumber).trim() : null;
+  }
+
+  const orgName = payload.organization_name !== undefined ? payload.organization_name : payload.organization;
+  if (orgName !== undefined) {
+    const org = String(orgName).trim();
+    userUpdates.organization_name = org;
+    userUpdates.organization = org;
+    profileUpdates.organization_name = org;
+  }
+
+  const licenseNum = payload.official_license_number !== undefined ? payload.official_license_number : payload.license_number;
+  if (licenseNum !== undefined) {
+    const lic = String(licenseNum).trim();
+    userUpdates.official_license_number = lic;
+    profileUpdates.official_license_number = lic;
+  }
+
+  const tournaments = payload.assigned_tournaments !== undefined ? payload.assigned_tournaments : payload.tournaments;
+  if (tournaments !== undefined) {
+    userUpdates.assigned_tournaments = tournaments;
+    profileUpdates.assigned_tournaments = tournaments;
+  }
+
+  const batch = db.batch();
+  batch.set(db.collection('Users').doc(rawUid), sanitizeForFirestore(userUpdates), { merge: true });
+  batch.set(db.collection('Official_Profiles').doc(officialId), sanitizeForFirestore(profileUpdates), { merge: true });
+  batch.set(db.collection('Official_Profiles').doc(rawUid), sanitizeForFirestore(profileUpdates), { merge: true });
+  await batch.commit();
+
+  return await getOfficialProfile(rawUid);
 }
