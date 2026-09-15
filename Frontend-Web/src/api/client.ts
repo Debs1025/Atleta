@@ -667,7 +667,7 @@ export const isMatchCreatedByOfficial = (
   const raw = item.raw_match || {};
   const cleanId = String(item.match_id || raw.match_id || '').replace(/^#/, '');
 
-  // Make sures to show created matches for official users
+  // 1. Check locally tracked created & certified matches
   const myUid = user.uid || (user as any).user_id;
   const createdIds = getOfficialCreatedMatchIds(myUid);
   const candidateIds = [
@@ -685,7 +685,9 @@ export const isMatchCreatedByOfficial = (
     }
   }
 
-  // 2. Check IDs for this official user
+  const clean = (s: any) => String(s || '').trim().toLowerCase().replace(/^off_/, '');
+
+  // 2. Check IDs for this official user (case-insensitive)
   const userIds = [
     user.uid,
     user.user_id,
@@ -693,7 +695,7 @@ export const isMatchCreatedByOfficial = (
     user.uid ? `off_${user.uid.replace(/^off_/, '')}` : null,
     user.uid ? user.uid.replace(/^off_/, '') : null,
     user.email,
-  ].filter(Boolean) as string[];
+  ].filter(Boolean).map(clean) as string[];
 
   // Candidate creator/official fields on the match record
   const matchOwners = [
@@ -705,29 +707,23 @@ export const isMatchCreatedByOfficial = (
     (item as any).official_id,
     (item as any).requested_by,
     (item as any).created_by,
-  ].filter(Boolean) as string[];
+  ].filter(Boolean).map(clean) as string[];
 
   for (const owner of matchOwners) {
-    const normOwner = String(owner).trim();
-    for (const myId of userIds) {
-      const normMyId = String(myId).trim();
-      if (normOwner === normMyId) return true;
-      if (normOwner.replace(/^off_/, '') === normMyId.replace(/^off_/, '')) return true;
-    }
+    if (owner && userIds.includes(owner)) return true;
   }
 
   // 3. Check assigned_officials array if present
-  const assigned = Array.isArray(raw.assigned_officials)
-    ? raw.assigned_officials
-    : Array.isArray((item as any).assigned_officials)
-      ? (item as any).assigned_officials
-      : [];
+  const assigned = (
+    Array.isArray(raw.assigned_officials)
+      ? raw.assigned_officials
+      : Array.isArray((item as any).assigned_officials)
+        ? (item as any).assigned_officials
+        : []
+  ).map(clean) as string[];
+
   for (const off of assigned) {
-    const normOff = String(off).trim();
-    for (const myId of userIds) {
-      const normMyId = String(myId).trim();
-      if (normOff === normMyId || normOff.replace(/^off_/, '') === normMyId.replace(/^off_/, '')) return true;
-    }
+    if (off && userIds.includes(off)) return true;
   }
 
   return false;
@@ -959,6 +955,68 @@ export const getOfficialProfileData = async (forceRefresh = false): Promise<any>
 
   return getMe();
 };
+
+export const updateOfficialProfileData = async (payload: any): Promise<any> => {
+  const token = getStoredToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const bodyData = {
+    full_legal_name: payload.full_legal_name || payload.full_name,
+    full_name: payload.full_legal_name || payload.full_name,
+    phone_number: payload.phone_number,
+    organization_name: payload.organization_name || payload.organization,
+    organization: payload.organization_name || payload.organization,
+    avatar_url: payload.avatar_url || payload.profile_image,
+    profile_image: payload.avatar_url || payload.profile_image,
+    ...payload,
+  };
+
+  try {
+    const res = await fetch(`${BASE_URL}/officials/profile`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(bodyData),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setCachedData('official_profile', data);
+      return data;
+    }
+  } catch {}
+
+  try {
+    const res2 = await fetch(`${BASE_URL}/officials/me`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(bodyData),
+    });
+    if (res2.ok) {
+      const data = await res2.json();
+      setCachedData('official_profile', data);
+      return data;
+    }
+  } catch {}
+
+  try {
+    const res3 = await fetch(`${BASE_URL}/users/profile`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(bodyData),
+    });
+    if (res3.ok) {
+      const data = await res3.json();
+      setCachedData('official_profile', data);
+      return data;
+    }
+  } catch {}
+
+  setCachedData('official_profile', bodyData);
+  return bodyData;
+};
+
 
 export const getAuditMatches = async (
   statusFilter: 'ALL' | 'PENDING' | 'PROCESSED' = 'ALL',

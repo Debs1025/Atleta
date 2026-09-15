@@ -61,6 +61,156 @@ const resolveTeamNames = (item: any): { home: string; away: string } => {
   };
 };
 
+const MatchDetailsCard: React.FC<{ match: OfficialScheduleItem }> = ({ match }) => {
+  const [coachName, setCoachName] = useState<string>('No Coach Assigned');
+
+  useEffect(() => {
+    const rawList = Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0
+      ? match.assigned_coaches
+      : match.coaches
+      ? (Array.isArray(match.coaches) ? match.coaches : [match.coaches])
+      : match.coach_name
+      ? [match.coach_name]
+      : (match as any)?.raw_match?.assigned_coaches
+      ? (match as any).raw_match.assigned_coaches
+      : (match as any)?.raw_match?.coaches
+      ? (match as any).raw_match.coaches
+      : [];
+
+    const candidateCoaches = (Array.isArray(rawList) ? rawList : [rawList])
+      .map(String)
+      .map((c) => c.trim())
+      .filter((c) => {
+        if (!c) return false;
+        const lower = c.toLowerCase();
+        if (lower === 'official assigned' || lower.startsWith('coach off_') || lower.startsWith('off_') || lower.startsWith('official_')) return false;
+        return true;
+      });
+
+    if (candidateCoaches.length === 0) {
+      setCoachName('No Coach Assigned');
+      return;
+    }
+
+    let isMounted = true;
+    Promise.all(candidateCoaches.map((c) => getCoachNameById(c)))
+      .then((names) => {
+        if (!isMounted) return;
+        const valid = names.map((n) => n.trim()).filter(Boolean);
+        if (valid.length > 0) {
+          setCoachName(valid.join(', '));
+        } else {
+          const fallback = candidateCoaches
+            .map((c) => c.replace(/^coach[_\s]*/i, '').trim())
+            .filter((c) => !c.toLowerCase().startsWith('off_'))
+            .join(', ');
+          setCoachName(fallback || 'No Coach Assigned');
+        }
+      })
+      .catch(() => {
+        if (isMounted) setCoachName('No Coach Assigned');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [match]);
+
+  let timeStr = 'TBD';
+  try {
+    const timeVal = match?.scheduled_time || (match as any)?.raw_match?.match_date || (match as any)?.match_date;
+    if (timeVal) {
+      const d = new Date(timeVal);
+      if (!isNaN(d.getTime())) {
+        timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+    }
+  } catch {
+    timeStr = 'TBD';
+  }
+
+  const sport = String(
+    match?.sport ||
+    match?.venue_logistics?.sport ||
+    (match as any)?.raw_match?.sport_type ||
+    'BASKETBALL'
+  ).toUpperCase();
+
+  const { home, away } = resolveTeamNames(match);
+  const homeInitial = home.trim() ? home.trim().charAt(0).toUpperCase() : 'H';
+  const awayInitial = away.trim() ? away.trim().charAt(0).toUpperCase() : 'A';
+
+  const venueLocation = String(
+    match?.venue ||
+    match?.venue_logistics?.location ||
+    (match as any)?.raw_match?.location ||
+    'MAIN COMPLEX'
+  );
+
+  const courtNum = String(
+    match?.court_number ||
+    match?.venue_logistics?.court ||
+    (match as any)?.raw_match?.court_number ||
+    '1'
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0 }}>
+      {/* Live Match Card */}
+      <div style={styles.matchCardWrapper}>
+        <div style={styles.timeTag}>{timeStr}</div>
+
+        <div style={styles.matchCardOuter}>
+          <div style={styles.sportPill}>{sport}</div>
+
+          <div style={styles.teamList}>
+            <div style={styles.teamRow}>
+              <div style={styles.teamLetterBox}>{homeInitial}</div>
+              <span style={styles.teamName}>{home}</span>
+            </div>
+
+            <div style={styles.teamRow}>
+              <div style={styles.teamLetterBox}>{awayInitial}</div>
+              <span style={styles.teamName}>{away}</span>
+            </div>
+          </div>
+
+          <div style={styles.dashedDivider} />
+
+          <div style={styles.officialsSection}>
+            <span style={styles.officialsLabel}>COACHES:</span>
+            <div style={styles.officialsAvatars}>
+              <Users style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B', textTransform: 'uppercase' }}>
+                {coachName}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Live Venue Logistics Box */}
+      <div style={styles.logisticsBox}>
+        <h3 style={styles.logisticsTitle}>VENUE LOGISTICS</h3>
+        <div style={styles.logisticsGrid}>
+          <div style={styles.logisticsRow}>
+            <span style={styles.logisticsKey}>LOCATION</span>
+            <span style={styles.logisticsVal}>{venueLocation}</span>
+          </div>
+          <div style={styles.logisticsRow}>
+            <span style={styles.logisticsKey}>SPORT</span>
+            <span style={styles.logisticsVal}>{sport}</span>
+          </div>
+          <div style={styles.logisticsRow}>
+            <span style={styles.logisticsKey}>COURT</span>
+            <span style={styles.logisticsVal}>{courtNum}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const SchedulePage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -82,71 +232,11 @@ export const SchedulePage: React.FC = () => {
   const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayFormatted);
-  const [selectedMatch, setSelectedMatch] = useState<OfficialScheduleItem | null>(null);
-  const [displayCoachName, setDisplayCoachName] = useState<string>('No Coach Assigned');
-
-  useEffect(() => {
-    if (!selectedMatch) {
-      setDisplayCoachName('No Coach Assigned');
-      return;
-    }
-
-    const rawList = Array.isArray(selectedMatch.assigned_coaches) && selectedMatch.assigned_coaches.length > 0
-      ? selectedMatch.assigned_coaches
-      : selectedMatch.coaches
-      ? (Array.isArray(selectedMatch.coaches) ? selectedMatch.coaches : [selectedMatch.coaches])
-      : selectedMatch.coach_name
-      ? [selectedMatch.coach_name]
-      : (selectedMatch as any)?.raw_match?.assigned_coaches
-      ? (selectedMatch as any).raw_match.assigned_coaches
-      : (selectedMatch as any)?.raw_match?.coaches
-      ? (selectedMatch as any).raw_match.coaches
-      : [];
-
-    const candidateCoaches = (Array.isArray(rawList) ? rawList : [rawList])
-      .map(String)
-      .map((c) => c.trim())
-      .filter((c) => {
-        if (!c) return false;
-        const lower = c.toLowerCase();
-        if (lower === 'official assigned' || lower.startsWith('coach off_') || lower.startsWith('off_') || lower.startsWith('official_')) return false;
-        return true;
-      });
-
-    if (candidateCoaches.length === 0) {
-      setDisplayCoachName('No Coach Assigned');
-      return;
-    }
-
-    let isMounted = true;
-    Promise.all(candidateCoaches.map((c) => getCoachNameById(c)))
-      .then((names) => {
-        if (!isMounted) return;
-        const valid = names.map((n) => n.trim()).filter(Boolean);
-        if (valid.length > 0) {
-          setDisplayCoachName(valid.join(', '));
-        } else {
-          const fallback = candidateCoaches
-            .map((c) => c.replace(/^coach[_\s]*/i, '').trim())
-            .filter((c) => !c.toLowerCase().startsWith('off_'))
-            .join(', ');
-          setDisplayCoachName(fallback || 'No Coach Assigned');
-        }
-      })
-      .catch(() => {
-        if (isMounted) setDisplayCoachName('No Coach Assigned');
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedMatch]);
 
   const refreshSchedules = () => {
     getOfficialSchedules(month, year, true).then((res) => {
       const list = res || [];
       setSchedules(list);
-      if (list.length > 0) setSelectedMatch(list[list.length - 1]);
     }).catch(() => {});
   };
 
@@ -161,16 +251,12 @@ export const SchedulePage: React.FC = () => {
       getOfficialSchedules(month, year).then((res) => {
         const list = res || [];
         setSchedules(list);
-        // Find if match exists on selected date
         const matchOnDate = list.find((s) => {
           const timeStr = s?.scheduled_time || (s as any)?.raw_match?.match_date || (s as any)?.match_date;
           if (!timeStr) return false;
           return timeStr.startsWith(todayFormatted) || timeStr.includes(todayFormatted);
         });
-        if (matchOnDate) {
-          setSelectedMatch(matchOnDate);
-        } else if (list.length > 0) {
-          setSelectedMatch(list[0]);
+        if (!matchOnDate && list.length > 0) {
           const firstTime = list[0].scheduled_time || (list[0] as any).raw_match?.match_date || (list[0] as any).match_date;
           if (firstTime) {
             setSelectedDateStr(firstTime.split('T')[0]);
@@ -199,14 +285,9 @@ export const SchedulePage: React.FC = () => {
     return isMatchCreatedByOfficial(s as any, user);
   });
 
-  const onCellClick = (dayNum: number, matchesForDay: OfficialScheduleItem[]) => {
+  const onCellClick = (dayNum: number) => {
     const formatted = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
     setSelectedDateStr(formatted);
-    if (Array.isArray(matchesForDay) && matchesForDay.length > 0) {
-      setSelectedMatch(matchesForDay[0]);
-    } else {
-      setSelectedMatch(null);
-    }
   };
 
   // Safe formatting for details sidebar
@@ -223,40 +304,36 @@ export const SchedulePage: React.FC = () => {
     detailsDateHeader = 'TODAY';
   }
 
-  let detailsTimeStr = 'TBD';
-  try {
-    if (selectedMatch?.scheduled_time) {
-      const d = new Date(selectedMatch.scheduled_time);
-      if (!isNaN(d.getTime())) {
-        detailsTimeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  // Matches for the selected date, sorted chronologically by time
+  const selectedDayMatches = safeSchedules
+    .filter((s) => {
+      if (!s || !selectedDateStr) return false;
+      const timeStr = s.scheduled_time || (s as any).raw_match?.match_date || (s as any).match_date || '';
+      if (!timeStr) return false;
+      if (timeStr.startsWith(selectedDateStr) || timeStr.includes(selectedDateStr)) return true;
+      try {
+        const d = new Date(timeStr);
+        if (isNaN(d.getTime())) return false;
+        const parts = selectedDateStr.split('-');
+        if (parts.length === 3) {
+          const selYear = Number(parts[0]);
+          const selMonth = Number(parts[1]);
+          const selDay = Number(parts[2]);
+          return (
+            (d.getFullYear() === selYear && d.getMonth() + 1 === selMonth && d.getDate() === selDay) ||
+            (d.getUTCFullYear() === selYear && d.getUTCMonth() + 1 === selMonth && d.getUTCDate() === selDay)
+          );
+        }
+        return false;
+      } catch {
+        return false;
       }
-    }
-  } catch {
-    detailsTimeStr = 'TBD';
-  }
-
-  const detailsSport = String(
-    selectedMatch?.sport ||
-    selectedMatch?.venue_logistics?.sport ||
-    'BASKETBALL'
-  ).toUpperCase();
-
-  const { home: detailsHomeTeam, away: detailsAwayTeam } = resolveTeamNames(selectedMatch);
-
-  const homeInitial = detailsHomeTeam.trim() ? detailsHomeTeam.trim().charAt(0).toUpperCase() : 'H';
-  const awayInitial = detailsAwayTeam.trim() ? detailsAwayTeam.trim().charAt(0).toUpperCase() : 'A';
-
-  const venueLocation = String(
-    selectedMatch?.venue ||
-    selectedMatch?.venue_logistics?.location ||
-    'MAIN COMPLEX'
-  );
-
-  const courtNum = String(
-    selectedMatch?.court_number ||
-    selectedMatch?.venue_logistics?.court ||
-    '1'
-  );
+    })
+    .sort((a, b) => {
+      const timeA = new Date(a.scheduled_time || (a as any).raw_match?.match_date || (a as any).match_date || 0).getTime();
+      const timeB = new Date(b.scheduled_time || (b as any).raw_match?.match_date || (b as any).match_date || 0).getTime();
+      return timeA - timeB;
+    });
 
   const selectedDayNum = selectedDateStr ? Number(selectedDateStr.split('-')[2]) : null;
 
@@ -314,31 +391,37 @@ export const SchedulePage: React.FC = () => {
                         return <td key={dayIndex} style={styles.calTdEmpty} />;
                       }
 
-                      // Matches for this day
+                      // Matches for this day (sorted by time)
                       const targetDatePrefix = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                      const matchesForDay = safeSchedules.filter((s) => {
-                        if (!s) return false;
-                        const timeStr = s.scheduled_time || (s as any).raw_match?.match_date || (s as any).match_date || '';
-                        if (!timeStr) return false;
-                        if (timeStr.startsWith(targetDatePrefix) || timeStr.includes(targetDatePrefix)) return true;
-                        try {
-                          const d = new Date(timeStr);
-                          if (isNaN(d.getTime())) return false;
-                          return (
-                            (d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === dayNum) ||
-                            (d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month && d.getUTCDate() === dayNum)
-                          );
-                        } catch {
-                          return false;
-                        }
-                      });
+                      const matchesForDay = safeSchedules
+                        .filter((s) => {
+                          if (!s) return false;
+                          const timeStr = s.scheduled_time || (s as any).raw_match?.match_date || (s as any).match_date || '';
+                          if (!timeStr) return false;
+                          if (timeStr.startsWith(targetDatePrefix) || timeStr.includes(targetDatePrefix)) return true;
+                          try {
+                            const d = new Date(timeStr);
+                            if (isNaN(d.getTime())) return false;
+                            return (
+                              (d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === dayNum) ||
+                              (d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month && d.getUTCDate() === dayNum)
+                            );
+                          } catch {
+                            return false;
+                          }
+                        })
+                        .sort((a, b) => {
+                          const timeA = new Date(a.scheduled_time || (a as any).raw_match?.match_date || (a as any).match_date || 0).getTime();
+                          const timeB = new Date(b.scheduled_time || (b as any).raw_match?.match_date || (b as any).match_date || 0).getTime();
+                          return timeA - timeB;
+                        });
 
                       const isSelected = dayNum === selectedDayNum;
 
                       return (
                         <td
                           key={dayIndex}
-                          onClick={() => onCellClick(dayNum, matchesForDay)}
+                          onClick={() => onCellClick(dayNum)}
                           style={{
                             ...styles.calTd,
                             backgroundColor: isSelected ? '#F0F9FF' : '#FFFFFF',
@@ -399,60 +482,10 @@ export const SchedulePage: React.FC = () => {
               </div>
 
               <div style={styles.detailsBody}>
-                {selectedMatch ? (
-                  <>
-                    {/* Live Match Card */}
-                    <div style={styles.matchCardWrapper}>
-                      <div style={styles.timeTag}>{detailsTimeStr}</div>
-
-                      <div style={styles.matchCardOuter}>
-                        <div style={styles.sportPill}>{detailsSport}</div>
-
-                        <div style={styles.teamList}>
-                          <div style={styles.teamRow}>
-                            <div style={styles.teamLetterBox}>{homeInitial}</div>
-                            <span style={styles.teamName}>{detailsHomeTeam}</span>
-                          </div>
-
-                          <div style={styles.teamRow}>
-                            <div style={styles.teamLetterBox}>{awayInitial}</div>
-                            <span style={styles.teamName}>{detailsAwayTeam}</span>
-                          </div>
-                        </div>
-
-                        <div style={styles.dashedDivider} />
-
-                        <div style={styles.officialsSection}>
-                          <span style={styles.officialsLabel}>COACHES:</span>
-                          <div style={styles.officialsAvatars}>
-                            <Users style={{ width: 16, height: 16, flexShrink: 0 }} />
-                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B', textTransform: 'uppercase' }}>
-                              {displayCoachName}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Live Venue Logistics Box */}
-                    <div style={styles.logisticsBox}>
-                      <h3 style={styles.logisticsTitle}>VENUE LOGISTICS</h3>
-                      <div style={styles.logisticsGrid}>
-                        <div style={styles.logisticsRow}>
-                          <span style={styles.logisticsKey}>LOCATION</span>
-                          <span style={styles.logisticsVal}>{venueLocation}</span>
-                        </div>
-                        <div style={styles.logisticsRow}>
-                          <span style={styles.logisticsKey}>SPORT</span>
-                          <span style={styles.logisticsVal}>{detailsSport}</span>
-                        </div>
-                        <div style={styles.logisticsRow}>
-                          <span style={styles.logisticsKey}>COURT</span>
-                          <span style={styles.logisticsVal}>{courtNum}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </>
+                {selectedDayMatches.length > 0 ? (
+                  selectedDayMatches.map((m, idx) => (
+                    <MatchDetailsCard key={m?.schedule_id || m?.match_id || idx} match={m} />
+                  ))
                 ) : (
                   <div style={{ padding: '40px 16px', textAlign: 'center', color: '#94A3B8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '8px' }}>
                     <p style={{ margin: 0, fontWeight: 800, textTransform: 'uppercase', color: '#64748B', fontSize: '12px' }}>

@@ -171,6 +171,7 @@ export const styles: Record<string, React.CSSProperties> = {
     paddingTop: '46px',
     boxSizing: 'border-box',
     height: '100%',
+    overflow: 'hidden',
   },
   detailsCard: {
     border: '2px solid #0B132B',
@@ -178,7 +179,9 @@ export const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
+    maxHeight: '100%',
     boxSizing: 'border-box',
+    overflow: 'hidden',
   },
   detailsBanner: {
     backgroundColor: '#0B132B',
@@ -206,10 +209,11 @@ export const styles: Record<string, React.CSSProperties> = {
     padding: '16px 16px',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between',
     flex: 1,
-    gap: '14px',
+    gap: '20px',
     boxSizing: 'border-box',
+    overflowY: 'auto',
+    overflowX: 'hidden',
   },
   matchCardWrapper: {
     position: 'relative',

@@ -8,6 +8,7 @@ import {
   setCachedData,
   getMe,
   getOfficialProfileData,
+  updateOfficialProfileData,
   getOfficialDashboard,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse } from '../../api/types';
@@ -126,6 +127,16 @@ export const ProfilePage: React.FC = () => {
         sessionStorage.setItem('atleta_official_user', JSON.stringify(updatedUser));
       }
     } catch {}
+
+    updateOfficialProfileData({
+      full_legal_name: editName.trim() || undefined,
+      full_name: editName.trim() || undefined,
+      phone_number: editPhone.trim() || undefined,
+      organization_name: editOrg.trim() || undefined,
+      organization: editOrg.trim() || undefined,
+      avatar_url: editAvatar || undefined,
+      profile_image: editAvatar || undefined,
+    }).catch(() => {});
   };
 
   const displayName =
