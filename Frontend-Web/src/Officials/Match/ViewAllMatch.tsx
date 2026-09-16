@@ -21,6 +21,7 @@ const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
 
   return (
     <tr
+      className="hover-match-row"
       style={styles.tr}
       onClick={onClick}
       onMouseEnter={(e) => {
@@ -136,7 +137,7 @@ export const ViewAllMatch: React.FC = () => {
         {/* Header Row */}
         <div style={styles.pageHeaderRow}>
           <h1 style={styles.pageTitle}>ALL MATCHES</h1>
-          <Link to="/dashboard" style={styles.backLink}>
+          <Link to="/dashboard" className="hover-back-link" style={styles.backLink}>
             <span>Back to Main Page</span>
             <span>↩</span>
           </Link>
@@ -149,6 +150,7 @@ export const ViewAllMatch: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('PENDING')}
+              className={`hover-tab-btn ${activeTab === 'PENDING' ? 'active' : ''}`}
               style={{
                 ...styles.tabBtn,
                 ...(activeTab === 'PENDING' ? styles.tabBtnActive : styles.tabBtnInactive),
@@ -160,6 +162,7 @@ export const ViewAllMatch: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('PROCESSED')}
+              className={`hover-tab-btn ${activeTab === 'PROCESSED' ? 'active' : ''}`}
               style={{
                 ...styles.tabBtn,
                 ...(activeTab === 'PROCESSED' ? styles.tabBtnActive : styles.tabBtnInactive),
@@ -186,6 +189,7 @@ export const ViewAllMatch: React.FC = () => {
                     key={sport}
                     type="button"
                     onClick={() => setSelectedSport(sport === 'ALL SPORTS' ? 'ALL' : sport)}
+                    className={`hover-sport-btn ${isActive ? 'active' : ''}`}
                     style={{
                       ...styles.sportBtn,
                       ...(isActive ? styles.sportBtnActive : styles.sportBtnInactive),

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* Base Designs */
 @layer base {
 
   *,
@@ -23,7 +24,7 @@
     -webkit-user-select: none;
   }
 
-  /* Remove the input line when clicking an icon */
+  /* Remove text thingy in the icons */
   h1,
   h2,
   h3, 
@@ -50,7 +51,7 @@
     cursor: default;
   }
 
-  /* Interactive Links and Buttons */
+  /* Interactive Links, Selects, and Buttons */
   button,
   a,
   [role="button"],
@@ -76,6 +77,7 @@
     box-shadow: none !important;
   }
 
+  /* Text and Data Form Inputs */
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -91,7 +93,7 @@
   }
 }
 
-/* Smooth Popover Transitions */
+/* Notification Pop Up Designs */
 @keyframes notifPopFadeIn {
   0% {
     opacity: 0;
@@ -109,7 +111,7 @@
   transform-origin: top right;
 }
 
-/* Custom Scrollbars */
+/* Global Scrollbar Designs */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -128,7 +130,7 @@
   background: #94A3B8;
 }
 
-/* Interactive Hover */
+/* Auth and Global Nav Designs */
 .btn-primary {
   transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
   cursor: pointer;
@@ -143,6 +145,7 @@
   transform: scale(0.99);
 }
 
+/* Navbar Links & Action Buttons */
 .nav-link {
   transition: color 0.2s ease, opacity 0.2s ease;
   cursor: pointer;
@@ -162,6 +165,7 @@
   background-color: #E2E8F0 !important;
 }
 
+/* Text Links */
 .text-link {
   transition: color 0.2s ease, text-decoration 0.2s ease;
   cursor: pointer;
@@ -172,6 +176,7 @@
   text-decoration: underline !important;
 }
 
+/* Footer Links */
 .footer-link {
   transition: color 0.2s ease;
   cursor: pointer;
@@ -181,7 +186,7 @@
   color: #0B132B !important;
 }
 
-/* Responsive Rules */
+/* Responsive Designs */
 @media (max-width: 900px) {
   .resp-kpi-grid {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
@@ -218,4 +223,197 @@
   .resp-kpi-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Homepage (Officials Dashboard) Hover Designs */
+.hover-view-all {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-view-all:hover {
+  color: #0284C7 !important;
+  opacity: 0.85;
+}
+
+/* Homepage & All Matches: Match Table Rows */
+.hover-match-row {
+  cursor: pointer !important;
+  transition: background-color 0.15s ease !important;
+}
+.hover-match-row:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* All Matches (View All Page) Hover Designs */
+.hover-back-link {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-back-link:hover {
+  color: #0284C7 !important;
+  opacity: 0.85;
+}
+
+/* "PENDING AUDITS" & "PROCESSED AUDITS" Tabs */
+.hover-tab-btn {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-tab-btn:hover:not(.active) {
+  background-color: #F1F5F9 !important;
+  color: #0B132B !important;
+}
+
+/* Sport Filter Buttons */
+.hover-sport-btn {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-sport-btn:hover:not(.active) {
+  background-color: #F1F5F9 !important;
+  color: #0B132B !important;
+}
+
+/* Notification Center & Notification Pop-up Hover Designs */
+.hover-btn-ghost {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-ghost:hover {
+  color: #0284C7 !important;
+  opacity: 0.85;
+}
+
+/* Notification Pop-up & Notification Center Buttons */
+.hover-btn-solid {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-solid:hover {
+  background-color: #1E293B !important;
+  opacity: 0.92;
+}
+
+/* Notification "Go Back", "CLEAR HISTORY", "REVIEW & ATTACH" Buttons */
+.hover-btn-outline {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-outline:hover {
+  background-color: #F8FAFC !important;
+  color: #0284C7 !important;
+  border-color: #0284C7 !important;
+}
+
+/* Notification "VIEW DETAILS" Action Link */
+.hover-link-accent {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-link-accent:hover {
+  color: #0284C7 !important;
+  text-decoration: underline !important;
+}
+
+/* Notification Category Tabs (ALL LOGS, AUDIT REQUESTS, SCHEDULE UPDATES) */
+.hover-tab-underline {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-tab-underline:hover:not(.active) {
+  color: #0B132B !important;
+  border-bottom-color: #94A3B8 !important;
+}
+
+/* Modal Close (X) Buttons */
+.hover-close-x {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-close-x:hover {
+  color: #EF4444 !important;
+}
+
+/* Schedule Page: Calendar Month Navigation & Day Squares */
+.hover-step-btn {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-step-btn:hover {
+  background-color: #F1F5F9 !important;
+  color: #0284C7 !important;
+}
+
+.hover-calendar-cell {
+  transition: background-color 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-calendar-cell:hover {
+  background-color: #F8FAFC !important;
+}
+.hover-calendar-cell.selected:hover {
+  background-color: #E0F2FE !important;
+}
+
+/* Tournament Official Settings Page Hover Designs */
+.hover-settings-row {
+  transition: background-color 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-settings-row:hover {
+  background-color: #F8FAFC !important;
+}
+.hover-settings-row:hover svg {
+  color: #0284C7 !important;
+}
+
+.hover-switch {
+  transition: opacity 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-switch:hover {
+  opacity: 0.85 !important;
+}
+
+/* Create Match: Inputs, Dropdowns, Placeholders, Selects & Action Buttons */
+.hover-input {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.hover-input:hover {
+  border-color: #0284C7 !important;
+}
+.hover-input:focus {
+  border-color: #0284C7 !important;
+  box-shadow: 0 0 0 1px #0284C7 !important;
+}
+
+.hover-dropzone {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-dropzone:hover {
+  border-color: #0284C7 !important;
+  background-color: #F0F9FF !important;
+}
+.hover-dropzone:hover svg {
+  color: #0284C7 !important;
+}
+
+/* Scoresheet / Match Audit Action Buttons */
+.hover-btn-danger {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-danger:hover {
+  background-color: #DC2626 !important;
+  opacity: 0.92;
+}
+
+.hover-btn-success {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-success:hover {
+  background-color: #059669 !important;
+  opacity: 0.92;
 }

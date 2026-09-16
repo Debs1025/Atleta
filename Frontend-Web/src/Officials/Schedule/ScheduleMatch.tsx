@@ -182,7 +182,7 @@ export const ScheduleMatch: React.FC<ScheduleMatchProps> = ({
             <h2 style={styles.headerTitle}>MATCH DAY DETAILS</h2>
             <p style={styles.headerSubtitle}>{dateHeader}</p>
           </div>
-          <button type="button" onClick={onClose} style={styles.closeBtn} title="Close">
+          <button type="button" onClick={onClose} className="hover-close-x" style={styles.closeBtn} title="Close">
             <X style={{ width: 20, height: 20 }} />
           </button>
         </div>

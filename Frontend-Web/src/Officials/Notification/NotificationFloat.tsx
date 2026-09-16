@@ -105,6 +105,7 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
         <button
           type="button"
           onClick={onMarkAllRead}
+          className="hover-btn-ghost"
           style={styles.markAllBtn}
         >
           MARK ALL AS READ
@@ -113,23 +114,28 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
 
       {/* Notification Items List */}
       <div style={styles.itemsList}>
-        {loading && notifications.length === 0 ? (
-          <div style={{ padding: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
-          </div>
-        ) : notifications.length === 0 ? (
-          <div style={styles.emptyState}>No notifications right now.</div>
-        ) : (
-          notifications.slice(0, 10).map((item, idx) => {
+        {(() => {
+          const unreadNotifications = notifications.filter((item) => !item.is_read);
+          if (loading && unreadNotifications.length === 0) {
+            return (
+              <div style={{ padding: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+              </div>
+            );
+          }
+          if (unreadNotifications.length === 0) {
+            return <div style={styles.emptyState}>No notifications right now.</div>;
+          }
+          return unreadNotifications.slice(0, 10).map((item, idx) => {
             const isAudit = item.type === 'AUDIT_REQUEST' || item.title.toLowerCase().includes('audit') || item.title.toLowerCase().includes('stats');
             const pillText = isAudit ? 'AUDIT REQUEST' : 'SCHEDULE UPDATES';
-            const isLast = idx === Math.min(notifications.length, 10) - 1;
+            const isLast = idx === Math.min(unreadNotifications.length, 10) - 1;
 
             return (
               <div
                 key={item.notification_id}
                 onClick={() => {
-                  if (!item.is_read) onMarkSingleRead(item.notification_id);
+                  onMarkSingleRead(item.notification_id);
                 }}
                 style={{
                   ...styles.itemRow,
@@ -165,8 +171,8 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
                 </div>
               </div>
             );
-          })
-        )}
+          });
+        })()}
       </div>
 
       {/* Footer CTA Container */}
@@ -174,6 +180,7 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
         <button
           type="button"
           onClick={handleViewAll}
+          className="hover-btn-solid"
           style={styles.footerBtn}
         >
           <span>VIEW ALL NOTIFICATIONS</span>

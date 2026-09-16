@@ -358,11 +358,11 @@ export const SchedulePage: React.FC = () => {
             <div style={styles.headerControlsRow}>
               <h1 style={styles.monthTitle}>{monthName}</h1>
               <div style={styles.stepBtnGroup}>
-                <button type="button" onClick={prevMonth} style={styles.stepBtn} title="Previous month">
+                <button type="button" onClick={prevMonth} className="hover-step-btn" style={styles.stepBtn} title="Previous month">
                   <ChevronLeft style={{ width: 18, height: 18 }} />
                 </button>
                 <div style={styles.stepDivider} />
-                <button type="button" onClick={nextMonth} style={styles.stepBtn} title="Next month">
+                <button type="button" onClick={nextMonth} className="hover-step-btn" style={styles.stepBtn} title="Next month">
                   <ChevronRight style={{ width: 18, height: 18 }} />
                 </button>
               </div>
@@ -422,6 +422,7 @@ export const SchedulePage: React.FC = () => {
                         <td
                           key={dayIndex}
                           onClick={() => onCellClick(dayNum)}
+                          className={`hover-calendar-cell ${isSelected ? 'selected' : ''}`}
                           style={{
                             ...styles.calTd,
                             backgroundColor: isSelected ? '#F0F9FF' : '#FFFFFF',

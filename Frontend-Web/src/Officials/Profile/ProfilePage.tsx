@@ -218,6 +218,7 @@ export const ProfilePage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleOpenEditModal}
+                className="hover-btn-solid"
                 style={styles.editProfileBtn}
               >
                 EDIT PROFILE
@@ -272,7 +273,7 @@ export const ProfilePage: React.FC = () => {
         </main>
       </div>
 
-      {/* Edit Profile Modal */}
+      {/* Edit Profile */}
       {isEditModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(11, 19, 43, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ backgroundColor: '#FFFFFF', border: '2px solid #0B132B', width: '92%', maxWidth: '480px', padding: '24px 28px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
@@ -281,6 +282,7 @@ export const ProfilePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
+                className="hover-close-x"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
               >
                 <X style={{ width: 18, height: 18 }} />
@@ -304,6 +306,7 @@ export const ProfilePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
+                      className="hover-btn-outline"
                       style={{ padding: '6px 12px', border: '1px solid #0B132B', backgroundColor: '#FFFFFF', color: '#0B132B', fontWeight: 800, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
                       <Camera style={{ width: 12, height: 12 }} />
@@ -313,6 +316,7 @@ export const ProfilePage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setEditAvatar(null)}
+                        className="hover-btn-outline"
                         style={{ padding: '6px 10px', border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#B91C1C', fontWeight: 700, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
                         <Trash2 style={{ width: 12, height: 12 }} />
@@ -371,12 +375,14 @@ export const ProfilePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
+                  className="hover-btn-outline"
                   style={{ padding: '9px 16px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#64748B', fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
                 >
                   CANCEL
                 </button>
                 <button
                   type="submit"
+                  className="hover-btn-solid"
                   style={{ padding: '9px 20px', border: 'none', backgroundColor: '#0B132B', color: '#FFFFFF', fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
                 >
                   SAVE CHANGES

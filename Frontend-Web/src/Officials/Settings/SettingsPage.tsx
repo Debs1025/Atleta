@@ -83,7 +83,11 @@ export const SettingsPage: React.FC = () => {
           <div style={styles.sectionWrap}>
             <div style={styles.sectionBanner}>OFFICIAL IDENTITY & CREDENTIALS</div>
             <div style={styles.sectionBox}>
-              <div style={styles.itemRow}>
+              <div
+                style={styles.itemRow}
+                className="hover-settings-row"
+                onClick={() => navigate('/profile')}
+              >
                 <div style={styles.itemTextWrap}>
                   <h3 style={styles.itemTitle}>AUDIT PROFILE DETAILS</h3>
                   <p style={styles.itemDesc}>Update your certification records and official public profile.</p>
@@ -91,7 +95,10 @@ export const SettingsPage: React.FC = () => {
                 <ChevronRight style={{ width: 18, height: 18, color: '#0B132B' }} />
               </div>
 
-              <div style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}>
+              <div
+                style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}
+                className="hover-settings-row"
+              >
                 <div style={styles.itemTextWrap}>
                   <h3 style={styles.itemTitle}>ORGANIZATIONAL AFFILIATION</h3>
                   <p style={styles.itemDesc}>Manage links to sanctioned tournament bodies and federations.</p>
@@ -115,6 +122,7 @@ export const SettingsPage: React.FC = () => {
                   tabIndex={0}
                   aria-label="Toggle split screen layout defaults"
                   onClick={() => toggleSetting('split_screen_defaults')}
+                  className="hover-switch"
                   style={{
                     ...styles.switchTrack,
                     ...(settings.split_screen_defaults ? styles.switchTrackActive : {}),
@@ -139,6 +147,7 @@ export const SettingsPage: React.FC = () => {
                   tabIndex={0}
                   aria-label="Toggle discrepancy presets"
                   onClick={() => toggleSetting('discrepancy_presets')}
+                  className="hover-switch"
                   style={{
                     ...styles.switchTrack,
                     ...(settings.discrepancy_presets ? styles.switchTrackActive : {}),
@@ -169,6 +178,7 @@ export const SettingsPage: React.FC = () => {
                   tabIndex={0}
                   aria-label="Toggle match reminders"
                   onClick={() => toggleSetting('match_reminders')}
+                  className="hover-switch"
                   style={{
                     ...styles.switchTrack,
                     ...(settings.match_reminders ? styles.switchTrackActive : {}),
@@ -193,6 +203,7 @@ export const SettingsPage: React.FC = () => {
                 href="https://privacy.gov.ph/data-privacy-act/"
                 target="_blank"
                 rel="noreferrer"
+                className="hover-settings-row"
                 style={styles.itemRow}
               >
                 <div style={styles.itemLeft}>
@@ -208,6 +219,7 @@ export const SettingsPage: React.FC = () => {
               <a
                 href="#verification-protocols"
                 onClick={(e) => e.preventDefault()}
+                className="hover-settings-row"
                 style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}
               >
                 <div style={styles.itemLeft}>

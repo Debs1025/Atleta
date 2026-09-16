@@ -232,6 +232,7 @@ export const ScoresheetMatch: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsEditing(!isEditing)}
+            className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
             {isEditing ? 'LOCK EDITING' : 'EDIT SCANNED STATS'}
@@ -399,6 +400,7 @@ export const ScoresheetMatch: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsEditing(!isEditing)}
+            className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
             {isEditing ? 'LOCK EDITING' : 'EDIT RACE RESULTS'}
@@ -514,6 +516,7 @@ export const ScoresheetMatch: React.FC = () => {
                 navigate('/dashboard');
               }
             }}
+            className="hover-btn-outline"
             style={styles.returnBtn}
           >
             <ArrowLeft style={{ width: 15, height: 15 }} />
@@ -605,7 +608,7 @@ export const ScoresheetMatch: React.FC = () => {
                   style={{ display: 'none' }}
                   onChange={handleFileUpload}
                 />
-                <div style={styles.dropzone} onClick={() => fileInputRef.current?.click()}>
+                <div style={styles.dropzone} className="hover-dropzone" onClick={() => fileInputRef.current?.click()}>
                   {isUploading ? (
                     <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
                   ) : (
@@ -640,6 +643,7 @@ export const ScoresheetMatch: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setActiveModal('PREVIEW')}
+                      className="hover-btn-ghost"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
                     >
                       <Eye style={{ width: 14, height: 14 }} />
@@ -656,6 +660,7 @@ export const ScoresheetMatch: React.FC = () => {
                   onChange={(e) => setNotes(e.target.value)}
                   disabled={matchData.is_certified}
                   placeholder="Comment any notes, official warnings, or manual point adjustments here..."
+                  className="hover-input"
                   style={styles.notesTextarea}
                 />
               </div>
@@ -666,6 +671,7 @@ export const ScoresheetMatch: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveModal('REMOVE')}
+                className="hover-btn-danger"
                 style={styles.removeBtn}
               >
                 REMOVE MATCH
@@ -676,6 +682,7 @@ export const ScoresheetMatch: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setActiveModal('CERTIFY')}
+                    className="hover-btn-success"
                     style={styles.certifyBtn}
                   >
                     CERTIFY MATCH
@@ -686,6 +693,7 @@ export const ScoresheetMatch: React.FC = () => {
                       type="button"
                       onClick={handleDownloadPdf}
                       disabled={isDownloadingPdf}
+                      className="hover-btn-solid"
                       style={styles.downloadPdfBtn}
                     >
                       {isDownloadingPdf ? (
@@ -727,8 +735,8 @@ export const ScoresheetMatch: React.FC = () => {
             </p>
             {actionError && <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>{actionError}</div>}
             <div style={styles.modalActions}>
-              <button type="button" onClick={() => setActiveModal(null)} style={styles.modalCancelBtn}>CANCEL</button>
-              <button type="button" onClick={handleCertify} disabled={actionLoading} style={styles.modalConfirmBtnGreen}>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
+              <button type="button" onClick={handleCertify} disabled={actionLoading} className="hover-btn-success" style={styles.modalConfirmBtnGreen}>
                 {actionLoading ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : 'CONFIRM CERTIFY'}
               </button>
             </div>
@@ -748,8 +756,8 @@ export const ScoresheetMatch: React.FC = () => {
             </p>
             {actionError && <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>{actionError}</div>}
             <div style={styles.modalActions}>
-              <button type="button" onClick={() => setActiveModal(null)} style={styles.modalCancelBtn}>CANCEL</button>
-              <button type="button" onClick={handleRemove} disabled={actionLoading} style={styles.modalConfirmBtnRed}>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
+              <button type="button" onClick={handleRemove} disabled={actionLoading} className="hover-btn-danger" style={styles.modalConfirmBtnRed}>
                 {actionLoading ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : 'CONFIRM REMOVE'}
               </button>
             </div>
@@ -762,7 +770,7 @@ export const ScoresheetMatch: React.FC = () => {
           <div style={{ ...styles.modalCard, maxWidth: '720px', maxHeight: '80vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={styles.modalTitle}>SCORESHEET PREVIEW</h3>
-              <button type="button" onClick={() => setActiveModal(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-close-x" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
                 <X style={{ width: 20, height: 20 }} />
               </button>
             </div>
@@ -772,7 +780,7 @@ export const ScoresheetMatch: React.FC = () => {
               <img src={scoresheetUrl} alt="Scoresheet" style={{ width: '100%', height: 'auto', border: '1px solid #CBD5E1', borderRadius: '4px' }} />
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-              <button type="button" onClick={() => setActiveModal(null)} style={styles.modalCancelBtn}>CLOSE</button>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CLOSE</button>
             </div>
           </div>
         </div>

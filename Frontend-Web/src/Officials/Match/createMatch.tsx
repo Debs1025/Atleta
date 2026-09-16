@@ -237,6 +237,7 @@ export const CreateMatch: React.FC = () => {
                     placeholder="E.G. CHAMPIONSHIP-2026-001"
                     value={gameName}
                     onChange={(e) => setGameName(e.target.value)}
+                    className="hover-input"
                     style={styles.input}
                   />
                 </div>
@@ -247,6 +248,7 @@ export const CreateMatch: React.FC = () => {
                     required
                     value={sportCategory}
                     onChange={(e) => setSportCategory(e.target.value)}
+                    className="hover-input"
                     style={styles.select}
                   >
                     <option value="Basketball">Basketball</option>
@@ -263,6 +265,7 @@ export const CreateMatch: React.FC = () => {
                   placeholder="E.G. MAIN GYMNASIUM / COURT 1 OR AQUATICS CENTER"
                   value={venue}
                   onChange={(e) => setVenue(e.target.value)}
+                  className="hover-input"
                   style={styles.input}
                 />
               </div>
@@ -276,6 +279,7 @@ export const CreateMatch: React.FC = () => {
                     min={todayStr}
                     value={matchDate}
                     onChange={(e) => setMatchDate(e.target.value)}
+                    className="hover-input"
                     style={styles.input}
                   />
                 </div>
@@ -286,6 +290,7 @@ export const CreateMatch: React.FC = () => {
                     type="time"
                     value={matchTime}
                     onChange={(e) => setMatchTime(e.target.value)}
+                    className="hover-input"
                     style={styles.input}
                   />
                 </div>
@@ -319,6 +324,7 @@ export const CreateMatch: React.FC = () => {
                       placeholder="E.G. ADNU Knights"
                       value={homeTeam}
                       onChange={(e) => setHomeTeam(e.target.value)}
+                      className="hover-input"
                       style={styles.input}
                     />
                   </div>
@@ -331,6 +337,7 @@ export const CreateMatch: React.FC = () => {
                       placeholder="E.G. ADMU Eagles"
                       value={awayTeam}
                       onChange={(e) => setAwayTeam(e.target.value)}
+                      className="hover-input"
                       style={styles.input}
                     />
                   </div>
@@ -358,11 +365,12 @@ export const CreateMatch: React.FC = () => {
                         placeholder={`Delegation ${idx + 1} Name`}
                         value={team}
                         onChange={(e) => handleTeamChange(idx, e.target.value)}
+                        className="hover-input"
                         style={styles.input}
                       />
                     </div>
                   ))}
-                  <div style={styles.addCoachBox} onClick={() => setTeams([...teams, ''])}>
+                  <div style={styles.addCoachBox} className="hover-btn-outline" onClick={() => setTeams([...teams, ''])}>
                     <span style={styles.addCoachLabel}>ADD TEAM</span>
                     <PlusCircle style={{ width: 16, height: 16, color: '#0B132B' }} />
                   </div>
@@ -389,12 +397,13 @@ export const CreateMatch: React.FC = () => {
                     placeholder="Coach Full Name / ID"
                     value={coach}
                     onChange={(e) => handleCoachChange(idx, e.target.value)}
+                    className="hover-input"
                     style={styles.input}
                   />
                 </div>
               ))}
 
-              <div style={styles.addCoachBox} onClick={() => setCoaches([...coaches, ''])}>
+              <div style={styles.addCoachBox} className="hover-btn-outline" onClick={() => setCoaches([...coaches, ''])}>
                 <span style={styles.addCoachLabel}>ADD COACH</span>
                 <PlusCircle style={{ width: 16, height: 16, color: '#0B132B' }} />
               </div>
@@ -415,7 +424,7 @@ export const CreateMatch: React.FC = () => {
                 onChange={handleFileChange}
               />
 
-              <div style={styles.dropzoneContainer} onClick={() => fileInputRef.current?.click()}>
+              <div style={styles.dropzoneContainer} className="hover-dropzone" onClick={() => fileInputRef.current?.click()}>
                 {selectedFile ? (
                   <FileText style={{ width: 32, height: 32, color: '#0B132B' }} />
                 ) : (
@@ -434,10 +443,10 @@ export const CreateMatch: React.FC = () => {
 
             {/* Footer Actions */}
             <div style={styles.footerActionsRow}>
-              <button type="button" onClick={() => navigate('/dashboard')} style={styles.cancelBtn}>
+              <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-outline" style={styles.cancelBtn}>
                 CANCEL
               </button>
-              <button type="submit" disabled={submitting} style={styles.createMatchBtn}>
+              <button type="submit" disabled={submitting} className="hover-btn-solid" style={styles.createMatchBtn}>
                 {submitting ? (
                   <>
                     <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
@@ -496,6 +505,7 @@ export const CreateMatch: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/matches')}
+                className="hover-btn-solid"
                 style={styles.modalPrimaryBtn}
               >
                 <span>VIEW IN ALL MATCHES</span>
@@ -504,6 +514,7 @@ export const CreateMatch: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/schedules')}
+                className="hover-btn-outline"
                 style={styles.modalSecondaryBtn}
               >
                 CHECK SCHEDULE CALENDAR
@@ -511,6 +522,7 @@ export const CreateMatch: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
+                className="hover-btn-outline"
                 style={styles.modalSecondaryBtn}
               >
                 RETURN TO DASHBOARD

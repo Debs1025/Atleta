@@ -19,10 +19,12 @@ export const LoginPage: React.FC = () => {
   const [showPass, setShowPass] = useState(false);
   const [savePass, setSavePass] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [isAutoLoggingIn, setIsAutoLoggingIn] = useState<boolean>(() => Boolean(getStoredToken()));
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (getStoredToken()) {
+      setIsAutoLoggingIn(true);
       getMe().then((user) => {
         if (user?.role === 'SystemAdmin' || user?.role === 'System Admin' || user?.role === 'Admin') {
           getAdminCoachQueue(true).catch(() => {});
@@ -33,7 +35,7 @@ export const LoginPage: React.FC = () => {
           navigate('/dashboard');
         }
       }).catch(() => {
-        navigate('/dashboard');
+        setIsAutoLoggingIn(false);
       });
     }
   }, [navigate]);
@@ -77,6 +79,84 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+
+  if (isAutoLoggingIn) {
+    return (
+      <div style={styles.container}>
+        <header className="resp-header" style={styles.header}>
+          <Link to="/" style={styles.logo}>
+            ATLETA<sup style={styles.logoSup}>WEB</sup>
+          </Link>
+        </header>
+
+        <main style={{ ...styles.main, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            className="resp-card"
+            style={{
+              ...styles.card,
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '20px',
+              padding: '48px 32px',
+            }}
+          >
+            <div
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: '#F0F9FF',
+                border: '2px solid #0B132B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Loader2 style={{ width: 32, height: 32, color: '#0B132B', animation: 'spin 1s linear infinite' }} />
+            </div>
+
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#0B132B', margin: '0 0 6px 0', letterSpacing: '0.05em' }}>
+                LOGGING YOU IN...
+              </h2>
+              <p style={{ fontSize: '13px', color: '#64748B', margin: 0, fontWeight: 600, lineHeight: 1.5 }}>
+                Resuming authenticated session and loading your dashboard workspace...
+              </p>
+            </div>
+
+            <div
+              style={{
+                width: '100%',
+                height: '4px',
+                backgroundColor: '#E2E8F0',
+                borderRadius: '2px',
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  width: '50%',
+                  height: '100%',
+                  backgroundColor: '#0B132B',
+                  borderRadius: '2px',
+                }}
+              />
+            </div>
+          </div>
+        </main>
+
+        <footer className="resp-footer" style={styles.footer}>
+          <div className="resp-foot-wrap" style={styles.footWrap}>
+            <div style={styles.footLogo}>ATLETA</div>
+            <div style={styles.copy}>© 2026 ATLETA. ALL RIGHTS RESERVED.</div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>

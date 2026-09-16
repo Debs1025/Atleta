@@ -73,7 +73,7 @@ export const NotificationPage: React.FC = () => {
           {/* Header Row */}
           <div style={styles.headerRow}>
             <div style={styles.titleGroup}>
-              <h1 style={styles.pageTitle}>NOTIFICATION CENTER</h1>
+              <h1 style={styles.pageTitle}>NOTIFICATION</h1>
               <p style={styles.pageSubtitle}>
                 Comprehensive notification for audit requests, and match timeline updates.
               </p>
@@ -82,6 +82,7 @@ export const NotificationPage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate(-1)}
+              className="hover-btn-outline"
               style={styles.goBackBtn}
             >
               <span>Go Back</span>
@@ -95,6 +96,7 @@ export const NotificationPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('ALL')}
+                className={`hover-tab-underline ${activeTab === 'ALL' ? 'active' : ''}`}
                 style={{
                   ...styles.tabBtn,
                   ...(activeTab === 'ALL' ? styles.tabBtnActive : {}),
@@ -106,6 +108,7 @@ export const NotificationPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('AUDIT')}
+                className={`hover-tab-underline ${activeTab === 'AUDIT' ? 'active' : ''}`}
                 style={{
                   ...styles.tabBtn,
                   ...(activeTab === 'AUDIT' ? styles.tabBtnActive : {}),
@@ -117,6 +120,7 @@ export const NotificationPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('SCHEDULE')}
+                className={`hover-tab-underline ${activeTab === 'SCHEDULE' ? 'active' : ''}`}
                 style={{
                   ...styles.tabBtn,
                   ...(activeTab === 'SCHEDULE' ? styles.tabBtnActive : {}),
@@ -130,6 +134,7 @@ export const NotificationPage: React.FC = () => {
               <button
                 type="button"
                 onClick={clearHistory}
+                className="hover-btn-outline"
                 style={styles.outlineBtn}
               >
                 CLEAR HISTORY
@@ -137,6 +142,7 @@ export const NotificationPage: React.FC = () => {
               <button
                 type="button"
                 onClick={markAllRead}
+                className="hover-btn-solid"
                 style={styles.solidBtn}
               >
                 MARK ALL AS READ
@@ -205,6 +211,7 @@ export const NotificationPage: React.FC = () => {
                           if (!notif.is_read) markSingleRead(notif.notification_id);
                           navigate('/dashboard');
                         }}
+                        className="hover-btn-outline"
                         style={styles.auditActionBtn}
                       >
                         <span>REVIEW & ATTACH SCORESHEET</span>
@@ -240,16 +247,10 @@ export const NotificationPage: React.FC = () => {
                           if (!notif.is_read) markSingleRead(notif.notification_id);
                           navigate('/schedules');
                         }}
+                        className="hover-link-accent"
                         style={styles.viewDetailsLink}
                       >
                         VIEW DETAILS
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => markSingleRead(notif.notification_id)}
-                        style={styles.dismissLink}
-                      >
-                        DISMISS
                       </button>
                     </div>
                   </div>

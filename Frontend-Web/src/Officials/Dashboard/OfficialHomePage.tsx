@@ -185,6 +185,7 @@ export const OfficialHomePage: React.FC = () => {
             <h3 style={styles.sectionHeading}>NEW MATCHES</h3>
             <Link
               to="/matches"
+              className="hover-view-all"
               style={styles.viewAllLink}
               onMouseEnter={() => prefetchAllOfficialAuditMatches()}
             >
@@ -218,6 +219,7 @@ export const OfficialHomePage: React.FC = () => {
                     return (
                       <tr
                         key={item.match_id || idx}
+                        className="hover-match-row"
                         style={{ cursor: 'pointer' }}
                         onMouseEnter={() => prefetchMatchAuditDetail(rawId)}
                         onClick={() => navigate(`/matches/${rawId}`)}
