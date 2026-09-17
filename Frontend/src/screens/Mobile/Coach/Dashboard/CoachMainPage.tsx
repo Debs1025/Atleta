@@ -456,8 +456,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             coachTeamAthletes = [];
           }
 
+          const normalizeId = (id?: string) => (id || '').replace(/^ath_/, '').trim();
+
           const unassignedCoachAthletes: RosterAthlete[] = rawCoachAthletes
-            .filter((ha: any) => !coachTeamAthletes.some((ca) => ca.athlete_id === ha.athlete_id || ca.user_id === ha.user_id))
+            .filter((ha: any) => {
+              const haKey = normalizeId(ha.athlete_id || ha.user_id);
+              return !coachTeamAthletes.some((ca) => normalizeId(ca.athlete_id || ca.user_id) === haKey);
+            })
             .map((ha: any) => ({
               athlete_id: ha.athlete_id || ha.user_id || `ath_${Date.now()}`,
               user_id: ha.user_id || ha.athlete_id || '',
@@ -469,7 +474,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               avatar_url: ha.avatar_url || undefined,
             }));
 
-          const allHandledAthletes = [...coachTeamAthletes, ...unassignedCoachAthletes];
+          const seenMap = new Map<string, RosterAthlete>();
+          for (const a of [...coachTeamAthletes, ...unassignedCoachAthletes]) {
+            const k = normalizeId(a.athlete_id || a.user_id);
+            if (k && !seenMap.has(k)) {
+              seenMap.set(k, a);
+            }
+          }
+          const allHandledAthletes = Array.from(seenMap.values());
           setAthletesPool(allHandledAthletes);
 
           if (profileRes) {
@@ -1018,11 +1030,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 };
               });
 
-              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Camarines Bulls";
-              const resolvedOpponentName = finalData.opponent_team_name || "METRO WARRIORS";
+              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Team";
+              const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
 
               const matchPayload = {
-                team_id: teams[0]?.team_id || "team_bulls_TUCSIQ",
+                team_id: teams[0]?.team_id || (teams[0] as any)?.id || "",
                 home_team_name: resolvedTeamName,
                 away_team_name: resolvedOpponentName,
                 opponent_team_name: resolvedOpponentName,
@@ -1036,7 +1048,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     : "Basketball",
                 match_type: "OCR Scanned Match",
                 match_date: new Date().toISOString(),
-                location: "Metro Center",
+                location: finalData.location || "Arena",
                 game_result: homePts >= oppPts ? "WIN" : "LOSS",
                 notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,
@@ -1167,17 +1179,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
                     user_id: `usr_ocr_${idx + 1}`,
                     full_name: stat.player_name,
-                    birthdate: "2006-01-01",
+                    birthdate: "",
                     position_or_event: "Player",
-                    location_province: "Camarines Sur",
-                    team_name: stat.team_name || finalData.team_name,
+                    location_province: "",
+                    team_name: stat.team_name || finalData.team_name || "",
                     rating_score: Math.min(99, Math.max(75, Math.round(70 + (gamePts * 0.5) + (gameAst * 0.8) + (gameReb * 0.6)))),
                     sport_category: (finalData.sport_type || "BASKETBALL").toUpperCase() as any,
                     biometrics: {
-                      height_ft: "6'2\"",
-                      weight_lbs: "185 lbs",
-                      wingspan_ft: "6'4\"",
-                      vertical_jump_in: "32\"",
+                      height_ft: "-",
+                      weight_lbs: "-",
+                      wingspan_ft: "-",
+                      vertical_jump_in: "-",
                     },
                     averages: {
                       ppg: gamePts,

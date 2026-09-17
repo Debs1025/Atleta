@@ -76,81 +76,83 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
     try {
       setLoadingAthletes(true);
       const token = await getStoredAuthToken();
-      const res = await fetch(`${API_BASE}/athletes?sport=${encodeURIComponent(sport)}`, {
+      // 1. Prioritize coach managed / recruited athletes first
+      const coachAthletesRes = await fetch(`${API_BASE}/coaches/athletes`, {
         headers: {
           Accept: "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-      });
+      }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
 
-      if (res.ok) {
-        const data = await res.json();
-        const rawList: any[] = Array.isArray(data.athletes)
-          ? data.athletes
-          : Array.isArray(data)
-          ? data
-          : [];
+      let rawList: any[] = [];
+      const coachList = Array.isArray(coachAthletesRes?.athletes)
+        ? coachAthletesRes.athletes
+        : Array.isArray(coachAthletesRes)
+        ? coachAthletesRes
+        : [];
 
-        if (rawList.length > 0) {
-          const mapped: AthleteRosterItem[] = rawList
-            .filter((a) => matchesSport(a.sport_type, a.position || a.position_or_event, sport))
-            .map((a) => {
-              const fName = a.first_name || "";
-              const lName = a.last_name || "";
-              const fullName = a.full_name || `${fName} ${lName}`.trim() || "Athlete";
-              return {
-                athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}_${Math.random()}`,
-                jersey_number: String(a.jersey_number ?? "00"),
-                last_name: lName || fullName.split(" ").slice(-1)[0] || "",
-                full_name: fullName.toUpperCase(),
-                position_or_event:
-                  a.position ||
-                  a.position_or_event ||
-                  (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : "100m"),
-                is_active_on_field: false,
-                avatar_url: a.avatar_url,
-                sport_type: a.sport_type || sport,
-                basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-                timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-              };
-            });
+      if (coachList.length > 0) {
+        rawList = coachList;
+      } else {
+        const res = await fetch(`${API_BASE}/athletes?sport=${encodeURIComponent(sport)}`, {
+          headers: {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
 
-          setDbAthletes(mapped);
-          return;
+        if (res.ok) {
+          const data = await res.json();
+          rawList = Array.isArray(data.athletes)
+            ? data.athletes
+            : Array.isArray(data)
+            ? data
+            : [];
         }
       }
 
-      // Fallback to scouting endpoint
-      const scoutRes = await fetch(`${API_BASE}/scouting/athletes?sport=${encodeURIComponent(sport)}`, {
-        headers: {
-          Accept: "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (rawList.length > 0) {
+        // Deduplicate athletes by canonical ID or name
+        const seenIds = new Set<string>();
+        const uniqueRaw: any[] = [];
+        for (const a of rawList) {
+          const idKey = (a.user_id || a.athlete_id || "").replace(/^ath_/, "");
+          const nameKey = (a.full_name || `${a.first_name || ""} ${a.last_name || ""}`).trim().toLowerCase();
+          const lookupKey = idKey || nameKey;
+          if (lookupKey && !seenIds.has(lookupKey)) {
+            seenIds.add(lookupKey);
+            uniqueRaw.push(a);
+          }
+        }
 
-      if (Array.isArray(scoutRes) && scoutRes.length > 0) {
-        const mapped: AthleteRosterItem[] = scoutRes
+        const mapped: AthleteRosterItem[] = uniqueRaw
           .filter((a) => matchesSport(a.sport_type, a.position || a.position_or_event, sport))
           .map((a) => {
             const fName = a.first_name || "";
             const lName = a.last_name || "";
-            const fullName = `${fName} ${lName}`.trim() || "Athlete";
+            const fullName = a.full_name || `${fName} ${lName}`.trim() || "Athlete";
             return {
-              athlete_id: a.athlete_id || `ath_${Date.now()}_${Math.random()}`,
-              jersey_number: "00",
-              last_name: lName,
+              athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}_${Math.random()}`,
+              jersey_number: String(a.jersey_number ?? "00"),
+              last_name: lName || fullName.split(" ").slice(-1)[0] || "",
               full_name: fullName.toUpperCase(),
-              position_or_event: a.position || (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : "100m"),
+              position_or_event:
+                a.position ||
+                a.position_or_event ||
+                (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : "100m"),
               is_active_on_field: false,
+              avatar_url: a.avatar_url,
               sport_type: a.sport_type || sport,
               basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
               timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
             };
           });
+
         setDbAthletes(mapped);
-      } else {
-        setDbAthletes([]);
+        return;
       }
+
+      setDbAthletes([]);
     } catch (err) {
       console.warn("Could not fetch sport athletes from database:", err);
       setDbAthletes([]);
