@@ -236,33 +236,20 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
             };
 
             // Call deployed backend OCR standalone endpoint
-            const endpoints = [
-                `${API_BASE}/matches/scan-scoresheet`,
-                `${API_BASE}/matches/ocr/scan`,
-                `${API_BASE}/matches/scoresheet`,
-            ];
-
+            const canonicalEndpoint = `${API_BASE}/matches/ocr/scan`;
             let responseData: any = null;
-            let lastError: string = "";
 
-            for (const endpoint of endpoints) {
-                try {
-                    const res = await fetch(endpoint, {
-                        method: "POST",
-                        headers,
-                        body: formData,
-                    });
+            const res = await fetch(canonicalEndpoint, {
+                method: "POST",
+                headers,
+                body: formData,
+            });
 
-                    if (res.ok) {
-                        responseData = await res.json();
-                        break;
-                    } else {
-                        const errBody = await res.text();
-                        lastError = `Server returned status ${res.status}: ${errBody}`;
-                    }
-                } catch (err: any) {
-                    lastError = err?.message || String(err);
-                }
+            if (res.ok) {
+                responseData = await res.json();
+            } else {
+                const errBody = await res.text();
+                throw new Error(`Server returned status ${res.status}: ${errBody}`);
             }
 
             if (!responseData) {

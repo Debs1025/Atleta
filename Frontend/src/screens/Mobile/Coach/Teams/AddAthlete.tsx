@@ -46,14 +46,20 @@ export function AddAthlete({
   const [liveAthletes, setLiveAthletes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch all live registered athletes from Firestore via backend
+  // Fetch all live registered / recruited athletes from Firestore via backend
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
         setIsLoading(true);
-        const res = await requestAuthenticatedJson("/athletes").catch(() => null);
-        const rawList = Array.isArray(res) ? res : Array.isArray(res?.athletes) ? res.athletes : [];
+        let rawList: any[] = [];
+        const coachAthletesRes = await requestAuthenticatedJson("/coaches/athletes").catch(() => null);
+        if (coachAthletesRes && Array.isArray(coachAthletesRes.athletes) && coachAthletesRes.athletes.length > 0) {
+          rawList = coachAthletesRes.athletes;
+        } else {
+          const res = await requestAuthenticatedJson("/athletes").catch(() => null);
+          rawList = Array.isArray(res) ? res : Array.isArray(res?.athletes) ? res.athletes : [];
+        }
         if (isMounted && rawList.length > 0) {
           setLiveAthletes(rawList);
         }

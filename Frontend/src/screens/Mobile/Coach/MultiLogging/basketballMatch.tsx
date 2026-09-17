@@ -116,32 +116,94 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
           const isSwapTarget = selectedBenchPlayer !== null;
 
           return (
-            <TouchableOpacity
+            <View
               key={player.athlete_id}
               style={[
                 styles.playerCard,
                 isSwapTarget && styles.playerCardSelected,
               ]}
-              onPress={() => handlePlayerCardPress(player)}
-              activeOpacity={0.85}
             >
-              <View style={styles.playerCardHeader}>
-                <Text style={styles.jerseyNumber}>{player.jersey_number}</Text>
-                {selectedBenchPlayer ? (
-                  <View style={styles.benchBadge}>
-                    <Text style={styles.benchBadgeText}>{selectedBenchPlayer.jersey_number}</Text>
+              <TouchableOpacity
+                onPress={() => handlePlayerCardPress(player)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.playerCardHeader}>
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+                    <Text style={styles.jerseyNumber}>{player.jersey_number}</Text>
+                    <Text style={styles.lastName}>{player.last_name}</Text>
                   </View>
-                ) : (
-                  <Ionicons name="chevron-forward" size={22} color="#00D2FF" style={styles.chevronIcon} />
-                )}
+                  {selectedBenchPlayer ? (
+                    <View style={styles.benchBadge}>
+                      <Text style={styles.benchBadgeText}>{selectedBenchPlayer.jersey_number}</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => setSelectedActionPlayer(player)}
+                      style={styles.moreActionsBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={18} color="#00D2FF" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <Text style={styles.statsSummary}>
+                  {stats.pts} PTS | {stats.ast} AST | {stats.reb} REB | {stats.pf} PF
+                </Text>
+              </TouchableOpacity>
+
+              {/* Inline Quick Action Buttons */}
+              <View style={styles.quickActionRow}>
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "pts", 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+1</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "pts", 2)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+2</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "pts", 3)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+3</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "ast", 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+AST</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "reb", 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+REB</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, { borderColor: "#334155" }]}
+                  onPress={() => setSelectedActionPlayer(player)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.quickActionBtnText, { color: "#94A3B8" }]}>MORE</Text>
+                </TouchableOpacity>
               </View>
-
-              <Text style={styles.lastName}>{player.last_name}</Text>
-
-              <Text style={styles.statsSummary}>
-                {stats.pts} PTS | {stats.ast} AST | {stats.reb} REB | {stats.pf} PF
-              </Text>
-            </TouchableOpacity>
+            </View>
           );
         })}
       </ScrollView>
