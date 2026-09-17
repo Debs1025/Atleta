@@ -333,6 +333,20 @@ export const requestPasswordReset = async (payload: PasswordResetPayload): Promi
   return handleResponse<{ message: string }>(res);
 };
 
+export const changeOfficialPassword = async (password: string): Promise<{ message: string }> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/users/change-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ password }),
+  });
+  return handleResponse<{ message: string }>(res);
+};
+
+
 
 export const getMe = async (forceRefresh = false): Promise<AuthUser> => {
   const cached = getCachedData<AuthUser>('user_me');
