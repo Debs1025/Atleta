@@ -34,16 +34,16 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
         full_name: playerName,
         sport_category: currentMatch.sport_category,
         position_tag: currentMatch.sport_category === 'BASKETBALL' ? 'FORWARD' : currentMatch.sport_category === 'SWIMMING' ? 'FREESTYLE' : 'SPRINT',
-        province: 'Camarines Sur',
+        province: '-',
         recruitment_status: 'OPEN',
-        calculated_per: 24.5,
-        efficiency_pct: 88,
-        biometrics: { height_ft: "6'2\"", weight_lbs: '185 lbs', wingspan_ft: "6'5\"" },
-        stats: { ppg: 22.4, rpg: 7.1, ast: 8.1, fg_pct: 48 },
+        calculated_per: 0,
+        efficiency_pct: 0,
+        biometrics: { height_ft: '-', weight_lbs: '-', wingspan_ft: '-' },
+        stats: { ppg: 0, rpg: 0, ast: 0, fg_pct: 0 },
         contact_info: {
-          email: `${playerName.toLowerCase().replace(/\s+/g, '.')}@anhs.edu.ph`,
+          email: `${playerName.toLowerCase().replace(/\s+/g, '.')}@athlete.ph`,
           facebook: playerName,
-          phone: '+67000',
+          phone: '-',
         },
       });
     }

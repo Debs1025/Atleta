@@ -106,13 +106,13 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 biometrics: {
                   height_ft: heightCm
                     ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"`
-                    : a.biometrics?.height_ft || `6'0"`,
+                    : a.biometrics?.height_ft || "-",
                   weight_lbs: weightKg
                     ? `${Math.round(weightKg * 2.20462)} lbs`
-                    : a.biometrics?.weight_lbs || `175 lbs`,
+                    : a.biometrics?.weight_lbs || "-",
                   wingspan_ft: wingspanCm
                     ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"`
-                    : a.biometrics?.wingspan_ft || `6'2"`,
+                    : a.biometrics?.wingspan_ft || "-",
                 },
                 stats: a.stats || {
                   ppg,
@@ -189,9 +189,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     position_tag: r.position || 'PG',
                     sport_category: (r.sport_type?.toUpperCase() || t.sport_type?.toUpperCase() || 'BASKETBALL') as SportCategoryFilter,
                     biometrics: {
-                      height_ft: r.height_ft || `6'0"`,
-                      weight_lbs: r.weight_lbs || '175 lbs',
-                      wingspan_ft: r.wingspan_ft || `6'2"`,
+                      height_ft: r.height_ft || "-",
+                      weight_lbs: r.weight_lbs || "-",
+                      wingspan_ft: r.wingspan_ft || "-",
                     },
                     stats: r.stats || { ppg: 0, rpg: 0, ast: 0, fg_pct: 0 },
                     calculated_per: r.per || 25,

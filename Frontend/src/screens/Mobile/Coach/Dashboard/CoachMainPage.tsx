@@ -202,17 +202,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   athlete_id: "",
   user_id: "",
   full_name: "Athlete",
-  birthdate: "",
+  birthdate: "-",
   position_or_event: "Unassigned",
-  location_province: "",
+  location_province: "Unassigned",
   team_name: "",
-  rating_score: 75,
+  rating_score: 70,
   sport_category: "BASKETBALL",
   biometrics: {
-    height_ft: "6'0\"",
-    weight_lbs: "175 lbs",
-    wingspan_ft: "6'2\"",
-    vertical_jump_in: "30\"",
+    height_ft: "-",
+    weight_lbs: "-",
+    wingspan_ft: "-",
+    vertical_jump_in: "-",
   },
   averages: {
     ppg: 0,
@@ -225,14 +225,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     three_pt_percentage: 0,
     ft_percentage: 0,
   },
-  radar_competencies: {
-    speed: 75,
-    power: 75,
-    agility: 75,
-    iq: 75,
-    tech: 75,
-  },
-  scoring_trends_last_10: [0, 0],
+  radar_competencies: undefined,
+  scoring_trends_last_10: [],
   eligibility_documents: {
     psa_verified: false,
     residency_verified: false,
@@ -242,9 +236,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     current_7day_acute_load: 0,
     current_28day_chronic_load: 0,
     calculated_acwr: 0,
-    workout_score: 75,
+    workout_score: 70,
     fatigue_meter: 0,
-    routine_score: 75,
+    routine_score: 70,
     body_stress_pts: 0,
   },
 };
@@ -258,16 +252,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
   // Helper function to dynamically compute performance profile from real metrics
   const computeAthletePerformance = (a: any): AthletePerformanceProfile => {
-    const ppg = Number(a.averages?.ppg || a.stats?.ppg || a.pts || 0);
-    const rpg = Number(a.averages?.rpg || a.stats?.rpg || a.reb || 0);
-    const apg = Number(a.averages?.apg || a.stats?.apg || a.ast || 0);
-    const gp = Number(a.averages?.games_played || a.stats?.games_played || (ppg > 0 ? 1 : 0));
-    const wins = Number(a.averages?.wins || a.stats?.wins || (gp > 0 ? Math.round(gp * 0.7) : 0));
-    const per = Number(a.averages?.per_score || a.stats?.per || a.per || 0);
+    const ppg = Number(a.averages?.ppg ?? a.stats?.ppg ?? a.pts ?? 0);
+    const rpg = Number(a.averages?.rpg ?? a.stats?.rpg ?? a.reb ?? 0);
+    const apg = Number(a.averages?.apg ?? a.stats?.apg ?? a.ast ?? 0);
+    const gp = Number(a.averages?.games_played ?? a.stats?.games_played ?? (ppg > 0 ? 1 : 0));
+    const wins = Number(a.averages?.wins ?? a.stats?.wins ?? (gp > 0 ? Math.round(gp * 0.7) : 0));
+    const per = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.2) : 0));
 
     // Calculate dynamic rating score derived from PER / PPG / verified metrics
     let rating = Number(a.rating_score || 0);
-    if (!rating || rating === 88 || rating === 85) {
+    if (!rating) {
       if (per > 0) {
         rating = Math.min(99, Math.max(60, Math.round(per * 2.8)));
       } else if (ppg > 0) {
@@ -279,23 +273,38 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       }
     }
 
-    const heightCm = a.physical_attributes?.height_cm || a.height_cm;
-    const weightKg = a.physical_attributes?.weight_kg || a.weight_kg;
-    const wingspanCm = a.physical_attributes?.wingspan_cm || a.wingspan_cm;
-    const verticalCm = a.physical_attributes?.vertical_cm || a.vertical_cm;
+    const phys = a.physical_profile || a.physical_attributes || {};
+    const heightCm = Number(phys.height_cm ?? a.height_cm ?? 0);
+    const weightKg = Number(phys.weight_kg ?? a.weight_kg ?? 0);
+    const wingspanCm = Number(phys.wingspan_cm ?? a.wingspan_cm ?? 0);
+    const verticalCm = Number(phys.vertical_cm ?? a.vertical_cm ?? 0);
 
-    const heightFt = heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : (a.biometrics?.height_ft || `6'0"`);
-    const weightLbs = weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : (a.biometrics?.weight_lbs || `175 lbs`);
-    const wingspanFt = wingspanCm ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"` : (a.biometrics?.wingspan_ft || `6'2"`);
-    const verticalIn = verticalCm ? `${Math.round(verticalCm / 2.54)}"` : (a.biometrics?.vertical_jump_in || `30"`);
+    const heightFt = heightCm > 0
+      ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"`
+      : (a.biometrics?.height_ft && a.biometrics.height_ft !== "6'0\"" ? a.biometrics.height_ft : "-");
+
+    const weightLbs = weightKg > 0
+      ? `${Math.round(weightKg * 2.20462)} lbs`
+      : (a.biometrics?.weight_lbs && a.biometrics.weight_lbs !== "175 lbs" ? a.biometrics.weight_lbs : "-");
+
+    const wingspanFt = wingspanCm > 0
+      ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"`
+      : (a.biometrics?.wingspan_ft && a.biometrics.wingspan_ft !== "6'2\"" ? a.biometrics.wingspan_ft : "-");
+
+    const verticalIn = verticalCm > 0
+      ? `${Math.round(verticalCm / 2.54)}"`
+      : (a.biometrics?.vertical_jump_in && a.biometrics.vertical_jump_in !== "30\"" ? a.biometrics.vertical_jump_in : "-");
+
+    const rawTrends = a.scoring_trends_last_10;
+    const trends = Array.isArray(rawTrends) && rawTrends.length > 0 ? rawTrends : (ppg > 0 ? [ppg] : []);
 
     return {
       athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}`,
       user_id: a.user_id || a.athlete_id || "",
       full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
-      birthdate: a.birthdate || "2006-01-01",
+      birthdate: a.birthdate || a.dob || "-",
       position_or_event: a.position || "Athlete",
-      location_province: a.location || a.province || "Camarines Sur",
+      location_province: a.province || a.location || "Unassigned",
       team_name: a.team_name || "Team",
       rating_score: rating,
       sport_category: (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() as any,
@@ -309,12 +318,20 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         ppg: ppg,
         rpg: rpg,
         apg: apg,
-        per_score: per > 0 ? per : Math.round(ppg * 1.2),
+        per_score: per,
         games_played: gp,
         wins: wins,
-        fg_percentage: Number(a.averages?.fg_percentage || a.stats?.fg_pct || (ppg > 0 ? 46 : 0)),
-        three_pt_percentage: Number(a.averages?.three_pt_percentage || a.stats?.three_pct || (ppg > 0 ? 35 : 0)),
-        ft_percentage: Number(a.averages?.ft_percentage || a.stats?.ft_pct || (ppg > 0 ? 75 : 0)),
+        fg_percentage: Number(a.averages?.fg_percentage ?? a.stats?.fg_pct ?? 0),
+        three_pt_percentage: Number(a.averages?.three_pt_percentage ?? a.stats?.three_pct ?? 0),
+        ft_percentage: Number(a.averages?.ft_percentage ?? a.stats?.ft_pct ?? 0),
+        pb_100m: a.averages?.pb_100m || a.stats?.pb_100m,
+        pb_200m: a.averages?.pb_200m || a.stats?.pb_200m,
+        reaction_time_s: a.averages?.reaction_time_s || a.stats?.reaction_time_s,
+        win_rate_pct: a.averages?.win_rate_pct ?? a.stats?.win_rate_pct,
+        pb_50m_free: a.averages?.pb_50m_free || a.stats?.pb_50m_free,
+        pb_100m_free: a.averages?.pb_100m_free || a.stats?.pb_100m_free,
+        swim_index_score: a.averages?.swim_index_score ?? a.stats?.swim_index_score,
+        podiums_count: a.averages?.podiums_count ?? a.stats?.podiums_count,
       },
       workload_analytics: a.workload || a.workload_analytics || {
         target_7day_effort_pts: gp > 0 ? 450 : 0,
@@ -326,17 +343,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         routine_score: Math.min(99, Math.max(50, rating - 5)),
         body_stress_pts: gp > 0 ? 20 : 0,
       },
-      radar_competencies: a.radar_competencies || {
-        speed: Math.min(99, Math.max(60, rating - 2)),
-        power: Math.min(99, Math.max(60, rating - 5)),
-        agility: Math.min(99, Math.max(60, rating)),
-        iq: Math.min(99, Math.max(60, rating + 2)),
-        tech: Math.min(99, Math.max(60, rating - 1)),
-      },
-      scoring_trends_last_10: a.scoring_trends_last_10 || (ppg > 0 ? [ppg, ppg + 2, Math.max(0, ppg - 1), ppg + 4, ppg] : [0, 0]),
+      radar_competencies: a.radar_competencies || undefined,
+      scoring_trends_last_10: trends,
       eligibility_documents: {
-        psa_verified: !!a.is_eligibility_verified,
-        residency_verified: true,
+        psa_verified: Boolean(a.eligibility_documents?.psa_verified || a.documents?.psa_birth_certificate?.status === 'Verified'),
+        residency_verified: Boolean(a.eligibility_documents?.proof_of_residency || a.eligibility_documents?.residency_verified || a.documents?.proof_of_residency?.status === 'Verified'),
       },
     };
   };
@@ -458,12 +469,40 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
           const normalizeId = (id?: string) => (id || '').replace(/^ath_/, '').trim();
 
-          const unassignedCoachAthletes: RosterAthlete[] = rawCoachAthletes
+          const richCoachAthletesMap = new Map<string, any>();
+          rawCoachAthletes.forEach((ha: any) => {
+            const k = normalizeId(ha.athlete_id || ha.user_id);
+            if (k) richCoachAthletesMap.set(k, ha);
+          });
+
+          const enrichedTeamAthletes: any[] = coachTeamAthletes.map((ca: any) => {
+            const k = normalizeId(ca.athlete_id || ca.user_id);
+            const rich = richCoachAthletesMap.get(k) || {};
+            return {
+              ...rich,
+              ...ca,
+              full_name: (ca.full_name && ca.full_name !== 'Athlete') ? ca.full_name : (rich.full_name || 'Athlete'),
+              birthdate: rich.birthdate || ca.birthdate,
+              province: rich.province || ca.province,
+              location: rich.location || ca.location,
+              physical_profile: rich.physical_profile || rich.physical_attributes || ca.physical_profile || ca.physical_attributes,
+              physical_attributes: rich.physical_attributes || rich.physical_profile || ca.physical_attributes,
+              averages: rich.averages || rich.stats || ca.averages || ca.stats,
+              stats: rich.stats || rich.averages || ca.stats || ca.averages,
+              scoring_trends_last_10: rich.scoring_trends_last_10 || ca.scoring_trends_last_10,
+              eligibility_documents: rich.eligibility_documents || ca.eligibility_documents,
+              documents: rich.documents || ca.documents,
+              is_eligibility_verified: ca.is_eligibility_verified ?? rich.is_eligibility_verified,
+            };
+          });
+
+          const unassignedCoachAthletes: any[] = rawCoachAthletes
             .filter((ha: any) => {
               const haKey = normalizeId(ha.athlete_id || ha.user_id);
               return !coachTeamAthletes.some((ca) => normalizeId(ca.athlete_id || ca.user_id) === haKey);
             })
             .map((ha: any) => ({
+              ...ha,
               athlete_id: ha.athlete_id || ha.user_id || `ath_${Date.now()}`,
               user_id: ha.user_id || ha.athlete_id || '',
               full_name: ha.full_name || `${ha.first_name || ''} ${ha.last_name || ''}`.trim() || 'Athlete',
@@ -474,8 +513,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               avatar_url: ha.avatar_url || undefined,
             }));
 
-          const seenMap = new Map<string, RosterAthlete>();
-          for (const a of [...coachTeamAthletes, ...unassignedCoachAthletes]) {
+          const seenMap = new Map<string, any>();
+          for (const a of [...enrichedTeamAthletes, ...unassignedCoachAthletes]) {
             const k = normalizeId(a.athlete_id || a.user_id);
             if (k && !seenMap.has(k)) {
               seenMap.set(k, a);

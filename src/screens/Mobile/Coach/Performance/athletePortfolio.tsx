@@ -44,11 +44,18 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
   // Helper to construct smooth SVG Path for last 10 scoring trends
   const renderScoringTrendsChart = () => {
     const rawData = athlete.scoring_trends_last_10;
-    let data: number[] = Array.isArray(rawData)
-      ? rawData
-          .map((v) => (typeof v === "number" ? v : Number(v)))
-          .filter((v) => Number.isFinite(v) && !isNaN(v))
-      : [];
+    const hasData = Array.isArray(rawData) && rawData.length > 0 && rawData.some((v) => Number(v) > 0);
+    if (!hasData) {
+      return (
+        <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: "#94A3B8", fontSize: 13 }}>No scoring trends recorded yet.</Text>
+        </View>
+      );
+    }
+
+    let data: number[] = rawData
+      .map((v) => (typeof v === "number" ? v : Number(v)))
+      .filter((v) => Number.isFinite(v) && !isNaN(v));
 
     if (data.length === 0) {
       data = [0, 0];
@@ -156,25 +163,27 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
     const center = size / 2;
     const maxRadius = 65;
 
-    const comps = athlete.radar_competencies || {
-      speed: 85,
-      power: 80,
-      agility: 90,
-      iq: 88,
-      tech: 84,
-    };
+    const comps = athlete.radar_competencies;
+    const hasRadarData = comps && Object.values(comps).some((v) => typeof v === "number" && v > 0);
+    if (!hasRadarData) {
+      return (
+        <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: "#94A3B8", fontSize: 13 }}>Pending athletic evaluation metrics.</Text>
+        </View>
+      );
+    }
 
-    const sanitizeVal = (val: any, fallback: number = 75) => {
+    const sanitizeVal = (val: any) => {
       const num = typeof val === "number" ? val : Number(val);
-      return Number.isFinite(num) && !isNaN(num) ? Math.max(0, Math.min(100, num)) : fallback;
+      return Number.isFinite(num) && !isNaN(num) ? Math.max(0, Math.min(100, num)) : 0;
     };
 
     const axes = [
-      { key: "speed", label: "Speed", value: sanitizeVal(comps.speed, 85) },
-      { key: "agility", label: "Agility", value: sanitizeVal(comps.agility, 90) },
-      { key: "tech", label: "Tech", value: sanitizeVal(comps.tech, 84) },
-      { key: "iq", label: "IQ", value: sanitizeVal(comps.iq, 88) },
-      { key: "power", label: "Power", value: sanitizeVal(comps.power, 80) },
+      { key: "speed", label: "Speed", value: sanitizeVal(comps?.speed) },
+      { key: "agility", label: "Agility", value: sanitizeVal(comps?.agility) },
+      { key: "tech", label: "Tech", value: sanitizeVal(comps?.tech) },
+      { key: "iq", label: "IQ", value: sanitizeVal(comps?.iq) },
+      { key: "power", label: "Power", value: sanitizeVal(comps?.power) },
     ];
 
     const angleStep = (2 * Math.PI) / 5;
@@ -341,25 +350,27 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>100M PB</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.pb_100m || "10.12s"}
+                  {athlete.averages.pb_100m || "-"}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>200M PB</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.pb_200m || "20.85s"}
+                  {athlete.averages.pb_200m || "-"}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>REACTION</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.reaction_time_s || "0.14s"}
+                  {athlete.averages.reaction_time_s || "-"}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>WIN %</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.win_rate_pct ? `${athlete.averages.win_rate_pct}%` : "86.7%"}
+                  {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null
+                    ? `${athlete.averages.win_rate_pct}%`
+                    : "-"}
                 </Text>
               </View>
             </>
@@ -368,25 +379,27 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>50M FREE</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.pb_50m_free || "23.45s"}
+                  {athlete.averages.pb_50m_free || "-"}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>100M FREE</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.pb_100m_free || "51.12s"}
+                  {athlete.averages.pb_100m_free || "-"}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>SWIM INDEX</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.swim_index_score || "854"}
+                  {athlete.averages.swim_index_score ? String(athlete.averages.swim_index_score) : "-"}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>PODIUMS</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.podiums_count || "12"}
+                  {athlete.averages.podiums_count !== undefined && athlete.averages.podiums_count !== null
+                    ? String(athlete.averages.podiums_count)
+                    : "0"}
                 </Text>
               </View>
             </>
@@ -395,25 +408,25 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>PPG</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.ppg || "22.4"}
+                  {typeof athlete.averages.ppg === "number" ? athlete.averages.ppg : (athlete.averages.ppg || "0")}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>RPG</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.rpg || "8.5"}
+                  {typeof athlete.averages.rpg === "number" ? athlete.averages.rpg : (athlete.averages.rpg || "0")}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>APG</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.apg || "6.2"}
+                  {typeof athlete.averages.apg === "number" ? athlete.averages.apg : (athlete.averages.apg || "0")}
                 </Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>PER</Text>
                 <Text style={styles.statValue}>
-                  {athlete.averages.per_score || "10.2"}
+                  {typeof athlete.averages.per_score === "number" ? athlete.averages.per_score : (athlete.averages.per_score || "0")}
                 </Text>
               </View>
             </>
@@ -428,25 +441,25 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           <View style={styles.physicalRow}>
             <Text style={styles.physicalLabel}>Height</Text>
             <Text style={styles.physicalValue}>
-              {athlete.biometrics.height_ft}
+              {athlete.biometrics.height_ft || "-"}
             </Text>
           </View>
           <View style={styles.physicalRow}>
             <Text style={styles.physicalLabel}>Weight</Text>
             <Text style={styles.physicalValue}>
-              {athlete.biometrics.weight_lbs}
+              {athlete.biometrics.weight_lbs || "-"}
             </Text>
           </View>
           <View style={styles.physicalRow}>
             <Text style={styles.physicalLabel}>Wingspan</Text>
             <Text style={styles.physicalValue}>
-              {athlete.biometrics.wingspan_ft}
+              {athlete.biometrics.wingspan_ft || "-"}
             </Text>
           </View>
           <View style={styles.physicalRow}>
             <Text style={styles.physicalLabel}>Vertical</Text>
             <Text style={styles.physicalValue}>
-              {athlete.biometrics.vertical_jump_in}
+              {athlete.biometrics.vertical_jump_in || "-"}
             </Text>
           </View>
         </View>
@@ -529,24 +542,30 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
               name="document-text-outline"
               size={24}
               color={
-                athlete.eligibility_documents.psa_verified
+                athlete.eligibility_documents?.psa_verified
                   ? "#00C8FF"
-                  : "#94A3B8"
+                  : "#64748B"
               }
             />
             <Text style={styles.docLabel}>PSA</Text>
+            <Text style={{ fontSize: 11, color: athlete.eligibility_documents?.psa_verified ? "#00C8FF" : "#64748B", marginTop: 4 }}>
+              {athlete.eligibility_documents?.psa_verified ? "Verified" : "Pending"}
+            </Text>
           </View>
           <View style={styles.docTile}>
             <Ionicons
               name="home-outline"
               size={24}
               color={
-                athlete.eligibility_documents.residency_verified
+                athlete.eligibility_documents?.residency_verified
                   ? "#00C8FF"
-                  : "#94A3B8"
+                  : "#64748B"
               }
             />
             <Text style={styles.docLabel}>Proof of Residency</Text>
+            <Text style={{ fontSize: 11, color: athlete.eligibility_documents?.residency_verified ? "#00C8FF" : "#64748B", marginTop: 4 }}>
+              {athlete.eligibility_documents?.residency_verified ? "Verified" : "Not Verified"}
+            </Text>
           </View>
         </View>
       </ScrollView>
