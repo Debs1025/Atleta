@@ -90,8 +90,22 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const homeScoreMatch = (m.notes || '').match(/\((\d+)\s*-\s*(\d+)\)/);
           const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
           const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
-          const homeName = m.home_team_name || m.home_team || (m.notes || '').match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || 'CELTICS';
-          const oppName = m.away_team_name || m.away_team || m.opponent_team_name || 'HAWKS';
+          // Resolve team display names from all possible field paths
+          // Coach-logged: home_team_name / away_team_name
+          // Official-created: team_id / opponent_team_name / home_team_id / away_team_id
+          const homeName =
+            m.home_team_name ||
+            m.game_name?.split(/\s+vs\.?\s+/i)?.[0]?.trim() ||
+            m.team_id ||
+            m.home_team_id ||
+            (m.notes ? (m.notes as string).match(/OCR Logged:\s*([^v]+?)\s+vs/i)?.[1]?.trim() : null) ||
+            'Home Team';
+          const oppName =
+            m.away_team_name ||
+            m.opponent_team_name ||
+            m.game_name?.split(/\s+vs\.?\s+/i)?.[1]?.trim() ||
+            m.away_team_id ||
+            'Away Team';
 
           const rawSport = (m.sport_type || 'BASKETBALL').toUpperCase();
           const sportType: OfficialMatchRecord['sport_type'] =
@@ -144,11 +158,11 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             team_id: m.team_id || '',
             home_team_name: homeName,
             away_team_name: oppName,
-            league_name: m.league_name || m.tournament_name || (m.notes?.includes('BRAA') ? 'BRAA REGIONALS' : m.notes?.includes('PALARO') ? 'PALARONG PAMBANSA' : 'BATANG PINOY'),
+            league_name: m.league_name || m.tournament_name || (m.match_type === 'Official Match' ? 'Official Match' : m.match_type || '-'),
             sport_type: sportType,
             match_date: formattedDate,
             match_time: formattedTime,
-            location: m.location || m.venue || 'Metro Sports Arena, Court 1',
+            location: m.location || m.venue || '-',
             audit_status: auditStatus,
             is_certified: auditStatus === 'REQUEST GRANTED' || !!m.is_certified,
             home_score: hScore,
