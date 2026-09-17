@@ -253,7 +253,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
             }
 
             if (!responseData) {
-                throw new Error(lastError || "Could not process scoresheet with OCR server.");
+                throw new Error("Could not process scoresheet with OCR server.");
             }
 
             // Map real AI-extracted player statistics into RawOCRDetectedData

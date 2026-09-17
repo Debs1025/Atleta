@@ -225,7 +225,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     three_pt_percentage: 0,
     ft_percentage: 0,
   },
-  radar_competencies: undefined,
+  radar_competencies: { speed: 0, power: 0, agility: 0, iq: 0, tech: 0 },
   scoring_trends_last_10: [],
   eligibility_documents: {
     psa_verified: false,
@@ -1087,7 +1087,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     : "Basketball",
                 match_type: "OCR Scanned Match",
                 match_date: new Date().toISOString(),
-                location: finalData.location || "Arena",
+                location: (finalData as any).location || "Arena",
                 game_result: homePts >= oppPts ? "WIN" : "LOSS",
                 notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,

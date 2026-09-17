@@ -74,16 +74,31 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshMatches = useCallback(async () => {
     try {
       setIsLoadingMatches(true);
-      const [matchesRes, syncRes]: [any, any] = await Promise.all([
+
+      // Fetch both the coach's own matches AND all official matches in the system.
+      // ?all=true includes official (tournament-official-created) matches regardless of coach association.
+      const [coachRes, allRes, syncRes]: [any, any, any] = await Promise.all([
         requestAuthenticatedJson('/matches').catch(() => null),
+        requestAuthenticatedJson('/matches?all=true').catch(() => null),
         requestAuthenticatedJson('/sync/coach-snapshot').catch(() => null),
       ]);
 
-      const rawList = (matchesRes?.matches && Array.isArray(matchesRes.matches) && matchesRes.matches.length > 0)
-        ? matchesRes.matches
-        : (syncRes?.scheduled_matches && Array.isArray(syncRes.scheduled_matches))
-        ? syncRes.scheduled_matches
-        : [];
+      const coachList: any[] = Array.isArray(coachRes?.matches) ? coachRes.matches : [];
+      const allList: any[] = Array.isArray(allRes?.matches) ? allRes.matches : [];
+      const syncList: any[] = Array.isArray(syncRes?.scheduled_matches) ? syncRes.scheduled_matches : [];
+
+      // Merge all sources, deduplicate by match_id (coach list takes precedence for audit_status)
+      const seenIds = new Set<string>();
+      const merged: any[] = [];
+      for (const m of [...coachList, ...allList, ...syncList]) {
+        const id = m.match_id || m.id;
+        if (id && !seenIds.has(id)) {
+          seenIds.add(id);
+          merged.push(m);
+        }
+      }
+
+      const rawList = merged;
 
       if (rawList.length > 0) {
         const mappedBackendMatches: OfficialMatchRecord[] = rawList.map((m: any, idx: number) => {
