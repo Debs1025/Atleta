@@ -53,7 +53,7 @@ export const ScoresheetMatch: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
 
   // Modals & Actions
-  const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | null>(null);
+  const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | 'NO_SCORESHEET' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
@@ -131,9 +131,21 @@ export const ScoresheetMatch: React.FC = () => {
     setRaceResults(updated);
   };
 
+  const handleOpenCertify = () => {
+    if (!scoresheetUrl || !scoresheetUrl.trim()) {
+      setActiveModal('NO_SCORESHEET');
+      return;
+    }
+    setActiveModal('CERTIFY');
+  };
+
   // HANDLES CERTIFY AND MAKE SURE IT DOESN'T DISAPPEAR
   const handleCertify = async () => {
     if (!matchData) return;
+    if (!scoresheetUrl || !scoresheetUrl.trim()) {
+      setActiveModal('NO_SCORESHEET');
+      return;
+    }
     setActionLoading(true);
     setActionError(null);
     try {
@@ -228,14 +240,14 @@ export const ScoresheetMatch: React.FC = () => {
     <div style={styles.tableSection}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={styles.tableSectionTitle}>{teamName} PLAYER PERFORMANCE STATISTICS</div>
-        {teamType === 'home' && !matchData?.is_certified && (
+        {teamType === 'home' && !matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
           <button
             type="button"
             onClick={() => setIsEditing(!isEditing)}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'LOCK EDITING' : 'EDIT SCANNED STATS'}
+            {isEditing ? 'LOCK EDITING' : 'EDIT RESULTS'}
           </button>
         )}
       </div>
@@ -365,7 +377,7 @@ export const ScoresheetMatch: React.FC = () => {
             ) : (
               <tr>
                 <td colSpan={11} style={{ padding: '24px', color: '#64748B', textAlign: 'center' }}>
-                  No player statistics recorded. Upload official scoresheet below to auto-populate.
+                  No player statistics recorded. Upload official scoresheet below to see results.
                 </td>
               </tr>
             )}
@@ -396,14 +408,14 @@ export const ScoresheetMatch: React.FC = () => {
         <div style={styles.tableSectionTitle}>
           {matchData?.sport_type?.toUpperCase()} OFFICIAL RACE & EVENT RESULTS
         </div>
-        {!matchData?.is_certified && (
+        {!matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
           <button
             type="button"
             onClick={() => setIsEditing(!isEditing)}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'LOCK EDITING' : 'EDIT RACE RESULTS'}
+            {isEditing ? 'LOCK EDITING' : 'EDIT RESULTS'}
           </button>
         )}
       </div>
@@ -493,7 +505,7 @@ export const ScoresheetMatch: React.FC = () => {
             ) : (
               <tr>
                 <td colSpan={8} style={{ padding: '24px', color: '#64748B', textAlign: 'center' }}>
-                  No race results recorded. Upload official meet scoresheet below to auto-populate.
+                  No race results recorded. Upload official meet scoresheet below to see results.
                 </td>
               </tr>
             )}
@@ -525,8 +537,8 @@ export const ScoresheetMatch: React.FC = () => {
         </div>
 
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
-            <Loader2 style={{ width: 36, height: 36, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)' }}>
+            <Loader2 style={{ width: 40, height: 40, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
           </div>
         ) : matchData ? (
           <>
@@ -681,7 +693,7 @@ export const ScoresheetMatch: React.FC = () => {
                 {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
                   <button
                     type="button"
-                    onClick={() => setActiveModal('CERTIFY')}
+                    onClick={handleOpenCertify}
                     className="hover-btn-success"
                     style={styles.certifyBtn}
                   >
@@ -723,6 +735,41 @@ export const ScoresheetMatch: React.FC = () => {
       </main>
 
       {/* Confirmation & Preview Modals */}
+      {activeModal === 'NO_SCORESHEET' && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle style={{ width: 22, height: 22, color: '#EF4444' }} />
+              <h3 style={styles.modalTitle}>UPLOAD SCORESHEET FIRST</h3>
+            </div>
+            <p style={styles.modalDesc}>
+              You cannot certify this match without an official scoresheet. Please upload a scoresheet first to verify the results before certifying.
+            </p>
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                className="hover-btn-outline"
+                style={styles.modalCancelBtn}
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveModal(null);
+                  fileInputRef.current?.click();
+                }}
+                className="hover-btn-solid"
+                style={styles.modalConfirmBtnGreen}
+              >
+                UPLOAD SCORESHEET
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeModal === 'CERTIFY' && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalCard}>

@@ -33,7 +33,6 @@ export const ProfilePage: React.FC = () => {
   // Edit profile modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
   const [editOrg, setEditOrg] = useState('');
   const [editAvatar, setEditAvatar] = useState<string | null>(null);
 
@@ -64,7 +63,6 @@ export const ProfilePage: React.FC = () => {
       (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : '')
     );
     setEditOrg(profile?.organization_name || user?.organization_name || user?.organization || '');
-    setEditPhone(profile?.phone_number || user?.phone_number || '');
     setEditAvatar(profile?.avatar_url || user?.avatar_url || (user as any)?.profile_image || null);
     setIsEditModalOpen(true);
   };
@@ -88,7 +86,6 @@ export const ProfilePage: React.FC = () => {
       ...(user || { uid: profile?.official_id || 'OFFICIAL', email: email, role: 'Official' }),
       full_legal_name: editName.trim() || undefined,
       full_name: editName.trim() || undefined,
-      phone_number: editPhone.trim() || undefined,
       organization_name: editOrg.trim() || undefined,
       organization: editOrg.trim() || undefined,
       avatar_url: editAvatar || undefined,
@@ -100,7 +97,6 @@ export const ProfilePage: React.FC = () => {
       ...prev,
       full_legal_name: editName.trim() || undefined,
       full_name: editName.trim() || undefined,
-      phone_number: editPhone.trim() || undefined,
       organization_name: editOrg.trim() || undefined,
       organization: editOrg.trim() || undefined,
       avatar_url: editAvatar || undefined,
@@ -112,7 +108,6 @@ export const ProfilePage: React.FC = () => {
       ...(profile || {}),
       full_legal_name: editName.trim() || undefined,
       full_name: editName.trim() || undefined,
-      phone_number: editPhone.trim() || undefined,
       organization_name: editOrg.trim() || undefined,
       organization: editOrg.trim() || undefined,
       avatar_url: editAvatar || undefined,
@@ -131,7 +126,6 @@ export const ProfilePage: React.FC = () => {
     updateOfficialProfileData({
       full_legal_name: editName.trim() || undefined,
       full_name: editName.trim() || undefined,
-      phone_number: editPhone.trim() || undefined,
       organization_name: editOrg.trim() || undefined,
       organization: editOrg.trim() || undefined,
       avatar_url: editAvatar || undefined,
@@ -173,7 +167,6 @@ export const ProfilePage: React.FC = () => {
       });
 
   const email = profile?.email || user?.email || '—';
-  const phone = profile?.phone_number || user?.phone_number || '—';
   const avatarUrl = profile?.avatar_url || user?.avatar_url || (user as any)?.profile_image || null;
 
   return (
@@ -258,14 +251,9 @@ export const ProfilePage: React.FC = () => {
             <div style={styles.sectionCard}>
               <div style={styles.sectionBannerGray}>CONTACT INFORMATION</div>
               <div style={styles.summaryBox}>
-                <div style={{ ...styles.summaryRow, ...styles.summaryRowBorder }}>
+                <div style={styles.summaryRow}>
                   <span style={styles.rowLabel}>PRIMARY EMAIL</span>
                   <span style={styles.rowValue}>{email}</span>
-                </div>
-
-                <div style={styles.summaryRow}>
-                  <span style={styles.rowLabel}>CONTACT NUMBER</span>
-                  <span style={styles.rowValue}>{phone}</span>
                 </div>
               </div>
             </div>
@@ -348,25 +336,13 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               {/* Regional Affiliation Field */}
-              <div style={{ marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>REGIONAL AFFILIATION / ORGANIZATION</label>
                 <input
                   type="text"
                   placeholder="e.g. Bucal Official / Ateneo De Cubao"
                   value={editOrg}
                   onChange={(e) => setEditOrg(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '2px', padding: '9px 12px', fontSize: '13px', outline: 'none', color: '#0B132B', fontWeight: 600 }}
-                />
-              </div>
-
-              {/* Contact Number Field */}
-              <div style={{ marginBottom: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>CONTACT NUMBER</label>
-                <input
-                  type="text"
-                  placeholder="63"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
                   style={{ border: '1px solid #CBD5E1', borderRadius: '2px', padding: '9px 12px', fontSize: '13px', outline: 'none', color: '#0B132B', fontWeight: 600 }}
                 />
               </div>

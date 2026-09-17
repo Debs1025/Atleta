@@ -427,7 +427,7 @@ export const getCoachNameById = async (coachIdOrName: string): Promise<string> =
         return name;
       }
     }
-  } catch {}
+  } catch { }
 
   return trimmed.replace(/^coach[_\s]*/i, '').trim();
 };
@@ -985,7 +985,7 @@ export const updateOfficialProfileData = async (payload: any): Promise<any> => {
       setCachedData('official_profile', data);
       return data;
     }
-  } catch {}
+  } catch { }
 
   try {
     const res2 = await fetch(`${BASE_URL}/officials/me`, {
@@ -998,7 +998,7 @@ export const updateOfficialProfileData = async (payload: any): Promise<any> => {
       setCachedData('official_profile', data);
       return data;
     }
-  } catch {}
+  } catch { }
 
   try {
     const res3 = await fetch(`${BASE_URL}/users/profile`, {
@@ -1011,7 +1011,7 @@ export const updateOfficialProfileData = async (payload: any): Promise<any> => {
       setCachedData('official_profile', data);
       return data;
     }
-  } catch {}
+  } catch { }
 
   setCachedData('official_profile', bodyData);
   return bodyData;

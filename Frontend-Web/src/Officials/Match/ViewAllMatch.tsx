@@ -210,7 +210,7 @@ export const ViewAllMatch: React.FC = () => {
             <thead>
               <tr>
                 <th style={styles.th}>MATCH ID</th>
-                <th style={styles.th}>MATCH CLASS</th>
+                <th style={styles.th}>MATCH NAME</th>
                 <th style={styles.th}>SPORT</th>
                 <th style={styles.th}>COACHES (TEAM 1, TEAM 2)</th>
                 <th style={styles.th}>DATE / TIME</th>

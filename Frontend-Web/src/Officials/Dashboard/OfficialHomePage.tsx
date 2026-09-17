@@ -198,7 +198,7 @@ export const OfficialHomePage: React.FC = () => {
               <thead>
                 <tr>
                   <th style={styles.th}>MATCH ID</th>
-                  <th style={styles.th}>MATCH CLASS</th>
+                  <th style={styles.th}>MATCH NAME</th>
                   <th style={styles.th}>SPORT</th>
                   <th style={styles.th}>COACH</th>
                   <th style={{ ...styles.th, borderRight: 'none' }}>STATUS</th>

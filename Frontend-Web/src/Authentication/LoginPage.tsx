@@ -136,14 +136,7 @@ export const LoginPage: React.FC = () => {
                 position: 'relative',
               }}
             >
-              <div
-                style={{
-                  width: '50%',
-                  height: '100%',
-                  backgroundColor: '#0B132B',
-                  borderRadius: '2px',
-                }}
-              />
+              <div className="progress-bar-indeterminate" />
             </div>
           </div>
         </main>
