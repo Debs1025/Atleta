@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -164,26 +165,35 @@ export const AdminHomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Metric Cards Grid */}
+          {/* System Admin Overview & Queue Health Cards */}
           <div style={styles.cardsGrid}>
             <div style={styles.criticalCard}>
               <div style={styles.watermark}>
-                <svg width="130" height="130" viewBox="0 0 100 100" fill="none">
-                  <circle cx="50" cy="50" r="42" stroke="#0B132B" strokeWidth="14" />
-                  <circle cx="50" cy="50" r="20" stroke="#0B132B" strokeWidth="10" />
-                </svg>
+                <ShieldCheck style={{ width: 140, height: 140, strokeWidth: 1.1, color: '#0B132B' }} />
               </div>
-              <h2 style={styles.criticalTitle}>CRITICAL REVIEW NEEDED</h2>
-              <p style={styles.criticalText}>
-                A spike in certification uploads from NCAA DI institutions has been detected. Audits must be
-                completed within 24 hours of timestamp to maintain compliance protocols.
-              </p>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <ShieldCheck style={{ width: 18, height: 18, color: '#0B132B' }} />
+                  <h2 style={styles.criticalTitle}>COACH ADMISSION & CREDENTIAL VERIFICATION</h2>
+                </div>
+                <p style={styles.criticalText}>
+                  Review and authenticate incoming coach applications, verify submitted professional licenses and institutional affiliations. Approved admissions grant instant roster governance and athlete scouting privileges.
+                </p>
+              </div>
             </div>
 
             <div style={styles.healthCard}>
-              <div style={styles.healthLabel}>QUEUE HEALTH</div>
-              <div style={styles.healthValue}>{queueHealthScore}%</div>
-              <div style={styles.healthSub}>INTEGRITY CHECK PASSED</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={styles.healthLabel}>QUEUE HEALTH</div>
+                <span style={styles.liveIndicatorDot} title="All Systems Operational" />
+              </div>
+              <div>
+                <div style={styles.healthValue}>{queueHealthScore}%</div>
+                <div style={styles.healthSub}>ALL SERVICES OPERATIONAL</div>
+              </div>
+              <div style={styles.healthFooter}>
+                <span>REAL-TIME QUEUE SYNC ACTIVE</span>
+              </div>
             </div>
           </div>
 
@@ -333,7 +343,7 @@ export const AdminHomePage: React.FC = () => {
                                 : styles.pendingReviewBadge
                             }
                           >
-                            {isCoachVerified(item) ? 'VERIFIED' : isCoachRejected(item) ? 'REJECTED' : 'PENDING_REVIEW'}
+                            {isCoachVerified(item) ? 'VERIFIED' : isCoachRejected(item) ? 'REJECTED' : 'PENDING'}
                           </span>
                         </td>
                         <td style={{ ...styles.td, textAlign: 'center', borderRight: 'none', padding: '10px 8px' }}>

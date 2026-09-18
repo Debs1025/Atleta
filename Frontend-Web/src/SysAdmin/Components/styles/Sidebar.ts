@@ -12,6 +12,7 @@ export const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     boxSizing: 'border-box',
     fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+    height: '100%',
   },
   topSection: {
     display: 'flex',

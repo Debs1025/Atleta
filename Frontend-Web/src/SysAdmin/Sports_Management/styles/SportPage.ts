@@ -2,7 +2,9 @@ import React from 'react';
 
 export const styles: Record<string, React.CSSProperties> = {
   shell: {
-    minHeight: '100vh',
+    height: '100vh',
+    width: '100vw',
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: '#FFFFFF',
@@ -12,13 +14,15 @@ export const styles: Record<string, React.CSSProperties> = {
   layout: {
     display: 'flex',
     flex: 1,
-    minHeight: 'calc(100vh - 64px)',
+    height: 'calc(100vh - 64px)',
+    overflow: 'hidden',
   },
   main: {
     flex: 1,
     padding: '36px 48px',
     backgroundColor: '#FFFFFF',
     overflowY: 'auto',
+    height: '100%',
     boxSizing: 'border-box',
   },
   topNavRow: {
