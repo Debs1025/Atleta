@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import { requestAuthenticatedJson, API_BASE } from '../../Authentication/authShared';
+import { getMatchesOfflineFirst, saveMatchOfflineFirst } from '../../../../services/firebaseClient';
 
 export type AuditStatus = 'NOT REQUESTED' | 'PENDING REQUEST' | 'REQUEST GRANTED';
 
@@ -98,7 +99,11 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      const rawList = merged;
+      let rawList = merged;
+      if (rawList.length === 0) {
+        // Offline fallback from persistent Firestore cache
+        rawList = await getMatchesOfflineFirst();
+      }
 
       if (rawList.length > 0) {
         const mappedBackendMatches: OfficialMatchRecord[] = rawList.map((m: any, idx: number) => {

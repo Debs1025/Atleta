@@ -17,6 +17,7 @@ import { styles } from "./styles/createLog";
 import { SportCategory, AthleteRosterItem, MatchLogSessionState } from "./types";
 import { useMatchSession } from "./MatchSessionContext";
 import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
+import { getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 
 interface CreateLogProps {
   onBack?: () => void;
@@ -99,15 +100,21 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
             Accept: "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        });
+        }).catch(() => null);
 
-        if (res.ok) {
-          const data = await res.json();
-          rawList = Array.isArray(data.athletes)
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          rawList = Array.isArray(data?.athletes)
             ? data.athletes
             : Array.isArray(data)
             ? data
             : [];
+        } else {
+          // Offline / WiFi off: Load from persistent Firestore offline cache
+          const offlineList = await getAthletesOfflineFirst(sport);
+          if (offlineList.length > 0) {
+            rawList = offlineList;
+          }
         }
       }
 

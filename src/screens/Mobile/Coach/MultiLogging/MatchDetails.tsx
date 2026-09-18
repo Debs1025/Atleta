@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/MatchDetails";
 import { useMatchSession } from "./MatchSessionContext";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { saveMatchOfflineFirst } from "../../../../services/firebaseClient";
 
 interface MatchDetailsProps {
   onBack?: () => void;
@@ -132,9 +133,9 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     };
 
     try {
-      await requestAuthenticatedJson("/matches/submit", "POST", payload);
+      await saveMatchOfflineFirst(payload);
     } catch (err) {
-      console.warn("Backend match log submission error:", err);
+      console.warn("Offline-first match log save note:", err);
     }
   };
 
