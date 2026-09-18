@@ -44,7 +44,11 @@ try {
     }),
   });
 } catch (e) {
-  dbInstance = getFirestore(app);
+  try {
+    dbInstance = initializeFirestore(app, {});
+  } catch (e2) {
+    dbInstance = getFirestore(app);
+  }
 }
 
 export const db: Firestore = dbInstance;
