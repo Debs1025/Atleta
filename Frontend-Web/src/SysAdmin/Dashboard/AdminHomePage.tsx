@@ -150,7 +150,7 @@ export const AdminHomePage: React.FC = () => {
 
   return (
     <div style={styles.shell}>
-      <Navbar title="SYSTEM DASHBOARD" />
+      <Navbar title="ADMIN DASHBOARD" />
 
       <div style={styles.layout}>
         <Sidebar activeTab="AUDIT_QUEUE" />

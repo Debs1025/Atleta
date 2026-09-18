@@ -6,7 +6,7 @@ interface NavbarProps {
   title?: string;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ title = 'SYSTEM DASHBOARD' }) => {
+export const Navbar: React.FC<NavbarProps> = ({ title = 'ADMIN DASHBOARD' }) => {
   return (
     <header style={styles.header}>
       <Link to="/admin/dashboard" style={styles.logo}>
