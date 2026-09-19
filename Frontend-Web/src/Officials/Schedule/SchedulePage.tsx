@@ -223,6 +223,7 @@ export const SchedulePage: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(
     () => getCachedData<AuthUser>('user_me') || getStoredUser()
   );
+
   const [schedules, setSchedules] = useState<OfficialScheduleItem[]>(
     () => getCachedData<OfficialScheduleItem[]>(`official_schedules_${month}_${year}`) || []
   );
@@ -231,7 +232,12 @@ export const SchedulePage: React.FC = () => {
   const now = new Date();
   const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayFormatted);
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
+    if (now.getFullYear() === year && now.getMonth() + 1 === month) {
+      return todayFormatted;
+    }
+    return `${year}-${String(month).padStart(2, '0')}-01`;
+  });
 
   const refreshSchedules = () => {
     getOfficialSchedules(month, year, true).then((res) => {
@@ -246,32 +252,85 @@ export const SchedulePage: React.FC = () => {
       return;
     }
 
-    Promise.all([
-      getMe().then((res) => setUser(res)).catch(() => {}),
-      getOfficialSchedules(month, year).then((res) => {
-        const list = res || [];
-        setSchedules(list);
-        const matchOnDate = list.find((s) => {
-          const timeStr = s?.scheduled_time || (s as any)?.raw_match?.match_date || (s as any)?.match_date;
-          if (!timeStr) return false;
-          return timeStr.startsWith(todayFormatted) || timeStr.includes(todayFormatted);
-        });
-        if (!matchOnDate && list.length > 0) {
+    let isCurrent = true;
+
+    // Synchronously load cache for the newly selected month/year immediately to prevent glitching data
+    const cached = getCachedData<OfficialScheduleItem[]>(`official_schedules_${month}_${year}`);
+    if (cached && Array.isArray(cached)) {
+      setSchedules(cached);
+    } else {
+      setSchedules([]);
+    }
+
+    getMe().then((res) => {
+      if (isCurrent && res) setUser(res);
+    }).catch(() => {});
+
+    getOfficialSchedules(month, year).then((res) => {
+      if (!isCurrent) return; // Discard stale responses from quickly skipped months
+
+      const list = res || [];
+      setSchedules(list);
+
+      // Verify that selected date is in the currently active month & year
+      setSelectedDateStr((prev) => {
+        const parts = prev ? prev.split('-') : [];
+        const selYear = Number(parts[0]);
+        const selMonth = Number(parts[1]);
+
+        if (selYear === year && selMonth === month) {
+          return prev;
+        }
+
+        const nowDate = new Date();
+        if (nowDate.getFullYear() === year && nowDate.getMonth() + 1 === month) {
+          return `${year}-${String(month).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`;
+        }
+
+        if (list.length > 0) {
           const firstTime = list[0].scheduled_time || (list[0] as any).raw_match?.match_date || (list[0] as any).match_date;
           if (firstTime) {
-            setSelectedDateStr(firstTime.split('T')[0]);
+            const firstDatePart = firstTime.split('T')[0];
+            const fParts = firstDatePart.split('-');
+            if (Number(fParts[0]) === year && Number(fParts[1]) === month) {
+              return firstDatePart;
+            }
           }
         }
-      }).catch(() => {}),
-    ]);
-  }, [navigate, month, year, todayFormatted]);
+
+        return `${year}-${String(month).padStart(2, '0')}-01`;
+      });
+    }).catch(() => {});
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [navigate, month, year]);
 
   const nextMonth = () => {
-    setCurrentDate(new Date(year, month, 1));
+    const nextD = new Date(year, month, 1);
+    const nextY = nextD.getFullYear();
+    const nextM = nextD.getMonth() + 1;
+    const nowDate = new Date();
+    if (nowDate.getFullYear() === nextY && nowDate.getMonth() + 1 === nextM) {
+      setSelectedDateStr(`${nextY}-${String(nextM).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`);
+    } else {
+      setSelectedDateStr(`${nextY}-${String(nextM).padStart(2, '0')}-01`);
+    }
+    setCurrentDate(nextD);
   };
 
   const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 2, 1));
+    const prevD = new Date(year, month - 2, 1);
+    const prevY = prevD.getFullYear();
+    const prevM = prevD.getMonth() + 1;
+    const nowDate = new Date();
+    if (nowDate.getFullYear() === prevY && nowDate.getMonth() + 1 === prevM) {
+      setSelectedDateStr(`${prevY}-${String(prevM).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`);
+    } else {
+      setSelectedDateStr(`${prevY}-${String(prevM).padStart(2, '0')}-01`);
+    }
+    setCurrentDate(prevD);
   };
 
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -334,8 +393,6 @@ export const SchedulePage: React.FC = () => {
       const timeB = new Date(b.scheduled_time || (b as any).raw_match?.match_date || (b as any).match_date || 0).getTime();
       return timeA - timeB;
     });
-
-  const selectedDayNum = selectedDateStr ? Number(selectedDateStr.split('-')[2]) : null;
 
   return (
     <div style={styles.shell}>
@@ -416,7 +473,7 @@ export const SchedulePage: React.FC = () => {
                           return timeA - timeB;
                         });
 
-                      const isSelected = dayNum === selectedDayNum;
+                      const isSelected = selectedDateStr === targetDatePrefix;
 
                       return (
                         <td
