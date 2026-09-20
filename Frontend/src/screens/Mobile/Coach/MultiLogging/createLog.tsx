@@ -20,6 +20,7 @@ import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
 import { getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 
 interface CreateLogProps {
+  initialAthletes?: any[];
   onBack?: () => void;
   onStartLogging?: (session: MatchLogSessionState) => void;
 }
@@ -51,7 +52,7 @@ const matchesSport = (athleteSport?: string, athletePosition?: string, targetSpo
   return sport === target;
 };
 
-export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
+export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: CreateLogProps) {
   const insets = useSafeAreaInsets();
   const {
     session,
@@ -71,6 +72,28 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
   const [showInterruptionModal, setShowInterruptionModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [missingItems, setMissingItems] = useState<string[]>([]);
+
+  useEffect(() => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    const formattedDate = `${mm}/${dd}/${yyyy}`;
+
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const formattedTime = `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+
+    setSessionDate((prev) => prev || formattedDate);
+    setSessionTime((prev) => prev || formattedTime);
+    setSessionDetails({
+      date_time: `${formattedDate}, ${formattedTime}`,
+      location: session.location || "Araneta Coliseum",
+    });
+  }, []);
 
   // Fetch sport-specific athletes from database
   const fetchAthletesFromDb = useCallback(async (sport: SportCategory) => {
@@ -110,10 +133,12 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
             ? data
             : [];
         } else {
-          // Offline / WiFi off: Load from persistent Firestore offline cache
+          // Offline / WiFi off: Load from persistent Firestore offline cache or initialAthletes
           const offlineList = await getAthletesOfflineFirst(sport);
           if (offlineList.length > 0) {
             rawList = offlineList;
+          } else if (initialAthletes && initialAthletes.length > 0) {
+            rawList = initialAthletes;
           }
         }
       }
@@ -194,27 +219,19 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
   };
 
   const handleStart = () => {
-    const missing: string[] = [];
+    const effectiveDate = sessionDate.trim() || new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+    const effectiveTime = sessionTime.trim() || "07:00 PM";
+    const effectiveLocation = (session.location && session.location.trim()) || "Araneta Coliseum";
 
     if (session.active_roster.length === 0) {
-      missing.push(`Select at least 1 ${session.sport_type.toLowerCase()} athlete for the roster`);
-    }
-    if (!sessionDate.trim()) {
-      missing.push("Date schedule (mm/dd/yyyy)");
-    }
-    if (!sessionTime.trim()) {
-      missing.push("Time schedule (--:-- --)");
-    }
-    if (!session.location || !session.location.trim()) {
-      missing.push("Session location (e.g. Gym / Stadium)");
-    }
-
-    if (missing.length > 0) {
-      setMissingItems(missing);
+      setMissingItems([`Select at least 1 ${session.sport_type.toLowerCase()} athlete for the roster`]);
       setShowErrors(true);
       setShowInterruptionModal(true);
       return;
     }
+
+    setSessionDate(effectiveDate);
+    setSessionTime(effectiveTime);
 
     // Organize selected roster into active on-court vs bench roster
     const allSelected = session.active_roster;
@@ -230,6 +247,8 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
     }
 
     setSessionDetails({
+      date_time: `${effectiveDate}, ${effectiveTime}`,
+      location: effectiveLocation,
       active_roster: activeRoster,
       bench_roster: benchRoster,
     });
@@ -582,6 +601,36 @@ export function CreateLogScreen({ onBack, onStartLogging }: CreateLogProps) {
                     ? `No ${session.sport_type} athletes match "${searchQuery}".`
                     : `No registered ${session.sport_type} athletes found in database.`}
                 </Text>
+                <TouchableOpacity
+                  style={{
+                    marginTop: 14,
+                    paddingVertical: 10,
+                    paddingHorizontal: 16,
+                    backgroundColor: "#00D2FF",
+                    borderRadius: 8,
+                  }}
+                  onPress={() => {
+                    const fallbackName = searchQuery.trim() || "Harold Delos Santos";
+                    addAthleteToRoster({
+                      athlete_id: `ath_custom_${Date.now()}`,
+                      jersey_number: "0",
+                      last_name: fallbackName.split(" ").slice(-1)[0] || fallbackName,
+                      full_name: fallbackName.toUpperCase(),
+                      position_or_event: session.sport_type === "BASKETBALL" ? "Guard" : session.sport_type === "SWIMMING" ? "Freestyle" : "100m",
+                      is_active_on_field: false,
+                      sport_type: session.sport_type,
+                      basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
+                      timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
+                    });
+                    setShowAddModal(false);
+                    setSearchQuery("");
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: "#070D19", fontWeight: "bold" }}>
+                    + Add {searchQuery.trim() ? `"${searchQuery.trim()}"` : "Harold Delos Santos"}
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>

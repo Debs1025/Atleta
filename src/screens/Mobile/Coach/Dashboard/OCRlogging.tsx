@@ -442,7 +442,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 54, paddingBottom: 40 },
+          { paddingTop: 14, paddingBottom: 40 },
         ]}
         showsVerticalScrollIndicator={false}
       >

@@ -11,6 +11,7 @@ import { TeamProfileScreen } from "./TeamProfile";
 import { CoachProfileScreen } from "./CoachProfile";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
+import { getAthleteProfileOfflineFirst } from "../../../../services/firebaseClient";
 
 const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [];
 
@@ -103,8 +104,13 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         requestAuthenticatedJson("/inquiries").catch(() => null),
       ]);
 
-      if (homeRes || profileRes || statsRes || workloadRes) {
-        const raw = { ...(homeRes || {}), ...(profileRes || {}), ...(statsRes || {}) };
+      let homeData = homeRes;
+      if (!homeData && !profileRes && !statsRes) {
+        homeData = await getAthleteProfileOfflineFirst();
+      }
+
+      if (homeData || profileRes || statsRes || workloadRes) {
+        const raw = { ...(homeData || {}), ...(profileRes || {}), ...(statsRes || {}) };
         const stats = raw.stats || raw.analytics || raw;
         const phys = raw.physical_attributes || raw.physical_profile || raw;
 

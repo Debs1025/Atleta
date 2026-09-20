@@ -51,6 +51,7 @@ import { MatchHistory } from "../Performance/matchHistory";
 import { TrackfieldMatchResult } from "../Performance/trackfieldMatchResult";
 import { SwimmingMatchResult } from "../Performance/swimmingMatchResult";
 import { BasketballMatchResult } from "../Performance/basketballMatchResult";
+import { getMatchesOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -251,17 +252,62 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
 
   // Helper function to dynamically compute performance profile from real metrics
-  const computeAthletePerformance = (a: any): AthletePerformanceProfile => {
-    const ppg = Number(a.averages?.ppg ?? a.stats?.ppg ?? a.pts ?? 0);
-    const rpg = Number(a.averages?.rpg ?? a.stats?.rpg ?? a.reb ?? 0);
-    const apg = Number(a.averages?.apg ?? a.stats?.apg ?? a.ast ?? 0);
-    const gp = Number(a.averages?.games_played ?? a.stats?.games_played ?? (ppg > 0 ? 1 : 0));
+  const computeAthletePerformance = (a: any, matchesList: MatchHistoryItem[] = matchHistoryList): AthletePerformanceProfile => {
+    const athleteName = (a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || "").toLowerCase();
+    const athleteId = a.athlete_id || a.user_id;
+
+    const matchingMatches = (matchesList || []).filter((m) =>
+      m.player_stats?.some(
+        (ps: any) =>
+          (ps.name && athleteName && ps.name.toLowerCase() === athleteName) ||
+          (ps.athlete_id && athleteId && ps.athlete_id === athleteId)
+      )
+    );
+
+    let matchPts = 0;
+    let matchReb = 0;
+    let matchAst = 0;
+    let matchCount = matchingMatches.length;
+    let matchTrends: number[] = [];
+
+    matchingMatches.forEach((m) => {
+      const ps = m.player_stats?.find(
+        (p: any) =>
+          (p.name && athleteName && p.name.toLowerCase() === athleteName) ||
+          (p.athlete_id && athleteId && p.athlete_id === athleteId)
+      );
+      if (ps) {
+        const pts = Number(ps.pts || 0);
+        matchPts += pts;
+        matchReb += Number(ps.reb || 0);
+        matchAst += Number(ps.ast || 0);
+        matchTrends.push(pts);
+      }
+    });
+
+    const baseGp = Number(a.averages?.games_played ?? a.stats?.games_played ?? (Number(a.averages?.ppg ?? a.stats?.ppg ?? a.pts ?? 0) > 0 ? 1 : 0));
+    const basePpg = Number(a.averages?.ppg ?? a.stats?.ppg ?? a.pts ?? 0);
+    const baseRpg = Number(a.averages?.rpg ?? a.stats?.rpg ?? a.reb ?? 0);
+    const baseApg = Number(a.averages?.apg ?? a.stats?.apg ?? a.ast ?? 0);
+
+    let gp = baseGp;
+    let ppg = basePpg;
+    let rpg = baseRpg;
+    let apg = baseApg;
+
+    if (matchCount > 0) {
+      gp = Math.max(baseGp, matchCount);
+      ppg = Math.round((matchPts / matchCount) * 10) / 10;
+      rpg = Math.round((matchReb / matchCount) * 10) / 10;
+      apg = Math.round((matchAst / matchCount) * 10) / 10;
+    }
+
     const wins = Number(a.averages?.wins ?? a.stats?.wins ?? (gp > 0 ? Math.round(gp * 0.7) : 0));
-    const per = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.2) : 0));
+    const per = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.2 + rpg * 1.0 + apg * 1.5) : 0));
 
     // Calculate dynamic rating score derived from PER / PPG / verified metrics
     let rating = Number(a.rating_score || 0);
-    if (!rating) {
+    if (!rating || matchCount > 0) {
       if (per > 0) {
         rating = Math.min(99, Math.max(60, Math.round(per * 2.8)));
       } else if (ppg > 0) {
@@ -383,14 +429,29 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             : (syncRes?.scheduled_matches && Array.isArray(syncRes.scheduled_matches))
             ? syncRes.scheduled_matches
             : [];
+          let offlineMatches: any[] = [];
+          try {
+            offlineMatches = await getMatchesOfflineFirst();
+          } catch (_) {}
 
-          if (rawMatchList.length > 0) {
-            const liveMatches: MatchHistoryItem[] = rawMatchList.map((m: any) => {
+          const rawCombined = [...(rawMatchList || [])];
+          if (Array.isArray(offlineMatches)) {
+            offlineMatches.forEach((om: any) => {
+              const omId = om.match_id || om.id;
+              if (omId && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {
+                rawCombined.unshift(om);
+              }
+            });
+          }
+
+          let liveMatches: MatchHistoryItem[] = [];
+          if (rawCombined.length > 0) {
+            liveMatches = rawCombined.map((m: any) => {
               const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
               const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
               const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
-              const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
-              const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
+              const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "ATLETA";
+              const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "OPPONENT";
               const rawD = m.match_date || m.date_time || m.created_at;
               const d = rawD ? new Date(rawD) : null;
               const dateShort = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
@@ -414,7 +475,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 home_score: hScore,
                 away_score: aScore,
                 player_stats: m.player_stats || [],
-                coach_notes: m.notes ? [m.notes] : ["Match recorded via OCR Scoresheet."],
+                coach_notes: m.notes ? [m.notes] : ["Match recorded."],
               };
             });
             setMatchHistoryList(liveMatches);
@@ -434,46 +495,55 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             ? teamsRes.teams
             : [];
 
-          let coachTeamAthletes: RosterAthlete[] = [];
-          if (rawTeamsList.length > 0) {
-            const mappedTeams: Team[] = rawTeamsList.map((t: any) => ({
-              team_id: t.team_id || t.id,
-              team_name: t.team_name || "Team",
-              sport_type: (t.sport_type?.toUpperCase() || "BASKETBALL") as Team["sport_type"],
-              division: t.division || "Elite Professional",
-              season_record: t.season_record || { wins: t.wins || 0, losses: t.losses || 0 },
-              coach_id: t.coach_id || coach.coach_id,
-              roster_list: Array.isArray(t.roster_list) ? t.roster_list.map((p: any) => ({
-                athlete_id: typeof p === 'string' ? p : (p.athlete_id || p.user_id || 'ath_01'),
-                user_id: typeof p === 'string' ? p : (p.user_id || p.athlete_id || 'usr_01'),
-                full_name: typeof p === 'object' ? (p.full_name || p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Athlete') : 'Athlete',
-                sport_type: typeof p === 'object' ? (p.sport_type || 'BASKETBALL') : 'BASKETBALL',
-                position: typeof p === 'object' ? (p.position || 'PG') : 'PG',
-                jersey_number: typeof p === 'object' ? String(p.jersey_number || '0') : '0',
-                is_eligibility_verified: typeof p === 'object' ? !!p.is_eligibility_verified : true,
-                event_distance: typeof p === 'object' ? p.event_distance : undefined,
-                stroke_style: typeof p === 'object' ? p.stroke_style : undefined,
-                avatar_url: typeof p === 'object' ? p.avatar_url : undefined,
-              })) : [],
-              created_at: t.created_at || new Date().toISOString().split("T")[0],
-            }));
-            setTeams(mappedTeams);
-            if (mappedTeams[0]) {
-              setSelectedTeamId(mappedTeams[0].team_id);
-            }
-            coachTeamAthletes = mappedTeams.flatMap((t: Team) => t.roster_list || []);
-          } else {
-            setTeams([]);
-            coachTeamAthletes = [];
+          const processedTeams: Team[] = rawTeamsList.map((t: any) => ({
+            team_id: t.team_id || `team_${Date.now()}`,
+            team_name: t.team_name || "Team",
+            sport_type: (t.sport_type?.toUpperCase() || "BASKETBALL") as Team["sport_type"],
+            gender: t.gender || "Co-ed",
+            age_group: t.age_group || "Varsity",
+            season: t.season || "2026 Season",
+            member_count: t.member_count || (Array.isArray(t.athletes) ? t.athletes.length : 0),
+            team_color: t.team_color || "#38BDF8",
+            schedule: t.schedule || "MWF 4:00 PM - 6:00 PM",
+            athletes: Array.isArray(t.athletes) ? t.athletes : [],
+          }));
+          setTeams(processedTeams);
+          if (processedTeams.length > 0 && !selectedTeamId) {
+            setSelectedTeamId(processedTeams[0].team_id);
           }
+
+          const coachTeamAthletes: any[] = [];
+          processedTeams.forEach((t) => {
+            if (Array.isArray(t.athletes)) {
+              t.athletes.forEach((ath: any) => {
+                coachTeamAthletes.push({
+                  ...ath,
+                  team_id: t.team_id,
+                  team_name: t.team_name,
+                  sport_type: t.sport_type,
+                });
+              });
+            }
+          });
 
           const normalizeId = (id?: string) => (id || '').replace(/^ath_/, '').trim();
 
           const richCoachAthletesMap = new Map<string, any>();
-          rawCoachAthletes.forEach((ha: any) => {
-            const k = normalizeId(ha.athlete_id || ha.user_id);
-            if (k) richCoachAthletesMap.set(k, ha);
-          });
+          if (Array.isArray(syncRes?.handled_athletes)) {
+            syncRes.handled_athletes.forEach((ha: any) => {
+              const k = normalizeId(ha.athlete_id || ha.user_id);
+              if (k) richCoachAthletesMap.set(k, ha);
+            });
+          }
+          if (Array.isArray(coachAthletesRes?.athletes)) {
+            coachAthletesRes.athletes.forEach((ca: any) => {
+              const k = normalizeId(ca.athlete_id || ca.user_id);
+              if (k) {
+                const prev = richCoachAthletesMap.get(k) || {};
+                richCoachAthletesMap.set(k, { ...prev, ...ca });
+              }
+            });
+          }
 
           const enrichedTeamAthletes: any[] = coachTeamAthletes.map((ca: any) => {
             const k = normalizeId(ca.athlete_id || ca.user_id);
@@ -575,7 +645,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           }
 
           const rawAthletesList: any[] = allHandledAthletes;
-          const mappedPerf: AthletePerformanceProfile[] = rawAthletesList.map((a: any) => computeAthletePerformance(a));
+          const mappedPerf: AthletePerformanceProfile[] = rawAthletesList.map((a: any) => computeAthletePerformance(a, liveMatches));
 
           // Merge unassigned handled athletes into mappedPerf if not already present
           if (rawCoachAthletes.length > 0) {
@@ -583,7 +653,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             rawCoachAthletes.forEach((ha: any) => {
               const aId = ha.athlete_id || ha.user_id;
               if (!existingIds.has(aId)) {
-                mappedPerf.push(computeAthletePerformance(ha));
+                mappedPerf.push(computeAthletePerformance(ha, liveMatches));
               }
             });
           }
@@ -915,7 +985,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     setActiveTab("Teams");
   }, []);
 
-  const handleMatchSaveCompleted = useCallback(() => {
+  const handleMatchSaveCompleted = useCallback((savedPayload?: any) => {
     setCoachProfile((prev) => ({
       ...prev,
       system_statistics: {
@@ -923,6 +993,171 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         metric_logs: (prev.system_statistics?.metric_logs || 0) + 1,
       },
     }));
+
+    if (savedPayload) {
+      const matchId = savedPayload.match_id || `match_${Date.now()}`;
+      const homePts = Number(savedPayload.home_score || 0);
+      const awayPts = Number(savedPayload.away_score || 0);
+      const gameResult = savedPayload.game_result === "WIN" ? "RESULT WIN" : "RESULT LOSS";
+      const sport = (savedPayload.sport_type || "BASKETBALL").toUpperCase() as any;
+
+      const newMatchItem: MatchHistoryItem = {
+        match_id: matchId,
+        date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+        date_group: "CURRENT LOGS",
+        event_or_opponent: `${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"}`,
+        score_or_time_summary: `${homePts} - ${awayPts}`,
+        sport_category: sport,
+        result_badge_text: gameResult,
+        is_official: false,
+        home_team: savedPayload.home_team_name || "ATLETA",
+        away_team: savedPayload.opponent_team_name || "OPPONENT",
+        home_score: homePts,
+        away_score: awayPts,
+        entries_count: Array.isArray(savedPayload.player_stats) ? savedPayload.player_stats.length : 1,
+        player_stats: (savedPayload.player_stats || []).map((p: any) => ({
+          name: p.player_name,
+          team: p.team_name || savedPayload.home_team_name || "ATLETA",
+          pts: Number(p.pts ?? p.stats?.points ?? 0),
+          ast: Number(p.ast ?? p.stats?.assists ?? 0),
+          reb: Number(p.reb ?? p.stats?.rebounds ?? 0),
+        })),
+        leaderboard_entries: (savedPayload.player_stats || []).map((p: any, idx: number) => ({
+          rank: idx + 1,
+          name: p.player_name,
+          detail: p.team_name || savedPayload.home_team_name || "ATLETA",
+          time_or_score: `${p.pts ?? p.stats?.points ?? 0} pts`,
+        })),
+        coach_notes: [savedPayload.notes || `Match: ${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"} (${homePts} - ${awayPts})`],
+      };
+
+      setMatchHistoryList((prev) => [newMatchItem, ...prev.filter((m) => m.match_id !== matchId)]);
+
+      if (Array.isArray(savedPayload.player_stats)) {
+        savedPayload.player_stats.forEach((ps: any) => {
+          const playerName = (ps.player_name || ps.name || "").trim().toLowerCase();
+          const pAthleteId = ps.athlete_id || ps.user_id;
+          const matchPts = Number(ps.pts ?? ps.stats?.points ?? 0);
+          const matchReb = Number(ps.reb ?? ps.stats?.rebounds ?? 0);
+          const matchAst = Number(ps.ast ?? ps.stats?.assists ?? 0);
+
+          setPerfAthletes((prevList) => {
+            let matchedAny = false;
+            const nextList = prevList.map((ath) => {
+              const athName = (ath.full_name || "").trim().toLowerCase();
+              const isMatch =
+                (pAthleteId && (ath.athlete_id === pAthleteId || ath.user_id === pAthleteId)) ||
+                (playerName && athName === playerName) ||
+                (playerName && athName.includes(playerName)) ||
+                (playerName && playerName.includes(athName));
+
+              if (!isMatch) return ath;
+              matchedAny = true;
+
+              const prevGp = Number(ath.averages?.games_played || (ath.averages?.ppg > 0 ? 1 : 0));
+              const prevPpg = Number(ath.averages?.ppg || 0);
+              const prevRpg = Number(ath.averages?.rpg || 0);
+              const prevApg = Number(ath.averages?.apg || 0);
+
+              const newGp = prevGp + 1;
+              const newPpg = Math.round(((prevPpg * prevGp + matchPts) / newGp) * 10) / 10;
+              const newRpg = Math.round(((prevRpg * prevGp + matchReb) / newGp) * 10) / 10;
+              const newApg = Math.round(((prevApg * prevGp + matchAst) / newGp) * 10) / 10;
+              const newPer = Math.round(newPpg * 1.2 + newRpg * 1.0 + newApg * 1.5);
+              const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPpg * 3.5)));
+              const newTrends = [...(ath.scoring_trends_last_10 || (prevPpg > 0 ? [prevPpg] : [])), matchPts].slice(-10);
+
+              const updatedAthlete: AthletePerformanceProfile = {
+                ...ath,
+                rating_score: newRating,
+                averages: {
+                  ...ath.averages,
+                  ppg: newPpg,
+                  rpg: newRpg,
+                  apg: newApg,
+                  games_played: newGp,
+                  per_score: newPer,
+                  wins: savedPayload.game_result === "WIN" ? (ath.averages?.wins || 0) + 1 : (ath.averages?.wins || 0),
+                },
+                scoring_trends_last_10: newTrends,
+                workload_analytics: {
+                  ...(ath.workload_analytics || {}),
+                  target_7day_effort_pts: 450,
+                  current_7day_acute_load: Math.min(600, (ath.workload_analytics?.current_7day_acute_load || 300) + matchPts * 8),
+                  current_28day_chronic_load: Math.min(550, (ath.workload_analytics?.current_28day_chronic_load || 280) + matchPts * 3),
+                  calculated_acwr: 1.15,
+                  workout_score: newRating,
+                  fatigue_meter: 35,
+                  routine_score: Math.max(50, newRating - 5),
+                  body_stress_pts: 30,
+                },
+              };
+
+              setSelectedPerfAthlete((curr) => {
+                if (curr && (curr.athlete_id === ath.athlete_id || curr.full_name.toLowerCase().trim() === playerName)) {
+                  return updatedAthlete;
+                }
+                return curr;
+              });
+
+              return updatedAthlete;
+            });
+
+            if (!matchedAny && playerName) {
+              const newPer = Math.round(matchPts * 1.2 + matchReb * 1.0 + matchAst * 1.5);
+              const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || matchPts * 3.5)));
+              const newAth: AthletePerformanceProfile = {
+                athlete_id: pAthleteId || `ath_${Date.now()}`,
+                user_id: pAthleteId || "",
+                full_name: ps.player_name || ps.name || "Athlete",
+                birthdate: "2004-10-05",
+                position_or_event: ps.position || "Guard",
+                location_province: "Camarines Sur",
+                team_name: savedPayload.home_team_name || "Bicol Rivers",
+                rating_score: newRating,
+                sport_category: sport,
+                biometrics: {
+                  height_ft: "6'0\"",
+                  weight_lbs: "165 lbs",
+                  wingspan_ft: "6'7\"",
+                  vertical_jump_in: "-",
+                },
+                averages: {
+                  ppg: matchPts,
+                  rpg: matchReb,
+                  apg: matchAst,
+                  games_played: 1,
+                  per_score: newPer,
+                  wins: savedPayload.game_result === "WIN" ? 1 : 0,
+                  fg_percentage: 50,
+                  three_pt_percentage: 40,
+                  ft_percentage: 80,
+                },
+                workload_analytics: {
+                  target_7day_effort_pts: 450,
+                  current_7day_acute_load: 350,
+                  current_28day_chronic_load: 320,
+                  calculated_acwr: 1.09,
+                  workout_score: newRating,
+                  fatigue_meter: 25,
+                  routine_score: Math.max(50, newRating - 5),
+                  body_stress_pts: 20,
+                },
+                scoring_trends_last_10: [matchPts],
+                eligibility_documents: {
+                  psa_verified: true,
+                  residency_verified: true,
+                },
+              };
+              nextList.push(newAth);
+            }
+
+            return nextList;
+          });
+        });
+      }
+    }
   }, []);
 
   return (
@@ -1568,6 +1803,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           <MatchSessionProvider>
             {activeView === "create_log" && (
               <CreateLogScreen
+                initialAthletes={athletesPool}
                 onBack={() => setActiveView("dashboard")}
                 onStartLogging={(session) => {
                   if (session.sport_type === "BASKETBALL") {
@@ -1739,7 +1975,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     <View style={styles.recordBox}>
                       <Text style={styles.recordLabel}>SEASON RECORD</Text>
                       <Text style={styles.recordValue}>
-                        {currentTeam.season_record.wins} Wins - {currentTeam.season_record.losses} Losses
+                        {currentTeam?.season_record?.wins ?? 0} Wins - {currentTeam?.season_record?.losses ?? 0} Losses
                       </Text>
                     </View>
                   </View>

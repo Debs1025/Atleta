@@ -18,7 +18,7 @@ import { saveMatchOfflineFirst } from "../../../../services/firebaseClient";
 interface MatchDetailsProps {
   onBack?: () => void;
   onDone?: () => void;
-  onSaveComplete?: () => void;
+  onSaveComplete?: (payload?: any) => void;
 }
 
 export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDetailsProps) {
@@ -53,6 +53,37 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   const allPlayers = session.active_roster.concat(session.bench_roster);
 
   const handleSaveMatch = async () => {
+    const normalizedSport = (session.sport_type || "BASKETBALL").toUpperCase();
+    const normalizedGameResult = (gameResult || "Win").toUpperCase();
+
+    // Map all active and bench players to player_stats
+    const playerStats = allPlayers.map((p) => {
+      const bStats = p.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
+      const tStats = p.timing_stats || { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false };
+      return {
+        athlete_id: p.athlete_id,
+        player_name: p.full_name,
+        name: p.full_name,
+        jersey_number: p.jersey_number,
+        position: p.position_or_event,
+        pts: Number(bStats.pts || 0),
+        reb: Number(bStats.reb || 0),
+        ast: Number(bStats.ast || 0),
+        stl: Number(bStats.stl || 0),
+        pf: Number(bStats.pf || 0),
+        to: Number(bStats.to || 0),
+        timer_seconds: Number(tStats.timer_seconds || 0),
+        formatted_time: tStats.formatted_time || "00:00.00",
+        distance_meters: Number(tStats.distance_meters || 0),
+        split_times: tStats.split_times || [],
+        is_foul_dq: Boolean(tStats.is_foul_dq),
+      };
+    });
+
+    const totalCalculatedHomeScore = playerStats.reduce((sum, p) => sum + (p.pts || 0), 0);
+    const homeScore = totalCalculatedHomeScore > 0 ? totalCalculatedHomeScore : (normalizedGameResult === "WIN" ? 78 : 65);
+    const awayScore = normalizedGameResult === "WIN" ? Math.max(0, homeScore - 8) : homeScore + 8;
+
     // Construct backend-ready match payload
     const updatedSession = {
       ...session,
@@ -63,64 +94,15 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       notes,
     };
 
-    setSessionDetails(updatedSession);
-    if (onSaveComplete) onSaveComplete();
-    setShowSaveSuccessModal(true);
-
-    const normalizedSport =
-      session.sport_type === "BASKETBALL"
-        ? "Basketball"
-        : session.sport_type === "SWIMMING"
-        ? "Swimming"
-        : "Track & Field";
-
-    const normalizedGameResult = gameResult.toUpperCase() === "WIN" ? "WIN" : "LOSS";
-
-    const playerStats = allPlayers.map((p) => {
-      const bStats: any = (p as any).basketball_stats || {};
-      const tStats: any = (p as any).timing_stats || {};
-      const pts = bStats.pts ?? (p as any).points ?? 0;
-      const ast = bStats.ast ?? (p as any).assists ?? 0;
-      const reb = bStats.reb ?? (p as any).rebounds ?? 0;
-      const stl = bStats.stl ?? (p as any).steals ?? 0;
-      const pf = bStats.pf ?? (p as any).fouls ?? 0;
-      const to = bStats.to ?? (p as any).turnovers ?? 0;
-
-      return {
-        athlete_id: p.athlete_id,
-        player_name: p.full_name,
-        jersey_number: p.jersey_number ? Number(p.jersey_number) : null,
-        sport_type: normalizedSport,
-        team_name: session.team_name || "ATLETA VARSITY",
-        pts,
-        ast,
-        reb,
-        stats: {
-          points: pts,
-          assists: ast,
-          rebounds: reb,
-          steals: stl,
-          fouls: pf,
-          turnovers: to,
-          timer_seconds: tStats.timer_seconds || 0,
-          formatted_time: tStats.formatted_time || "00:00.00",
-          distance_meters: tStats.distance_meters || 100,
-          split_times: tStats.split_times || [],
-        },
-      };
-    });
-
-    const totalPts = playerStats.reduce((sum, p) => sum + (p.pts || 0), 0);
-    const homeScore = totalPts > 0 ? totalPts : 85;
-    const awayScore = normalizedGameResult === "WIN" ? Math.max(0, homeScore - 6) : homeScore + 6;
-
     const payload = {
       match_id: session.match_id || `match_${Date.now()}`,
       team_id: session.team_name || "team_varsity",
       home_team_name: session.team_name || "ATLETA VARSITY",
       opponent_team_name: opponentName || "OPPONENT TEAM",
       match_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
+      game_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
       match_type: gameType || "Practice",
+      game_type: gameType || "Practice",
       match_date: session.date_time || new Date().toISOString(),
       location: session.location || "Metro Sports Center",
       sport_type: normalizedSport,
@@ -131,6 +113,9 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       player_stats: playerStats,
       player_metrics: playerStats,
     };
+
+    if (onSaveComplete) onSaveComplete(payload);
+    setShowSaveSuccessModal(true);
 
     try {
       await saveMatchOfflineFirst(payload);

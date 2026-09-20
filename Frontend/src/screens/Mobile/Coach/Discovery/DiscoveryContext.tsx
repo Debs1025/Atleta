@@ -175,8 +175,10 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               division_tag: t.division || 'Elite Division',
               description: t.description || `${t.team_name || 'Team'} competitive roster.`,
               head_coach: t.coach_name || t.head_coach || 'Head Coach',
-              season_record: t.season_record
-                ? `${t.season_record.wins || 0} - ${t.season_record.losses || 0}`
+              season_record: typeof t.season_record === 'object' && t.season_record !== null
+                ? `${t.season_record.wins ?? 0} - ${t.season_record.losses ?? 0}`
+                : typeof t.season_record === 'string'
+                ? t.season_record
                 : '0 - 0',
               logo_url: t.logo_url,
               banner_url: t.banner_url,

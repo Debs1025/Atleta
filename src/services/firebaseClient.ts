@@ -17,9 +17,33 @@ import {
   enableNetwork,
   disableNetwork,
   serverTimestamp,
+  setLogLevel,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
+
+try {
+  setLogLevel("silent");
+} catch (_) {}
+
+// Suppress offline stream retry warnings from clogging dev overlays
+const origWarn = console.warn;
+console.warn = (...args: any[]) => {
+  const msg = typeof args[0] === "string" ? args[0] : "";
+  if (msg.includes("@firebase/firestore") || msg.includes("WebChannelConnection") || msg.includes("transport errored")) {
+    return;
+  }
+  origWarn(...args);
+};
+
+const origError = console.error;
+console.error = (...args: any[]) => {
+  const msg = typeof args[0] === "string" ? args[0] : "";
+  if (msg.includes("@firebase/firestore") || msg.includes("WebChannelConnection") || msg.includes("transport errored")) {
+    return;
+  }
+  origError(...args);
+};
 
 const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
@@ -92,6 +116,83 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(filtered));
   } catch (cacheErr) {
     console.warn("Local storage cache write error:", cacheErr);
+  }
+
+  // 2b. Update local athletes cache and Firestore with new aggregate stats
+  try {
+    const existingAthletesRaw = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
+    if (existingAthletesRaw && Array.isArray(payload.player_stats)) {
+      let athletesList: any[] = JSON.parse(existingAthletesRaw);
+      payload.player_stats.forEach((ps: any) => {
+        const idx = athletesList.findIndex(
+          (a) =>
+            (ps.athlete_id && (a.athlete_id === ps.athlete_id || a.user_id === ps.athlete_id || a.id === ps.athlete_id)) ||
+            (ps.player_name && a.full_name && a.full_name.toLowerCase() === ps.player_name.toLowerCase())
+        );
+        if (idx >= 0) {
+          const ath = athletesList[idx];
+          const prevGp = Number(ath.averages?.games_played ?? ath.stats?.games_played ?? (Number(ath.averages?.ppg || ath.pts || 0) > 0 ? 1 : 0));
+          const prevPpg = Number(ath.averages?.ppg ?? ath.stats?.ppg ?? ath.pts ?? 0);
+          const prevRpg = Number(ath.averages?.rpg ?? ath.stats?.rpg ?? ath.reb ?? 0);
+          const prevApg = Number(ath.averages?.apg ?? ath.stats?.apg ?? ath.ast ?? 0);
+
+          const newPts = Number(ps.pts ?? ps.stats?.points ?? 0);
+          const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? 0);
+          const newAst = Number(ps.ast ?? ps.stats?.assists ?? 0);
+
+          const newGp = prevGp + 1;
+          const newPpg = Math.round(((prevPpg * prevGp + newPts) / newGp) * 10) / 10;
+          const newRpg = Math.round(((prevRpg * prevGp + newReb) / newGp) * 10) / 10;
+          const newApg = Math.round(((prevApg * prevGp + newAst) / newGp) * 10) / 10;
+          const newPer = Math.round(newPpg * 1.2 + newRpg * 1.0 + newApg * 1.5);
+          const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPpg * 3.5)));
+
+          const prevTrends = Array.isArray(ath.scoring_trends_last_10) ? ath.scoring_trends_last_10 : (prevPpg > 0 ? [prevPpg] : []);
+          const newTrends = [...prevTrends, newPts].slice(-10);
+
+          athletesList[idx] = {
+            ...ath,
+            averages: {
+              ...(ath.averages || {}),
+              ppg: newPpg,
+              rpg: newRpg,
+              apg: newApg,
+              games_played: newGp,
+              per_score: newPer,
+              wins: payload.game_result === "WIN" ? (ath.averages?.wins || 0) + 1 : (ath.averages?.wins || 0),
+            },
+            stats: {
+              ...(ath.stats || {}),
+              ppg: newPpg,
+              rpg: newRpg,
+              apg: newApg,
+              games_played: newGp,
+              per: newPer,
+              points: (ath.stats?.points || 0) + newPts,
+              rebounds: (ath.stats?.rebounds || 0) + newReb,
+              assists: (ath.stats?.assists || 0) + newAst,
+            },
+            pts: newPpg,
+            reb: newRpg,
+            ast: newApg,
+            rating_score: newRating,
+            scoring_trends_last_10: newTrends,
+          };
+
+          // Also attempt update on Firestore Athlete_Profiles
+          const athId = ps.athlete_id || ath.athlete_id || ath.user_id;
+          if (athId) {
+            try {
+              const athDocRef = doc(db, "Athlete_Profiles", athId);
+              setDoc(athDocRef, athletesList[idx], { merge: true }).catch(() => null);
+            } catch (_) {}
+          }
+        }
+      });
+      await AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(athletesList));
+    }
+  } catch (athErr) {
+    console.warn("Athlete local stats update error:", athErr);
   }
 
   // 3. Attempt REST API synchronization if online
@@ -218,6 +319,41 @@ export async function getMatchesOfflineFirst(): Promise<any[]> {
   }
 
   return [];
+}
+
+const OFFLINE_ATHLETE_PROFILE_CACHE_KEY = "atleta_offline_athlete_profile_cache";
+
+/**
+ * Fetch individual athlete profile with Firestore + storage offline fallback.
+ */
+export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
+  // 1. Try REST API
+  try {
+    const token = await getStoredAuthToken();
+    const res = await fetch(`${API_BASE}/athletes/home`, {
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Object.keys(data).length > 0) {
+        await AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(data));
+        return data;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Fallback to AsyncStorage cache
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (_) {}
+
+  return null;
 }
 
 /**
