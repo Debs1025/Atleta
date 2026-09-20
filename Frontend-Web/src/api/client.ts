@@ -64,7 +64,12 @@ export const getStoredOfficialSettings = (): OfficialSettings | null => {
 };
 
 export const getStoredToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  const keys = [TOKEN_KEY, 'atleta_auth_token', 'token', 'auth_token', 'accessToken', 'jwt'];
+  for (const k of keys) {
+    const val = localStorage.getItem(k) || sessionStorage.getItem(k);
+    if (val && val !== 'null' && val !== 'undefined') return val;
+  }
+  return null;
 };
 
 export const getStoredUser = (): AuthUser | null => {

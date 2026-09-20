@@ -13,7 +13,6 @@ import {
   Download,
 } from 'lucide-react';
 import {
-  getStoredToken,
   getMatchAuditDetail,
   certifyMatchValidation,
   deleteOfficialMatch,
@@ -58,11 +57,9 @@ export const ScoresheetMatch: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
+  // Allow viewing match details publicly; token is attached if available for upload/certification
   useEffect(() => {
-    if (!getStoredToken()) {
-      navigate('/login');
-      return;
-    }
+    // Session token verified when performing restricted actions
   }, [navigate]);
 
   const loadMatchData = async () => {
