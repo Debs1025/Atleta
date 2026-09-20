@@ -78,9 +78,15 @@ export const ScoresheetMatch: React.FC = () => {
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
         setNotes((prev) => (prev ? prev : resolvedNote));
         if (data.scoresheet_url) setScoresheetUrl(data.scoresheet_url);
-        setHomeRoster(data.home_team?.roster_stats || []);
-        setAwayRoster(data.away_team?.roster_stats || []);
-        setRaceResults(data.race_results || []);
+        if (data.home_team?.roster_stats && data.home_team.roster_stats.length > 0) {
+          setHomeRoster(data.home_team.roster_stats);
+        }
+        if (data.away_team?.roster_stats && data.away_team.roster_stats.length > 0) {
+          setAwayRoster(data.away_team.roster_stats);
+        }
+        if (data.race_results && data.race_results.length > 0) {
+          setRaceResults(data.race_results);
+        }
       }
     } catch (err) {
       console.error('Failed to load match detail:', err);
@@ -176,9 +182,29 @@ export const ScoresheetMatch: React.FC = () => {
 
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
-      }
 
-      await loadMatchData();
+        setMatchData((prev) => {
+          if (!prev) return prev;
+          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
+          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
+          return {
+            ...prev,
+            scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
+            home_team: {
+              ...prev.home_team,
+              score: hSum,
+              result: hSum >= aSum ? 'WIN' : 'LOSE',
+              roster_stats: hRows,
+            },
+            away_team: {
+              ...prev.away_team,
+              score: aSum,
+              result: aSum > hSum ? 'WIN' : 'LOSE',
+              roster_stats: aRows,
+            },
+          };
+        });
+      }
     } catch (err: any) {
       setUploadError(err?.message || 'Failed to upload scoresheet.');
     } finally {
