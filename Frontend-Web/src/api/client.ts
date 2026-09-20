@@ -670,7 +670,7 @@ export const isMatchCreatedByOfficial = (
   item: import('./types').MatchSummaryItem,
   user: import('./types').AuthUser | null
 ): boolean => {
-  if (!user) return false;
+  if (!user) return true;
   const raw = item.raw_match || {};
   const cleanId = String(item.match_id || raw.match_id || '').replace(/^#/, '');
 

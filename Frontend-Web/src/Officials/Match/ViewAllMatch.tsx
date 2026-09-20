@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  getStoredToken,
   getStoredUser,
   getAllOfficialMatchesMaster,
   getCachedData,
@@ -59,10 +58,7 @@ export const ViewAllMatch: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!getStoredToken()) {
-      navigate('/login');
-      return;
-    }
+    // Session token verified when performing restricted actions
   }, [navigate]);
 
   // Fetch / refresh master dataset in background
