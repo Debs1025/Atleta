@@ -1495,21 +1495,53 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
 };
 
 export const uploadScoresheetFile = async (matchId: string, file: File): Promise<any> => {
+  const cleanId = matchId.replace(/^#/, '');
   const token = getStoredToken();
   const formData = new FormData();
-  formData.append('scoresheet', file);
   formData.append('file', file);
+  formData.append('scoresheet', file);
+  formData.append('document', file);
 
-  const res = await fetch(`${BASE_URL}/matches/${matchId.replace(/^#/, '')}/scoresheet`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: formData,
-  });
-  const data = await handleResponse<any>(res);
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  let responseData: any = null;
+
+  try {
+    const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (res.ok) {
+      responseData = await res.json();
+    }
+  } catch (err) {
+    console.warn('Match-specific scoresheet upload endpoint failed, trying standalone OCR fallback:', err);
+  }
+
+  if (!responseData) {
+    try {
+      const fallbackRes = await fetch(`${BASE_URL}/matches/ocr/scan`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      if (fallbackRes.ok) {
+        responseData = await fallbackRes.json();
+      } else {
+        const errBody = await fallbackRes.text();
+        throw new Error(`OCR processing failed: ${fallbackRes.status} ${errBody}`);
+      }
+    } catch (fallbackErr: any) {
+      throw new Error(fallbackErr?.message || 'Could not process scoresheet with OCR server.');
+    }
+  }
+
   invalidateCache();
-  return data;
+  return responseData;
 };
 
 export const scanScoresheetStandalone = async (file: File): Promise<any> => {

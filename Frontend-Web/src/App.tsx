@@ -2,24 +2,46 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
 import { ForgotPassword } from './Authentication/ForgotPassword';
-import { OfficialSettings } from './Officials/OfficialSettings';
-import { OCRLoggingPage } from './Officials/OCRLoggingPage';
+import { AdminHomePage } from './SysAdmin/Dashboard/AdminHomePage';
+import { SportPage } from './SysAdmin/Sports_Management/SportPage';
+import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
+import { SchedulePage } from './Officials/Schedule/SchedulePage';
+import { SettingsPage } from './Officials/Settings/SettingsPage';
+import { NotificationPage } from './Officials/Notification/NotificationPage';
+import { ProfilePage } from './Officials/Profile/ProfilePage';
+import { ViewAllMatch } from './Officials/Match/ViewAllMatch';
+import { ScoresheetMatch } from './Officials/Match/ScoresheetMatch';
+import { CreateMatch } from './Officials/Match/createMatch';
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<OCRLoggingPage />} />
-        <Route path="/ocr" element={<OCRLoggingPage />} />
-        <Route path="/matches" element={<OCRLoggingPage />} />
+        <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/settings" element={<OfficialSettings />} />
+        <Route path="/admin/dashboard" element={<AdminHomePage />} />
+        <Route path="/admin/admission" element={<AdminHomePage />} />
+        <Route path="/admin/coaches" element={<AdminHomePage />} />
+        <Route path="/admin/sports" element={<SportPage />} />
+        <Route path="/admin/sport-configuration" element={<SportPage />} />
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/dashboard" element={<OfficialHomePage />} />
+
+        <Route path="/matches" element={<ViewAllMatch />} />
+        <Route path="/matches/:matchId" element={<ScoresheetMatch />} />
+        <Route path="/create-match" element={<CreateMatch />} />
+        <Route path="/schedules" element={<SchedulePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/notifications" element={<NotificationPage />} />
+        <Route path="/notifications-center" element={<NotificationPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
 }
+
 
 export default App;
