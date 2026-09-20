@@ -1314,7 +1314,7 @@ export const getMatchAuditDetail = async (
         jersey_no: jersey,
         player_name: `${fullName}${pos}`,
         position: p.position || 'G',
-        minutes: stats.minutes || '00:00',
+        minutes: stats.minutes ? String(stats.minutes) : '0',
         pts: Number(stats.points ?? stats.pts ?? 0),
         reb: Number((stats.offensive_rebounds || 0) + (stats.defensive_rebounds || 0) || stats.rebounds || stats.reb || 0),
         ast: Number(stats.assists ?? stats.ast ?? 0),
@@ -1349,7 +1349,7 @@ export const getMatchAuditDetail = async (
       return {
         jersey_no: '',
         player_name: 'TEAM TOTALS',
-        minutes: rows.length > 0 ? '200:00' : '00:00',
+        minutes: '0',
         pts: pts > 0 ? pts : fallbackScore,
         reb,
         ast,

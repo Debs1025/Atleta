@@ -162,7 +162,7 @@ export const ScoresheetMatch: React.FC = () => {
             jersey_no: jersey,
             player_name: fullName,
             position: p.position || 'G',
-            minutes: p.minutes || '20:00',
+            minutes: p.minutes ? String(p.minutes) : '0',
             pts: Number(p.points ?? p.pts ?? 0),
             reb: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
             ast: Number(p.assists ?? p.ast ?? 0),
@@ -484,7 +484,7 @@ export const ScoresheetMatch: React.FC = () => {
             <tr style={styles.statTotalsTr}>
               <td style={styles.statTotalsTd}></td>
               <td style={{ ...styles.statTotalsTd, textAlign: 'left', paddingLeft: '14px' }}>TEAM TOTALS</td>
-              <td style={styles.statTotalsTd}>{roster.length > 0 ? '200:00' : '00:00'}</td>
+              <td style={styles.statTotalsTd}>{'0'}</td>
               <td style={styles.statTotalsTd}>{score}</td>
               <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.reb) || 0), 0)}</td>
               <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.ast) || 0), 0)}</td>

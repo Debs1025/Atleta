@@ -249,7 +249,7 @@ export const CreateMatch: React.FC = () => {
               jersey_no: jersey,
               player_name: fullName,
               position: p.position || 'G',
-              minutes: p.minutes || '20:00',
+              minutes: p.minutes ? String(p.minutes) : '0',
               pts: Number(p.points ?? p.pts ?? 0),
               reb: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
               ast: Number(p.assists ?? p.ast ?? 0),
@@ -285,7 +285,7 @@ export const CreateMatch: React.FC = () => {
               team_totals: {
                 jersey_no: '',
                 player_name: 'TEAM TOTALS',
-                minutes: hRows.length > 0 ? '200:00' : '00:00',
+                minutes: '0',
                 pts: hSum,
                 reb: hRows.reduce((a, b) => a + b.reb, 0),
                 ast: hRows.reduce((a, b) => a + b.ast, 0),
@@ -304,7 +304,7 @@ export const CreateMatch: React.FC = () => {
               team_totals: {
                 jersey_no: '',
                 player_name: 'TEAM TOTALS',
-                minutes: aRows.length > 0 ? '200:00' : '00:00',
+                minutes: '0',
                 pts: aSum,
                 reb: aRows.reduce((a, b) => a + b.reb, 0),
                 ast: aRows.reduce((a, b) => a + b.ast, 0),
