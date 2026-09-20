@@ -7,7 +7,9 @@ import type {
   PasswordResetPayload,
 } from './types';
 
-const BASE_URL = (import.meta.env.VITE_ATLETA_API || '').replace(/\/+$/, '');
+const DEFAULT_DEPLOYED_API = 'https://atleta-backend.vercel.app/api/v1';
+const rawBase = (import.meta.env.VITE_ATLETA_API || DEFAULT_DEPLOYED_API).trim().replace(/\/+$/, '');
+const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
 
 const TOKEN_KEY = 'atleta_official_token';
 const USER_KEY = 'atleta_official_user';
@@ -144,5 +146,39 @@ export const updateOfficialSettings = async (settings: OfficialSettingsPayload):
     },
     body: JSON.stringify(settings),
   });
+  return handleResponse<any>(res);
+};
+
+export const scanScoresheetOCR = async (file: File): Promise<any> => {
+  const token = getStoredToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('scoresheet', file);
+  formData.append('document', file);
+
+  const res = await fetch(`${BASE_URL}/matches/ocr/scan`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  return handleResponse<any>(res);
+};
+
+export const submitVerifiedMatch = async (payload: any): Promise<any> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/matches/submit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
   return handleResponse<any>(res);
 };

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Shield, UserCheck, Bell, Sliders, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { getStoredToken, getStoredUser, updateOfficialSettings, getMe } from '../api/client';
 import type { AuthUser } from '../api/types';
+import { OfficialNavbar } from './OfficialNavbar';
 
 export const OfficialSettings: React.FC = () => {
   const navigate = useNavigate();
@@ -45,9 +46,12 @@ export const OfficialSettings: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
+    <div className="min-h-screen flex flex-col bg-[#F8FAFC]">
+      <OfficialNavbar />
+
+      <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-[#0B132B]">
           TOURNAMENT OFFICIAL SETTINGS
         </h1>
@@ -225,6 +229,7 @@ export const OfficialSettings: React.FC = () => {
           )}
         </button>
       </div>
+      </main>
     </div>
   );
 };
