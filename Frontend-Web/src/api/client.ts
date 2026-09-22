@@ -1381,6 +1381,14 @@ export const getMatchAuditDetail = async (
 
     const coachName = match.coach_name || cachedRaw.coach_name || (assignedCoaches.length > 0 ? assignedCoaches.join(', ') : undefined);
 
+    // Preserve existing valid cached rosters / race results if newly mapped rows are empty
+    const existingCached = getCachedData<import('./types').MatchAuditDetail>(cacheKey);
+    const finalHomeRoster = homePlayers.length > 0 ? homePlayers : (existingCached?.home_team?.roster_stats || []);
+    const finalAwayRoster = awayPlayers.length > 0 ? awayPlayers : (existingCached?.away_team?.roster_stats || []);
+    const finalRaceResults = raceResults.length > 0 ? raceResults : (existingCached?.race_results || []);
+    const finalHomeTotals = homePlayers.length > 0 ? homeTotals : (existingCached?.home_team?.team_totals || homeTotals);
+    const finalAwayTotals = awayPlayers.length > 0 ? awayTotals : (existingCached?.away_team?.team_totals || awayTotals);
+
     const result: import('./types').MatchAuditDetail = {
       match_id: matchId,
       validation_id: validationId,
@@ -1390,28 +1398,28 @@ export const getMatchAuditDetail = async (
       match_date_formatted: matchDateFormatted,
       home_team: {
         name: homeTeamName,
-        score: homeScore,
+        score: homeScore > 0 ? homeScore : (existingCached?.home_team?.score || 0),
         result: homeScore >= awayScore ? 'WIN' : 'LOSE',
-        roster_stats: homePlayers,
-        team_totals: homeTotals,
+        roster_stats: finalHomeRoster,
+        team_totals: finalHomeTotals,
       },
       away_team: {
         name: awayTeamName,
-        score: awayScore,
+        score: awayScore > 0 ? awayScore : (existingCached?.away_team?.score || 0),
         result: awayScore > homeScore ? 'WIN' : 'LOSE',
-        roster_stats: awayPlayers,
-        team_totals: awayTotals,
+        roster_stats: finalAwayRoster,
+        team_totals: finalAwayTotals,
       },
-      race_results: raceResults,
-      scoresheet_url: typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim() ? match.scoresheet_url.trim() : (typeof pendingVal?.scoresheet_url === 'string' ? pendingVal.scoresheet_url.trim() : undefined),
+      race_results: finalRaceResults,
+      scoresheet_url: (typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim() ? match.scoresheet_url.trim() : (typeof pendingVal?.scoresheet_url === 'string' ? pendingVal.scoresheet_url.trim() : existingCached?.scoresheet_url)),
       audit_context_notes: typeof match.notes === 'string'
         ? match.notes
         : Array.isArray(match.notes) && match.notes.length > 0
           ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
-          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : ''),
-      is_certified: Boolean(match.is_certified || match.is_locked),
-      assigned_coaches: assignedCoaches,
-      coach_name: coachName,
+          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : (existingCached?.audit_context_notes || '')),
+      is_certified: Boolean(match.is_certified || match.is_locked || existingCached?.is_certified),
+      assigned_coaches: assignedCoaches.length > 0 ? assignedCoaches : (existingCached?.assigned_coaches || []),
+      coach_name: coachName || existingCached?.coach_name,
     };
 
     setCachedData(cacheKey, result);
