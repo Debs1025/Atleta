@@ -5,6 +5,8 @@ import {
   ExternalLink,
   Shield,
   FileText,
+  Bell,
+  Sliders,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -31,9 +33,13 @@ export const SettingsPage: React.FC = () => {
       getStoredOfficialSettings() || {
         split_screen_defaults: true,
         discrepancy_presets: false,
-        match_reminders: false,
+        match_reminders: true,
+        audit_notifications: true,
+        auto_refresh: false,
       }
   );
+
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getStoredToken()) {
@@ -55,10 +61,15 @@ export const SettingsPage: React.FC = () => {
       [key]: !settings[key],
     };
     setSettings(updated);
+    setSavingKey(String(key));
+
     try {
       await updateOfficialSettings({ [key]: updated[key] });
     } catch {
+      // Revert if request failed
       setSettings(settings);
+    } finally {
+      setTimeout(() => setSavingKey(null), 400);
     }
   };
 
@@ -75,113 +86,37 @@ export const SettingsPage: React.FC = () => {
         {/* Settings Content Area */}
         <main style={styles.contentArea}>
           <div style={styles.pageHeader}>
-            <h1 style={styles.pageTitle}>TOURNAMENT OFFICIAL SETTINGS</h1>
-            <p style={styles.pageSubtitle}>Configure your dashboard and security verification protocols.</p>
+            <h1 style={styles.pageTitle}>OFFICIAL SETTINGS</h1>
+            <p style={styles.pageSubtitle}>
+              Manage your notification reminders, match audit alerts, and compliance standards.
+            </p>
           </div>
 
-          {/* Section 1: OFFICIAL IDENTITY & CREDENTIALS */}
+          {/* Section 1: NOTIFICATIONS & REMINDERS */}
           <div style={styles.sectionWrap}>
-            <div style={styles.sectionBanner}>OFFICIAL IDENTITY & CREDENTIALS</div>
-            <div style={styles.sectionBox}>
-              <div
-                style={styles.itemRow}
-                className="hover-settings-row"
-                onClick={() => navigate('/profile')}
-              >
-                <div style={styles.itemTextWrap}>
-                  <h3 style={styles.itemTitle}>AUDIT PROFILE DETAILS</h3>
-                  <p style={styles.itemDesc}>Update your certification records and official public profile.</p>
-                </div>
-                <ChevronRight style={{ width: 18, height: 18, color: '#0B132B' }} />
-              </div>
-
-              <div
-                style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}
-                className="hover-settings-row"
-              >
-                <div style={styles.itemTextWrap}>
-                  <h3 style={styles.itemTitle}>ORGANIZATIONAL AFFILIATION</h3>
-                  <p style={styles.itemDesc}>Manage links to sanctioned tournament bodies and federations.</p>
-                </div>
-                <ChevronRight style={{ width: 18, height: 18, color: '#0B132B' }} />
-              </div>
+            <div style={styles.sectionBanner}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Bell style={{ width: 12, height: 12 }} /> NOTIFICATIONS & REMINDERS
+              </span>
             </div>
-          </div>
-
-          {/* Section 2: AUDIT & VERIFICATION PREFERENCES */}
-          <div style={styles.sectionWrap}>
-            <div style={styles.sectionBanner}>AUDIT & VERIFICATION PREFERENCES</div>
             <div style={styles.sectionBox}>
               <div style={styles.itemRow}>
                 <div style={styles.itemTextWrap}>
-                  <h3 style={styles.itemTitle}>SPLIT-SCREEN LAYOUT DEFAULTS</h3>
-                  <p style={styles.itemDesc}>Enable multi-view data grids for real-time match verification.</p>
+                  <h3 style={styles.itemTitle}>GAME SCHEDULE REMINDERS</h3>
+                  <p style={styles.itemDesc}>
+                    Receive automatic reminder alerts 1 to 3 days before scheduled matches.
+                  </p>
                 </div>
                 <button
                   type="button"
                   tabIndex={0}
-                  aria-label="Toggle split screen layout defaults"
-                  onClick={() => toggleSetting('split_screen_defaults')}
-                  className="hover-switch"
-                  style={{
-                    ...styles.switchTrack,
-                    ...(settings.split_screen_defaults ? styles.switchTrackActive : {}),
-                  }}
-                >
-                  <span
-                    style={{
-                      ...styles.switchThumb,
-                      ...(settings.split_screen_defaults ? styles.switchThumbActive : {}),
-                    }}
-                  />
-                </button>
-              </div>
-
-              <div style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}>
-                <div style={styles.itemTextWrap}>
-                  <h3 style={styles.itemTitle}>DISCREPANCY PRESETS</h3>
-                  <p style={styles.itemDesc}>Set automated flags for data outliers in official scoresheets.</p>
-                </div>
-                <button
-                  type="button"
-                  tabIndex={0}
-                  aria-label="Toggle discrepancy presets"
-                  onClick={() => toggleSetting('discrepancy_presets')}
-                  className="hover-switch"
-                  style={{
-                    ...styles.switchTrack,
-                    ...(settings.discrepancy_presets ? styles.switchTrackActive : {}),
-                  }}
-                >
-                  <span
-                    style={{
-                      ...styles.switchThumb,
-                      ...(settings.discrepancy_presets ? styles.switchThumbActive : {}),
-                    }}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: NOTIFICATION CONTROLS */}
-          <div style={styles.sectionWrap}>
-            <div style={styles.sectionBanner}>NOTIFICATION CONTROLS</div>
-            <div style={styles.sectionBox}>
-              <div style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}>
-                <div style={styles.itemTextWrap}>
-                  <h3 style={styles.itemTitle}>MATCH REMINDER</h3>
-                  <p style={styles.itemDesc}>Reminds when a match is close.</p>
-                </div>
-                <button
-                  type="button"
-                  tabIndex={0}
-                  aria-label="Toggle match reminders"
+                  aria-label="Toggle game schedule reminders"
                   onClick={() => toggleSetting('match_reminders')}
                   className="hover-switch"
                   style={{
                     ...styles.switchTrack,
                     ...(settings.match_reminders ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'match_reminders' ? { opacity: 0.7 } : {}),
                   }}
                 >
                   <span
@@ -192,12 +127,110 @@ export const SettingsPage: React.FC = () => {
                   />
                 </button>
               </div>
+
+              <div style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}>
+                <div style={styles.itemTextWrap}>
+                  <h3 style={styles.itemTitle}>MATCH AUDIT NOTIFICATIONS</h3>
+                  <p style={styles.itemDesc}>
+                    Get notified immediately when coaches submit new scoresheets for certification.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  tabIndex={0}
+                  aria-label="Toggle match audit notifications"
+                  onClick={() => toggleSetting('audit_notifications')}
+                  className="hover-switch"
+                  style={{
+                    ...styles.switchTrack,
+                    ...(settings.audit_notifications !== false ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'audit_notifications' ? { opacity: 0.7 } : {}),
+                  }}
+                >
+                  <span
+                    style={{
+                      ...styles.switchThumb,
+                      ...(settings.audit_notifications !== false ? styles.switchThumbActive : {}),
+                    }}
+                  />
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Section 4: SECURITY & COMPLIANCE */}
+          {/* Section 2: MATCH VIEW & AUDIT PREFERENCES */}
           <div style={styles.sectionWrap}>
-            <div style={styles.sectionBanner}>SECURITY & COMPLIANCE</div>
+            <div style={styles.sectionBanner}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Sliders style={{ width: 12, height: 12 }} /> MATCH AUDIT & DISPLAY
+              </span>
+            </div>
+            <div style={styles.sectionBox}>
+              <div style={styles.itemRow}>
+                <div style={styles.itemTextWrap}>
+                  <h3 style={styles.itemTitle}>SCORE DISCREPANCY HIGHLIGHTS</h3>
+                  <p style={styles.itemDesc}>
+                    Highlight statistical anomalies and boxscore mismatches automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  tabIndex={0}
+                  aria-label="Toggle discrepancy presets"
+                  onClick={() => toggleSetting('discrepancy_presets')}
+                  className="hover-switch"
+                  style={{
+                    ...styles.switchTrack,
+                    ...(settings.discrepancy_presets ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'discrepancy_presets' ? { opacity: 0.7 } : {}),
+                  }}
+                >
+                  <span
+                    style={{
+                      ...styles.switchThumb,
+                      ...(settings.discrepancy_presets ? styles.switchThumbActive : {}),
+                    }}
+                  />
+                </button>
+              </div>
+
+              <div style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}>
+                <div style={styles.itemTextWrap}>
+                  <h3 style={styles.itemTitle}>AUTO-REFRESH MATCH QUEUE</h3>
+                  <p style={styles.itemDesc}>
+                    Automatically check for updated match statuses and certifications in the background.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  tabIndex={0}
+                  aria-label="Toggle auto refresh"
+                  onClick={() => toggleSetting('auto_refresh')}
+                  className="hover-switch"
+                  style={{
+                    ...styles.switchTrack,
+                    ...(settings.auto_refresh ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'auto_refresh' ? { opacity: 0.7 } : {}),
+                  }}
+                >
+                  <span
+                    style={{
+                      ...styles.switchThumb,
+                      ...(settings.auto_refresh ? styles.switchThumbActive : {}),
+                    }}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: SECURITY & COMPLIANCE */}
+          <div style={styles.sectionWrap}>
+            <div style={styles.sectionBanner}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Shield style={{ width: 12, height: 12 }} /> SECURITY & COMPLIANCE
+              </span>
+            </div>
             <div style={styles.sectionBox}>
               <a
                 href="https://privacy.gov.ph/data-privacy-act/"
@@ -210,27 +243,26 @@ export const SettingsPage: React.FC = () => {
                   <FileText style={{ width: 18, height: 18, color: '#0B132B' }} />
                   <div style={styles.itemTextWrap}>
                     <h3 style={styles.itemTitle}>DATA PRIVACY ACT (RA 10173) COMPLIANCE</h3>
-                    <p style={styles.itemDesc}>Review legal obligations regarding athlete data handling.</p>
+                    <p style={styles.itemDesc}>Review guidelines on handling student-athlete performance data.</p>
                   </div>
                 </div>
                 <ExternalLink style={{ width: 16, height: 16, color: '#0B132B' }} />
               </a>
 
-              <a
-                href="#verification-protocols"
-                onClick={(e) => e.preventDefault()}
+              <div
                 className="hover-settings-row"
                 style={{ ...styles.itemRow, ...styles.itemRowNoBorder }}
+                onClick={() => navigate('/profile')}
               >
                 <div style={styles.itemLeft}>
                   <Shield style={{ width: 18, height: 18, color: '#0B132B' }} />
                   <div style={styles.itemTextWrap}>
-                    <h3 style={styles.itemTitle}>TOURNAMENT MATCH VERIFICATION PROTOCOLS</h3>
-                    <p style={styles.itemDesc}>Standard Operating Procedures for official verification.</p>
+                    <h3 style={styles.itemTitle}>ACCOUNT PASSWORD & SECURITY</h3>
+                    <p style={styles.itemDesc}>Manage login password and secure authentication credentials.</p>
                   </div>
                 </div>
-                <ExternalLink style={{ width: 16, height: 16, color: '#0B132B' }} />
-              </a>
+                <ChevronRight style={{ width: 18, height: 18, color: '#0B132B' }} />
+              </div>
             </div>
           </div>
         </main>
@@ -238,3 +270,5 @@ export const SettingsPage: React.FC = () => {
     </div>
   );
 };
+
+export default SettingsPage;

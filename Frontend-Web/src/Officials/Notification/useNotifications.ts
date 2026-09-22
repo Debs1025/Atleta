@@ -3,6 +3,9 @@ import {
   getOfficialNotifications,
   markAllOfficialNotificationsAsRead,
   markOfficialNotificationAsRead,
+  storeReadNotificationId,
+  storeAllReadNotificationIds,
+  getStoredReadNotificationIds,
   getCachedData,
 } from '../../api/client';
 import type { OfficialNotificationItem } from '../../api/types';
@@ -11,12 +14,17 @@ import type { OfficialNotificationItem } from '../../api/types';
 export function useNotifications() {
   const [notifications, setNotifications] = useState<OfficialNotificationItem[]>(() => {
     const cached = getCachedData<{ unread_count: number; notifications: OfficialNotificationItem[] }>('official_notifications');
-    return cached?.notifications || [];
+    const readSet = getStoredReadNotificationIds();
+    return (cached?.notifications || []).map((n) => ({
+      ...n,
+      is_read: Boolean(n.is_read) || readSet.has(n.notification_id),
+    }));
   });
   const [unreadCount, setUnreadCount] = useState<number>(() => {
     const cached = getCachedData<{ unread_count: number; notifications: OfficialNotificationItem[] }>('official_notifications');
+    const readSet = getStoredReadNotificationIds();
     if (cached?.notifications && Array.isArray(cached.notifications)) {
-      return cached.notifications.filter((n) => !n.is_read).length;
+      return cached.notifications.filter((n) => !n.is_read && !readSet.has(n.notification_id)).length;
     }
     return cached?.unread_count ?? 0;
   });
@@ -45,21 +53,20 @@ export function useNotifications() {
 
   const markAllRead = async () => {
     setUnreadCount(0);
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setNotifications((prev) => {
+      storeAllReadNotificationIds(prev.map((n) => n.notification_id));
+      return prev.map((n) => ({ ...n, is_read: true }));
+    });
     await markAllOfficialNotificationsAsRead();
   };
 
   const markSingleRead = async (id: string) => {
+    storeReadNotificationId(id);
     setNotifications((prev) =>
       prev.map((n) => (n.notification_id === id ? { ...n, is_read: true } : n))
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
     await markOfficialNotificationAsRead(id);
-  };
-
-  const clearHistory = () => {
-    setNotifications([]);
-    setUnreadCount(0);
   };
 
   return {
@@ -70,6 +77,5 @@ export function useNotifications() {
     refresh: () => fetchNotifications(true),
     markAllRead,
     markSingleRead,
-    clearHistory,
   };
 }
