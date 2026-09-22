@@ -124,7 +124,9 @@ export function HomeAnalyticsPage({
   const bballFtPct = Number(analytics.free_throw_percentage ?? 0);
   const bballScores =
     Array.isArray(analytics.last_5_games_scores) && analytics.last_5_games_scores.length > 0
-      ? analytics.last_5_games_scores.filter((s) => typeof s === "number" && s > 0)
+      ? analytics.last_5_games_scores
+          .map((v) => (typeof v === "number" ? v : parseFloat(String(v))))
+          .filter((s) => typeof s === "number" && !isNaN(s) && s >= 0)
       : [];
 
   // 2. Swimming Metrics
@@ -152,8 +154,8 @@ export function HomeAnalyticsPage({
       ? analytics.last_5_games_scores
       : [];
   const swimScores = rawSwimHistory
-    .map((v) => (typeof v === "number" ? v : parseFloat(String(v)) || 0))
-    .filter((s) => s > 0);
+    .map((v) => (typeof v === "number" ? v : parseFloat(String(v))))
+    .filter((s) => typeof s === "number" && !isNaN(s) && s >= 0);
 
   // 3. Track & Field Metrics
   const trackSprintTime =
@@ -177,8 +179,8 @@ export function HomeAnalyticsPage({
       ? analytics.last_5_games_scores
       : [];
   const trackScores = rawTrackHistory
-    .map((v) => (typeof v === "number" ? v : parseFloat(String(v)) || 0))
-    .filter((s) => s > 0);
+    .map((v) => (typeof v === "number" ? v : parseFloat(String(v))))
+    .filter((s) => typeof s === "number" && !isNaN(s) && s >= 0);
 
   // Active chart scores
   const activeScores = isSwimming

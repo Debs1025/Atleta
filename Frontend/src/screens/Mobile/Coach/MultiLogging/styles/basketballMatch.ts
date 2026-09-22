@@ -151,6 +151,35 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontFamily: fontBoldPlatform,
   },
+  // Modal correction section
+  modalSectionTitle: {
+    color: "#94A3B8",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginTop: 16,
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  correctionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  correctionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.4)",
+  },
+  correctionBtnText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   // Bench Rail
   benchRailContainer: {
     position: "absolute",
@@ -284,40 +313,6 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     letterSpacing: 1.2,
-    fontFamily: fontBoldPlatform,
-  },
-  // Shot options modal overlay
-  shotModalCard: {
-    width: "90%",
-    backgroundColor: "#0E172A",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    padding: 20,
-    alignSelf: "center",
-    gap: 12,
-  },
-  shotModalTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-    textAlign: "center",
-    marginBottom: 10,
-    fontFamily: fontBoldPlatform,
-  },
-  shotBtn: {
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: "#111C30",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  shotBtnText: {
-    color: "#00D2FF",
-    fontSize: 15,
-    fontWeight: "800",
     fontFamily: fontBoldPlatform,
   },
 });

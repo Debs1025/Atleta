@@ -254,7 +254,7 @@ export function ManageTeamPage({
 
                 <View style={{ flex: 1, marginRight: 6 }}>
                   <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
-                    {player.full_name}
+                    {player.full_name || `${player.first_name || ''} ${player.last_name || ''}`.trim() || 'Athlete'}
                   </Text>
                 </View>
 
@@ -268,7 +268,7 @@ export function ManageTeamPage({
                         onPress={() => setPosPickerPlayer(player)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.posText}>{player.position || ""}</Text>
+                        <Text style={styles.posText}>{player.position || "SG"}</Text>
                         <Ionicons name="chevron-down" size={12} color="#64748B" />
                       </TouchableOpacity>
                     </View>
@@ -277,7 +277,7 @@ export function ManageTeamPage({
                       <Text style={styles.miniLabel}>JERSEY</Text>
                       <TextInput
                         style={styles.uniformInputBox}
-                        value={player.jersey_number || ""}
+                        value={player.jersey_number !== undefined && player.jersey_number !== null ? String(player.jersey_number) : ""}
                         keyboardType="number-pad"
                         maxLength={3}
                         onChangeText={(val) =>

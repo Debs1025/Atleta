@@ -91,7 +91,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
     setSessionTime((prev) => prev || formattedTime);
     setSessionDetails({
       date_time: `${formattedDate}, ${formattedTime}`,
-      location: session.location || "Araneta Coliseum",
+      location: session.location || "Smart Araneta Coliseum, Quezon City",
     });
   }, []);
 
@@ -108,16 +108,14 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         },
       }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
 
-      let rawList: any[] = [];
       const coachList = Array.isArray(coachAthletesRes?.athletes)
         ? coachAthletesRes.athletes
         : Array.isArray(coachAthletesRes)
         ? coachAthletesRes
         : [];
+      let rawList: any[] = [...coachList, ...(initialAthletes || [])];
 
-      if (coachList.length > 0) {
-        rawList = coachList;
-      } else {
+      if (rawList.length === 0) {
         const res = await fetch(`${API_BASE}/athletes?sport=${encodeURIComponent(sport)}`, {
           headers: {
             Accept: "application/json",
@@ -137,8 +135,6 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
           const offlineList = await getAthletesOfflineFirst(sport);
           if (offlineList.length > 0) {
             rawList = offlineList;
-          } else if (initialAthletes && initialAthletes.length > 0) {
-            rawList = initialAthletes;
           }
         }
       }
@@ -364,9 +360,6 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
             Track & Field
           </Text>
         </TouchableOpacity>
-
-        {/* SELECT TEAM & ROSTER SEARCH */}
-        <Text style={styles.sectionLabel}>SELECT TEAM</Text>
 
         <Text style={styles.subLabel}>Search Athletes</Text>
         <View style={styles.searchContainer}>

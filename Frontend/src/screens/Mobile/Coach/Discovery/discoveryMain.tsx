@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, ScrollView, Text, Image } from 'react-native';
+import { View, TextInput, TouchableOpacity, ScrollView, Text, Image, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AtletaHeader } from '../Components/AtletaHeader';
@@ -10,6 +10,7 @@ import { DiscoveryEvent } from './discoveryEvent';
 import { ViewTeam } from './viewTeam';
 import { ViewMatch } from './viewMatch';
 import { ScoutAthlete } from './scoutAthlete';
+import { AdvancedFilterModal } from './AdvancedFilterModal';
 import { styles } from './styles/discoveryMain';
 import { DiscoveryTab, SportCategoryFilter } from './discoveryTypes';
 
@@ -49,8 +50,12 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
     setSearchQuery,
     selectedAthlete,
     setSelectedAthlete,
+    isLoading,
+    refreshDiscovery,
+    activeFilterCount,
   } = useDiscovery();
 
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [subView, setSubView] = useState<'none' | 'rankings' | 'recruits' | 'viewTeam' | 'viewMatch'>('none');
 
   const isFullSubPage = subView !== 'none' || !!selectedAthlete;
@@ -83,7 +88,19 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
         ) : subView === 'viewMatch' ? (
           <ViewMatch onBack={() => setSubView('none')} />
         ) : (
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} overScrollMode="never">
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            overScrollMode="never"
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={refreshDiscovery}
+                tintColor="#00C8FF"
+                colors={["#00C8FF"]}
+              />
+            }
+          >
             {/* Search & Quick Navigation Bar */}
             <View style={styles.searchNavRow}>
               <View style={styles.searchInputContainer}>
@@ -96,6 +113,29 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
                   onChangeText={setSearchQuery}
                   autoCapitalize="none"
                 />
+                <TouchableOpacity
+                  onPress={() => setShowFilterModal(true)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 8,
+                    paddingVertical: 5,
+                    borderRadius: 6,
+                    backgroundColor: activeFilterCount > 0 ? 'rgba(0, 200, 255, 0.15)' : '#1E293B',
+                    borderWidth: 1,
+                    borderColor: activeFilterCount > 0 ? '#00C8FF' : 'rgba(255, 255, 255, 0.08)',
+                    marginLeft: 4,
+                    gap: 4,
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="options-outline" size={16} color={activeFilterCount > 0 ? '#00C8FF' : '#94A3B8'} />
+                  {activeFilterCount > 0 && (
+                    <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#00C8FF', justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#080F21', fontSize: 10, fontWeight: '900' }}>{activeFilterCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
 
               <View style={styles.topActionButtonsGroup}>
@@ -160,6 +200,9 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
           </ScrollView>
         )}
       </View>
+
+      {/* Advanced Filter Modal */}
+      <AdvancedFilterModal visible={showFilterModal} onClose={() => setShowFilterModal(false)} />
     </View>
   );
 };

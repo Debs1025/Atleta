@@ -25,7 +25,7 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
   const currentMatch = match || contextMatch;
 
   const handleSelectPlayer = (playerName: string) => {
-    const found = athletes.find((a) => a.full_name.toLowerCase() === playerName.toLowerCase());
+    const found = athletes.find((a) => (a.full_name || '').toLowerCase() === (playerName || '').toLowerCase());
     if (found) {
       setSelectedAthlete(found);
     } else if (currentMatch) {

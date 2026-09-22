@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
+import { Alert, Platform, ScrollView, Text, View } from "react-native";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -165,29 +165,42 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     }
   };
 
-  const submit = form.handleSubmit(async (values) => {
-    setLoading(true);
-    setFeedback(null);
+  const submit = form.handleSubmit(
+    async (values) => {
+      setLoading(true);
+      setFeedback(null);
 
-    try {
-      const result = await requestJson("/users/login", values);
-      const token = extractAuthToken(result);
-      const role = extractAuthRole(result, values.email);
+      try {
+        const result = await requestJson("/users/login", values);
+        const token = extractAuthToken(result);
+        const role = extractAuthRole(result, values.email);
 
-      if (token) await storeAuthToken(token);
-      await storeAuthRole(role);
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(role);
 
-      onAuthenticated?.(role);
-      form.reset(values);
-    } catch (error) {
+        onAuthenticated?.(role);
+        form.reset(values);
+      } catch (error) {
+        const errorMessage = getAuthErrorMessage(error, "Invalid email or password. Please check your credentials and try again.");
+        setFeedback({
+          tone: "error",
+          message: errorMessage
+        });
+        Alert.alert("Authentication Failed", errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    },
+    (errors) => {
+      const firstError = Object.values(errors)[0]?.message as string | undefined;
+      const msg = firstError || "Please enter your email and password.";
       setFeedback({
         tone: "error",
-        message: getAuthErrorMessage(error, "Invalid login credentials.")
+        message: msg
       });
-    } finally {
-      setLoading(false);
+      Alert.alert("Authentication Failed", msg);
     }
-  });
+  );
 
   return (
     <ScrollView contentContainerStyle={authScreenStyles.content} keyboardShouldPersistTaps="handled">

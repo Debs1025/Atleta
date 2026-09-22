@@ -375,9 +375,9 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Search & Quick-Link Row */}
+        {/* Search Row */}
         <View style={styles.searchRow}>
-          <View style={styles.searchInputContainer}>
+          <View style={[styles.searchInputContainer, { marginRight: 0 }]}>
             <Ionicons
               name="search-outline"
               size={18}
@@ -386,25 +386,17 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
             />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search specializations (Basketbal..."
+              placeholder="Search teams, coaches, sports..."
               placeholderTextColor="#64748B"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color="#64748B" />
+              </Pressable>
+            )}
           </View>
-
-          {/* Quick Link: INQUIRIES */}
-          <Pressable
-            style={styles.inquiriesQuickLink}
-            onPress={() => setCurrentScreen("INQUIRIES")}
-          >
-            <Image
-              source={require("../../../../assets/inquiries.png")}
-              style={styles.inquiriesIconImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.inquiriesQuickText}>INQUIRIES</Text>
-          </Pressable>
         </View>
 
         {/* Sport Filter Chips Horizontal Scroll */}

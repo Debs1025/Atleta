@@ -133,9 +133,9 @@ export function MyTeamsPage({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.teamName}>{team.team_name}</Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Ionicons name="calendar-outline" size={16} color="#64748B" />
+                    <Ionicons name="people-outline" size={16} color="#64748B" />
                     <Text style={styles.playerCountText}>
-                      {`${team.roster_list ? team.roster_list.length : 0} ${team.roster_list && team.roster_list.length === 1 ? "Player" : "Players"}`}
+                      {`${team.roster_list ? team.roster_list.length : ((team as any).athlete_count || 0)} ${(team.roster_list ? team.roster_list.length : ((team as any).athlete_count || 0)) === 1 ? "Player" : "Players"}`}
                     </Text>
                   </View>
                 </View>

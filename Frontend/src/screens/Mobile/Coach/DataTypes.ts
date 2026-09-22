@@ -79,6 +79,8 @@ export interface UserCoach {
 export interface RosterAthlete {
   athlete_id: string;
   user_id: string;
+  first_name?: string;
+  last_name?: string;
   full_name: string;
   position: "PG" | "SG" | "SF" | "PF" | "C" | string;
   jersey_number: string;
@@ -88,6 +90,16 @@ export interface RosterAthlete {
   stroke_style?: string;
   avatar_url?: string;
   missing_documents?: string[];
+  birthdate?: string;
+  province?: string;
+  location?: string;
+  physical_profile?: any;
+  physical_attributes?: any;
+  averages?: any;
+  stats?: any;
+  scoring_trends_last_10?: any;
+  eligibility_documents?: any;
+  documents?: any;
 }
 
 export interface Team {

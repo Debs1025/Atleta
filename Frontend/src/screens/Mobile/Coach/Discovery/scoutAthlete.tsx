@@ -83,9 +83,9 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
 
         {/* Athlete Name & Position Badge */}
         <View style={styles.athleteNameRow}>
-          <Text style={styles.athleteNameText}>{currentAthlete.full_name.toUpperCase()}</Text>
+          <Text style={styles.athleteNameText}>{(currentAthlete.full_name || 'ATHLETE').toUpperCase()}</Text>
           {currentAthlete.position_tag &&
-            currentAthlete.position_tag.toUpperCase() !== currentAthlete.sport_category.toUpperCase() && (
+            currentAthlete.position_tag.toUpperCase() !== (currentAthlete.sport_category || '').toUpperCase() && (
               <View style={styles.positionBadge}>
                 <Text style={styles.positionBadgeText}>{currentAthlete.position_tag}</Text>
               </View>
@@ -95,10 +95,10 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         {/* Location & Sport Subline */}
         <View style={styles.sublineRow}>
           <Text style={styles.sublineText}>
-            #{currentAthlete.jersey_number || '2'} • {currentAthlete.province}, Bicol
+            #{currentAthlete.jersey_number || '2'} • {currentAthlete.province || 'Camarines Sur'}, Bicol
           </Text>
           <View style={styles.sportTagBadge}>
-            <Text style={styles.sportTagBadgeText}>{currentAthlete.sport_category.toUpperCase()}</Text>
+            <Text style={styles.sportTagBadgeText}>{(currentAthlete.sport_category || 'BASKETBALL').toUpperCase()}</Text>
           </View>
         </View>
 
@@ -106,17 +106,17 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         <View style={styles.biometricsCard}>
           <View style={styles.biometricCol}>
             <Text style={styles.biometricLabel}>HEIGHT</Text>
-            <Text style={styles.biometricValue}>{currentAthlete.biometrics.height_ft}</Text>
+            <Text style={styles.biometricValue}>{currentAthlete.biometrics?.height_ft || "6'2\""}</Text>
           </View>
           <View style={styles.biometricDivider} />
           <View style={styles.biometricCol}>
             <Text style={styles.biometricLabel}>WEIGHT</Text>
-            <Text style={styles.biometricValue}>{currentAthlete.biometrics.weight_lbs}</Text>
+            <Text style={styles.biometricValue}>{currentAthlete.biometrics?.weight_lbs || "180 lbs"}</Text>
           </View>
           <View style={styles.biometricDivider} />
           <View style={styles.biometricCol}>
             <Text style={styles.biometricLabel}>WINGSPAN</Text>
-            <Text style={styles.biometricValue}>{currentAthlete.biometrics.wingspan_ft || "6'5\""}</Text>
+            <Text style={styles.biometricValue}>{currentAthlete.biometrics?.wingspan_ft || "6'5\""}</Text>
           </View>
         </View>
 
@@ -126,61 +126,61 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
           {currentAthlete.sport_category === 'BASKETBALL' ? (
             <>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats.ppg ?? 0}</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.ppg ?? 0}</Text>
                 <Text style={styles.analyticLabel}>PPG</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats.rpg ?? 0}</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.rpg ?? 0}</Text>
                 <Text style={styles.analyticLabel}>RPG</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats.ast ?? 0}</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.ast ?? 0}</Text>
                 <Text style={styles.analyticLabel}>AST</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats.fg_pct ?? 0}%</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.fg_pct ?? 0}%</Text>
                 <Text style={styles.analyticLabel}>FG%</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 0}</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
                 <Text style={styles.analyticLabel}>PER</Text>
               </View>
             </>
           ) : currentAthlete.sport_category === 'SWIMMING' ? (
             <>
               <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats.times_50m_free || 'N/A'}</Text>
+                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_50m_free || 'N/A'}</Text>
                 <Text style={styles.analyticLabel}>50M FREE</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats.times_100m || 'N/A'}</Text>
+                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_100m || 'N/A'}</Text>
                 <Text style={styles.analyticLabel}>100M</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats.times_200m || 'N/A'}</Text>
+                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_200m || 'N/A'}</Text>
                 <Text style={styles.analyticLabel}>200M</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 0}</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
                 <Text style={styles.analyticLabel}>PER</Text>
               </View>
             </>
           ) : (
             <>
               <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats.times_100m || 'N/A'}</Text>
+                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_100m || 'N/A'}</Text>
                 <Text style={styles.analyticLabel}>100M</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats.times_200m || 'N/A'}</Text>
+                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_200m || 'N/A'}</Text>
                 <Text style={styles.analyticLabel}>200M</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats.times_400m || 'N/A'}</Text>
+                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_400m || 'N/A'}</Text>
                 <Text style={styles.analyticLabel}>400M</Text>
               </View>
               <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 0}</Text>
+                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
                 <Text style={styles.analyticLabel}>PER</Text>
               </View>
             </>
@@ -191,10 +191,10 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         <View style={styles.efficiencyContainer}>
           <View style={styles.efficiencyHeader}>
             <Text style={styles.efficiencyTitle}>EFFICIENCY</Text>
-            <Text style={styles.efficiencyValueText}>{currentAthlete.efficiency_pct}%</Text>
+            <Text style={styles.efficiencyValueText}>{currentAthlete.efficiency_pct ?? 75}%</Text>
           </View>
           <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: `${currentAthlete.efficiency_pct}%` }]} />
+            <View style={[styles.progressBarFill, { width: `${currentAthlete.efficiency_pct ?? 75}%` }]} />
           </View>
         </View>
 
@@ -209,7 +209,7 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
           </View>
           <View style={styles.contactRow}>
             <Ionicons name="logo-facebook" size={18} color="#94A3B8" />
-            <Text style={styles.contactText}>{currentAthlete.contact_info?.facebook || currentAthlete.full_name}</Text>
+            <Text style={styles.contactText}>{currentAthlete.contact_info?.facebook || currentAthlete.full_name || 'N/A'}</Text>
           </View>
           <View style={styles.contactRow}>
             <Ionicons name="call-outline" size={18} color="#94A3B8" />

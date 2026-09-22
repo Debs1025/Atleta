@@ -738,13 +738,13 @@ export function AthleteProfilePage({
             {avatarUri ? (
               <Image
                 source={{ uri: avatarUri }}
-                style={styles.avatarImage}
+                style={styles.avatarPhoto}
                 resizeMode="cover"
               />
             ) : (
               <Image
                 source={require("../../../../assets/profile.png")}
-                style={styles.avatarImage}
+                style={styles.avatarPlaceholderImage}
                 resizeMode="contain"
               />
             )}

@@ -90,6 +90,7 @@ export function NotificationPage({
     externalNotifications || []
   );
   const [loading, setLoading] = useState(!externalNotifications);
+  const [filterTab, setFilterTab] = useState<"ALL" | "INQUIRIES" | "DOCUMENTS" | "UNREAD">("ALL");
 
   // Modal States
   const [selectedInquiryNotif, setSelectedInquiryNotif] =
@@ -280,36 +281,23 @@ export function NotificationPage({
     const target = notifications.find((n) => n.id === id);
     const inquiryId = target?.inquiry_details?.inquiry_id || id;
 
-    const updated = notifications.map((n) => {
-      if (n.id === id && n.inquiry_details) {
-        return {
-          ...n,
-          read_status: true,
-          inquiry_details: {
-            ...n.inquiry_details,
-            status: "ACCEPTED" as const,
-          },
-        };
-      }
-      return n;
-    });
-    updateFeed(updated);
-
-    if (selectedInquiryNotif && selectedInquiryNotif.id === id) {
-      setSelectedInquiryNotif({
-        ...selectedInquiryNotif,
-        read_status: true,
-        inquiry_details: selectedInquiryNotif.inquiry_details
-          ? { ...selectedInquiryNotif.inquiry_details, status: "ACCEPTED" }
-          : undefined,
-      });
-    }
+    const remaining = notifications.filter((n) => n.id !== id);
+    updateFeed(remaining);
+    setSelectedInquiryNotif(null);
 
     try {
       await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status: "Accepted" });
-      Alert.alert("Inquiry Accepted", "You have accepted the recruitment inquiry!");
+      Alert.alert(
+        "Inquiry Accepted",
+        "You have joined the team! Redirecting to Home Dashboard...",
+        [{ text: "OK", onPress: () => onBack() }]
+      );
     } catch (err: any) {
-      Alert.alert("Inquiry Responded", "Your acceptance has been logged.");
+      Alert.alert(
+        "Inquiry Responded",
+        "Your acceptance has been logged. Redirecting to Home Dashboard...",
+        [{ text: "OK", onPress: () => onBack() }]
+      );
     }
   };
 
@@ -462,6 +450,19 @@ export function NotificationPage({
 
   const unreadCount = notifications.filter((n) => !n.read_status).length;
 
+  const displayNotifications = notifications.filter((item) => {
+    if (filterTab === "INQUIRIES") {
+      return item.type === "RECRUITMENT_INQUIRY";
+    }
+    if (filterTab === "DOCUMENTS") {
+      return item.type === "ACTION_REQUIRED";
+    }
+    if (filterTab === "UNREAD") {
+      return !item.read_status;
+    }
+    return true;
+  });
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -486,6 +487,34 @@ export function NotificationPage({
         )}
       </View>
 
+      {/* FILTER CHIPS */}
+      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingBottom: 12, gap: 8 }}>
+        {(["ALL", "INQUIRIES", "DOCUMENTS", "UNREAD"] as const).map((tab) => (
+          <Pressable
+            key={tab}
+            onPress={() => setFilterTab(tab)}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 12,
+              borderRadius: 20,
+              backgroundColor: filterTab === tab ? "#38BDF8" : "rgba(30, 41, 59, 0.7)",
+              borderWidth: 1,
+              borderColor: filterTab === tab ? "#38BDF8" : "rgba(148, 163, 184, 0.2)",
+            }}
+          >
+            <Text
+              style={{
+                color: filterTab === tab ? "#080F21" : "#94A3B8",
+                fontSize: 12,
+                fontWeight: "700",
+              }}
+            >
+              {tab === "ALL" ? "All" : tab === "INQUIRIES" ? "Inquiries" : tab === "DOCUMENTS" ? "Documents" : "Unread"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       {loading ? (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color="#38BDF8" />
@@ -496,19 +525,21 @@ export function NotificationPage({
           style={styles.scrollContainer}
           contentContainerStyle={[
             styles.scrollContent,
-            notifications.length === 0 && { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingBottom: 80 },
+            displayNotifications.length === 0 && { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingBottom: 80 },
           ]}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled={true}
           overScrollMode="never"
           keyboardShouldPersistTaps="handled"
         >
-          {notifications.length === 0 ? (
+          {displayNotifications.length === 0 ? (
             <View style={{ alignItems: "center", justifyContent: "center", paddingHorizontal: 20 }}>
               <Ionicons name="notifications-off-outline" size={56} color="#64748B" />
               <Text style={{ color: "#F8FAFC", fontSize: 16, fontWeight: "700", marginTop: 16 }}>No Notifications</Text>
               <Text style={{ color: "#94A3B8", fontSize: 13, textAlign: "center", marginTop: 6 }}>
-                You have no active alerts or pending recruitment inquiries.
+                {filterTab === "ALL"
+                  ? "You have no active alerts or pending recruitment inquiries."
+                  : `No notifications found under ${filterTab.toLowerCase()}.`}
               </Text>
             </View>
           ) : (
@@ -517,7 +548,7 @@ export function NotificationPage({
                 <Text style={styles.dateGroupText}>• TODAY</Text>
               </View>
 
-              {notifications.map((item) => {
+              {displayNotifications.map((item) => {
                 const isUnread = !item.read_status;
 
                 if (item.type === "RECRUITMENT_INQUIRY") {

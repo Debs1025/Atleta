@@ -95,13 +95,14 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       if (isInitialLoad) {
         setLoading(true);
       }
-      const [homeRes, profileRes, statsRes, workloadRes, notifRes, inqRes]: [any, any, any, any, any, any] = await Promise.all([
+      const [homeRes, profileRes, statsRes, workloadRes, notifRes, inqRes, teamRes]: [any, any, any, any, any, any, any] = await Promise.all([
         requestAuthenticatedJson("/athletes/home").catch(() => null),
         requestAuthenticatedJson("/athletes/profile").catch(() => null),
         requestAuthenticatedJson("/athletes/stats/all").catch(() => null),
         requestAuthenticatedJson("/athletes/workload").catch(() => null),
         requestAuthenticatedJson("/notifications").catch(() => null),
         requestAuthenticatedJson("/inquiries").catch(() => null),
+        requestAuthenticatedJson("/athletes/team").catch(() => null),
       ]);
 
       let homeData = homeRes;
@@ -109,7 +110,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         homeData = await getAthleteProfileOfflineFirst();
       }
 
-      if (homeData || profileRes || statsRes || workloadRes) {
+      if (homeData || profileRes || statsRes || workloadRes || teamRes) {
         const raw = { ...(homeData || {}), ...(profileRes || {}), ...(statsRes || {}) };
         const stats = raw.stats || raw.analytics || raw;
         const phys = raw.physical_attributes || raw.physical_profile || raw;
@@ -195,6 +196,11 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         const swimHistory = stats.recent_swim_times || stats.recent_times || stats.last_races || stats.last_5_games_scores || [];
         const trackHistory = stats.recent_track_marks || stats.recent_marks || stats.last_events || stats.last_5_games_scores || [];
 
+        const teamObj = teamRes?.team || {};
+        const coachObj = teamRes?.coach || {};
+        const currentTeamId = teamObj.team_id || teamRes?.team_id || raw.current_affiliation?.team_id || raw.team_id || homeRes?.current_team_summary?.team_id || "";
+        const currentTeamName = teamObj.team_name || teamRes?.team_name || raw.current_affiliation?.team_name || raw.team_name || homeRes?.current_team_summary?.team_name || (currentTeamId ? "Assigned Team" : "Unassigned Team");
+
         const mappedProfile: AthleteProfile = {
           athlete_id: raw.athlete_id || raw.user_id || "ath_me",
           first_name: (raw.first_name || raw.user?.first_name || "").toUpperCase(),
@@ -209,18 +215,18 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           recruitment_status: raw.recruitment_status || "AVAILABLE",
           leaderboard_rank: raw.leaderboard_rank || "N/A",
           current_affiliation: {
-            team_id: raw.current_affiliation?.team_id || raw.team_id || "",
-            team_name: raw.current_affiliation?.team_name || raw.team_name || (raw.team_id ? "Assigned Team" : "Unassigned Team"),
-            sport_type: (raw.current_affiliation?.sport_type || raw.sport_type || sportCategory).toUpperCase() as any,
-            division: raw.current_affiliation?.division || raw.division || "",
-            head_coach: raw.current_affiliation?.head_coach || raw.head_coach || {
-              coach_id: "",
-              full_name: "No Coach Assigned",
-              role_title: "Head Coach",
-              years_experience: "0 Years",
-              quote: "",
+            team_id: currentTeamId,
+            team_name: currentTeamName,
+            sport_type: (teamObj.sport_type || raw.current_affiliation?.sport_type || raw.sport_type || sportCategory).toUpperCase() as any,
+            division: teamObj.division || raw.current_affiliation?.division || raw.division || "",
+            head_coach: {
+              coach_id: coachObj.coach_id || raw.current_affiliation?.head_coach?.coach_id || "",
+              full_name: (coachObj.full_name || raw.current_affiliation?.head_coach?.full_name || homeRes?.current_team_summary?.coach_name || "No Coach Assigned").toUpperCase(),
+              role_title: coachObj.current_institution || raw.current_affiliation?.head_coach?.role_title || "Head Coach",
+              years_experience: raw.current_affiliation?.head_coach?.years_experience || "0 Years",
+              quote: raw.current_affiliation?.head_coach?.quote || "",
             },
-            is_verified: Boolean(raw.current_affiliation?.is_verified ?? raw.is_verified),
+            is_verified: Boolean(currentTeamId || (raw.current_affiliation?.is_verified ?? raw.is_verified)),
           },
           analytics: {
             points_per_game: Number(stats.points_per_game ?? stats.ppg ?? stats.points ?? 0),
@@ -228,7 +234,14 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             rebounds_per_game: Number(stats.rebounds_per_game ?? stats.rpg ?? stats.rebounds ?? 0),
             field_goal_percentage: Number(stats.field_goal_percentage ?? stats.fg_pct ?? stats.fg_percentage ?? 0),
             free_throw_percentage: Number(stats.free_throw_percentage ?? stats.ft_pct ?? stats.ft_percentage ?? 0),
-            last_5_games_scores: stats.last_5_games_scores || stats.last_games || stats.recent_scores || [],
+            last_5_games_scores:
+              (Array.isArray(stats.last_5_games_scores) && stats.last_5_games_scores.length > 0)
+                ? stats.last_5_games_scores
+                : (Array.isArray(homeRes?.five_game_trend) && homeRes.five_game_trend.length > 0)
+                ? homeRes.five_game_trend
+                : (Array.isArray(homeRes?.personal_analytics?.scoring_trend) && homeRes.personal_analytics.scoring_trend.length > 0)
+                ? homeRes.personal_analytics.scoring_trend
+                : stats.last_games || stats.recent_scores || [],
             // Swimming
             best_time_formatted: finishTime,
             split_time_formatted: splitTime,
