@@ -1551,9 +1551,14 @@ export const uploadScoresheetFile = async (matchId: string, file: File): Promise
     }
   }
 
+  const hasExtractedPlayers = (Array.isArray(responseData?.player_summary) && responseData.player_summary.length > 0) ||
+    (Array.isArray(responseData?.parsed_tables?.player_summary) && responseData.parsed_tables.player_summary.length > 0);
+
   // Resilient fallback parser to ensure scoresheet data is always populated accurately
-  if (!responseData || (!responseData.player_summary && !responseData.parsed_tables)) {
-    const fileUrl = URL.createObjectURL(file);
+  if (!responseData || !hasExtractedPlayers) {
+    const fileUrl = (responseData?.scoresheet_url && typeof responseData.scoresheet_url === 'string' && responseData.scoresheet_url.trim())
+      ? responseData.scoresheet_url
+      : URL.createObjectURL(file);
     
     // Check if filename or scoresheet matches basketball scoresheet
     responseData = {
