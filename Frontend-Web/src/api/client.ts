@@ -1508,8 +1508,55 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
   return data;
 };
 
-export const uploadScoresheetFile = async (matchId: string, file: File): Promise<any> => {
+const optimizeScoresheetImageForWeb = async (file: File): Promise<File> => {
+  if (!file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxDim = 1200;
+      let width = img.width;
+      let height = img.height;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const optFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.jpg', {
+                type: 'image/jpeg',
+              });
+              resolve(optFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          0.75
+        );
+      } else {
+        resolve(file);
+      }
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+};
+
+export const uploadScoresheetFile = async (matchId: string, rawFile: File): Promise<any> => {
   const cleanId = matchId.replace(/^#/, '');
+  const file = await optimizeScoresheetImageForWeb(rawFile);
   const token = getStoredToken();
   const formData = new FormData();
   formData.append('file', file);
@@ -1593,7 +1640,8 @@ export const uploadScoresheetFile = async (matchId: string, file: File): Promise
   return responseData;
 };
 
-export const scanScoresheetStandalone = async (file: File): Promise<any> => {
+export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
+  const file = await optimizeScoresheetImageForWeb(rawFile);
   const token = getStoredToken();
   const formData = new FormData();
   formData.append('scoresheet', file);
