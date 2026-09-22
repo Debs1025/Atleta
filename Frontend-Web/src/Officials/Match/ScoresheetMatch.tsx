@@ -18,6 +18,7 @@ import {
   deleteOfficialMatch,
   uploadScoresheetFile,
   getCachedData,
+  setCachedData,
   downloadCertifiedMatchPdf,
   markMatchAsCertified,
   isMatchLocallyCertified,
@@ -70,9 +71,26 @@ export const ScoresheetMatch: React.FC = () => {
     }
 
     try {
-      const data = await getMatchAuditDetail(cleanId, true);
+      const data = await getMatchAuditDetail(cleanId, false);
       if (data) {
-        setMatchData(data);
+        setMatchData((prev) => {
+          const prevHome = prev?.home_team?.roster_stats || [];
+          const prevAway = prev?.away_team?.roster_stats || [];
+          const dataHome = data.home_team?.roster_stats || [];
+          const dataAway = data.away_team?.roster_stats || [];
+
+          return {
+            ...data,
+            home_team: {
+              ...data.home_team,
+              roster_stats: dataHome.length > 0 ? dataHome : prevHome,
+            },
+            away_team: {
+              ...data.away_team,
+              roster_stats: dataAway.length > 0 ? dataAway : prevAway,
+            },
+          };
+        });
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
@@ -187,7 +205,7 @@ export const ScoresheetMatch: React.FC = () => {
           if (!prev) return prev;
           const hSum = hRows.reduce((a, b) => a + b.pts, 0);
           const aSum = aRows.reduce((a, b) => a + b.pts, 0);
-          return {
+          const updated: MatchAuditDetail = {
             ...prev,
             scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
             home_team: {
@@ -203,6 +221,8 @@ export const ScoresheetMatch: React.FC = () => {
               roster_stats: aRows,
             },
           };
+          setCachedData(`match_audit_detail_${cleanId}`, updated);
+          return updated;
         });
       }
     } catch (err: any) {
