@@ -15,7 +15,8 @@ import type {
   CreateSportPayload,
 } from './types';
 
-const BASE_URL = (import.meta.env.VITE_ATLETA_API || '').replace(/\/+$/, '');
+const rawApi = (import.meta.env.VITE_ATLETA_API || '').trim().replace(/\/+$/, '');
+const BASE_URL = rawApi ? (rawApi.endsWith('/api/v1') ? rawApi : `${rawApi}/api/v1`) : '';
 
 const TOKEN_KEY = 'atleta_official_token';
 const USER_KEY = 'atleta_official_user';
@@ -677,20 +678,23 @@ export const isMatchCreatedByOfficial = (
   item: import('./types').MatchSummaryItem,
   user: import('./types').AuthUser | null
 ): boolean => {
-  if (!user) return false;
+  const currentUser = user || getStoredUser() || getCachedData<import('./types').AuthUser>('user_me');
   const raw = item.raw_match || {};
   const cleanId = String(item.match_id || raw.match_id || '').replace(/^#/, '');
 
   // 1. Check locally tracked created & certified matches
-  const myUid = user.uid || (user as any).user_id;
+  const myUid = currentUser?.uid || (currentUser as any)?.user_id || (currentUser as any)?.id;
   const createdIds = getOfficialCreatedMatchIds(myUid);
   const candidateIds = [
     cleanId,
+    item.match_id ? String(item.match_id).replace(/^#/, '') : null,
+    item.validation_id ? String(item.validation_id).replace(/^#/, '') : null,
     raw.match_id ? String(raw.match_id).replace(/^#/, '') : null,
     raw.validation_id ? String(raw.validation_id).replace(/^#/, '') : null,
     raw.audit_id ? String(raw.audit_id).replace(/^#/, '') : null,
     raw.reference_id ? String(raw.reference_id).replace(/^#/, '') : null,
     (item as any).id ? String((item as any).id).replace(/^#/, '') : null,
+    (raw as any).id ? String((raw as any).id).replace(/^#/, '') : null,
   ].filter(Boolean) as string[];
 
   for (const cid of candidateIds) {
@@ -699,32 +703,50 @@ export const isMatchCreatedByOfficial = (
     }
   }
 
+  if (!currentUser) return false;
+
   const clean = (s: any) => String(s || '').trim().toLowerCase().replace(/^off_/, '');
 
   // 2. Check IDs for this official user (case-insensitive)
-  const userIds = [
-    user.uid,
-    user.user_id,
-    (user as any).official_id,
-    user.uid ? `off_${user.uid.replace(/^off_/, '')}` : null,
-    user.uid ? user.uid.replace(/^off_/, '') : null,
-    user.email,
-  ].filter(Boolean).map(clean) as string[];
+  const userIds = new Set(
+    [
+      currentUser.uid,
+      currentUser.user_id,
+      (currentUser as any).id,
+      (currentUser as any).official_id,
+      currentUser.email,
+      (currentUser as any).name,
+      currentUser.full_name,
+      (currentUser as any).full_legal_name,
+      currentUser.uid ? `off_${currentUser.uid.replace(/^off_/, '')}` : null,
+      currentUser.uid ? currentUser.uid.replace(/^off_/, '') : null,
+      (currentUser as any).official_id ? String((currentUser as any).official_id).replace(/^off_/, '') : null,
+      (currentUser as any).official_id ? `off_${String((currentUser as any).official_id).replace(/^off_/, '')}` : null,
+    ].filter(Boolean).map(clean)
+  );
 
   // Candidate creator/official fields on the match record
   const matchOwners = [
     raw.official_id,
     raw.requested_by,
     raw.created_by,
+    raw.creator_id,
+    raw.creator,
+    raw.user_id,
+    raw.author_id,
     raw.certified_by,
     raw.validated_by,
+    raw.assigned_to,
     (item as any).official_id,
     (item as any).requested_by,
     (item as any).created_by,
-  ].filter(Boolean).map(clean) as string[];
+    (item as any).creator_id,
+    (item as any).creator,
+    (item as any).user_id,
+  ].filter(Boolean).map(clean);
 
   for (const owner of matchOwners) {
-    if (owner && userIds.includes(owner)) return true;
+    if (owner && userIds.has(owner)) return true;
   }
 
   // 3. Check assigned_officials array if present
@@ -734,10 +756,14 @@ export const isMatchCreatedByOfficial = (
       : Array.isArray((item as any).assigned_officials)
         ? (item as any).assigned_officials
         : []
-  ).map(clean) as string[];
+  ).map(clean);
 
   for (const off of assigned) {
-    if (off && userIds.includes(off)) return true;
+    if (off && userIds.has(off)) return true;
+  }
+
+  if (raw.created_via === 'OFFICIAL_PORTAL' || raw.source === 'OFFICIAL_PORTAL' || raw.match_type === 'OFFICIAL') {
+    return true;
   }
 
   return false;
@@ -747,16 +773,7 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
   const token = getStoredToken();
   const idempotencyKey = crypto.randomUUID();
 
-  const rawSport = String(payload.sport_type || '').trim().toLowerCase();
-  let normalizedSport = 'Basketball';
-  if (rawSport.includes('swim')) {
-    normalizedSport = 'Swimming';
-  } else if (rawSport.includes('track') || rawSport.includes('field')) {
-    normalizedSport = 'Track & Field';
-  } else if (rawSport.includes('basket')) {
-    normalizedSport = 'Basketball';
-  }
-
+  const sportName = String(payload.sport_type || 'Basketball').trim();
   const home = String(payload.home_team_name || payload.team_id || 'Home Team').trim() || 'Home Team';
   const away = String(payload.opponent_team_name || (payload as any).away_team_id || 'Opponent').trim() || 'Opponent';
   const location = String(payload.location || payload.venue || 'Tournament Sports Complex').trim() || 'Tournament Sports Complex';
@@ -774,7 +791,7 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
       home_team_name: home,
       opponent_team_name: away,
       away_team_id: away,
-      sport_type: normalizedSport,
+      sport_type: sportName,
       match_date: payload.match_date || new Date().toISOString(),
       location: location,
       venue: location,
@@ -788,10 +805,12 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
     }),
   });
   const data = await handleResponse<any>(res);
-  const createdId = data?.match?.match_id || data?.match_id;
+  const createdId = data?.match?.match_id || data?.match_id || data?.data?.match_id || data?.id;
   const user = getStoredUser();
-  if (createdId && user?.uid) {
-    recordOfficialCreatedMatchId(createdId, user.uid);
+  if (createdId) {
+    const rawIdStr = String(createdId);
+    recordOfficialCreatedMatchId(rawIdStr, user?.uid);
+    recordOfficialCreatedMatchId(rawIdStr.replace(/^#/, ''), user?.uid);
   }
 
   // Invalidate dashboard, schedules, and match queue caches so new match reflects instantly everywhere
@@ -881,9 +900,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
     });
   } catch { }
 
-  const unread_count = typeof data?.unread_count === 'number'
-    ? data.unread_count
-    : notifications.filter((n) => !n.is_read).length;
+  const unread_count = notifications.filter((n) => !n.is_read).length;
 
   const result = { unread_count, notifications };
   setCachedData('official_notifications', result);
@@ -892,7 +909,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
 
 export const markAllOfficialNotificationsAsRead = async (): Promise<void> => {
   const token = getStoredToken();
-  // Optimistically update cache
+  // Update Officials Notification Cached Data
   const cached = getCachedData<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }>('official_notifications');
   if (cached) {
     setCachedData('official_notifications', {
@@ -1060,28 +1077,22 @@ export const getAuditMatches = async (
     const pendingValidations: any[] = Array.isArray(pendingRes) ? pendingRes : [];
 
     const userMe = getStoredUser();
-    const myIds = new Set([
-      userMe?.uid,
-      userMe?.user_id,
-      (userMe as any)?.official_id,
-      userMe?.uid ? `off_${userMe.uid.replace(/^off_/, '')}` : null,
-      userMe?.uid ? userMe.uid.replace(/^off_/, '') : null,
-      userMe?.email,
-    ].filter(Boolean) as string[]);
 
     dashboardQueue.forEach((item) => {
-      const creator = item.requested_by || item.official_id;
-      if (creator && userMe?.uid && (myIds.has(creator) || myIds.has(String(creator).replace(/^off_/, '')))) {
-        const id = item.match_id || item.audit_id;
-        if (id) recordOfficialCreatedMatchId(id, userMe.uid);
+      const id = item.match_id || item.audit_id;
+      if (id) {
+        const rawId = String(id);
+        recordOfficialCreatedMatchId(rawId, userMe?.uid);
+        recordOfficialCreatedMatchId(rawId.replace(/^#/, ''), userMe?.uid);
       }
     });
 
     pendingValidations.forEach((v) => {
-      const creator = v.requested_by || v.official_id;
-      if (creator && userMe?.uid && (myIds.has(creator) || myIds.has(String(creator).replace(/^off_/, '')))) {
-        const id = v.match_id || v.validation_id;
-        if (id) recordOfficialCreatedMatchId(id, userMe.uid);
+      const id = v.match_id || v.validation_id;
+      if (id) {
+        const rawId = String(id);
+        recordOfficialCreatedMatchId(rawId, userMe?.uid);
+        recordOfficialCreatedMatchId(rawId.replace(/^#/, ''), userMe?.uid);
       }
     });
 
@@ -1544,7 +1555,7 @@ export const fetchBrowseTeams = async (sport?: string): Promise<any[]> => {
   return [];
 };
 
-// ─── SPORTS MANAGEMENT  ───────────────────────────────────────────────────
+// Sport Addition
 
 export const getSports = async (activeOnly = false, forceRefresh = false): Promise<SportsListResponse> => {
   const cacheKey = `sports_catalog_${activeOnly}`;
@@ -1612,5 +1623,107 @@ export const updateSport = async (
   invalidateCache('sports_catalog');
   return data;
 };
+
+export const DEFAULT_FALLBACK_SPORTS: SportConfiguration[] = [
+  {
+    sport_id: 'sport_basketball',
+    sport_name: 'Basketball',
+    short_identifier: 'BKT',
+    configurable_stats: [
+      { stat_name_key: 'points', measurement_category: 'Cumulative Total', label: 'Points' },
+      { stat_name_key: 'rebounds', measurement_category: 'Cumulative Total', label: 'Rebounds' },
+      { stat_name_key: 'assists', measurement_category: 'Cumulative Total', label: 'Assists' },
+      { stat_name_key: 'steals', measurement_category: 'Cumulative Total', label: 'Steals' },
+      { stat_name_key: 'blocks', measurement_category: 'Cumulative Total', label: 'Blocks' },
+    ],
+    positions: ['Point Guard', 'Shooting Guard', 'Small Forward', 'Power Forward', 'Center'],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    sport_id: 'sport_swimming',
+    sport_name: 'Swimming',
+    short_identifier: 'SWM',
+    configurable_stats: [
+      { stat_name_key: 'finish_time', measurement_category: 'Time (ms)', label: 'Finish Time' },
+      { stat_name_key: 'split_times', measurement_category: 'Time (ms)', label: 'Split Times' },
+    ],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    sport_id: 'sport_track_field',
+    sport_name: 'Track & Field',
+    short_identifier: 'TRK',
+    configurable_stats: [
+      { stat_name_key: 'finish_time', measurement_category: 'Time (ms)', label: 'Finish Time' },
+      { stat_name_key: 'distance', measurement_category: 'Distance (m)', label: 'Distance' },
+    ],
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+export const getActiveSportsList = async (forceRefresh = false): Promise<SportConfiguration[]> => {
+  try {
+    const res = await getSports(true, forceRefresh);
+    const list = Array.isArray(res?.sports) ? res.sports : [];
+    const active = list.filter((s) => s.is_active !== false);
+    if (active.length > 0) return active;
+  } catch (err) {
+    console.warn('Failed to fetch active sports from server, using fallback catalog:', err);
+  }
+  return DEFAULT_FALLBACK_SPORTS;
+};
+
+export const isIndividualSportType = (
+  sportName?: string,
+  sportConfig?: SportConfiguration | null
+): boolean => {
+  const norm = String(sportName || '').toLowerCase().trim();
+  if (sportConfig) {
+    const hasTimeOrDistance = sportConfig.configurable_stats?.some(
+      (s) => s.measurement_category === 'Time (ms)' || s.measurement_category === 'Distance (m)'
+    );
+    if (hasTimeOrDistance) return true;
+    const rules = (sportConfig.scoring_rules as any) || {};
+    if (rules.is_individual || rules.match_type === 'INDIVIDUAL' || rules.format === 'RACE') return true;
+  }
+  return (
+    norm.includes('swim') ||
+    norm.includes('track') ||
+    norm.includes('field') ||
+    norm.includes('race') ||
+    norm.includes('aquatic') ||
+    norm.includes('athletics')
+  );
+};
+
+export const getSportBadgeCode = (
+  sportName?: string,
+  sportIdentifier?: string
+): string => {
+  if (sportIdentifier && sportIdentifier.trim()) {
+    return sportIdentifier.trim().substring(0, 3).toUpperCase();
+  }
+  const norm = String(sportName || '').toUpperCase().trim();
+  if (norm.includes('SWIM')) return 'SW';
+  if (norm.includes('TRACK') || norm.includes('FIELD')) return 'TF';
+  if (norm.includes('BASKET')) return 'BB';
+  if (norm.includes('VOLLEY')) return 'VB';
+  if (norm.includes('FOOT') || norm.includes('SOCCER')) return 'FB';
+  if (norm.includes('BADMINTON')) return 'BD';
+  if (norm.includes('TENNIS')) return 'TN';
+  if (norm.includes('TABLE') || norm.includes('PING')) return 'TT';
+  const words = norm.split(/[\s&_-]+/);
+  if (words.length >= 2) {
+    return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  }
+  return norm.substring(0, 2).toUpperCase() || 'SP';
+};
+
 
 

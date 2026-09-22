@@ -68,14 +68,14 @@ const MatchDetailsCard: React.FC<{ match: OfficialScheduleItem }> = ({ match }) 
     const rawList = Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0
       ? match.assigned_coaches
       : match.coaches
-      ? (Array.isArray(match.coaches) ? match.coaches : [match.coaches])
-      : match.coach_name
-      ? [match.coach_name]
-      : (match as any)?.raw_match?.assigned_coaches
-      ? (match as any).raw_match.assigned_coaches
-      : (match as any)?.raw_match?.coaches
-      ? (match as any).raw_match.coaches
-      : [];
+        ? (Array.isArray(match.coaches) ? match.coaches : [match.coaches])
+        : match.coach_name
+          ? [match.coach_name]
+          : (match as any)?.raw_match?.assigned_coaches
+            ? (match as any).raw_match.assigned_coaches
+            : (match as any)?.raw_match?.coaches
+              ? (match as any).raw_match.coaches
+              : [];
 
     const candidateCoaches = (Array.isArray(rawList) ? rawList : [rawList])
       .map(String)
@@ -243,7 +243,7 @@ export const SchedulePage: React.FC = () => {
     getOfficialSchedules(month, year, true).then((res) => {
       const list = res || [];
       setSchedules(list);
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   useEffect(() => {
@@ -264,7 +264,7 @@ export const SchedulePage: React.FC = () => {
 
     getMe().then((res) => {
       if (isCurrent && res) setUser(res);
-    }).catch(() => {});
+    }).catch(() => { });
 
     getOfficialSchedules(month, year).then((res) => {
       if (!isCurrent) return; // Discard stale responses from quickly skipped months
@@ -300,7 +300,7 @@ export const SchedulePage: React.FC = () => {
 
         return `${year}-${String(month).padStart(2, '0')}-01`;
       });
-    }).catch(() => {});
+    }).catch(() => { });
 
     return () => {
       isCurrent = false;
@@ -500,14 +500,14 @@ export const SchedulePage: React.FC = () => {
                               const code = sport.includes('SWIM')
                                 ? 'SW'
                                 : sport.includes('TRACK') || sport.includes('FIELD')
-                                ? 'TF'
-                                : '';
+                                  ? 'TF'
+                                  : '';
                               const badgeStyle =
                                 code === 'SW'
                                   ? styles.vbBadge
                                   : code === 'TF'
-                                  ? styles.fbBadge
-                                  : styles.bbBadge;
+                                    ? styles.fbBadge
+                                    : styles.bbBadge;
 
                               const { home: mHome, away: mAway } = resolveTeamNames(m);
                               const label = mHome && mAway ? `${mHome} vs. ${mAway}` : mHome || mAway || 'Event';

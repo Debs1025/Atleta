@@ -1,43 +1,38 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  getStoredToken,
   getStoredUser,
-  getAllOfficialMatchesMaster,
   getCachedData,
+  getAllOfficialMatchesMaster,
   prefetchMatchAuditDetail,
   isMatchCreatedByOfficial,
+  isMatchLocallyCertified,
+  getActiveSportsList,
+  DEFAULT_FALLBACK_SPORTS,
 } from '../../api/client';
-import type { MatchSummaryItem } from '../../api/types';
+import type { MatchSummaryItem, SportConfiguration } from '../../api/types';
 import { styles } from './styles/ViewAllMatch';
 
-interface MatchRowProps {
-  item: MatchSummaryItem;
-  onClick: () => void;
-}
-
-const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
-  const isPending = item.status === 'PENDING';
+// Memoized row component to eliminate unnecessary re-renders when switching filters
+const MatchRow = React.memo(({ item, onClick }: { item: MatchSummaryItem; onClick: (id: string) => void }) => {
+  const rawId = item.match_id.replace(/^#/, '');
+  const isAudited = item.status === 'AUDITED' || isMatchLocallyCertified(rawId);
 
   return (
     <tr
       className="hover-match-row"
-      style={styles.tr}
-      onClick={onClick}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = '#F8FAFC';
-        prefetchMatchAuditDetail(item.match_id);
-      }}
-      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
+      style={{ cursor: 'pointer' }}
+      onMouseEnter={() => prefetchMatchAuditDetail(rawId)}
+      onClick={() => onClick(item.match_id)}
     >
       <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
-      <td style={{ ...styles.td, ...styles.tdMatchClass }}>{item.match_class}</td>
-      <td style={{ ...styles.td, ...styles.tdSport }}>{item.sport}</td>
-      <td style={{ ...styles.td, ...styles.tdCoaches }}>{item.coaches}</td>
-      <td style={{ ...styles.td, ...styles.tdDateTime }}>{item.date_time}</td>
+      <td style={styles.td}>{item.match_class}</td>
+      <td style={styles.td}>{item.sport}</td>
+      <td style={styles.td}>{item.coaches || 'Official Assigned'}</td>
+      <td style={styles.td}>{item.date_time}</td>
       <td style={{ ...styles.td, borderRight: 'none' }}>
-        <span style={isPending ? styles.statusPending : styles.statusAudited}>
-          {item.status}
+        <span style={isAudited ? styles.statusAudited : styles.statusPending}>
+          {isAudited ? 'AUDITED' : 'PENDING'}
         </span>
       </td>
     </tr>
@@ -49,6 +44,7 @@ export const ViewAllMatch: React.FC = () => {
   const user = useMemo(() => getStoredUser(), []);
   const [activeTab, setActiveTab] = useState<'PENDING' | 'PROCESSED'>('PENDING');
   const [selectedSport, setSelectedSport] = useState<string>('ALL');
+  const [activeSports, setActiveSports] = useState<SportConfiguration[]>(DEFAULT_FALLBACK_SPORTS);
 
   // Master in-memory dataset of all official's matches
   const [allMatches, setAllMatches] = useState<MatchSummaryItem[]>(
@@ -59,11 +55,10 @@ export const ViewAllMatch: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!getStoredToken()) {
-      navigate('/login');
-      return;
-    }
-  }, [navigate]);
+    getActiveSportsList().then((sports) => {
+      if (sports && sports.length > 0) setActiveSports(sports);
+    }).catch(() => { });
+  }, []);
 
   // Fetch / refresh master dataset in background
   useEffect(() => {
@@ -91,10 +86,10 @@ export const ViewAllMatch: React.FC = () => {
     };
   }, []);
 
-  const sportsList = useMemo(
-    () => ['ALL SPORTS', 'BASKETBALL', 'TRACK AND FIELD', 'SWIMMING'],
-    []
-  );
+  const sportsList = useMemo(() => {
+    const list = activeSports.map((s) => s.sport_name.toUpperCase());
+    return ['ALL SPORTS', ...Array.from(new Set(list))];
+  }, [activeSports]);
 
   // Filter Sports, Pending/Processed, and ONLY matches created by this official user
   const displayedMatches = useMemo(() => {
@@ -110,16 +105,11 @@ export const ViewAllMatch: React.FC = () => {
       const normSport = selectedSport.replace('&', 'AND').toUpperCase().trim();
       if (normSport !== 'ALL' && normSport !== 'ALL SPORTS') {
         const itemSport = (item.sport || '').toLowerCase();
-        if (normSport.includes('BASKET')) {
-          return itemSport.includes('basket');
-        }
-        if (normSport.includes('SWIM')) {
-          return itemSport.includes('swim') || itemSport.includes('aquatic');
-        }
-        if (normSport.includes('TRACK') || normSport.includes('FIELD')) {
-          return itemSport.includes('track') || itemSport.includes('field') || itemSport.includes('athletic');
-        }
-        return itemSport.includes(normSport.toLowerCase());
+        const targetSport = normSport.toLowerCase();
+        if (targetSport.includes('basket')) return itemSport.includes('basket');
+        if (targetSport.includes('swim')) return itemSport.includes('swim') || itemSport.includes('aquatic');
+        if (targetSport.includes('track') || targetSport.includes('field')) return itemSport.includes('track') || itemSport.includes('field') || itemSport.includes('athletic');
+        return itemSport.includes(targetSport) || targetSport.includes(itemSport);
       }
 
       return true;

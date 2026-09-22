@@ -97,11 +97,14 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
     pointerEvents: visible ? 'auto' : 'none',
   };
 
+  const unreadNotifications = notifications.filter((item) => !item.is_read);
+  const displayCount = unreadCount > 0 ? unreadCount : unreadNotifications.length;
+
   return (
     <div ref={popoverRef} style={transitionStyle}>
       {/* Popover Header */}
       <div style={styles.popoverHeader}>
-        <h3 style={styles.headerTitle}>NOTIFICATIONS ({unreadCount})</h3>
+        <h3 style={styles.headerTitle}>NOTIFICATIONS ({displayCount})</h3>
         <button
           type="button"
           onClick={onMarkAllRead}

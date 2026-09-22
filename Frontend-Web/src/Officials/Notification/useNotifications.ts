@@ -15,6 +15,9 @@ export function useNotifications() {
   });
   const [unreadCount, setUnreadCount] = useState<number>(() => {
     const cached = getCachedData<{ unread_count: number; notifications: OfficialNotificationItem[] }>('official_notifications');
+    if (cached?.notifications && Array.isArray(cached.notifications)) {
+      return cached.notifications.filter((n) => !n.is_read).length;
+    }
     return cached?.unread_count ?? 0;
   });
   const [loading, setLoading] = useState<boolean>(false);
@@ -25,8 +28,10 @@ export function useNotifications() {
       setLoading(true);
       setError(null);
       const res = await getOfficialNotifications(forceRefresh);
-      setNotifications(res.notifications || []);
-      setUnreadCount(res.unread_count || 0);
+      const notifs = res.notifications || [];
+      const count = notifs.filter((n) => !n.is_read).length;
+      setNotifications(notifs);
+      setUnreadCount(count);
     } catch (err: any) {
       setError(err?.message || 'Failed to load notifications.');
     } finally {

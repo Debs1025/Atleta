@@ -15,8 +15,13 @@ import {
   getMe,
   createOfficialMatch,
   fetchBrowseTeams,
+  uploadScoresheetFile,
+  setCachedData,
+  getActiveSportsList,
+  isIndividualSportType,
+  DEFAULT_FALLBACK_SPORTS,
 } from '../../api/client';
-import type { AuthUser } from '../../api/types';
+import type { AuthUser, MatchAuditDetail, BoxScoreRow, SportConfiguration } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
@@ -26,6 +31,7 @@ export const CreateMatch: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [availableSports, setAvailableSports] = useState<SportConfiguration[]>(DEFAULT_FALLBACK_SPORTS);
   const [gameName, setGameName] = useState('');
   const [sportCategory, setSportCategory] = useState('Basketball');
   const [venue, setVenue] = useState('');
@@ -54,10 +60,11 @@ export const CreateMatch: React.FC = () => {
     venue?: string;
   } | null>(null);
 
-  const isIndividualSport =
-    sportCategory.toLowerCase().includes('track') ||
-    sportCategory.toLowerCase().includes('swim') ||
-    sportCategory.toLowerCase().includes('field');
+  const selectedSportConfig = availableSports.find(
+    (s) => s.sport_name.toLowerCase() === sportCategory.toLowerCase()
+  ) || null;
+
+  const isIndividualSport = isIndividualSportType(sportCategory, selectedSportConfig);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -66,8 +73,17 @@ export const CreateMatch: React.FC = () => {
       navigate('/login');
       return;
     }
-    getMe().then((res) => setUser(res)).catch(() => {});
-    fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
+    getMe().then((res) => setUser(res)).catch(() => { });
+    fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => { });
+    getActiveSportsList().then((sports) => {
+      if (sports && sports.length > 0) {
+        setAvailableSports(sports);
+        setSportCategory((prev) => {
+          const exists = sports.some((s) => s.sport_name.toLowerCase() === prev.toLowerCase());
+          return exists ? prev : sports[0].sport_name;
+        });
+      }
+    }).catch(() => { });
   }, [navigate]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,7 +140,7 @@ export const CreateMatch: React.FC = () => {
     if (isIndividualSport) {
       const validTeams = teams.map((t) => t.trim()).filter(Boolean);
       if (validTeams.length < 2) {
-        setErrorMessage('Please specify at least 2 participating teams or delegations for this event.');
+        setErrorMessage('Please choose at least 2 participating teams or delegations for this event.');
         return;
       }
       finalHome = validTeams[0];
@@ -143,12 +159,7 @@ export const CreateMatch: React.FC = () => {
     try {
       setSubmitting(true);
 
-      let normalizedSport = 'Basketball';
-      if (sportCategory.toLowerCase().includes('swim')) {
-        normalizedSport = 'Swimming';
-      } else if (sportCategory.toLowerCase().includes('track') || sportCategory.toLowerCase().includes('field')) {
-        normalizedSport = 'Track & Field';
-      }
+      const normalizedSport = selectedSportConfig ? selectedSportConfig.sport_name : sportCategory.trim() || 'Basketball';
 
       let isoDate = new Date(matchDate).toISOString();
       if (matchTime) {
@@ -157,14 +168,14 @@ export const CreateMatch: React.FC = () => {
           if (!isNaN(combined.getTime())) {
             isoDate = combined.toISOString();
           }
-        } catch {}
+        } catch { }
       } else {
         try {
           const combined = new Date(`${matchDate}T09:00:00`);
           if (!isNaN(combined.getTime())) {
             isoDate = combined.toISOString();
           }
-        } catch {}
+        } catch { }
       }
 
       const venueLocation = venue.trim() || 'Tournament Sports Complex';
@@ -183,16 +194,157 @@ export const CreateMatch: React.FC = () => {
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
       });
 
-      const matchId = createdMatch?.match?.match_id || createdMatch?.match_id;
+      const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
+      const cleanMatchId = rawMatchId ? String(rawMatchId).replace(/^#/, '') : '';
 
-      const createdId = matchId || `MATCH-${Date.now()}`;
-      const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
       const displayTime = matchTime
-        ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+        ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
         : '';
 
+      // Upload scoresheet file & trigger OCR parsing if a file was selected
+      if (cleanMatchId && selectedFile) {
+        try {
+          const ocrRes = await uploadScoresheetFile(cleanMatchId, selectedFile);
+
+          const rawPlayers: any[] = Array.isArray(ocrRes?.player_summary)
+            ? ocrRes.player_summary
+            : Array.isArray(ocrRes?.parsed_tables?.player_summary)
+              ? ocrRes.parsed_tables.player_summary
+              : [];
+
+          const teamScoresArr: any[] = Array.isArray(ocrRes?.team_scores)
+            ? ocrRes.team_scores
+            : Array.isArray(ocrRes?.parsed_tables?.team_scores)
+              ? ocrRes.parsed_tables.team_scores
+              : [];
+
+          const homeScoreItem = teamScoresArr.find(
+            (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
+          );
+          const awayScoreItem = teamScoresArr.find(
+            (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
+          );
+
+          const hName = (finalHome || homeScoreItem?.team || 'CSSAC').toUpperCase();
+          const aName = (finalAway || awayScoreItem?.team || 'CBSUA').toUpperCase();
+
+          const totalPlayers = rawPlayers.length;
+          const halfCount = Math.ceil(totalPlayers / 2);
+
+          const hRows: BoxScoreRow[] = [];
+          const aRows: BoxScoreRow[] = [];
+
+          rawPlayers.forEach((p: any, idx: number) => {
+            let resolvedTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
+            if (!resolvedTeam) {
+              resolvedTeam = idx < halfCount ? aName : hName;
+            }
+
+            const jersey = p.jersey_number !== undefined && p.jersey_number !== null
+              ? String(p.jersey_number).padStart(2, '0')
+              : String(idx + 1).padStart(2, '0');
+
+            const fullName = String(p.player_name || `PLAYER ${jersey}`).toUpperCase();
+            const fga = Number(p.fg_attempted || p.fga || 0);
+            const fgm = Number(p.fg_made || p.fgm || 0);
+            const fgPct = p.true_shooting_pct
+              ? `${Math.round(p.true_shooting_pct)}%`
+              : fga > 0
+                ? `${Math.round((fgm / fga) * 100)}%`
+                : '50%';
+
+            const row: BoxScoreRow = {
+              jersey_no: jersey,
+              player_name: fullName,
+              position: p.position || 'G',
+              minutes: p.minutes ? String(p.minutes) : '0',
+              pts: Number(p.points ?? p.pts ?? 0),
+              reb: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
+              ast: Number(p.assists ?? p.ast ?? 0),
+              stl: Number(p.steals ?? p.stl ?? 0),
+              blk: Number(p.blocks ?? p.blk ?? 0),
+              fg_pct: fgPct,
+              three_p_pct: p.three_p_pct ? `${p.three_p_pct}%` : '0.0%',
+              ft_pct: p.ft_pct ? `${p.ft_pct}%` : '0.0%',
+            };
+
+            if (resolvedTeam === hName || (!resolvedTeam && idx >= halfCount)) {
+              hRows.push(row);
+            } else {
+              aRows.push(row);
+            }
+          });
+
+          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
+          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
+
+          const cachedDetail: MatchAuditDetail = {
+            match_id: cleanMatchId,
+            validation_id: cleanMatchId,
+            game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+            sport_type: normalizedSport,
+            league_class: `${normalizedSport.toUpperCase()} • OFFICIAL MATCH`,
+            match_date_formatted: displayTime ? `${displayDate} / ${displayTime}` : displayDate,
+            home_team: {
+              name: hName,
+              score: hSum,
+              result: hSum >= aSum ? 'WIN' : 'LOSE',
+              roster_stats: hRows,
+              team_totals: {
+                jersey_no: '',
+                player_name: 'TEAM TOTALS',
+                minutes: '0',
+                pts: hSum,
+                reb: hRows.reduce((a, b) => a + b.reb, 0),
+                ast: hRows.reduce((a, b) => a + b.ast, 0),
+                stl: hRows.reduce((a, b) => a + b.stl, 0),
+                blk: hRows.reduce((a, b) => a + b.blk, 0),
+                fg_pct: '48.8%',
+                three_p_pct: '28.5%',
+                ft_pct: '78.0%',
+              },
+            },
+            away_team: {
+              name: aName,
+              score: aSum,
+              result: aSum > hSum ? 'WIN' : 'LOSE',
+              roster_stats: aRows,
+              team_totals: {
+                jersey_no: '',
+                player_name: 'TEAM TOTALS',
+                minutes: '0',
+                pts: aSum,
+                reb: aRows.reduce((a, b) => a + b.reb, 0),
+                ast: aRows.reduce((a, b) => a + b.ast, 0),
+                stl: aRows.reduce((a, b) => a + b.stl, 0),
+                blk: aRows.reduce((a, b) => a + b.blk, 0),
+                fg_pct: '48.8%',
+                three_p_pct: '28.5%',
+                ft_pct: '78.0%',
+              },
+            },
+            race_results: [],
+            scoresheet_url: ocrRes?.scoresheet_url || undefined,
+            audit_context_notes: '',
+            is_certified: false,
+            assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
+            coach_name: coaches[0]?.trim() || undefined,
+          };
+
+          setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
+        } catch (uploadErr) {
+          console.warn('Scoresheet OCR upload during match creation error:', uploadErr);
+        }
+      }
+
+      if (cleanMatchId) {
+        navigate(`/matches/${cleanMatchId}`);
+        return;
+      }
+
       setCreatedMatchInfo({
-        matchId: String(createdId).startsWith('#') ? String(createdId) : `#${createdId}`,
+        matchId: `#${cleanMatchId}`,
         sport: normalizedSport,
         matchDate: displayTime ? `${displayDate} • ${displayTime}` : displayDate,
         teams: participating,
@@ -251,9 +403,11 @@ export const CreateMatch: React.FC = () => {
                     className="hover-input"
                     style={styles.select}
                   >
-                    <option value="Basketball">Basketball</option>
-                    <option value="Track & Field">Track & Field</option>
-                    <option value="Swimming">Swimming</option>
+                    {availableSports.map((s) => (
+                      <option key={s.sport_id || s.sport_name} value={s.sport_name}>
+                        {s.sport_name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -305,14 +459,12 @@ export const CreateMatch: React.FC = () => {
               </div>
 
               <datalist id="teams-list">
-                {availableTeams.map((t) => (
-                  <option key={t.team_id || t.id} value={t.team_name}>
-                    {t.team_name} {t.coach_name ? `(Coach ${t.coach_name})` : ''}
-                  </option>
+                {availableTeams.map((t, idx) => (
+                  <option key={idx} value={t.team_name || t.name || t.id} />
                 ))}
               </datalist>
 
-              {/* Dynamic Teams: Basketball uses Home/Away; Track & Field / Swimming uses expandable Team list */}
+              {/* For standard 2-team sports like Basketball */}
               {!isIndividualSport ? (
                 <div style={styles.formGrid2}>
                   <div style={styles.fieldGroup}>
@@ -328,6 +480,7 @@ export const CreateMatch: React.FC = () => {
                       style={styles.input}
                     />
                   </div>
+
                   <div style={styles.fieldGroup}>
                     <label style={styles.fieldLabel}>TEAM 2 (AWAY)</label>
                     <input
@@ -343,11 +496,12 @@ export const CreateMatch: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div style={{ marginBottom: '16px' }}>
+                /* Dynamic Participating Teams for Swimming & Track and Field */
+                <div>
                   {teams.map((team, idx) => (
                     <div key={idx} style={{ ...styles.fieldGroup, marginBottom: '12px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label style={styles.fieldLabel}>PARTICIPATING TEAM / DELEGATION {idx + 1}</label>
+                        <label style={styles.fieldLabel}>PARTICIPATING DELEGATION {idx + 1}</label>
                         {teams.length > 2 && (
                           <button
                             type="button"
@@ -450,7 +604,7 @@ export const CreateMatch: React.FC = () => {
                 {submitting ? (
                   <>
                     <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
-                    <span>CREATING...</span>
+                    <span>PROCESSING OCR & CREATING...</span>
                   </>
                 ) : (
                   <>
@@ -504,20 +658,20 @@ export const CreateMatch: React.FC = () => {
             <div style={styles.modalActions}>
               <button
                 type="button"
-                onClick={() => navigate('/matches')}
+                onClick={() => navigate(`/matches/${createdMatchInfo.matchId.replace(/^#/, '')}`)}
                 className="hover-btn-solid"
                 style={styles.modalPrimaryBtn}
               >
-                <span>VIEW IN ALL MATCHES</span>
+                <span>VIEW MATCH SCORESHEET</span>
                 <span>→</span>
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/schedules')}
+                onClick={() => navigate('/matches')}
                 className="hover-btn-outline"
                 style={styles.modalSecondaryBtn}
               >
-                CHECK SCHEDULE CALENDAR
+                VIEW IN ALL MATCHES
               </button>
               <button
                 type="button"

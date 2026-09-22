@@ -68,7 +68,7 @@ export const OfficialHomePage: React.FC = () => {
     const list: MatchSummaryItem[] = masterMatches.filter((m) => isMatchCreatedByOfficial(m, user));
     const existingIds = new Set(list.map((m) => m.match_id.replace(/^#/, '')));
 
-    // Also include any items from dashboard.audit_queue if they belong to this official and aren't in masterMatches yet
+    // Also include any items from audit dashboard if they aren't included yet
     (dashboard?.audit_queue || []).forEach((item: any, idx: number) => {
       const match = item.match_details || {};
       const rawId = String(match.match_id || item.match_id || `queue_${idx}`).replace(/^#/, '');
@@ -83,12 +83,7 @@ export const OfficialHomePage: React.FC = () => {
         raw_match: { ...match, ...item },
       };
 
-      const belongsToMe = isMatchCreatedByOfficial(fakeSummary, user) || (
-        (item.requested_by && currentOfficialIds.has(item.requested_by)) ||
-        (item.official_id && currentOfficialIds.has(item.official_id))
-      );
-
-      if (belongsToMe && !existingIds.has(rawId)) {
+      if (!existingIds.has(rawId)) {
         const isAudited = item.status === 'Approved' || item.status === 'Audited' || match.is_certified === true || isMatchLocallyCertified(rawId);
         const assignedCoaches = Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0
           ? match.assigned_coaches
