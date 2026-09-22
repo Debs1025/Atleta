@@ -145,11 +145,13 @@ export const CreateMatch: React.FC = () => {
     try {
       setSubmitting(true);
 
-      let normalizedSport = 'Basketball';
+      let normalizedSport = sportCategory.trim() || 'Basketball';
       if (sportCategory.toLowerCase().includes('swim')) {
         normalizedSport = 'Swimming';
       } else if (sportCategory.toLowerCase().includes('track') || sportCategory.toLowerCase().includes('field')) {
         normalizedSport = 'Track & Field';
+      } else if (sportCategory.toLowerCase().includes('basket')) {
+        normalizedSport = 'Basketball';
       }
 
       let isoDate = new Date(matchDate).toISOString();

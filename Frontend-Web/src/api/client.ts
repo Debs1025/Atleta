@@ -16,7 +16,8 @@ import type {
 } from './types';
 
 const DEFAULT_DEPLOYED_API = 'https://atleta-backend.vercel.app/api/v1';
-const rawBase = (import.meta.env.VITE_ATLETA_API || DEFAULT_DEPLOYED_API).trim().replace(/\/+$/, '');
+const envApi = (import.meta.env.VITE_ATLETA_API || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '') as string;
+const rawBase = (envApi && envApi.trim() ? envApi.trim() : DEFAULT_DEPLOYED_API).replace(/\/+$/, '');
 const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
 
 const TOKEN_KEY = 'atleta_official_token';
@@ -740,13 +741,13 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
   const token = getStoredToken();
   const idempotencyKey = crypto.randomUUID();
 
-  const rawSport = String(payload.sport_type || '').trim().toLowerCase();
-  let normalizedSport = 'Basketball';
-  if (rawSport.includes('swim')) {
+  const rawSport = String(payload.sport_type || '').trim();
+  let normalizedSport = rawSport || 'Basketball';
+  if (rawSport.toLowerCase().includes('swim')) {
     normalizedSport = 'Swimming';
-  } else if (rawSport.includes('track') || rawSport.includes('field')) {
+  } else if (rawSport.toLowerCase().includes('track') || rawSport.toLowerCase().includes('field')) {
     normalizedSport = 'Track & Field';
-  } else if (rawSport.includes('basket')) {
+  } else if (rawSport.toLowerCase().includes('basket')) {
     normalizedSport = 'Basketball';
   }
 
