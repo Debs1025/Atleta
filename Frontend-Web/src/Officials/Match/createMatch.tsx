@@ -15,7 +15,7 @@ import {
   getMe,
   createOfficialMatch,
   fetchBrowseTeams,
-  uploadScoresheetFile,
+  scanScoresheetStandalone,
   setCachedData,
 } from '../../api/client';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow } from '../../api/types';
@@ -173,32 +173,19 @@ export const CreateMatch: React.FC = () => {
 
       const venueLocation = venue.trim() || 'Tournament Sports Complex';
 
-      const createdMatch = await createOfficialMatch({
-        team_id: finalHome,
-        home_team_name: finalHome,
-        opponent_team_name: finalAway,
-        sport_type: normalizedSport,
-        match_date: isoDate,
-        location: venueLocation,
-        venue: venueLocation,
-        court_number: 1,
-        participating_teams: participating,
-        game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
-        coaches: coaches.map((c) => c.trim()).filter(Boolean),
-      });
+      let ocrRes: any = null;
+      let playerStatsPayload: any[] = [];
+      let scoresheetUrl: string | undefined = undefined;
+      const hRows: BoxScoreRow[] = [];
+      const aRows: BoxScoreRow[] = [];
+      let hSum = 0;
+      let aSum = 0;
 
-      const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
-      const cleanMatchId = rawMatchId ? String(rawMatchId).replace(/^#/, '') : '';
-
-      const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-      const displayTime = matchTime
-        ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
-        : '';
-
-      // Upload scoresheet file & trigger OCR parsing if a file was selected
-      if (cleanMatchId && selectedFile) {
+      // 1. Scan scoresheet first via standalone OCR (matching mobile OCR logging pipeline)
+      if (selectedFile) {
         try {
-          const ocrRes = await uploadScoresheetFile(cleanMatchId, selectedFile);
+          ocrRes = await scanScoresheetStandalone(selectedFile);
+          if (ocrRes?.scoresheet_url) scoresheetUrl = ocrRes.scoresheet_url;
 
           const rawPlayers: any[] = Array.isArray(ocrRes?.player_summary)
             ? ocrRes.player_summary
@@ -224,9 +211,6 @@ export const CreateMatch: React.FC = () => {
 
           const totalPlayers = rawPlayers.length;
           const halfCount = Math.ceil(totalPlayers / 2);
-
-          const hRows: BoxScoreRow[] = [];
-          const aRows: BoxScoreRow[] = [];
 
           rawPlayers.forEach((p: any, idx: number) => {
             let resolvedTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
@@ -267,68 +251,119 @@ export const CreateMatch: React.FC = () => {
             } else {
               aRows.push(row);
             }
+
+            playerStatsPayload.push({
+              athlete_id: `ath_ocr_${idx + 1}`,
+              player_name: fullName,
+              team_name: resolvedTeam,
+              jersey_number: Number(jersey),
+              position: p.position || 'G',
+              stats: {
+                points: Number(p.points ?? p.pts ?? 0),
+                rebounds: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
+                assists: Number(p.assists ?? p.ast ?? 0),
+                steals: Number(p.steals ?? p.stl ?? 0),
+                blocks: Number(p.blocks ?? p.blk ?? 0),
+                turnovers: Number(p.turnovers ?? p.to ?? 0),
+                fouls: Number(p.fouls ?? p.pf ?? 0),
+                fg_made: fgm,
+                fg_attempted: fga,
+                ft_made: Number(p.ft_made ?? 0),
+                ft_attempted: Number(p.ft_attempted ?? 0),
+              },
+            });
           });
 
-          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
-          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
-
-          const cachedDetail: MatchAuditDetail = {
-            match_id: cleanMatchId,
-            validation_id: cleanMatchId,
-            game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
-            sport_type: normalizedSport,
-            league_class: `${normalizedSport.toUpperCase()} • OFFICIAL MATCH`,
-            match_date_formatted: displayTime ? `${displayDate} / ${displayTime}` : displayDate,
-            home_team: {
-              name: hName,
-              score: hSum,
-              result: hSum >= aSum ? 'WIN' : 'LOSE',
-              roster_stats: hRows,
-              team_totals: {
-                jersey_no: '',
-                player_name: 'TEAM TOTALS',
-                minutes: '0',
-                pts: hSum,
-                reb: hRows.reduce((a, b) => a + b.reb, 0),
-                ast: hRows.reduce((a, b) => a + b.ast, 0),
-                stl: hRows.reduce((a, b) => a + b.stl, 0),
-                blk: hRows.reduce((a, b) => a + b.blk, 0),
-                fg_pct: '48.8%',
-                three_p_pct: '28.5%',
-                ft_pct: '78.0%',
-              },
-            },
-            away_team: {
-              name: aName,
-              score: aSum,
-              result: aSum > hSum ? 'WIN' : 'LOSE',
-              roster_stats: aRows,
-              team_totals: {
-                jersey_no: '',
-                player_name: 'TEAM TOTALS',
-                minutes: '0',
-                pts: aSum,
-                reb: aRows.reduce((a, b) => a + b.reb, 0),
-                ast: aRows.reduce((a, b) => a + b.ast, 0),
-                stl: aRows.reduce((a, b) => a + b.stl, 0),
-                blk: aRows.reduce((a, b) => a + b.blk, 0),
-                fg_pct: '48.8%',
-                three_p_pct: '28.5%',
-                ft_pct: '78.0%',
-              },
-            },
-            race_results: [],
-            scoresheet_url: ocrRes?.scoresheet_url || undefined,
-            audit_context_notes: '',
-            is_certified: false,
-            assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
-            coach_name: coaches[0]?.trim() || undefined,
-          };
-
-          setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
-        } catch (uploadErr) {
-          console.warn('Scoresheet OCR upload during match creation error:', uploadErr);
+          hSum = hRows.reduce((a, b) => a + b.pts, 0);
+          aSum = aRows.reduce((a, b) => a + b.pts, 0);
+        } catch (scanErr) {
+          console.warn('Scoresheet OCR scan error during match creation:', scanErr);
         }
+      }
+
+      // 2. Create official match directly with player stats and scoresheet URL attached
+      const createdMatch = await createOfficialMatch({
+        team_id: finalHome,
+        home_team_name: finalHome,
+        opponent_team_name: finalAway,
+        sport_type: normalizedSport,
+        match_date: isoDate,
+        location: venueLocation,
+        venue: venueLocation,
+        court_number: 1,
+        participating_teams: participating,
+        game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+        coaches: coaches.map((c) => c.trim()).filter(Boolean),
+        scoresheet_url: scoresheetUrl,
+        player_stats: playerStatsPayload,
+        home_score: hSum > 0 ? hSum : undefined,
+        away_score: aSum > 0 ? aSum : undefined,
+        game_result: hSum > 0 || aSum > 0 ? (hSum >= aSum ? 'WIN' : 'LOSS') : undefined,
+      } as any);
+
+      const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
+      const cleanMatchId = rawMatchId ? String(rawMatchId).replace(/^#/, '') : '';
+
+      const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+      const displayTime = matchTime
+        ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
+        : '';
+
+      if (cleanMatchId && hRows.length > 0) {
+        const cachedDetail: MatchAuditDetail = {
+          match_id: cleanMatchId,
+          validation_id: cleanMatchId,
+          game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+          sport_type: normalizedSport,
+          league_class: `${normalizedSport.toUpperCase()} • OFFICIAL MATCH`,
+          match_date_formatted: displayTime ? `${displayDate} / ${displayTime}` : displayDate,
+          home_team: {
+            name: finalHome.toUpperCase(),
+            score: hSum,
+            result: hSum >= aSum ? 'WIN' : 'LOSE',
+            roster_stats: hRows,
+            team_totals: {
+              jersey_no: '',
+              player_name: 'TEAM TOTALS',
+              minutes: '0',
+              pts: hSum,
+              reb: hRows.reduce((a, b) => a + b.reb, 0),
+              ast: hRows.reduce((a, b) => a + b.ast, 0),
+              stl: hRows.reduce((a, b) => a + b.stl, 0),
+              blk: hRows.reduce((a, b) => a + b.blk, 0),
+              fg_pct: '48.8%',
+              three_p_pct: '28.5%',
+              ft_pct: '78.0%',
+            },
+          },
+          away_team: {
+            name: finalAway.toUpperCase(),
+            score: aSum,
+            result: aSum > hSum ? 'WIN' : 'LOSE',
+            roster_stats: aRows,
+            team_totals: {
+              jersey_no: '',
+              player_name: 'TEAM TOTALS',
+              minutes: '0',
+              pts: aSum,
+              reb: aRows.reduce((a, b) => a + b.reb, 0),
+              ast: aRows.reduce((a, b) => a + b.ast, 0),
+              stl: aRows.reduce((a, b) => a + b.stl, 0),
+              blk: aRows.reduce((a, b) => a + b.blk, 0),
+              fg_pct: '48.8%',
+              three_p_pct: '28.5%',
+              ft_pct: '78.0%',
+            },
+          },
+          race_results: [],
+          scoresheet_url: scoresheetUrl,
+          audit_context_notes: '',
+          is_certified: false,
+          assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
+          coach_name: coaches[0]?.trim() || undefined,
+        };
+
+        setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
       }
 
       if (cleanMatchId) {
