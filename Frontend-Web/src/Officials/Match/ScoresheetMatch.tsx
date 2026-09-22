@@ -369,8 +369,8 @@ export const ScoresheetMatch: React.FC = () => {
       : [];
   const coachDisplay = assignedList.length > 0 ? assignedList.join(', ') : null;
 
-  const homeScore = homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || matchData?.home_team.score || 0;
-  const awayScore = awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || matchData?.away_team.score || 0;
+  const homeScore = matchData?.home_team.score || homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
+  const awayScore = matchData?.away_team.score || awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
 
   // Render Table for Team Basketball Stats
   const renderTeamStatsTable = (

@@ -98,14 +98,17 @@ export const CreateMatch: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[CREATE MATCH] handleSubmit called! sport:', sportCategory, 'date:', matchDate, 'home:', homeTeam, 'away:', awayTeam, 'file:', selectedFile?.name);
     setErrorMessage(null);
 
     if (!sportCategory) {
+      console.warn('[CREATE MATCH] Missing sportCategory');
       setErrorMessage('Please select a sport category.');
       return;
     }
 
     if (!matchDate) {
+      console.warn('[CREATE MATCH] Missing matchDate');
       setErrorMessage('Please select a match date.');
       return;
     }
@@ -426,7 +429,7 @@ export const CreateMatch: React.FC = () => {
 
           {errorMessage && <div style={styles.errorNotice}>{errorMessage}</div>}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             {/* Section 01: GENERAL MATCH DETAILS */}
             <div style={styles.sectionCard}>
               <div style={styles.sectionHeaderRow}>
