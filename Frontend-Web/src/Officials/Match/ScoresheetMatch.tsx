@@ -148,8 +148,22 @@ export const ScoresheetMatch: React.FC = () => {
           (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
         );
 
-        const hName = (matchData?.home_team.name || homeScoreItem?.team || 'CSSAC').toUpperCase();
-        const aName = (matchData?.away_team.name || awayScoreItem?.team || 'CBSUA').toUpperCase();
+        const ocrHomeName = String(
+          res?.match_info?.home_team_name ||
+          res?.match_info?.home_team ||
+          homeScoreItem?.team ||
+          'CELTICS'
+        ).toUpperCase();
+
+        const ocrAwayName = String(
+          res?.match_info?.opponent_team_name ||
+          res?.match_info?.away_team ||
+          awayScoreItem?.team ||
+          'HAWKS'
+        ).toUpperCase();
+
+        const hName = (matchData?.home_team.name || 'CSSAC').toUpperCase();
+        const aName = (matchData?.away_team.name || 'CBSUA').toUpperCase();
 
         const totalPlayers = rawPlayers.length;
         const halfCount = Math.ceil(totalPlayers / 2);
@@ -158,16 +172,25 @@ export const ScoresheetMatch: React.FC = () => {
         const aRows: BoxScoreRow[] = [];
 
         rawPlayers.forEach((p: any, idx: number) => {
-          let resolvedTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
-          if (!resolvedTeam) {
-            resolvedTeam = idx < halfCount ? aName : hName;
+          const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
+          let isHome = false;
+          if (rawTeam) {
+            if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam) || rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)) {
+              isHome = true;
+            } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam) || rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)) {
+              isHome = false;
+            } else {
+              isHome = idx >= halfCount;
+            }
+          } else {
+            isHome = idx >= halfCount;
           }
 
           const jersey = p.jersey_number !== undefined && p.jersey_number !== null
             ? String(p.jersey_number).padStart(2, '0')
             : String(idx + 1).padStart(2, '0');
 
-          const fullName = String(p.player_name || `PLAYER ${jersey}`).toUpperCase();
+          const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
           const fga = Number(p.fg_attempted || p.fga || 0);
           const fgm = Number(p.fg_made || p.fgm || 0);
           const fgPct = p.true_shooting_pct
@@ -191,7 +214,7 @@ export const ScoresheetMatch: React.FC = () => {
             ft_pct: p.ft_pct ? `${p.ft_pct}%` : '0.0%',
           };
 
-          if (resolvedTeam === hName || (!resolvedTeam && idx >= halfCount)) {
+          if (isHome) {
             hRows.push(row);
           } else {
             aRows.push(row);

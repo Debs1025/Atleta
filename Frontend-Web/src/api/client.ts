@@ -779,6 +779,13 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
       game_name: payload.game_name || `${home} vs ${away}`,
       coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
       assigned_coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
+      scoresheet_url: (payload as any).scoresheet_url,
+      player_stats: (payload as any).player_stats || [],
+      home_score: (payload as any).home_score,
+      away_score: (payload as any).away_score,
+      game_result: (payload as any).game_result,
+      scoresheet_data: (payload as any).scoresheet_data,
+      notes: (payload as any).notes || `Official Match: ${home} vs ${away}`,
     }),
   });
   const data = await handleResponse<any>(res);
