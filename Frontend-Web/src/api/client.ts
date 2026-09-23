@@ -347,16 +347,26 @@ export const getMe = async (forceRefresh = false): Promise<AuthUser> => {
   if (cached && !forceRefresh) return cached;
 
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/users/me`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await handleResponse<any>(res);
-  const user = data.user || data;
-  setCachedData('user_me', user);
-  return user;
+  try {
+    const res = await fetch(`${BASE_URL}/users/me`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.status === 404 || res.status === 401) {
+      const stored = getStoredUser();
+      if (stored) return stored;
+    }
+    const data = await handleResponse<any>(res);
+    const user = data.user || data;
+    setCachedData('user_me', user);
+    return user;
+  } catch (err) {
+    const stored = getStoredUser();
+    if (stored) return stored;
+    throw err;
+  }
 };
 
 export const getOfficialDashboard = async (forceRefresh = false): Promise<OfficialDashboardResponse> => {
@@ -843,13 +853,18 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
   if (cached && !forceRefresh) return cached;
 
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/officials/notifications`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await handleResponse<any>(res);
+  let data: any = null;
+  try {
+    const res = await fetch(`${BASE_URL}/officials/notifications`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      data = await res.json().catch(() => null);
+    }
+  } catch {}
   const rawList: any[] = Array.isArray(data)
     ? data
     : Array.isArray(data?.notifications)
