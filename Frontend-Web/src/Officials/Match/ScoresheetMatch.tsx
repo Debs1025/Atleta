@@ -141,29 +141,29 @@ export const ScoresheetMatch: React.FC = () => {
         : [];
 
       if (rawPlayers.length > 0) {
+        const hName = (matchData?.home_team?.name || 'Home Team').toUpperCase();
+        const aName = (matchData?.away_team?.name || 'Away Team').toUpperCase();
+
         const homeScoreItem = teamScoresArr.find(
-          (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
-        );
+          (t: any) => t.is_home === true || (hName && String(t.team || '').toUpperCase().includes(hName))
+        ) || teamScoresArr[0];
         const awayScoreItem = teamScoresArr.find(
-          (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
-        );
+          (t: any) => t.is_home === false || (aName && String(t.team || '').toUpperCase().includes(aName))
+        ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
 
         const ocrHomeName = String(
           res?.match_info?.home_team_name ||
           res?.match_info?.home_team ||
           homeScoreItem?.team ||
-          'CELTICS'
+          hName
         ).toUpperCase();
 
         const ocrAwayName = String(
           res?.match_info?.opponent_team_name ||
           res?.match_info?.away_team ||
           awayScoreItem?.team ||
-          'HAWKS'
+          aName
         ).toUpperCase();
-
-        const hName = (matchData?.home_team.name || 'CSSAC').toUpperCase();
-        const aName = (matchData?.away_team.name || 'CBSUA').toUpperCase();
 
         const totalPlayers = rawPlayers.length;
         const halfCount = Math.ceil(totalPlayers / 2);

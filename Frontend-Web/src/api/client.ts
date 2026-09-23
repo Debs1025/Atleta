@@ -814,9 +814,9 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         game_name: payload.game_name || `${home} vs ${away}`,
         scoresheet_url: (payload as any).scoresheet_url,
         player_stats: (payload as any).player_stats || [],
-        home_score: (payload as any).home_score || 107,
-        away_score: (payload as any).away_score || 103,
-        game_result: (payload as any).game_result || 'WIN',
+        home_score: (payload as any).home_score || 0,
+        away_score: (payload as any).away_score || 0,
+        game_result: (payload as any).game_result || 'SCHEDULED',
         is_official: true,
         is_certified: false,
         coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
@@ -1438,35 +1438,14 @@ export const getMatchAuditDetail = async (
     // Preserve existing valid cached rosters / race results if newly mapped rows are empty
     const existingCached = getCachedData<import('./types').MatchAuditDetail>(cacheKey);
 
-    const defaultScoresheetHome: import('./types').BoxScoreRow[] = [
-      { jersey_no: '05', player_name: 'L. BROWN (PG)', position: 'PG', minutes: '36', pts: 20, reb: 5, ast: 7, stl: 3, blk: 1, fg_pct: '60.0%', three_p_pct: '33.3%', ft_pct: '50.0%' },
-      { jersey_no: '18', player_name: 'D. WHITE (SG)', position: 'SG', minutes: '34', pts: 24, reb: 4, ast: 8, stl: 2, blk: 1, fg_pct: '66.7%', three_p_pct: '40.0%', ft_pct: '0.0%' },
-      { jersey_no: '27', player_name: 'J. TATUM (SF)', position: 'SF', minutes: '38', pts: 15, reb: 7, ast: 4, stl: 1, blk: 1, fg_pct: '56.0%', three_p_pct: '37.5%', ft_pct: '100.0%' },
-      { jersey_no: '35', player_name: 'R. WILLIAMS III (PF)', position: 'PF', minutes: '30', pts: 17, reb: 9, ast: 2, stl: 0, blk: 4, fg_pct: '72.0%', three_p_pct: '0.0%', ft_pct: '50.0%' },
-      { jersey_no: '42', player_name: 'A. HORFORD (C)', position: 'C', minutes: '28', pts: 16, reb: 8, ast: 3, stl: 1, blk: 2, fg_pct: '67.0%', three_p_pct: '25.0%', ft_pct: '0.0%' },
-    ];
-
-    const defaultScoresheetAway: import('./types').BoxScoreRow[] = [
-      { jersey_no: '07', player_name: 'J. CARTER (PG)', position: 'PG', minutes: '35', pts: 16, reb: 4, ast: 6, stl: 2, blk: 0, fg_pct: '58.0%', three_p_pct: '33.3%', ft_pct: '100.0%' },
-      { jersey_no: '14', player_name: 'S. WILLIAMS (SG)', position: 'SG', minutes: '32', pts: 17, reb: 3, ast: 4, stl: 1, blk: 1, fg_pct: '55.0%', three_p_pct: '50.0%', ft_pct: '100.0%' },
-      { jersey_no: '21', player_name: 'M. DAVIS (SF)', position: 'SF', minutes: '34', pts: 15, reb: 6, ast: 3, stl: 1, blk: 0, fg_pct: '61.0%', three_p_pct: '40.0%', ft_pct: '66.7%' },
-      { jersey_no: '32', player_name: 'R. THOMPSON (PF)', position: 'PF', minutes: '30', pts: 10, reb: 8, ast: 1, stl: 0, blk: 2, fg_pct: '53.0%', three_p_pct: '0.0%', ft_pct: '100.0%' },
-      { jersey_no: '45', player_name: 'C. GREEN (C)', position: 'C', minutes: '26', pts: 6, reb: 9, ast: 2, stl: 1, blk: 3, fg_pct: '38.0%', three_p_pct: '0.0%', ft_pct: '0.0%' },
-    ];
-
     let finalHomeRoster = homePlayers.length > 0 ? homePlayers : (existingCached?.home_team?.roster_stats || []);
     let finalAwayRoster = awayPlayers.length > 0 ? awayPlayers : (existingCached?.away_team?.roster_stats || []);
-
-    if (finalHomeRoster.length === 0 && finalAwayRoster.length === 0 && (sportType.toLowerCase().includes('basket') || match.scoresheet_url || existingCached?.scoresheet_url)) {
-      finalHomeRoster = defaultScoresheetHome;
-      finalAwayRoster = defaultScoresheetAway;
-    }
 
     const finalRaceResults = raceResults.length > 0 ? raceResults : (existingCached?.race_results || []);
     const computedHomePts = finalHomeRoster.reduce((a, b) => a + b.pts, 0);
     const computedAwayPts = finalAwayRoster.reduce((a, b) => a + b.pts, 0);
-    const finalHomeScore = homeScore > 0 ? homeScore : (computedHomePts > 0 ? computedHomePts : (existingCached?.home_team?.score || 107));
-    const finalAwayScore = awayScore > 0 ? awayScore : (computedAwayPts > 0 ? computedAwayPts : (existingCached?.away_team?.score || 103));
+    const finalHomeScore = homeScore > 0 ? homeScore : (computedHomePts > 0 ? computedHomePts : (existingCached?.home_team?.score || 0));
+    const finalAwayScore = awayScore > 0 ? awayScore : (computedAwayPts > 0 ? computedAwayPts : (existingCached?.away_team?.score || 0));
 
     const finalHomeTotals = computeTotals(finalHomeRoster, finalHomeScore);
     const finalAwayTotals = computeTotals(finalAwayRoster, finalAwayScore);

@@ -92,25 +92,21 @@ export const OCRLoggingPage: React.FC = () => {
         ? responseData.team_scores
         : [];
 
-      const homeScoreItem = teamScoresArr.find(
-        (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
-      );
-      const awayScoreItem = teamScoresArr.find(
-        (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
-      );
+      const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true) || teamScoresArr[0];
+      const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
 
       const homeTeamName = String(
         responseData.match_info?.home_team_name ||
         responseData.match_info?.home_team ||
         homeScoreItem?.team ||
-        'CELTICS'
+        'TEAM 1'
       ).toUpperCase();
 
       const oppTeamName = String(
         responseData.match_info?.opponent_team_name ||
         responseData.match_info?.away_team ||
         awayScoreItem?.team ||
-        'HAWKS'
+        'TEAM 2'
       ).toUpperCase();
 
       const detectedTeamNames = Array.from(
