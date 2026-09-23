@@ -151,14 +151,53 @@ export const OCRLoggingPage: React.FC = () => {
         };
       });
 
+      const ftMade = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_made || 0), 0);
+      const ftAttempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_attempted || 0), 0);
+      const pt2Made = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_made || 0), 0);
+      const pt2Attempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_attempted || 0), 0);
+      const totalAssists = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.assists || p.ast || 0), 0);
+      const totalTurnovers = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.turnovers || p.to || 0), 0);
+
+      // Accurately compute athlete points sum per team
+      const homeAthleteSum = athleteOverview
+        .filter((a) => a.team_name === homeTeamName)
+        .reduce((sum, a) => sum + (a.pts || 0), 0);
+      const oppAthleteSum = athleteOverview
+        .filter((a) => a.team_name === oppTeamName)
+        .reduce((sum, a) => sum + (a.pts || 0), 0);
+
+      // Extract numeric scores from AI response if available
+      const detectedScoresList = teamScoresArr
+        .map((t: any) => Number(t.score))
+        .filter((s: number) => !isNaN(s) && s > 0);
+
+      let hScore: number;
+      let aScore: number;
+
+      if (detectedScoresList.length >= 2) {
+        const maxScore = Math.max(...detectedScoresList);
+        const minScore = Math.min(...detectedScoresList);
+
+        if (homeAthleteSum >= oppAthleteSum) {
+          hScore = maxScore;
+          aScore = minScore;
+        } else {
+          hScore = minScore;
+          aScore = maxScore;
+        }
+      } else {
+        hScore = homeAthleteSum;
+        aScore = oppAthleteSum;
+      }
+
       const parsedOcrResult: RawOCRDetectedData = {
         team_name: homeTeamName,
         opponent_team_name: oppTeamName,
-        final_score: `${responseData.match_info?.home_score ?? 0} - ${responseData.match_info?.away_score ?? 0}`,
-        game_result: 'WIN',
+        final_score: `${hScore} - ${aScore}`,
+        game_result: hScore >= aScore ? 'WIN' : 'LOSS',
         team_scores: [
-          { team: homeTeamName, score: Number(responseData.match_info?.home_score ?? 0) },
-          { team: oppTeamName, score: Number(responseData.match_info?.away_score ?? 0) },
+          { team: homeTeamName, score: hScore },
+          { team: oppTeamName, score: aScore },
         ],
         teams: detectedTeamNames,
         sport_type: (responseData.match_info?.sport_type?.toUpperCase() || 'BASKETBALL') as any,
@@ -179,17 +218,17 @@ export const OCRLoggingPage: React.FC = () => {
         ],
         expanded_metrics: {
           shooting_efficiency: {
-            ft_made: 0,
-            ft_attempts: 0,
-            pt2_made: 0,
-            pt2_attempts: 0,
+            ft_made: ftMade,
+            ft_attempts: ftAttempts,
+            pt2_made: pt2Made,
+            pt2_attempts: pt2Attempts,
             pt3_made: 0,
             pt3_attempts: 0,
           },
           possession_errors: {
             key_drives: 0,
-            assists: 0,
-            turnovers: 0,
+            assists: totalAssists,
+            turnovers: totalTurnovers,
             scv_12s: 0,
           },
         },

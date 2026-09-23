@@ -125,6 +125,12 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         .filter((a) => (a.team_name || '').toUpperCase() === oppTeam)
         .reduce((sum, a) => sum + (a.pts || 0), 0);
 
+      const scoreHomeObj = (rawOCRData.team_scores || []).find((t) => (t.team || '').toUpperCase() === homeTeam);
+      const scoreAwayObj = (rawOCRData.team_scores || []).find((t) => (t.team || '').toUpperCase() === oppTeam);
+
+      const finalHomeScore = (scoreHomeObj && scoreHomeObj.score > homePts) ? scoreHomeObj.score : homePts;
+      const finalAwayScore = (scoreAwayObj && scoreAwayObj.score > awayPts) ? scoreAwayObj.score : awayPts;
+
       const payload = {
         team_id: rawOCRData.team_name || 'team_official',
         sport_type: rawOCRData.sport_type || 'BASKETBALL',
@@ -133,10 +139,10 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         match_date: new Date().toISOString(),
         location: 'Tournament Arena',
         opponent_team_name: oppTeam,
-        game_result: homePts >= awayPts ? 'WIN' : 'LOSS',
-        home_score: homePts,
-        away_score: awayPts,
-        notes: `Official OCR Logged Match (${homeTeam}: ${homePts} vs ${oppTeam}: ${awayPts})`,
+        game_result: finalHomeScore >= finalAwayScore ? 'WIN' : 'LOSS',
+        home_score: finalHomeScore,
+        away_score: finalAwayScore,
+        notes: `Official OCR Logged Match (${homeTeam}: ${finalHomeScore} vs ${oppTeam}: ${finalAwayScore})`,
         player_stats: athleteStats.map((a) => ({
           athlete_id: a.athlete_id,
           player_name: a.player_name,
