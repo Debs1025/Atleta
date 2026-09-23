@@ -203,24 +203,24 @@ export const CreateMatch: React.FC = () => {
             : [];
 
           const homeScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
-          );
+            (t: any) => t.is_home === true || (finalHome && String(t.team || '').toUpperCase().includes(finalHome.toUpperCase()))
+          ) || teamScoresArr[0];
           const awayScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
-          );
+            (t: any) => t.is_home === false || (finalAway && String(t.team || '').toUpperCase().includes(finalAway.toUpperCase()))
+          ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
 
           const ocrHomeName = String(
             ocrRes?.match_info?.home_team_name ||
             ocrRes?.match_info?.home_team ||
             homeScoreItem?.team ||
-            'CELTICS'
+            finalHome
           ).toUpperCase();
 
           const ocrAwayName = String(
             ocrRes?.match_info?.opponent_team_name ||
             ocrRes?.match_info?.away_team ||
             awayScoreItem?.team ||
-            'HAWKS'
+            finalAway
           ).toUpperCase();
 
           const hName = finalHome.toUpperCase();
