@@ -606,7 +606,8 @@ export const updateOfficialSettings = async (
     },
     body: JSON.stringify(payload),
   });
-  const data = await handleResponse<OfficialSettings>(res);
+  const rawData = await handleResponse<any>(res);
+  const data: OfficialSettings = (rawData && rawData.settings) ? rawData.settings : rawData;
   setCachedData('official_settings', data);
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
