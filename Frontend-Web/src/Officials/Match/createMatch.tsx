@@ -17,12 +17,42 @@ import {
   fetchBrowseTeams,
   scanScoresheetStandalone,
   setCachedData,
+  getCachedData,
   getSports,
 } from '../../api/client';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
+
+const normalizeSportKey = (name: string): string => (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
+
+const buildCreateSportsList = (rawSports?: any[]): string[] => {
+  const cached = rawSports || getCachedData<any>('sports_catalog_false')?.sports || getCachedData<any>('sports_catalog_true')?.sports || [];
+  const list = Array.isArray(cached) ? cached : [];
+  const seen = new Set<string>();
+  const sports: string[] = [];
+
+  list.forEach((s: any) => {
+    if (s && s.active !== false) {
+      const raw = (s.sport_name || s.name || '').trim();
+      const norm = normalizeSportKey(raw);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        sports.push(raw);
+      }
+    }
+  });
+
+  ['Basketball', 'Track & Field', 'Swimming'].forEach((def) => {
+    const norm = normalizeSportKey(def);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      sports.push(def);
+    }
+  });
+  return sports.length > 0 ? sports : ['Basketball', 'Track & Field', 'Swimming'];
+};
 
 export const CreateMatch: React.FC = () => {
   const navigate = useNavigate();
@@ -31,7 +61,7 @@ export const CreateMatch: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [gameName, setGameName] = useState('');
   const [sportCategory, setSportCategory] = useState('Basketball');
-  const [sportsList, setSportsList] = useState<string[]>(['Basketball', 'Track & Field', 'Swimming']);
+  const [sportsList, setSportsList] = useState<string[]>(() => buildCreateSportsList());
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
@@ -73,35 +103,9 @@ export const CreateMatch: React.FC = () => {
     getMe().then((res) => setUser(res)).catch(() => {});
     fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
     getSports().then((res) => {
-      const list = Array.isArray(res?.sports) ? res.sports : (Array.isArray(res) ? res : []);
-      const seen = new Set<string>();
-      const sports: string[] = [];
-
-      const normalizeSportKey = (name: string): string => {
-        return (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
-      };
-
-      list.forEach((s: any) => {
-        if (s.active !== false) {
-          const raw = (s.sport_name || s.name || '').trim();
-          const norm = normalizeSportKey(raw);
-          if (norm && !seen.has(norm)) {
-            seen.add(norm);
-            sports.push(raw);
-          }
-        }
-      });
-
-      ['Basketball', 'Track & Field', 'Swimming'].forEach((def) => {
-        const norm = normalizeSportKey(def);
-        if (!seen.has(norm)) {
-          seen.add(norm);
-          sports.push(def);
-        }
-      });
-
-      if (sports.length > 0) {
-        setSportsList(sports);
+      if (res) {
+        const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+        setSportsList(buildCreateSportsList(list));
       }
     }).catch(() => {});
   }, [navigate]);
@@ -236,25 +240,23 @@ export const CreateMatch: React.FC = () => {
             ? ocrRes.parsed_tables.team_scores
             : [];
 
-          const homeScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
-          );
-          const awayScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
-          );
+          const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
+          const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
 
           const ocrHomeName = String(
             ocrRes?.match_info?.home_team_name ||
             ocrRes?.match_info?.home_team ||
             homeScoreItem?.team ||
-            'CELTICS'
+            finalHome ||
+            'HOME TEAM'
           ).toUpperCase();
 
           const ocrAwayName = String(
             ocrRes?.match_info?.opponent_team_name ||
             ocrRes?.match_info?.away_team ||
             awayScoreItem?.team ||
-            'HAWKS'
+            finalAway ||
+            'AWAY TEAM'
           ).toUpperCase();
 
           const hName = finalHome.toUpperCase();

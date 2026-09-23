@@ -9,10 +9,10 @@ import {
   getOfficialDashboard,
   getAllOfficialMatchesMaster,
   getOfficialSettings,
-  prefetchAllOfficialAuditMatches,
   prefetchMatchAuditDetail,
   isMatchCreatedByOfficial,
   isMatchLocallyCertified,
+  getSports,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse, MatchSummaryItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -35,6 +35,7 @@ export const OfficialHomePage: React.FC = () => {
   const refreshDashboard = () => {
     getOfficialDashboard(true).then((res) => setDashboard(res)).catch(() => { });
     getAllOfficialMatchesMaster(true).then((res) => setMasterMatches(res || [])).catch(() => { });
+    getSports(false, true).catch(() => { });
   };
 
   useEffect(() => {
@@ -47,8 +48,8 @@ export const OfficialHomePage: React.FC = () => {
       getMe().then((res) => setUser(res)).catch(() => { }),
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
       getAllOfficialMatchesMaster().then((res) => setMasterMatches(res || [])).catch(() => { }),
+      getSports().catch(() => { }),
       getOfficialSettings().catch(() => { }),
-      prefetchAllOfficialAuditMatches().catch(() => { }),
     ]).finally(() => setLoading(false));
   }, [navigate]);
 
@@ -182,7 +183,6 @@ export const OfficialHomePage: React.FC = () => {
               to="/matches"
               className="hover-view-all"
               style={styles.viewAllLink}
-              onMouseEnter={() => prefetchAllOfficialAuditMatches()}
             >
               VIEW ALL <ExternalLink style={{ width: 12, height: 12 }} />
             </Link>

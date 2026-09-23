@@ -7,7 +7,7 @@ export const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#FFFFFF',
     fontFamily: '"Outfit", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
     color: '#0B132B',
-    overflowY: 'auto',
+    overflowY: 'scroll',
   },
   contentArea: {
     maxWidth: '1540px',
@@ -118,11 +118,13 @@ export const styles: Record<string, React.CSSProperties> = {
     border: '2px solid #0B132B',
     backgroundColor: '#FFFFFF',
     overflowX: 'auto',
+    minHeight: '340px',
   },
   table: {
     width: '100%',
     borderCollapse: 'collapse',
     textAlign: 'left',
+    tableLayout: 'fixed',
   },
   th: {
     backgroundColor: '#0B132B',

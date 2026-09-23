@@ -10,7 +10,6 @@ import {
   Loader2,
   Eye,
   X,
-  Download,
 } from 'lucide-react';
 import {
   getMatchAuditDetail,
@@ -19,7 +18,6 @@ import {
   uploadScoresheetFile,
   getCachedData,
   setCachedData,
-  downloadCertifiedMatchPdf,
   markMatchAsCertified,
   isMatchLocallyCertified,
   recordOfficialCreatedMatchId,
@@ -34,7 +32,28 @@ export const ScoresheetMatch: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const cleanId = matchId ? matchId.replace(/^#/, '') : '';
-  const cached = cleanId ? getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) : null;
+  const cached = cleanId ? (getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) || (() => {
+    const list = (getCachedData<any[]>('all_official_matches_master') || []).concat(getCachedData<any[]>('official_schedules') || []);
+    const item = list.find((m: any) => String(m.match_id || m.id || '').replace(/^#/, '') === cleanId);
+    if (!item) return null;
+    const raw = item.raw_match || {};
+    const hName = (item.home_team_name || raw.home_team_name || 'HOME TEAM').toUpperCase();
+    const aName = (item.opponent_team_name || raw.opponent_team_name || 'AWAY TEAM').toUpperCase();
+    const sType = item.sport || raw.sport_type || 'Basketball';
+    return {
+      match_id: cleanId,
+      validation_id: item.validation_id || raw.validation_id || cleanId,
+      game_name: item.match_name || raw.match_name || `${hName} vs ${aName}`,
+      sport_type: sType,
+      league_class: item.match_class || `${sType.toUpperCase()} • VARSITY LEAGUE`,
+      match_date_formatted: item.date_time || item.match_date_formatted || 'DATE TBD',
+      home_team: { name: hName, score: Number(raw.home_score || 0), result: 'WIN', roster_stats: [] },
+      away_team: { name: aName, score: Number(raw.away_score || 0), result: 'LOSE', roster_stats: [] },
+      is_certified: Boolean(item.status === 'AUDITED' || item.status === 'Certified' || raw.is_certified),
+      scoresheet_url: raw.scoresheet_url || item.scoresheet_url,
+      audit_context_notes: raw.notes || '',
+    } as unknown as MatchAuditDetail;
+  })()) : null;
 
   const [matchData, setMatchData] = useState<MatchAuditDetail | null>(() => cached || null);
   const [loading, setLoading] = useState(() => !cached);
@@ -56,19 +75,10 @@ export const ScoresheetMatch: React.FC = () => {
   const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | 'NO_SCORESHEET' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-  // Allow viewing match details publicly; token is attached if available for upload/certification
-  useEffect(() => {
-    // Session token verified when performing restricted actions
-  }, [navigate]);
-
-  const loadMatchData = async () => {
+  const loadMatchData = async (silent = Boolean(cached || matchData)) => {
     if (!cleanId) return;
-    const hasCached = Boolean(getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`));
-    if (!hasCached) {
-      setLoading(true);
-    }
+    if (!silent) setLoading(true);
 
     try {
       const data = await getMatchAuditDetail(cleanId, false);
@@ -141,29 +151,27 @@ export const ScoresheetMatch: React.FC = () => {
         : [];
 
       if (rawPlayers.length > 0) {
-        const homeScoreItem = teamScoresArr.find(
-          (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
-        );
-        const awayScoreItem = teamScoresArr.find(
-          (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
-        );
+        const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
+        const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
 
         const ocrHomeName = String(
           res?.match_info?.home_team_name ||
           res?.match_info?.home_team ||
           homeScoreItem?.team ||
-          'CELTICS'
+          matchData?.home_team.name ||
+          'HOME TEAM'
         ).toUpperCase();
 
         const ocrAwayName = String(
           res?.match_info?.opponent_team_name ||
           res?.match_info?.away_team ||
           awayScoreItem?.team ||
-          'HAWKS'
+          matchData?.away_team.name ||
+          'AWAY TEAM'
         ).toUpperCase();
 
-        const hName = (matchData?.home_team.name || 'CSSAC').toUpperCase();
-        const aName = (matchData?.away_team.name || 'CBSUA').toUpperCase();
+        const hName = (matchData?.home_team.name || 'HOME TEAM').toUpperCase();
+        const aName = (matchData?.away_team.name || 'AWAY TEAM').toUpperCase();
 
         const totalPlayers = rawPlayers.length;
         const halfCount = Math.ceil(totalPlayers / 2);
@@ -311,8 +319,10 @@ export const ScoresheetMatch: React.FC = () => {
         markMatchAsCertified(vKey);
         if (uId) recordOfficialCreatedMatchId(vKey, uId);
       }
+      // Optimistically mark as certified in state so the UI updates instantly with zero screen flash
+      setMatchData((prev) => prev ? ({ ...prev, is_certified: true, audit_context_notes: notes }) : prev);
       setActiveModal(null);
-      await loadMatchData();
+      await loadMatchData(true);
     } catch (err: any) {
       setActionError(err?.message || 'Certification failed.');
     } finally {
@@ -332,27 +342,6 @@ export const ScoresheetMatch: React.FC = () => {
       setActionError(err?.message || 'Failed to remove match record.');
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  const handleDownloadPdf = async () => {
-    if (!cleanId) return;
-    try {
-      setIsDownloadingPdf(true);
-      setActionError(null);
-      const blob = await downloadCertifiedMatchPdf(cleanId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `certified_match_${cleanId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setActionError(err?.message || 'Failed to download certified match PDF.');
-    } finally {
-      setIsDownloadingPdf(false);
     }
   };
 
@@ -715,17 +704,29 @@ export const ScoresheetMatch: React.FC = () => {
                   <div style={styles.scoreTeamBlock}>
                     <span style={styles.scoreTeamLabel}>{matchData.home_team.name}</span>
                     <span style={styles.scoreValue}>{homeScore}</span>
-                    <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
-                      {homeScore >= awayScore ? 'WIN' : 'LOSE'}
-                    </span>
+                    {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
+                      <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
+                        {homeScore >= awayScore ? 'WIN' : 'LOSE'}
+                      </span>
+                    ) : (
+                      <span style={{ ...styles.badgeLose, backgroundColor: '#E2E8F0', color: '#64748B', border: '1px solid #CBD5E1' }}>
+                        UNPLAYED
+                      </span>
+                    )}
                   </div>
                   <span style={styles.scoreDivider}>-</span>
                   <div style={styles.scoreTeamBlock}>
                     <span style={styles.scoreTeamLabel}>{matchData.away_team.name}</span>
                     <span style={styles.scoreValue}>{awayScore}</span>
-                    <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
-                      {awayScore > homeScore ? 'WIN' : 'LOSE'}
-                    </span>
+                    {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
+                      <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
+                        {awayScore > homeScore ? 'WIN' : 'LOSE'}
+                      </span>
+                    ) : (
+                      <span style={{ ...styles.badgeLose, backgroundColor: '#E2E8F0', color: '#64748B', border: '1px solid #CBD5E1' }}>
+                        UNPLAYED
+                      </span>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -842,29 +843,13 @@ export const ScoresheetMatch: React.FC = () => {
                     CERTIFY MATCH
                   </button>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleDownloadPdf}
-                      disabled={isDownloadingPdf}
-                      className="hover-btn-solid"
-                      style={styles.downloadPdfBtn}
-                    >
-                      {isDownloadingPdf ? (
-                        <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
-                      ) : (
-                        <Download style={{ width: 15, height: 15 }} />
-                      )}
-                      <span>DOWNLOAD CERTIFIED SCORESHEET PDF</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled
-                      style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
-                    >
-                      MATCH CERTIFIED
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    disabled
+                    style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
+                  >
+                    MATCH CERTIFIED
+                  </button>
                 )}
               </div>
             </div>

@@ -44,17 +44,41 @@ const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
   );
 });
 
+const normalizeSportKey = (name: string): string => (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
+
+const buildNormalizedSportsList = (rawSports?: any[]): string[] => {
+  const cached = rawSports || getCachedData<any>('sports_catalog_false')?.sports || getCachedData<any>('sports_catalog_true')?.sports || [];
+  const list = Array.isArray(cached) ? cached : [];
+  const seen = new Set<string>(['ALL SPORTS']);
+  const sports: string[] = ['ALL SPORTS'];
+
+  list.forEach((s: any) => {
+    if (s && s.active !== false) {
+      const raw = (s.sport_name || s.name || '').trim();
+      const norm = normalizeSportKey(raw);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        sports.push(raw.toUpperCase());
+      }
+    }
+  });
+
+  ['BASKETBALL', 'TRACK & FIELD', 'SWIMMING'].forEach((def) => {
+    const norm = normalizeSportKey(def);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      sports.push(def);
+    }
+  });
+  return sports;
+};
+
 export const ViewAllMatch: React.FC = () => {
   const navigate = useNavigate();
   const user = useMemo(() => getStoredUser(), []);
   const [activeTab, setActiveTab] = useState<'PENDING' | 'PROCESSED'>('PENDING');
   const [selectedSport, setSelectedSport] = useState<string>('ALL');
-  const [dynamicSports, setDynamicSports] = useState<string[]>([
-    'ALL SPORTS',
-    'BASKETBALL',
-    'TRACK & FIELD',
-    'SWIMMING',
-  ]);
+  const [dynamicSports, setDynamicSports] = useState<string[]>(() => buildNormalizedSportsList());
 
   // Master in-memory dataset of all official's matches
   const [allMatches, setAllMatches] = useState<MatchSummaryItem[]>(
@@ -76,7 +100,7 @@ export const ViewAllMatch: React.FC = () => {
       setLoading(true);
     }
 
-    getAllOfficialMatchesMaster(true)
+    getAllOfficialMatchesMaster(false)
       .then((data) => {
         if (isMounted && data) {
           setAllMatches(data);
@@ -90,36 +114,9 @@ export const ViewAllMatch: React.FC = () => {
       });
 
     getSports().then((res) => {
-      const list = Array.isArray(res?.sports) ? res.sports : (Array.isArray(res) ? res : []);
-      const seen = new Set<string>();
-      const sports: string[] = ['ALL SPORTS'];
-      seen.add('ALL SPORTS');
-
-      const normalizeSportKey = (name: string): string => {
-        return (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
-      };
-
-      list.forEach((s: any) => {
-        if (s.active !== false) {
-          const raw = (s.sport_name || s.name || '').trim();
-          const norm = normalizeSportKey(raw);
-          if (norm && !seen.has(norm)) {
-            seen.add(norm);
-            sports.push(raw.toUpperCase());
-          }
-        }
-      });
-
-      ['BASKETBALL', 'TRACK & FIELD', 'SWIMMING'].forEach((def) => {
-        const norm = normalizeSportKey(def);
-        if (!seen.has(norm)) {
-          seen.add(norm);
-          sports.push(def);
-        }
-      });
-
-      if (isMounted) {
-        setDynamicSports(sports);
+      if (isMounted && res) {
+        const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+        setDynamicSports(buildNormalizedSportsList(list));
       }
     }).catch(() => {});
 
@@ -243,12 +240,12 @@ export const ViewAllMatch: React.FC = () => {
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={styles.th}>MATCH ID</th>
-                <th style={styles.th}>MATCH NAME</th>
-                <th style={styles.th}>SPORT</th>
-                <th style={styles.th}>COACHES (TEAM 1, TEAM 2)</th>
-                <th style={styles.th}>DATE / TIME</th>
-                <th style={{ ...styles.th, borderRight: 'none' }}>STATUS</th>
+                <th style={{ ...styles.th, width: '13%' }}>MATCH ID</th>
+                <th style={{ ...styles.th, width: '27%' }}>MATCH NAME</th>
+                <th style={{ ...styles.th, width: '13%' }}>SPORT</th>
+                <th style={{ ...styles.th, width: '23%' }}>COACHES (TEAM 1, TEAM 2)</th>
+                <th style={{ ...styles.th, width: '14%' }}>DATE / TIME</th>
+                <th style={{ ...styles.th, width: '10%', borderRight: 'none' }}>STATUS</th>
               </tr>
             </thead>
             <tbody>

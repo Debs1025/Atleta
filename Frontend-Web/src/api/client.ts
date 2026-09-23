@@ -840,9 +840,9 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         game_name: payload.game_name || `${home} vs ${away}`,
         scoresheet_url: (payload as any).scoresheet_url,
         player_stats: (payload as any).player_stats || [],
-        home_score: (payload as any).home_score || 107,
-        away_score: (payload as any).away_score || 103,
-        game_result: (payload as any).game_result || 'WIN',
+        home_score: (payload as any).home_score || 0,
+        away_score: (payload as any).away_score || 0,
+        game_result: (payload as any).game_result || undefined,
         is_official: true,
         is_certified: false,
         coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
@@ -1275,11 +1275,8 @@ export const getAllOfficialMatchesMaster = async (
 
 export const prefetchAllOfficialAuditMatches = async (): Promise<void> => {
   try {
-    // Prime the master dataset first
-    await getAllOfficialMatchesMaster(true);
-  } catch (err) {
-    console.warn('Background match prefetch failed:', err);
-  }
+    await getAllOfficialMatchesMaster(false);
+  } catch { }
 };
 
 export const getMatchAuditDetail = async (
@@ -1298,17 +1295,24 @@ export const getMatchAuditDetail = async (
   };
 
   try {
-    const [detailsRes, boxscoreRes, pendingRes] = await Promise.all([
-      fetch(`${BASE_URL}/matches/${matchId}/details`, { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`${BASE_URL}/matches/${matchId}/boxscore`, { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`${BASE_URL}/validations/pending`, { headers }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
-    ]);
+    const cachedMaster = getCachedData<import('./types').MatchSummaryItem[]>('all_official_matches_master');
+    const cachedItem = cachedMaster?.find((m) => m.match_id.replace(/^#/, '') === matchId);
+    const cachedRaw = cachedItem?.raw_match || {};
+
+    const detailsRes = await fetch(`${BASE_URL}/matches/${matchId}/details`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
 
     const details = detailsRes || {};
-    const boxscore = boxscoreRes || {};
+    let boxscore: any = {};
+    if (!details.player_metrics || details.player_metrics.length === 0) {
+      boxscore = await fetch(`${BASE_URL}/matches/${matchId}/boxscore`, { headers })
+        .then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({}));
+    }
+
     const match = details.match || boxscore.match || details;
-    const pendingVal = Array.isArray(pendingRes) ? pendingRes.find((p: any) => p.match_id === matchId) : null;
-    const validationId = pendingVal?.validation_id || match?.validation_id || matchId;
+    const validationId = cachedItem?.validation_id || cachedRaw.validation_id || cachedRaw.audit_id || match?.validation_id || matchId;
 
     const homeTeamName = (
       (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' ? match.team_summary.team_name : null) ||
@@ -1316,7 +1320,7 @@ export const getMatchAuditDetail = async (
       match.home_team_id ||
       (match.team_summary?.team_id && match.team_summary.team_id !== 'Home Team' ? match.team_summary.team_id : null) ||
       match.team_id ||
-      'CSSAC'
+      'HOME TEAM'
     ).toUpperCase();
 
     const awayTeamName = (
@@ -1324,7 +1328,7 @@ export const getMatchAuditDetail = async (
       match.away_team_name ||
       match.away_team_id ||
       match.team_summary?.opponent_team_name ||
-      'CBSUA'
+      'AWAY TEAM'
     ).toUpperCase();
     const sportType = match.sport_type || 'Basketball';
     const leagueClass = match.match_type
@@ -1338,7 +1342,7 @@ export const getMatchAuditDetail = async (
 
     const playerMetrics: any[] = boxscore.player_metrics || details.player_metrics || match.player_stats || [];
 
-    // Check if individual sport (Swimming or Track & Field)
+    // Check if individual sport 
     const isIndividualSport = sportType.toLowerCase().includes('swim') || sportType.toLowerCase().includes('track') || sportType.toLowerCase().includes('field');
 
     const raceResults: import('./types').RaceResultRow[] = [];
@@ -1449,15 +1453,7 @@ export const getMatchAuditDetail = async (
       };
     };
 
-    const homeScore = match.home_score !== undefined ? Number(match.home_score) : homePlayers.reduce((a, b) => a + b.pts, 0);
-    const awayScore = match.away_score !== undefined ? Number(match.away_score) : awayPlayers.reduce((a, b) => a + b.pts, 0);
-
-    const cachedMaster = getCachedData<import('./types').MatchSummaryItem[]>('all_official_matches_master');
-    const cachedItem = cachedMaster?.find((m) => m.match_id.replace(/^#/, '') === matchId);
-    const cachedRaw = cachedItem?.raw_match || {};
-
     const assignedCoaches: string[] =
-      (Array.isArray(pendingVal?.match_details?.assigned_coaches) && pendingVal.match_details.assigned_coaches.length > 0 ? pendingVal.match_details.assigned_coaches : null) ||
       (Array.isArray(match.assigned_coaches) && match.assigned_coaches.length > 0 ? match.assigned_coaches : null) ||
       (Array.isArray(cachedRaw.assigned_coaches) && cachedRaw.assigned_coaches.length > 0 ? cachedRaw.assigned_coaches : null) ||
       (Array.isArray(match.coaches) && match.coaches.length > 0 ? match.coaches : null) ||
@@ -1468,36 +1464,14 @@ export const getMatchAuditDetail = async (
 
     // Preserve existing valid cached rosters / race results if newly mapped rows are empty
     const existingCached = getCachedData<import('./types').MatchAuditDetail>(cacheKey);
-
-    const defaultScoresheetHome: import('./types').BoxScoreRow[] = [
-      { jersey_no: '05', player_name: 'L. BROWN (PG)', position: 'PG', minutes: '36', pts: 20, reb: 5, ast: 7, stl: 3, blk: 1, fg_pct: '60.0%', three_p_pct: '33.3%', ft_pct: '50.0%' },
-      { jersey_no: '18', player_name: 'D. WHITE (SG)', position: 'SG', minutes: '34', pts: 24, reb: 4, ast: 8, stl: 2, blk: 1, fg_pct: '66.7%', three_p_pct: '40.0%', ft_pct: '0.0%' },
-      { jersey_no: '27', player_name: 'J. TATUM (SF)', position: 'SF', minutes: '38', pts: 15, reb: 7, ast: 4, stl: 1, blk: 1, fg_pct: '56.0%', three_p_pct: '37.5%', ft_pct: '100.0%' },
-      { jersey_no: '35', player_name: 'R. WILLIAMS III (PF)', position: 'PF', minutes: '30', pts: 17, reb: 9, ast: 2, stl: 0, blk: 4, fg_pct: '72.0%', three_p_pct: '0.0%', ft_pct: '50.0%' },
-      { jersey_no: '42', player_name: 'A. HORFORD (C)', position: 'C', minutes: '28', pts: 16, reb: 8, ast: 3, stl: 1, blk: 2, fg_pct: '67.0%', three_p_pct: '25.0%', ft_pct: '0.0%' },
-    ];
-
-    const defaultScoresheetAway: import('./types').BoxScoreRow[] = [
-      { jersey_no: '07', player_name: 'J. CARTER (PG)', position: 'PG', minutes: '35', pts: 16, reb: 4, ast: 6, stl: 2, blk: 0, fg_pct: '58.0%', three_p_pct: '33.3%', ft_pct: '100.0%' },
-      { jersey_no: '14', player_name: 'S. WILLIAMS (SG)', position: 'SG', minutes: '32', pts: 17, reb: 3, ast: 4, stl: 1, blk: 1, fg_pct: '55.0%', three_p_pct: '50.0%', ft_pct: '100.0%' },
-      { jersey_no: '21', player_name: 'M. DAVIS (SF)', position: 'SF', minutes: '34', pts: 15, reb: 6, ast: 3, stl: 1, blk: 0, fg_pct: '61.0%', three_p_pct: '40.0%', ft_pct: '66.7%' },
-      { jersey_no: '32', player_name: 'R. THOMPSON (PF)', position: 'PF', minutes: '30', pts: 10, reb: 8, ast: 1, stl: 0, blk: 2, fg_pct: '53.0%', three_p_pct: '0.0%', ft_pct: '100.0%' },
-      { jersey_no: '45', player_name: 'C. GREEN (C)', position: 'C', minutes: '26', pts: 6, reb: 9, ast: 2, stl: 1, blk: 3, fg_pct: '38.0%', three_p_pct: '0.0%', ft_pct: '0.0%' },
-    ];
-
-    let finalHomeRoster = homePlayers.length > 0 ? homePlayers : (existingCached?.home_team?.roster_stats || []);
-    let finalAwayRoster = awayPlayers.length > 0 ? awayPlayers : (existingCached?.away_team?.roster_stats || []);
-
-    if (finalHomeRoster.length === 0 && finalAwayRoster.length === 0 && (sportType.toLowerCase().includes('basket') || match.scoresheet_url || existingCached?.scoresheet_url)) {
-      finalHomeRoster = defaultScoresheetHome;
-      finalAwayRoster = defaultScoresheetAway;
-    }
+    const finalHomeRoster = homePlayers.length > 0 ? homePlayers : (existingCached?.home_team?.roster_stats || []);
+    const finalAwayRoster = awayPlayers.length > 0 ? awayPlayers : (existingCached?.away_team?.roster_stats || []);
 
     const finalRaceResults = raceResults.length > 0 ? raceResults : (existingCached?.race_results || []);
-    const computedHomePts = finalHomeRoster.reduce((a, b) => a + b.pts, 0);
-    const computedAwayPts = finalAwayRoster.reduce((a, b) => a + b.pts, 0);
-    const finalHomeScore = homeScore > 0 ? homeScore : (computedHomePts > 0 ? computedHomePts : (existingCached?.home_team?.score || 107));
-    const finalAwayScore = awayScore > 0 ? awayScore : (computedAwayPts > 0 ? computedAwayPts : (existingCached?.away_team?.score || 103));
+    const computedHomePts = finalHomeRoster.reduce((a: number, b: import('./types').BoxScoreRow) => a + (Number(b.pts) || 0), 0);
+    const computedAwayPts = finalAwayRoster.reduce((a: number, b: import('./types').BoxScoreRow) => a + (Number(b.pts) || 0), 0);
+    const finalHomeScore = match.home_score !== undefined ? Number(match.home_score) : (computedHomePts > 0 ? computedHomePts : (existingCached?.home_team?.score || 0));
+    const finalAwayScore = match.away_score !== undefined ? Number(match.away_score) : (computedAwayPts > 0 ? computedAwayPts : (existingCached?.away_team?.score || 0));
 
     const finalHomeTotals = computeTotals(finalHomeRoster, finalHomeScore);
     const finalAwayTotals = computeTotals(finalAwayRoster, finalAwayScore);
@@ -1524,12 +1498,12 @@ export const getMatchAuditDetail = async (
         team_totals: finalAwayTotals,
       },
       race_results: finalRaceResults,
-      scoresheet_url: (typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim() ? match.scoresheet_url.trim() : (typeof pendingVal?.scoresheet_url === 'string' ? pendingVal.scoresheet_url.trim() : existingCached?.scoresheet_url)),
+      scoresheet_url: (typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim() ? match.scoresheet_url.trim() : (typeof cachedRaw.scoresheet_url === 'string' ? cachedRaw.scoresheet_url.trim() : existingCached?.scoresheet_url)),
       audit_context_notes: typeof match.notes === 'string'
         ? match.notes
         : Array.isArray(match.notes) && match.notes.length > 0
           ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
-          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : (existingCached?.audit_context_notes || '')),
+          : (typeof cachedRaw.notes === 'string' ? cachedRaw.notes : (existingCached?.audit_context_notes || '')),
       is_certified: Boolean(match.is_certified || match.is_locked || existingCached?.is_certified),
       assigned_coaches: assignedCoaches.length > 0 ? assignedCoaches : (existingCached?.assigned_coaches || []),
       coach_name: coachName || existingCached?.coach_name,
@@ -1587,23 +1561,21 @@ export const certifyMatchValidation = async (
     markMatchAsCertified(vKey);
     if (user?.uid) recordOfficialCreatedMatchId(vKey, user.uid);
   }
-  invalidateCache();
-  return data;
-};
-
-export const downloadCertifiedMatchPdf = async (matchId: string): Promise<Blob> => {
-  const cleanId = matchId.replace(/^#/, '');
-  const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/matches/${cleanId}/pdf`, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Failed to download certified match PDF' }));
-    throw new Error(err.error || 'Failed to download certified match PDF');
+  const mKey = actualMatchId ? String(actualMatchId).replace(/^#/, '') : String(validationId).replace(/^#/, '');
+  const cachedMatch = getCachedData<any>(`match_audit_detail_${mKey}`);
+  if (cachedMatch) {
+    setCachedData(`match_audit_detail_${mKey}`, {
+      ...cachedMatch,
+      is_certified: true,
+      audit_context_notes: cleanPayload.context_notes || cachedMatch.audit_context_notes,
+      scoresheet_url: cleanPayload.scoresheet_url || cachedMatch.scoresheet_url,
+    });
   }
-  return res.blob();
+  invalidateCache('official_dashboard');
+  invalidateCache('official_schedules');
+  invalidateCache('all_official_matches_master');
+  invalidateCache('public_feed');
+  return data;
 };
 
 export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
@@ -1723,42 +1695,16 @@ export const uploadScoresheetFile = async (matchId: string, rawFile: File): Prom
     }
   }
 
-  const hasExtractedPlayers = (Array.isArray(responseData?.player_summary) && responseData.player_summary.length > 0) ||
-    (Array.isArray(responseData?.parsed_tables?.player_summary) && responseData.parsed_tables.player_summary.length > 0);
-
-  // Resilient fallback parser to ensure scoresheet data is always populated accurately
-  if (!responseData || !hasExtractedPlayers) {
-    const fileUrl = (responseData?.scoresheet_url && typeof responseData.scoresheet_url === 'string' && responseData.scoresheet_url.trim())
-      ? responseData.scoresheet_url
-      : URL.createObjectURL(file);
-    
-    // Check if filename or scoresheet matches basketball scoresheet
+  if (!responseData) {
     responseData = {
-      message: 'Scoresheet parsed successfully via OCR pipeline.',
+      message: 'Scoresheet uploaded successfully.',
       match_id: cleanId,
-      scoresheet_url: fileUrl,
-      match_info: {
-        event_name: 'Conference Finals',
-        home_team_name: 'CELTICS',
-        opponent_team_name: 'HAWKS',
-      },
-      team_scores: [
-        { team: 'CELTICS', score: 107, is_home: true },
-        { team: 'HAWKS', score: 103, is_home: false }
-      ],
-      player_summary: [
-        { player_name: 'J. Carter', team_name: 'HAWKS', jersey_number: 7, position: 'PG', points: 16, rebounds: 4, assists: 6, steals: 2, blocks: 0, fg_made: 5, fg_attempted: 12, ft_made: 3, ft_attempted: 3, true_shooting_pct: 58 },
-        { player_name: 'S. Williams', team_name: 'HAWKS', jersey_number: 14, position: 'SG', points: 17, rebounds: 3, assists: 4, steals: 1, blocks: 1, fg_made: 6, fg_attempted: 14, ft_made: 3, ft_attempted: 3, true_shooting_pct: 55 },
-        { player_name: 'M. Davis', team_name: 'HAWKS', jersey_number: 21, position: 'SF', points: 15, rebounds: 6, assists: 3, steals: 1, blocks: 0, fg_made: 5, fg_attempted: 11, ft_made: 2, ft_attempted: 3, true_shooting_pct: 61 },
-        { player_name: 'R. Thompson', team_name: 'HAWKS', jersey_number: 32, position: 'PF', points: 10, rebounds: 8, assists: 1, steals: 0, blocks: 2, fg_made: 4, fg_attempted: 9, ft_made: 1, ft_attempted: 1, true_shooting_pct: 53 },
-        { player_name: 'C. Green', team_name: 'HAWKS', jersey_number: 45, position: 'C', points: 6, rebounds: 9, assists: 2, steals: 1, blocks: 3, fg_made: 3, fg_attempted: 8, ft_made: 0, ft_attempted: 0, true_shooting_pct: 38 },
-        { player_name: 'L. Brown', team_name: 'CELTICS', jersey_number: 5, position: 'PG', points: 20, rebounds: 5, assists: 7, steals: 3, blocks: 1, fg_made: 7, fg_attempted: 15, ft_made: 2, ft_attempted: 4, true_shooting_pct: 60 },
-        { player_name: 'D. White', team_name: 'CELTICS', jersey_number: 18, position: 'SG', points: 24, rebounds: 4, assists: 8, steals: 2, blocks: 1, fg_made: 8, fg_attempted: 16, ft_made: 4, ft_attempted: 5, true_shooting_pct: 66 },
-        { player_name: 'J. Tatum', team_name: 'CELTICS', jersey_number: 27, position: 'SF', points: 15, rebounds: 7, assists: 4, steals: 1, blocks: 1, fg_made: 5, fg_attempted: 12, ft_made: 3, ft_attempted: 3, true_shooting_pct: 56 },
-        { player_name: 'R. Williams III', team_name: 'CELTICS', jersey_number: 35, position: 'PF', points: 17, rebounds: 9, assists: 2, steals: 0, blocks: 4, fg_made: 7, fg_attempted: 10, ft_made: 3, ft_attempted: 4, true_shooting_pct: 72 },
-        { player_name: 'A. Horford', team_name: 'CELTICS', jersey_number: 42, position: 'C', points: 16, rebounds: 8, assists: 3, steals: 1, blocks: 2, fg_made: 6, fg_attempted: 11, ft_made: 2, ft_attempted: 2, true_shooting_pct: 67 }
-      ]
+      scoresheet_url: URL.createObjectURL(file),
+      player_summary: [],
+      team_scores: [],
     };
+  } else if (!responseData.scoresheet_url) {
+    responseData.scoresheet_url = URL.createObjectURL(file);
   }
 
   return responseData;
@@ -1808,39 +1754,15 @@ export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
     } catch {}
   }
 
-  const hasExtractedPlayers = (Array.isArray(responseData?.player_summary) && responseData.player_summary.length > 0) ||
-    (Array.isArray(responseData?.parsed_tables?.player_summary) && responseData.parsed_tables.player_summary.length > 0);
-
-  if (!responseData || !hasExtractedPlayers) {
-    const fileUrl = (responseData?.scoresheet_url && typeof responseData.scoresheet_url === 'string' && responseData.scoresheet_url.trim())
-      ? responseData.scoresheet_url
-      : URL.createObjectURL(file);
-    
+  if (!responseData) {
     responseData = {
-      message: 'Scoresheet parsed successfully via OCR pipeline.',
-      scoresheet_url: fileUrl,
-      match_info: {
-        event_name: 'Conference Finals',
-        home_team_name: 'CELTICS',
-        opponent_team_name: 'HAWKS',
-      },
-      team_scores: [
-        { team: 'CELTICS', score: 107, is_home: true },
-        { team: 'HAWKS', score: 103, is_home: false }
-      ],
-      player_summary: [
-        { player_name: 'J. Carter', team_name: 'HAWKS', jersey_number: 7, position: 'PG', points: 16, rebounds: 4, assists: 6, steals: 2, blocks: 0, fg_made: 5, fg_attempted: 12, ft_made: 3, ft_attempted: 3, true_shooting_pct: 58 },
-        { player_name: 'S. Williams', team_name: 'HAWKS', jersey_number: 14, position: 'SG', points: 17, rebounds: 3, assists: 4, steals: 1, blocks: 1, fg_made: 6, fg_attempted: 14, ft_made: 3, ft_attempted: 3, true_shooting_pct: 55 },
-        { player_name: 'M. Davis', team_name: 'HAWKS', jersey_number: 21, position: 'SF', points: 15, rebounds: 6, assists: 3, steals: 1, blocks: 0, fg_made: 5, fg_attempted: 11, ft_made: 2, ft_attempted: 3, true_shooting_pct: 61 },
-        { player_name: 'R. Thompson', team_name: 'HAWKS', jersey_number: 32, position: 'PF', points: 10, rebounds: 8, assists: 1, steals: 0, blocks: 2, fg_made: 4, fg_attempted: 9, ft_made: 1, ft_attempted: 1, true_shooting_pct: 53 },
-        { player_name: 'C. Green', team_name: 'HAWKS', jersey_number: 45, position: 'C', points: 6, rebounds: 9, assists: 2, steals: 1, blocks: 3, fg_made: 3, fg_attempted: 8, ft_made: 0, ft_attempted: 0, true_shooting_pct: 38 },
-        { player_name: 'L. Brown', team_name: 'CELTICS', jersey_number: 5, position: 'PG', points: 20, rebounds: 5, assists: 7, steals: 3, blocks: 1, fg_made: 7, fg_attempted: 15, ft_made: 2, ft_attempted: 4, true_shooting_pct: 60 },
-        { player_name: 'D. White', team_name: 'CELTICS', jersey_number: 18, position: 'SG', points: 24, rebounds: 4, assists: 8, steals: 2, blocks: 1, fg_made: 8, fg_attempted: 16, ft_made: 4, ft_attempted: 5, true_shooting_pct: 66 },
-        { player_name: 'J. Tatum', team_name: 'CELTICS', jersey_number: 27, position: 'SF', points: 15, rebounds: 7, assists: 4, steals: 1, blocks: 1, fg_made: 5, fg_attempted: 12, ft_made: 3, ft_attempted: 3, true_shooting_pct: 56 },
-        { player_name: 'R. Williams III', team_name: 'CELTICS', jersey_number: 35, position: 'PF', points: 17, rebounds: 9, assists: 2, steals: 0, blocks: 4, fg_made: 7, fg_attempted: 10, ft_made: 3, ft_attempted: 4, true_shooting_pct: 72 },
-        { player_name: 'A. Horford', team_name: 'CELTICS', jersey_number: 42, position: 'C', points: 16, rebounds: 8, assists: 3, steals: 1, blocks: 2, fg_made: 6, fg_attempted: 11, ft_made: 2, ft_attempted: 2, true_shooting_pct: 67 }
-      ]
+      message: 'Scoresheet scanned successfully.',
+      scoresheet_url: URL.createObjectURL(file),
+      player_summary: [],
+      team_scores: [],
     };
+  } else if (!responseData.scoresheet_url) {
+    responseData.scoresheet_url = URL.createObjectURL(file);
   }
 
   return responseData;

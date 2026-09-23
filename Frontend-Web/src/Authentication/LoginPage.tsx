@@ -4,10 +4,7 @@ import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import {
   loginOfficial,
   getStoredToken,
-  getOfficialSettings,
   getMe,
-  getOfficialDashboard,
-  prefetchAllOfficialAuditMatches,
   getAdminCoachQueue,
 } from '../api/client';
 import { styles } from './styles/LoginPage';
@@ -30,8 +27,6 @@ export const LoginPage: React.FC = () => {
           getAdminCoachQueue(true).catch(() => {});
           navigate('/admin/dashboard');
         } else {
-          getOfficialSettings().catch(() => { });
-          prefetchAllOfficialAuditMatches().catch(() => { });
           navigate('/dashboard');
         }
       }).catch(() => {
@@ -51,18 +46,10 @@ export const LoginPage: React.FC = () => {
 
       const role = res?.user?.role;
       if (role === 'SystemAdmin' || role === 'System Admin' || role === 'Admin') {
-        getAdminCoachQueue(true).catch(() => {});
         navigate('/admin/dashboard');
         return;
       }
 
-      //  Prefetch the data settings, user profile, dashboard, and matches before navigating to avoid loadings
-      await Promise.allSettled([
-        getOfficialSettings(true),
-        getMe(true),
-        getOfficialDashboard(true),
-        prefetchAllOfficialAuditMatches(),
-      ]);
       navigate('/dashboard');
     } catch (e: any) {
       const msg = e.message || '';
