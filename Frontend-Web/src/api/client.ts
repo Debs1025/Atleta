@@ -374,13 +374,36 @@ export const getOfficialDashboard = async (forceRefresh = false): Promise<Offici
   if (cached && !forceRefresh) return cached;
 
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/officials/dashboard`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await handleResponse<OfficialDashboardResponse>(res);
+  let data: OfficialDashboardResponse;
+  try {
+    const res = await fetch(`${BASE_URL}/officials/dashboard`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      data = await res.json();
+    } else {
+      data = {
+        total_matches: 0,
+        pending_audits: 0,
+        completed_audits: 0,
+        audit_queue: [],
+        upcoming_schedules: [],
+        recent_matches: [],
+      } as any;
+    }
+  } catch {
+    data = {
+      total_matches: 0,
+      pending_audits: 0,
+      completed_audits: 0,
+      audit_queue: [],
+      upcoming_schedules: [],
+      recent_matches: [],
+    } as any;
+  }
   setCachedData('official_dashboard', data);
   return data;
 };
@@ -467,7 +490,7 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-    }).then((r) => handleResponse<any>(r)).catch(() => null),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     getAllOfficialMatchesMaster(forceRefresh).catch(() => []),
   ]);
 
@@ -1649,17 +1672,22 @@ export const uploadScoresheetFile = async (matchId: string, rawFile: File): Prom
   formData.append('file', file);
   formData.append('scoresheet', file);
   formData.append('document', file);
+  if (geminiKey) {
+    formData.append('gemini_key', geminiKey);
+    formData.append('apiKey', geminiKey);
+  }
+
+  const qs = geminiKey ? `?gemini_key=${encodeURIComponent(geminiKey)}` : '';
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(geminiKey ? { 'x-gemini-key': geminiKey } : {}),
   };
 
   let responseData: any = null;
 
   try {
-    const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
+    const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet${qs}`, {
       method: 'POST',
       headers,
       body: formData,
@@ -1673,7 +1701,7 @@ export const uploadScoresheetFile = async (matchId: string, rawFile: File): Prom
 
   if (!responseData) {
     try {
-      const fallbackRes = await fetch(`${BASE_URL}/matches/ocr/scan`, {
+      const fallbackRes = await fetch(`${BASE_URL}/matches/ocr/scan${qs}`, {
         method: 'POST',
         headers,
         body: formData,
@@ -1701,16 +1729,23 @@ export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
   formData.append('scoresheet', file);
   formData.append('file', file);
   formData.append('document', file);
+  if (geminiKey) {
+    formData.append('gemini_key', geminiKey);
+    formData.append('apiKey', geminiKey);
+  }
+
+  const qs = geminiKey ? `?gemini_key=${encodeURIComponent(geminiKey)}` : '';
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 
   let responseData: any = null;
   try {
-    const res = await fetch(`${BASE_URL}/matches/ocr/scan`, {
+    const res = await fetch(`${BASE_URL}/matches/ocr/scan${qs}`, {
       method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(geminiKey ? { 'x-gemini-key': geminiKey } : {}),
-      },
+      headers,
       body: formData,
     });
     if (res.ok) {
@@ -1722,13 +1757,9 @@ export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
 
   if (!responseData) {
     try {
-      const fallbackRes = await fetch(`${BASE_URL}/matches/scan-scoresheet`, {
+      const fallbackRes = await fetch(`${BASE_URL}/matches/scan-scoresheet${qs}`, {
         method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(geminiKey ? { 'x-gemini-key': geminiKey } : {}),
-        },
+        headers,
         body: formData,
       });
       if (fallbackRes.ok) {
