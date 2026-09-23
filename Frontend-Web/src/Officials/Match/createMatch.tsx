@@ -15,13 +15,11 @@ import {
   getMe,
   createOfficialMatch,
   fetchBrowseTeams,
-  uploadScoresheetFile,
+  scanScoresheetStandalone,
   setCachedData,
-  getActiveSportsList,
-  isIndividualSportType,
-  DEFAULT_FALLBACK_SPORTS,
+  getSports,
 } from '../../api/client';
-import type { AuthUser, MatchAuditDetail, BoxScoreRow, SportConfiguration } from '../../api/types';
+import type { AuthUser, MatchAuditDetail, BoxScoreRow } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
@@ -31,9 +29,9 @@ export const CreateMatch: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [availableSports, setAvailableSports] = useState<SportConfiguration[]>(DEFAULT_FALLBACK_SPORTS);
   const [gameName, setGameName] = useState('');
   const [sportCategory, setSportCategory] = useState('Basketball');
+  const [sportsList, setSportsList] = useState<string[]>(['Basketball', 'Track & Field', 'Swimming']);
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
@@ -60,11 +58,10 @@ export const CreateMatch: React.FC = () => {
     venue?: string;
   } | null>(null);
 
-  const selectedSportConfig = availableSports.find(
-    (s) => s.sport_name.toLowerCase() === sportCategory.toLowerCase()
-  ) || null;
-
-  const isIndividualSport = isIndividualSportType(sportCategory, selectedSportConfig);
+  const isIndividualSport =
+    sportCategory.toLowerCase().includes('track') ||
+    sportCategory.toLowerCase().includes('swim') ||
+    sportCategory.toLowerCase().includes('field');
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -73,17 +70,40 @@ export const CreateMatch: React.FC = () => {
       navigate('/login');
       return;
     }
-    getMe().then((res) => setUser(res)).catch(() => { });
-    fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => { });
-    getActiveSportsList().then((sports) => {
-      if (sports && sports.length > 0) {
-        setAvailableSports(sports);
-        setSportCategory((prev) => {
-          const exists = sports.some((s) => s.sport_name.toLowerCase() === prev.toLowerCase());
-          return exists ? prev : sports[0].sport_name;
-        });
+    getMe().then((res) => setUser(res)).catch(() => {});
+    fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
+    getSports().then((res) => {
+      const list = Array.isArray(res?.sports) ? res.sports : (Array.isArray(res) ? res : []);
+      const seen = new Set<string>();
+      const sports: string[] = [];
+
+      const normalizeSportKey = (name: string): string => {
+        return (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
+      };
+
+      list.forEach((s: any) => {
+        if (s.active !== false) {
+          const raw = (s.sport_name || s.name || '').trim();
+          const norm = normalizeSportKey(raw);
+          if (norm && !seen.has(norm)) {
+            seen.add(norm);
+            sports.push(raw);
+          }
+        }
+      });
+
+      ['Basketball', 'Track & Field', 'Swimming'].forEach((def) => {
+        const norm = normalizeSportKey(def);
+        if (!seen.has(norm)) {
+          seen.add(norm);
+          sports.push(def);
+        }
+      });
+
+      if (sports.length > 0) {
+        setSportsList(sports);
       }
-    }).catch(() => { });
+    }).catch(() => {});
   }, [navigate]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,14 +132,17 @@ export const CreateMatch: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[CREATE MATCH] handleSubmit called! sport:', sportCategory, 'date:', matchDate, 'home:', homeTeam, 'away:', awayTeam, 'file:', selectedFile?.name);
     setErrorMessage(null);
 
     if (!sportCategory) {
+      console.warn('[CREATE MATCH] Missing sportCategory');
       setErrorMessage('Please select a sport category.');
       return;
     }
 
     if (!matchDate) {
+      console.warn('[CREATE MATCH] Missing matchDate');
       setErrorMessage('Please select a match date.');
       return;
     }
@@ -140,7 +163,7 @@ export const CreateMatch: React.FC = () => {
     if (isIndividualSport) {
       const validTeams = teams.map((t) => t.trim()).filter(Boolean);
       if (validTeams.length < 2) {
-        setErrorMessage('Please choose at least 2 participating teams or delegations for this event.');
+        setErrorMessage('Please specify at least 2 participating teams or delegations for this event.');
         return;
       }
       finalHome = validTeams[0];
@@ -159,7 +182,14 @@ export const CreateMatch: React.FC = () => {
     try {
       setSubmitting(true);
 
-      const normalizedSport = selectedSportConfig ? selectedSportConfig.sport_name : sportCategory.trim() || 'Basketball';
+      let normalizedSport = sportCategory.trim() || 'Basketball';
+      if (sportCategory.toLowerCase().includes('swim')) {
+        normalizedSport = 'Swimming';
+      } else if (sportCategory.toLowerCase().includes('track') || sportCategory.toLowerCase().includes('field')) {
+        normalizedSport = 'Track & Field';
+      } else if (sportCategory.toLowerCase().includes('basket')) {
+        normalizedSport = 'Basketball';
+      }
 
       let isoDate = new Date(matchDate).toISOString();
       if (matchTime) {
@@ -168,56 +198,43 @@ export const CreateMatch: React.FC = () => {
           if (!isNaN(combined.getTime())) {
             isoDate = combined.toISOString();
           }
-        } catch { }
+        } catch {}
       } else {
         try {
           const combined = new Date(`${matchDate}T09:00:00`);
           if (!isNaN(combined.getTime())) {
             isoDate = combined.toISOString();
           }
-        } catch { }
+        } catch {}
       }
 
       const venueLocation = venue.trim() || 'Tournament Sports Complex';
 
-      const createdMatch = await createOfficialMatch({
-        team_id: finalHome,
-        home_team_name: finalHome,
-        opponent_team_name: finalAway,
-        sport_type: normalizedSport,
-        match_date: isoDate,
-        location: venueLocation,
-        venue: venueLocation,
-        court_number: 1,
-        participating_teams: participating,
-        game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
-        coaches: coaches.map((c) => c.trim()).filter(Boolean),
-      });
+      let ocrRes: any = null;
+      let playerStatsPayload: any[] = [];
+      let scoresheetUrl: string | undefined = undefined;
+      const hRows: BoxScoreRow[] = [];
+      const aRows: BoxScoreRow[] = [];
+      let hSum = 0;
+      let aSum = 0;
 
-      const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
-      const cleanMatchId = rawMatchId ? String(rawMatchId).replace(/^#/, '') : '';
-
-      const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-      const displayTime = matchTime
-        ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
-        : '';
-
-      // Upload scoresheet file & trigger OCR parsing if a file was selected
-      if (cleanMatchId && selectedFile) {
+      // 1. Scan scoresheet first via standalone OCR (matching mobile OCR logging pipeline)
+      if (selectedFile) {
         try {
-          const ocrRes = await uploadScoresheetFile(cleanMatchId, selectedFile);
+          ocrRes = await scanScoresheetStandalone(selectedFile);
+          if (ocrRes?.scoresheet_url) scoresheetUrl = ocrRes.scoresheet_url;
 
           const rawPlayers: any[] = Array.isArray(ocrRes?.player_summary)
             ? ocrRes.player_summary
             : Array.isArray(ocrRes?.parsed_tables?.player_summary)
-              ? ocrRes.parsed_tables.player_summary
-              : [];
+            ? ocrRes.parsed_tables.player_summary
+            : [];
 
           const teamScoresArr: any[] = Array.isArray(ocrRes?.team_scores)
             ? ocrRes.team_scores
             : Array.isArray(ocrRes?.parsed_tables?.team_scores)
-              ? ocrRes.parsed_tables.team_scores
-              : [];
+            ? ocrRes.parsed_tables.team_scores
+            : [];
 
           const homeScoreItem = teamScoresArr.find(
             (t: any) => t.is_home === true || String(t.team || '').toUpperCase().includes('CELTIC')
@@ -226,33 +243,55 @@ export const CreateMatch: React.FC = () => {
             (t: any) => t.is_home === false || String(t.team || '').toUpperCase().includes('HAWK')
           );
 
-          const hName = (finalHome || homeScoreItem?.team || 'CSSAC').toUpperCase();
-          const aName = (finalAway || awayScoreItem?.team || 'CBSUA').toUpperCase();
+          const ocrHomeName = String(
+            ocrRes?.match_info?.home_team_name ||
+            ocrRes?.match_info?.home_team ||
+            homeScoreItem?.team ||
+            'CELTICS'
+          ).toUpperCase();
+
+          const ocrAwayName = String(
+            ocrRes?.match_info?.opponent_team_name ||
+            ocrRes?.match_info?.away_team ||
+            awayScoreItem?.team ||
+            'HAWKS'
+          ).toUpperCase();
+
+          const hName = finalHome.toUpperCase();
+          const aName = finalAway.toUpperCase();
 
           const totalPlayers = rawPlayers.length;
           const halfCount = Math.ceil(totalPlayers / 2);
 
-          const hRows: BoxScoreRow[] = [];
-          const aRows: BoxScoreRow[] = [];
-
           rawPlayers.forEach((p: any, idx: number) => {
-            let resolvedTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
-            if (!resolvedTeam) {
-              resolvedTeam = idx < halfCount ? aName : hName;
+            const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
+            let isHome = false;
+            if (rawTeam) {
+              if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam) || rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)) {
+                isHome = true;
+              } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam) || rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)) {
+                isHome = false;
+              } else {
+                isHome = idx >= halfCount;
+              }
+            } else {
+              isHome = idx >= halfCount;
             }
+
+            const resolvedTeam = isHome ? hName : aName;
 
             const jersey = p.jersey_number !== undefined && p.jersey_number !== null
               ? String(p.jersey_number).padStart(2, '0')
               : String(idx + 1).padStart(2, '0');
 
-            const fullName = String(p.player_name || `PLAYER ${jersey}`).toUpperCase();
+            const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
             const fga = Number(p.fg_attempted || p.fga || 0);
             const fgm = Number(p.fg_made || p.fgm || 0);
             const fgPct = p.true_shooting_pct
               ? `${Math.round(p.true_shooting_pct)}%`
               : fga > 0
-                ? `${Math.round((fgm / fga) * 100)}%`
-                : '50%';
+              ? `${Math.round((fgm / fga) * 100)}%`
+              : '50%';
 
             const row: BoxScoreRow = {
               jersey_no: jersey,
@@ -269,82 +308,128 @@ export const CreateMatch: React.FC = () => {
               ft_pct: p.ft_pct ? `${p.ft_pct}%` : '0.0%',
             };
 
-            if (resolvedTeam === hName || (!resolvedTeam && idx >= halfCount)) {
+            if (isHome) {
               hRows.push(row);
             } else {
               aRows.push(row);
             }
+
+            playerStatsPayload.push({
+              athlete_id: `ath_ocr_${idx + 1}`,
+              player_name: fullName,
+              team_name: resolvedTeam,
+              jersey_number: Number(jersey),
+              position: p.position || 'G',
+              stats: {
+                points: Number(p.points ?? p.pts ?? 0),
+                rebounds: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
+                assists: Number(p.assists ?? p.ast ?? 0),
+                steals: Number(p.steals ?? p.stl ?? 0),
+                blocks: Number(p.blocks ?? p.blk ?? 0),
+                turnovers: Number(p.turnovers ?? p.to ?? 0),
+                fouls: Number(p.fouls ?? p.pf ?? 0),
+                fg_made: fgm,
+                fg_attempted: fga,
+                ft_made: Number(p.ft_made ?? 0),
+                ft_attempted: Number(p.ft_attempted ?? 0),
+              },
+            });
           });
 
-          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
-          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
-
-          const cachedDetail: MatchAuditDetail = {
-            match_id: cleanMatchId,
-            validation_id: cleanMatchId,
-            game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
-            sport_type: normalizedSport,
-            league_class: `${normalizedSport.toUpperCase()} • OFFICIAL MATCH`,
-            match_date_formatted: displayTime ? `${displayDate} / ${displayTime}` : displayDate,
-            home_team: {
-              name: hName,
-              score: hSum,
-              result: hSum >= aSum ? 'WIN' : 'LOSE',
-              roster_stats: hRows,
-              team_totals: {
-                jersey_no: '',
-                player_name: 'TEAM TOTALS',
-                minutes: '0',
-                pts: hSum,
-                reb: hRows.reduce((a, b) => a + b.reb, 0),
-                ast: hRows.reduce((a, b) => a + b.ast, 0),
-                stl: hRows.reduce((a, b) => a + b.stl, 0),
-                blk: hRows.reduce((a, b) => a + b.blk, 0),
-                fg_pct: '48.8%',
-                three_p_pct: '28.5%',
-                ft_pct: '78.0%',
-              },
-            },
-            away_team: {
-              name: aName,
-              score: aSum,
-              result: aSum > hSum ? 'WIN' : 'LOSE',
-              roster_stats: aRows,
-              team_totals: {
-                jersey_no: '',
-                player_name: 'TEAM TOTALS',
-                minutes: '0',
-                pts: aSum,
-                reb: aRows.reduce((a, b) => a + b.reb, 0),
-                ast: aRows.reduce((a, b) => a + b.ast, 0),
-                stl: aRows.reduce((a, b) => a + b.stl, 0),
-                blk: aRows.reduce((a, b) => a + b.blk, 0),
-                fg_pct: '48.8%',
-                three_p_pct: '28.5%',
-                ft_pct: '78.0%',
-              },
-            },
-            race_results: [],
-            scoresheet_url: ocrRes?.scoresheet_url || undefined,
-            audit_context_notes: '',
-            is_certified: false,
-            assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
-            coach_name: coaches[0]?.trim() || undefined,
-          };
-
-          setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
-        } catch (uploadErr) {
-          console.warn('Scoresheet OCR upload during match creation error:', uploadErr);
+          hSum = hRows.reduce((a, b) => a + b.pts, 0);
+          aSum = aRows.reduce((a, b) => a + b.pts, 0);
+        } catch (scanErr) {
+          console.warn('Scoresheet OCR scan error during match creation:', scanErr);
         }
       }
 
-      if (cleanMatchId) {
-        navigate(`/matches/${cleanMatchId}`);
-        return;
+      // 2. Create official match directly with player stats and scoresheet URL attached
+      const createdMatch = await createOfficialMatch({
+        team_id: finalHome,
+        home_team_name: finalHome,
+        opponent_team_name: finalAway,
+        sport_type: normalizedSport,
+        match_date: isoDate,
+        location: venueLocation,
+        venue: venueLocation,
+        court_number: 1,
+        participating_teams: participating,
+        game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+        coaches: coaches.map((c) => c.trim()).filter(Boolean),
+        scoresheet_url: scoresheetUrl,
+        player_stats: playerStatsPayload,
+        home_score: hSum > 0 ? hSum : undefined,
+        away_score: aSum > 0 ? aSum : undefined,
+        game_result: hSum > 0 || aSum > 0 ? (hSum >= aSum ? 'WIN' : 'LOSS') : undefined,
+      } as any);
+
+      const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
+      const cleanMatchId = rawMatchId ? String(rawMatchId).replace(/^#/, '') : '';
+
+      const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+      const displayTime = matchTime
+        ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
+        : '';
+
+      if (cleanMatchId && hRows.length > 0) {
+        const cachedDetail: MatchAuditDetail = {
+          match_id: cleanMatchId,
+          validation_id: cleanMatchId,
+          game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+          sport_type: normalizedSport,
+          league_class: `${normalizedSport.toUpperCase()} • OFFICIAL MATCH`,
+          match_date_formatted: displayTime ? `${displayDate} / ${displayTime}` : displayDate,
+          home_team: {
+            name: finalHome.toUpperCase(),
+            score: hSum,
+            result: hSum >= aSum ? 'WIN' : 'LOSE',
+            roster_stats: hRows,
+            team_totals: {
+              jersey_no: '',
+              player_name: 'TEAM TOTALS',
+              minutes: '0',
+              pts: hSum,
+              reb: hRows.reduce((a, b) => a + b.reb, 0),
+              ast: hRows.reduce((a, b) => a + b.ast, 0),
+              stl: hRows.reduce((a, b) => a + b.stl, 0),
+              blk: hRows.reduce((a, b) => a + b.blk, 0),
+              fg_pct: '48.8%',
+              three_p_pct: '28.5%',
+              ft_pct: '78.0%',
+            },
+          },
+          away_team: {
+            name: finalAway.toUpperCase(),
+            score: aSum,
+            result: aSum > hSum ? 'WIN' : 'LOSE',
+            roster_stats: aRows,
+            team_totals: {
+              jersey_no: '',
+              player_name: 'TEAM TOTALS',
+              minutes: '0',
+              pts: aSum,
+              reb: aRows.reduce((a, b) => a + b.reb, 0),
+              ast: aRows.reduce((a, b) => a + b.ast, 0),
+              stl: aRows.reduce((a, b) => a + b.stl, 0),
+              blk: aRows.reduce((a, b) => a + b.blk, 0),
+              fg_pct: '48.8%',
+              three_p_pct: '28.5%',
+              ft_pct: '78.0%',
+            },
+          },
+          race_results: [],
+          scoresheet_url: scoresheetUrl,
+          audit_context_notes: '',
+          is_certified: false,
+          assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
+          coach_name: coaches[0]?.trim() || undefined,
+        };
+
+        setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
       }
 
       setCreatedMatchInfo({
-        matchId: `#${cleanMatchId}`,
+        matchId: cleanMatchId ? `#${cleanMatchId}` : `#match_${Date.now()}`,
         sport: normalizedSport,
         matchDate: displayTime ? `${displayDate} • ${displayTime}` : displayDate,
         teams: participating,
@@ -373,7 +458,7 @@ export const CreateMatch: React.FC = () => {
 
           {errorMessage && <div style={styles.errorNotice}>{errorMessage}</div>}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             {/* Section 01: GENERAL MATCH DETAILS */}
             <div style={styles.sectionCard}>
               <div style={styles.sectionHeaderRow}>
@@ -403,9 +488,9 @@ export const CreateMatch: React.FC = () => {
                     className="hover-input"
                     style={styles.select}
                   >
-                    {availableSports.map((s) => (
-                      <option key={s.sport_id || s.sport_name} value={s.sport_name}>
-                        {s.sport_name}
+                    {sportsList.map((sport) => (
+                      <option key={sport} value={sport}>
+                        {sport}
                       </option>
                     ))}
                   </select>
