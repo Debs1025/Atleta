@@ -71,7 +71,7 @@ export const ScoresheetMatch: React.FC = () => {
     }
 
     try {
-      const data = await getMatchAuditDetail(cleanId, false);
+      const data = await getMatchAuditDetail(cleanId, true);
       if (data) {
         setMatchData((prev) => {
           const prevHome = prev?.home_team?.roster_stats || [];

@@ -799,6 +799,7 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
+        match_id: (payload as any).match_id,
         team_id: home,
         home_team_id: home,
         home_team_name: home,
@@ -1510,7 +1511,13 @@ export const getMatchAuditDetail = async (
         team_totals: finalAwayTotals,
       },
       race_results: finalRaceResults,
-      scoresheet_url: (typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim() ? match.scoresheet_url.trim() : (typeof pendingVal?.scoresheet_url === 'string' ? pendingVal.scoresheet_url.trim() : existingCached?.scoresheet_url)),
+      scoresheet_url:
+        (typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim()) ||
+        (typeof details.scoresheet_url === 'string' && details.scoresheet_url.trim()) ||
+        (typeof boxscore.scoresheet_url === 'string' && boxscore.scoresheet_url.trim()) ||
+        (typeof pendingVal?.scoresheet_url === 'string' && pendingVal.scoresheet_url.trim()) ||
+        existingCached?.scoresheet_url ||
+        undefined,
       audit_context_notes: typeof match.notes === 'string'
         ? match.notes
         : Array.isArray(match.notes) && match.notes.length > 0

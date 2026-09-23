@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Info,
   Users,
@@ -25,10 +25,12 @@ import { styles } from './styles/createMatch';
 
 export const CreateMatch: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryMatchId = searchParams.get('match_id') || searchParams.get('matchId') || '';
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [gameName, setGameName] = useState('');
+  const [gameName, setGameName] = useState(() => (queryMatchId ? queryMatchId.toUpperCase() : ''));
   const [sportCategory, setSportCategory] = useState('Basketball');
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
@@ -71,6 +73,12 @@ export const CreateMatch: React.FC = () => {
     getMe().then((res) => setUser(res)).catch(() => {});
     fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
   }, [navigate]);
+
+  useEffect(() => {
+    if (queryMatchId && !gameName) {
+      setGameName(queryMatchId.toUpperCase());
+    }
+  }, [queryMatchId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -310,7 +318,10 @@ export const CreateMatch: React.FC = () => {
       }
 
       // 2. Create official match directly with player stats and scoresheet URL attached
+      const targetMatchId = queryMatchId ? queryMatchId.toUpperCase() : (/^MATCH-\d+$/i.test(gameName.trim()) ? gameName.trim().toUpperCase() : undefined);
+
       const createdMatch = await createOfficialMatch({
+        match_id: targetMatchId,
         team_id: finalHome,
         home_team_name: finalHome,
         opponent_team_name: finalAway,
@@ -329,7 +340,7 @@ export const CreateMatch: React.FC = () => {
         game_result: hSum > 0 || aSum > 0 ? (hSum >= aSum ? 'WIN' : 'LOSS') : undefined,
       } as any);
 
-      const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
+      const rawMatchId = targetMatchId || createdMatch?.match?.match_id || createdMatch?.match_id;
       const cleanMatchId = rawMatchId ? String(rawMatchId).replace(/^#/, '') : '';
 
       const displayDate = new Date(isoDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
@@ -442,7 +453,7 @@ export const CreateMatch: React.FC = () => {
                   <label style={styles.fieldLabel}>GAME NAME / REFERENCE ID</label>
                   <input
                     type="text"
-                    placeholder="E.G. CHAMPIONSHIP-2026-001"
+                    placeholder="E.G. MATCH-003 OR CHAMPIONSHIP-2026-001"
                     value={gameName}
                     onChange={(e) => setGameName(e.target.value)}
                     className="hover-input"
