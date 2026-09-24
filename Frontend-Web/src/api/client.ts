@@ -143,6 +143,21 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
   const password = payload.password;
 
   try {
+    const res = await fetch(`${BASE_URL}/officials/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) {
+      const data = await handleResponse<AuthResponse>(res);
+      if (data.token && data.user) {
+        storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+      }
+      return data;
+    }
+  } catch { }
+
+  try {
     const res = await fetch(`${BASE_URL}/users/official/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
