@@ -1333,36 +1333,55 @@ export const getMatchAuditDetail = async (
     const pendingVal = Array.isArray(pendingRes) ? pendingRes.find((p: any) => p.match_id === matchId) : null;
     const validationId = pendingVal?.validation_id || match?.validation_id || matchId;
 
+    const scoresheetTeams: string[] = (
+      match.scoresheet_data?.team_scores ||
+      match.parsed_tables?.team_scores ||
+      details.scoresheet_data?.team_scores ||
+      details.parsed_tables?.team_scores ||
+      []
+    ).map((t: any) => String(t.team || t.team_name || '').trim()).filter(Boolean);
+
+    const scoresheetHome = match.scoresheet_data?.match_info?.home_team_name ||
+      match.scoresheet_data?.match_info?.home_team ||
+      match.parsed_tables?.match_info?.home_team_name ||
+      match.parsed_tables?.match_info?.home_team ||
+      (scoresheetTeams.length > 0 ? scoresheetTeams[0] : null);
+
+    const scoresheetAway = match.scoresheet_data?.match_info?.opponent_team_name ||
+      match.scoresheet_data?.match_info?.away_team_name ||
+      match.scoresheet_data?.match_info?.away_team ||
+      match.parsed_tables?.match_info?.opponent_team_name ||
+      match.parsed_tables?.match_info?.away_team ||
+      (scoresheetTeams.length > 1 ? scoresheetTeams[1] : null);
+
     const playerMetrics: any[] = boxscore.player_metrics || details.player_metrics || match.player_stats || [];
 
     const distinctTeams: string[] = Array.from(
       new Set(
         playerMetrics
           .map((p: any) => String(p.team_name || p.team || '').trim())
-          .filter((t: string) => Boolean(t) && t.toUpperCase() !== 'HOME TEAM' && t.toUpperCase() !== 'AWAY TEAM' && t.toUpperCase() !== 'CSSAC' && t.toUpperCase() !== 'CBSUA')
+          .filter((t: string) => Boolean(t) && t.toUpperCase() !== 'HOME TEAM' && t.toUpperCase() !== 'AWAY TEAM' && t.toUpperCase() !== 'TEAM A' && t.toUpperCase() !== 'TEAM B')
       )
     );
-
-    const scoresheetHome = match.scoresheet_data?.match_info?.home_team || match.parsed_tables?.match_info?.home_team;
-    const scoresheetAway = match.scoresheet_data?.match_info?.away_team || match.parsed_tables?.match_info?.away_team;
 
     const homeTeamName = (
       scoresheetHome ||
       (distinctTeams.length > 0 ? distinctTeams[0] : null) ||
-      (match.home_team_name && match.home_team_name !== 'CSSAC' && match.home_team_name !== 'Home Team' ? match.home_team_name : null) ||
-      (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' && match.team_summary.team_name !== 'CSSAC' ? match.team_summary.team_name : null) ||
+      (match.home_team_name && match.home_team_name !== 'Home Team' ? match.home_team_name : null) ||
+      (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' ? match.team_summary.team_name : null) ||
       match.home_team_id ||
       match.team_id ||
-      'CELTICS'
+      'HOME TEAM'
     ).toUpperCase();
 
     const awayTeamName = (
       scoresheetAway ||
       (distinctTeams.length > 1 ? distinctTeams[1] : null) ||
-      (match.opponent_team_name && match.opponent_team_name !== 'CBSUA' && match.opponent_team_name !== 'Away Team' ? match.opponent_team_name : null) ||
-      (match.away_team_name && match.away_team_name !== 'CBSUA' && match.away_team_name !== 'Away Team' ? match.away_team_name : null) ||
+      match.opponent_team_name ||
+      match.away_team_name ||
       match.away_team_id ||
-      'HAWKS'
+      match.team_summary?.opponent_team_name ||
+      'AWAY TEAM'
     ).toUpperCase();
     const sportType = match.sport_type || 'Basketball';
     const leagueClass = match.match_type
@@ -1508,31 +1527,37 @@ export const getMatchAuditDetail = async (
     let finalHomeRoster = homePlayers.length > 0 ? homePlayers : (existingCached?.home_team?.roster_stats || []);
     let finalAwayRoster = awayPlayers.length > 0 ? awayPlayers : (existingCached?.away_team?.roster_stats || []);
 
-    if (finalHomeRoster.length === 0 && !isIndividual) {
-      finalHomeRoster = [
-        { jersey_no: '00', player_name: 'J. TATUM (F)', position: 'F', minutes: '38', pts: 34, reb: 11, ast: 6, stl: 2, blk: 1, fg_pct: '54.5%', three_p_pct: '44.4%', ft_pct: '85.7%' },
-        { jersey_no: '07', player_name: 'J. BROWN (G)', position: 'G', minutes: '36', pts: 28, reb: 7, ast: 4, stl: 1, blk: 1, fg_pct: '52.6%', three_p_pct: '42.9%', ft_pct: '83.3%' },
-        { jersey_no: '08', player_name: 'K. PORZINGIS (C)', position: 'C', minutes: '32', pts: 21, reb: 9, ast: 2, stl: 0, blk: 3, fg_pct: '50.0%', three_p_pct: '40.0%', ft_pct: '100%' },
-        { jersey_no: '09', player_name: 'D. WHITE (G)', position: 'G', minutes: '34', pts: 14, reb: 4, ast: 7, stl: 3, blk: 2, fg_pct: '45.5%', three_p_pct: '33.3%', ft_pct: '100%' },
-        { jersey_no: '04', player_name: 'J. HOLIDAY (G)', position: 'G', minutes: '33', pts: 10, reb: 5, ast: 8, stl: 2, blk: 1, fg_pct: '44.4%', three_p_pct: '25.0%', ft_pct: '50.0%' },
-      ];
-    }
-
-    if (finalAwayRoster.length === 0 && !isIndividual) {
-      finalAwayRoster = [
-        { jersey_no: '11', player_name: 'T. YOUNG (G)', position: 'G', minutes: '39', pts: 35, reb: 3, ast: 12, stl: 2, blk: 0, fg_pct: '45.8%', three_p_pct: '45.5%', ft_pct: '88.9%' },
-        { jersey_no: '05', player_name: 'D. MURRAY (G)', position: 'G', minutes: '37', pts: 24, reb: 6, ast: 7, stl: 3, blk: 1, fg_pct: '45.0%', three_p_pct: '33.3%', ft_pct: '100%' },
-        { jersey_no: '12', player_name: 'D. HUNTER (F)', position: 'F', minutes: '31', pts: 18, reb: 5, ast: 2, stl: 1, blk: 0, fg_pct: '46.2%', three_p_pct: '50.0%', ft_pct: '75.0%' },
-        { jersey_no: '15', player_name: 'C. CAPELA (C)', position: 'C', minutes: '29', pts: 14, reb: 13, ast: 1, stl: 1, blk: 2, fg_pct: '75.0%', three_p_pct: '0.0%', ft_pct: '50.0%' },
-        { jersey_no: '41', player_name: 'S. BEY (F)', position: 'F', minutes: '30', pts: 12, reb: 6, ast: 3, stl: 1, blk: 0, fg_pct: '40.0%', three_p_pct: '40.0%', ft_pct: '100%' },
-      ];
+    const fallbackOcrPlayers: any[] = (
+      match.scoresheet_data?.player_summary ||
+      match.parsed_tables?.player_summary ||
+      details.scoresheet_data?.player_summary ||
+      details.parsed_tables?.player_summary ||
+      []
+    );
+    if ((finalHomeRoster.length === 0 || finalAwayRoster.length === 0) && fallbackOcrPlayers.length > 0) {
+      const halfFallback = Math.ceil(fallbackOcrPlayers.length / 2);
+      const hFall: import('./types').BoxScoreRow[] = [];
+      const aFall: import('./types').BoxScoreRow[] = [];
+      fallbackOcrPlayers.forEach((p: any, idx: number) => {
+        const rawT = (p.team_name || p.team || '').toUpperCase();
+        const isHome = rawT ? (rawT === homeTeamName || rawT.includes(homeTeamName) || homeTeamName.includes(rawT)) : idx >= halfFallback;
+        const row = mapPlayerToRow(p, idx);
+        if (isHome) hFall.push(row);
+        else aFall.push(row);
+      });
+      if (finalHomeRoster.length === 0 && hFall.length > 0) finalHomeRoster = hFall;
+      if (finalAwayRoster.length === 0 && aFall.length > 0) finalAwayRoster = aFall;
     }
 
     const finalRaceResults = raceResults.length > 0 ? raceResults : (existingCached?.race_results || []);
     const computedHomePts = finalHomeRoster.reduce((a, b) => a + b.pts, 0);
     const computedAwayPts = finalAwayRoster.reduce((a, b) => a + b.pts, 0);
-    const finalHomeScore = homeScore > 0 ? homeScore : (computedHomePts > 0 ? computedHomePts : 107);
-    const finalAwayScore = awayScore > 0 ? awayScore : (computedAwayPts > 0 ? computedAwayPts : 103);
+    const finalHomeScore = (homeScore !== undefined && homeScore !== null && Number(homeScore) > 0)
+      ? Number(homeScore)
+      : (computedHomePts > 0 ? computedHomePts : 0);
+    const finalAwayScore = (awayScore !== undefined && awayScore !== null && Number(awayScore) > 0)
+      ? Number(awayScore)
+      : (computedAwayPts > 0 ? computedAwayPts : 0);
 
     const finalHomeTotals = computeTotals(finalHomeRoster, finalHomeScore);
     const finalAwayTotals = computeTotals(finalAwayRoster, finalAwayScore);
@@ -1765,7 +1790,31 @@ export const scanScoresheetClientDirect = async (
 
   let ocrResult: any = null;
 
-  // 1. Try direct client-side Gemini Vision OCR call with waterfall
+  // 1. Try backend standalone scan endpoint first (uses Sharp preprocessing and server waterfall)
+  try {
+    const formData = new FormData();
+    formData.append('file', rawFile);
+    formData.append('scoresheet', rawFile);
+    const token = getStoredToken();
+    const backendRes = await fetch(`${BASE_URL}/matches/scan-scoresheet`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (backendRes.ok) {
+      const data = await backendRes.json();
+      if (data && (Array.isArray(data.player_summary) || Array.isArray(data.team_scores))) {
+        return {
+          scoresheet_url: data.scoresheet_url || dataUrl,
+          ...data,
+        };
+      }
+    }
+  } catch (backendErr) {
+    console.warn('Backend scan-scoresheet unreachable, trying direct client AI call:', backendErr);
+  }
+
+  // 2. Try direct client-side Gemini Vision OCR call with waterfall
   if (base64Data && geminiKey) {
     const modelsToTry = [
       'gemini-3.5-flash',
@@ -1774,36 +1823,42 @@ export const scanScoresheetClientDirect = async (
       'gemini-flash-latest',
       'gemini-3.7-flash',
       'gemini-pro-latest',
+      'gemini-2.5-pro',
     ];
 
-    const promptText = `Extract all sports data from this scoresheet image with complete fidelity into structured JSON:
+    const promptText = `You are an expert sports scoresheet OCR and data extraction system.
+Carefully examine the provided document image.
+Extract the match overview, exact team names from the header/team blocks, final scores, and all individual athlete statistics into this strict JSON structure:
 {
   "match_info": {
-    "home_team": "Home Team Name",
-    "away_team": "Away Team Name",
-    "home_score": 107,
-    "away_score": 103
+    "sport_type": "${sport}",
+    "event_name": "League / Event Name",
+    "home_team_name": "Home Team Name",
+    "opponent_team_name": "Opponent Team Name",
+    "game_result": "WIN",
+    "final_score": "0 - 0"
   },
   "team_scores": [
-    {"team": "Home Team Name", "score": 107, "is_home": true},
-    {"team": "Away Team Name", "score": 103, "is_home": false}
+    {"team": "HomeTeamName", "score": 0, "is_home": true},
+    {"team": "AwayTeamName", "score": 0, "is_home": false}
   ],
   "player_summary": [
     {
-      "player_name": "Player Name",
-      "jersey_number": 7,
-      "team_name": "Team Name",
-      "position": "PG",
-      "points": 16,
-      "rebounds": 4,
-      "assists": 5,
-      "steals": 2,
+      "player_name": "Full Name",
+      "jersey_number": 0,
+      "team_name": "TeamName",
+      "position": "G",
+      "points": 0,
+      "rebounds": 0,
+      "assists": 0,
+      "steals": 0,
       "blocks": 0,
-      "fouls": 2,
-      "fg_made": 6,
-      "fg_attempted": 12,
-      "ft_made": 4,
-      "ft_attempted": 4
+      "turnovers": 0,
+      "fouls": 0,
+      "fg_made": 0,
+      "fg_attempted": 0,
+      "ft_made": 0,
+      "ft_attempted": 0
     }
   ]
 }
@@ -1813,7 +1868,7 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         const res = await fetch(geminiUrl, {
           method: 'POST',

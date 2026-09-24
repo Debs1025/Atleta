@@ -78,26 +78,15 @@ export const ScoresheetMatch: React.FC = () => {
           const prevAway = prev?.away_team?.roster_stats || [];
           const dataHome = data.home_team?.roster_stats || [];
           const dataAway = data.away_team?.roster_stats || [];
-          const detectedHome = (dataHome[0] as any)?.team_name || (dataHome[0] as any)?.team || (prevHome[0] as any)?.team_name;
-          const detectedAway = (dataAway[0] as any)?.team_name || (dataAway[0] as any)?.team || (prevAway[0] as any)?.team_name;
-          const finalHomeName = (detectedHome && detectedHome !== 'Home Team' && detectedHome !== 'CSSAC')
-            ? String(detectedHome).toUpperCase()
-            : (data.home_team.name && data.home_team.name !== 'CSSAC' && data.home_team.name !== 'Home Team' ? data.home_team.name : (prev?.home_team?.name || 'CELTICS'));
-          const finalAwayName = (detectedAway && detectedAway !== 'Away Team' && detectedAway !== 'CBSUA')
-            ? String(detectedAway).toUpperCase()
-            : (data.away_team.name && data.away_team.name !== 'CBSUA' && data.away_team.name !== 'Away Team' ? data.away_team.name : (prev?.away_team?.name || 'HAWKS'));
 
           return {
             ...data,
-            game_name: `${finalHomeName} vs ${finalAwayName}`,
             home_team: {
               ...data.home_team,
-              name: finalHomeName,
               roster_stats: dataHome.length > 0 ? dataHome : prevHome,
             },
             away_team: {
               ...data.away_team,
-              name: finalAwayName,
               roster_stats: dataAway.length > 0 ? dataAway : prevAway,
             },
           };
@@ -262,6 +251,19 @@ export const ScoresheetMatch: React.FC = () => {
               score: hSum,
               result: hSum >= aSum ? 'WIN' : 'LOSE',
               roster_stats: hRows,
+              team_totals: {
+                jersey_no: '',
+                player_name: 'TEAM TOTALS',
+                minutes: '0',
+                pts: hSum,
+                reb: hRows.reduce((a, b) => a + b.reb, 0),
+                ast: hRows.reduce((a, b) => a + b.ast, 0),
+                stl: hRows.reduce((a, b) => a + b.stl, 0),
+                blk: hRows.reduce((a, b) => a + b.blk, 0),
+                fg_pct: '0.0%',
+                three_p_pct: '0.0%',
+                ft_pct: '0.0%',
+              },
             },
             away_team: {
               ...prev.away_team,
@@ -269,6 +271,19 @@ export const ScoresheetMatch: React.FC = () => {
               score: aSum,
               result: aSum > hSum ? 'WIN' : 'LOSE',
               roster_stats: aRows,
+              team_totals: {
+                jersey_no: '',
+                player_name: 'TEAM TOTALS',
+                minutes: '0',
+                pts: aSum,
+                reb: aRows.reduce((a, b) => a + b.reb, 0),
+                ast: aRows.reduce((a, b) => a + b.ast, 0),
+                stl: aRows.reduce((a, b) => a + b.stl, 0),
+                blk: aRows.reduce((a, b) => a + b.blk, 0),
+                fg_pct: '0.0%',
+                three_p_pct: '0.0%',
+                ft_pct: '0.0%',
+              },
             },
           };
           setCachedData(`match_audit_detail_${cleanId}`, updated);
