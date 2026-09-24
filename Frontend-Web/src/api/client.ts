@@ -1503,12 +1503,12 @@ export const getMatchAuditDetail = async (
     const finalRaceResults = raceResults;
     const computedHomePts = finalHomeRoster.reduce((a, b) => a + b.pts, 0);
     const computedAwayPts = finalAwayRoster.reduce((a, b) => a + b.pts, 0);
-    const finalHomeScore = (homeScore !== undefined && homeScore !== null && Number(homeScore) > 0)
-      ? Number(homeScore)
-      : (computedHomePts > 0 ? computedHomePts : 0);
-    const finalAwayScore = (awayScore !== undefined && awayScore !== null && Number(awayScore) > 0)
-      ? Number(awayScore)
-      : (computedAwayPts > 0 ? computedAwayPts : 0);
+    const finalHomeScore = computedHomePts > 0
+      ? computedHomePts
+      : (homeScore !== undefined && homeScore !== null && Number(homeScore) > 0 ? Number(homeScore) : 0);
+    const finalAwayScore = computedAwayPts > 0
+      ? computedAwayPts
+      : (awayScore !== undefined && awayScore !== null && Number(awayScore) > 0 ? Number(awayScore) : 0);
 
     const finalHomeTotals = computeTotals(finalHomeRoster, finalHomeScore);
     const finalAwayTotals = computeTotals(finalAwayRoster, finalAwayScore);
