@@ -242,32 +242,28 @@ export const CreateMatch: React.FC = () => {
           const totalPlayers = rawPlayers.length;
           const halfCount = Math.ceil(totalPlayers / 2);
 
+          // Find distinct team labels inside the OCR players
+          const distinctTeamsInRoster = Array.from(
+            new Set(rawPlayers.map((p: any) => String(p.team_name || p.team || '').trim().toUpperCase()).filter(Boolean))
+          );
+          const firstTeamKey = distinctTeamsInRoster[0] || '';
+
           rawPlayers.forEach((p: any, idx: number) => {
             const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase().trim() : '';
             let isHome = false;
-            if (rawTeam) {
-              if (
-                rawTeam === hName ||
-                rawTeam.includes(hName) ||
-                (ocrHomeName && (rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName))) ||
-                rawTeam.includes('HOME') ||
-                rawTeam.includes('TEAM B')
-              ) {
+
+            if (distinctTeamsInRoster.length >= 2) {
+              isHome = rawTeam === firstTeamKey;
+            } else if (rawTeam && hName !== aName) {
+              if (rawTeam === hName || rawTeam.includes(hName) || (ocrHomeName && (rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)))) {
                 isHome = true;
-              } else if (
-                rawTeam === aName ||
-                rawTeam.includes(aName) ||
-                (ocrAwayName && (rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName))) ||
-                rawTeam.includes('AWAY') ||
-                rawTeam.includes('VISITOR') ||
-                rawTeam.includes('TEAM A')
-              ) {
+              } else if (rawTeam === aName || rawTeam.includes(aName) || (ocrAwayName && (rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)))) {
                 isHome = false;
               } else {
-                isHome = idx >= halfCount;
+                isHome = idx < halfCount;
               }
             } else {
-              isHome = idx >= halfCount;
+              isHome = idx < halfCount;
             }
 
             const resolvedTeam = isHome ? hName : aName;

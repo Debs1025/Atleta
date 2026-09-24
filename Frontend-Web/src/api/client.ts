@@ -1799,7 +1799,7 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         const res = await fetch(geminiUrl, {
           method: 'POST',

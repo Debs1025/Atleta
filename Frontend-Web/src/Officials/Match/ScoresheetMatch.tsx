@@ -183,22 +183,31 @@ export const ScoresheetMatch: React.FC = () => {
         const totalPlayers = rawPlayers.length;
         const halfCount = Math.ceil(totalPlayers / 2);
 
+        // Find distinct team labels inside the OCR players
+        const distinctTeamsInRoster = Array.from(
+          new Set(rawPlayers.map((p: any) => String(p.team_name || p.team || '').trim().toUpperCase()).filter(Boolean))
+        );
+        const firstTeamKey = distinctTeamsInRoster[0] || '';
+
         const hRows: BoxScoreRow[] = [];
         const aRows: BoxScoreRow[] = [];
 
         rawPlayers.forEach((p: any, idx: number) => {
-          const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
+          const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase().trim() : '';
           let isHome = false;
-          if (rawTeam) {
-            if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam) || rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)) {
+
+          if (distinctTeamsInRoster.length >= 2) {
+            isHome = rawTeam === firstTeamKey;
+          } else if (rawTeam && hName !== aName) {
+            if (rawTeam === hName || rawTeam.includes(hName) || (ocrHomeName && (rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)))) {
               isHome = true;
-            } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam) || rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)) {
+            } else if (rawTeam === aName || rawTeam.includes(aName) || (ocrAwayName && (rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)))) {
               isHome = false;
             } else {
-              isHome = idx >= halfCount;
+              isHome = idx < halfCount;
             }
           } else {
-            isHome = idx >= halfCount;
+            isHome = idx < halfCount;
           }
 
           const jersey = p.jersey_number !== undefined && p.jersey_number !== null
