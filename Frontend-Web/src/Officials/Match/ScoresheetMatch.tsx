@@ -17,6 +17,7 @@ import {
   certifyMatchValidation,
   deleteOfficialMatch,
   scanScoresheetClientDirect,
+  uploadScoresheetFile,
   getCachedData,
   setCachedData,
   downloadCertifiedMatchPdf,
@@ -128,7 +129,16 @@ export const ScoresheetMatch: React.FC = () => {
       const aName = (matchData?.away_team?.name || 'Away Team').toUpperCase();
       const sport = matchData?.sport_type || 'Basketball';
 
-      const res = await scanScoresheetClientDirect(file, hName, aName, sport);
+      // Dynamically process OCR and sync to backend Firestore
+      let res: any = null;
+      try {
+        res = await uploadScoresheetFile(cleanId, file);
+      } catch (_) {
+        res = await scanScoresheetClientDirect(file, hName, aName, sport);
+      }
+      if (!res || (!res.player_summary && !res.parsed_tables)) {
+        res = await scanScoresheetClientDirect(file, hName, aName, sport);
+      }
       if (res?.scoresheet_url) setScoresheetUrl(res.scoresheet_url);
 
       // Map real AI-extracted player statistics following mobile OCR logging logic
