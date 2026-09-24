@@ -74,35 +74,14 @@ export const ScoresheetMatch: React.FC = () => {
     try {
       const data = await getMatchAuditDetail(cleanId, true);
       if (data) {
-        setMatchData((prev) => {
-          const prevHome = prev?.home_team?.roster_stats || [];
-          const prevAway = prev?.away_team?.roster_stats || [];
-          const dataHome = data.home_team?.roster_stats || [];
-          const dataAway = data.away_team?.roster_stats || [];
-
-          return {
-            ...data,
-            home_team: {
-              ...data.home_team,
-              roster_stats: dataHome.length > 0 ? dataHome : prevHome,
-            },
-            away_team: {
-              ...data.away_team,
-              roster_stats: dataAway.length > 0 ? dataAway : prevAway,
-            },
-          };
-        });
+        setMatchData(data);
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
         setNotes((prev) => (prev ? prev : resolvedNote));
         if (data.scoresheet_url) setScoresheetUrl(data.scoresheet_url);
-        if (data.home_team?.roster_stats && data.home_team.roster_stats.length > 0) {
-          setHomeRoster(data.home_team.roster_stats);
-        }
-        if (data.away_team?.roster_stats && data.away_team.roster_stats.length > 0) {
-          setAwayRoster(data.away_team.roster_stats);
-        }
+        setHomeRoster(data.home_team?.roster_stats || []);
+        setAwayRoster(data.away_team?.roster_stats || []);
         if (data.race_results && data.race_results.length > 0) {
           setRaceResults(data.race_results);
         }

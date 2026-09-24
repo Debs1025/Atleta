@@ -840,37 +840,14 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         notes: (payload as any).notes || `Official Match: ${home} vs ${away}`,
       }),
     });
-    if (res.ok) {
-      data = await res.json();
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Failed to create official match: ${res.status} ${errText}`);
     }
-  } catch (err) {
-    console.warn('createOfficialMatch API call failed, generating fallback match instance:', err);
-  }
-
-  if (!data || (!data.match && !data.match_id)) {
-    const fallbackId = `match_${Date.now()}`;
-    data = {
-      message: 'Official match instance created successfully.',
-      match_id: fallbackId,
-      match: {
-        match_id: fallbackId,
-        team_id: home,
-        home_team_name: home,
-        opponent_team_name: away,
-        sport_type: normalizedSport,
-        match_date: payload.match_date || new Date().toISOString(),
-        location: location,
-        game_name: payload.game_name || `${home} vs ${away}`,
-        scoresheet_url: (payload as any).scoresheet_url,
-        player_stats: (payload as any).player_stats || [],
-        home_score: (payload as any).home_score || 0,
-        away_score: (payload as any).away_score || 0,
-        game_result: (payload as any).game_result || 'SCHEDULED',
-        is_official: true,
-        is_certified: false,
-        coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
-      },
-    };
+    data = await res.json();
+  } catch (err: any) {
+    console.error('createOfficialMatch API call failed:', err);
+    throw err;
   }
 
   const createdId = data?.match?.match_id || data?.match_id;
@@ -1521,35 +1498,9 @@ export const getMatchAuditDetail = async (
 
     const coachName = match.coach_name || cachedRaw.coach_name || (assignedCoaches.length > 0 ? assignedCoaches.join(', ') : undefined);
 
-    // Preserve existing valid cached rosters / race results if newly mapped rows are empty
-    const existingCached = getCachedData<import('./types').MatchAuditDetail>(cacheKey);
-
-    let finalHomeRoster = homePlayers.length > 0 ? homePlayers : (existingCached?.home_team?.roster_stats || []);
-    let finalAwayRoster = awayPlayers.length > 0 ? awayPlayers : (existingCached?.away_team?.roster_stats || []);
-
-    const fallbackOcrPlayers: any[] = (
-      match.scoresheet_data?.player_summary ||
-      match.parsed_tables?.player_summary ||
-      details.scoresheet_data?.player_summary ||
-      details.parsed_tables?.player_summary ||
-      []
-    );
-    if ((finalHomeRoster.length === 0 || finalAwayRoster.length === 0) && fallbackOcrPlayers.length > 0) {
-      const halfFallback = Math.ceil(fallbackOcrPlayers.length / 2);
-      const hFall: import('./types').BoxScoreRow[] = [];
-      const aFall: import('./types').BoxScoreRow[] = [];
-      fallbackOcrPlayers.forEach((p: any, idx: number) => {
-        const rawT = (p.team_name || p.team || '').toUpperCase();
-        const isHome = rawT ? (rawT === homeTeamName || rawT.includes(homeTeamName) || homeTeamName.includes(rawT)) : idx >= halfFallback;
-        const row = mapPlayerToRow(p, idx);
-        if (isHome) hFall.push(row);
-        else aFall.push(row);
-      });
-      if (finalHomeRoster.length === 0 && hFall.length > 0) finalHomeRoster = hFall;
-      if (finalAwayRoster.length === 0 && aFall.length > 0) finalAwayRoster = aFall;
-    }
-
-    const finalRaceResults = raceResults.length > 0 ? raceResults : (existingCached?.race_results || []);
+    let finalHomeRoster = homePlayers;
+    let finalAwayRoster = awayPlayers;
+    const finalRaceResults = raceResults;
     const computedHomePts = finalHomeRoster.reduce((a, b) => a + b.pts, 0);
     const computedAwayPts = finalAwayRoster.reduce((a, b) => a + b.pts, 0);
     const finalHomeScore = (homeScore !== undefined && homeScore !== null && Number(homeScore) > 0)
@@ -1588,17 +1539,15 @@ export const getMatchAuditDetail = async (
         (typeof match.scoresheet_url === 'string' && match.scoresheet_url.trim()) ||
         (typeof details.scoresheet_url === 'string' && details.scoresheet_url.trim()) ||
         (typeof boxscore.scoresheet_url === 'string' && boxscore.scoresheet_url.trim()) ||
-        (typeof pendingVal?.scoresheet_url === 'string' && pendingVal.scoresheet_url.trim()) ||
-        existingCached?.scoresheet_url ||
-        '/celtics_hawks_scoresheet.jpg',
+        '',
       audit_context_notes: typeof match.notes === 'string'
         ? match.notes
         : Array.isArray(match.notes) && match.notes.length > 0
           ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
-          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : (existingCached?.audit_context_notes || '')),
-      is_certified: Boolean(match.is_certified || match.is_locked || existingCached?.is_certified),
-      assigned_coaches: assignedCoaches.length > 0 ? assignedCoaches : (existingCached?.assigned_coaches || []),
-      coach_name: coachName || existingCached?.coach_name,
+          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : ''),
+      is_certified: Boolean(match.is_certified || match.is_locked),
+      assigned_coaches: assignedCoaches,
+      coach_name: coachName,
     };
 
     setCachedData(cacheKey, result);
@@ -1819,22 +1768,20 @@ export const scanScoresheetClientDirect = async (
     const modelsToTry = [
       'gemini-3.5-flash',
       'gemini-3.5-flash-lite',
-      'gemini-3.6-flash',
       'gemini-flash-latest',
       'gemini-3.7-flash',
-      'gemini-pro-latest',
-      'gemini-2.5-pro',
     ];
 
     const promptText = `You are an expert sports scoresheet OCR and data extraction system.
-Carefully examine the provided document image.
-Extract the match overview, exact team names from the header/team blocks, final scores, and all individual athlete statistics into this strict JSON structure:
+Carefully examine the provided document image/PDF/CSV.
+Context: Sport: ${sport}, Expected Home: ${homeTeam}, Expected Away: ${awayTeam}.
+Extract the match overview, exact team names from the header/team blocks, final scores, and ALL individual athlete statistics into this strict JSON structure:
 {
   "match_info": {
     "sport_type": "${sport}",
     "event_name": "League / Event Name",
-    "home_team_name": "Home Team Name",
-    "opponent_team_name": "Opponent Team Name",
+    "home_team_name": "${homeTeam !== 'Home Team' ? homeTeam : 'Home Team Name'}",
+    "opponent_team_name": "${awayTeam !== 'Away Team' ? awayTeam : 'Opponent Team Name'}",
     "game_result": "WIN",
     "final_score": "0 - 0"
   },
@@ -1862,13 +1809,17 @@ Extract the match overview, exact team names from the header/team blocks, final 
     }
   ]
 }
-Extract EVERY player listed on Team A and Team B with their exact jersey numbers, actual names, and exact points/stats recorded on the sheet. Return ONLY valid JSON.`;
+
+CRITICAL RULES:
+1. You MUST transcribe EVERY player row from BOTH teams shown on the scoresheet into the "player_summary" array.
+2. For each player, include their exact jersey number, actual name, team name, and exact points and stats recorded on the sheet.
+3. Return ONLY valid JSON, nothing else.`;
 
     for (const model of modelsToTry) {
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
 
         const res = await fetch(geminiUrl, {
           method: 'POST',
@@ -1881,7 +1832,13 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
                 { inline_data: { mime_type: mimeType, data: base64Data } }
               ]
             }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 8192,
+              thinkingConfig: {
+                thinkingBudget: 0,
+              },
+            }
           })
         });
         clearTimeout(timeoutId);
@@ -1890,10 +1847,28 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
           const json = await res.json();
           const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
           if (text) {
-            const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-            if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
-              ocrResult = parsed;
-              break;
+            let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+            const firstBrace = clean.indexOf('{');
+            const lastBrace = clean.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+              clean = clean.substring(firstBrace, lastBrace + 1);
+            }
+            try {
+              const parsed = JSON.parse(clean);
+              if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
+                ocrResult = parsed;
+                break;
+              }
+            } catch (pErr) {
+              console.warn('Initial JSON parse attempt failed, trying clean repair:', pErr);
+              clean = clean.replace(/,\s*([\}\]])/g, '$1');
+              try {
+                const parsed = JSON.parse(clean);
+                if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
+                  ocrResult = parsed;
+                  break;
+                }
+              } catch (_) {}
             }
           }
         }
@@ -1903,61 +1878,17 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
     }
   }
 
-  // 2. High-fidelity extraction fallback if external AI call was blocked or timed out
-  if (!ocrResult || !Array.isArray(ocrResult.player_summary) || ocrResult.player_summary.length === 0) {
-    const isSwim = sport.toLowerCase().includes('swim');
-    const isTrack = sport.toLowerCase().includes('track') || sport.toLowerCase().includes('field');
-
-    if (isSwim || isTrack) {
-      const raceResults = [
-        { placement_rank: 1, athlete_name: 'M. PHELPS', team_name: homeTeam, distance: '100m', finish_time: '00:49.82', split_times: ['00:23.90', '00:25.92'], efficiency: 98 },
-        { placement_rank: 2, athlete_name: 'C. DRESSEL', team_name: awayTeam, distance: '100m', finish_time: '00:50.14', split_times: ['00:24.10', '00:26.04'], efficiency: 94 },
-        { placement_rank: 3, athlete_name: 'R. MURPHY', team_name: homeTeam, distance: '100m', finish_time: '00:51.05', split_times: ['00:24.50', '00:26.55'], efficiency: 89 },
-        { placement_rank: 4, athlete_name: 'K. CHALMERS', team_name: awayTeam, distance: '100m', finish_time: '00:51.42', split_times: ['00:24.80', '00:26.62'], efficiency: 86 },
-        { placement_rank: 5, athlete_name: 'A. PEATY', team_name: homeTeam, distance: '100m', finish_time: '00:52.10', split_times: ['00:25.10', '00:27.00'], efficiency: 82 },
-      ];
-      return {
-        scoresheet_url: dataUrl,
-        sport_type: sport,
-        race_results: raceResults,
-        team_scores: [{ team: homeTeam, score: 45 }, { team: awayTeam, score: 38 }],
-        player_summary: [],
-      };
-    }
-
-    const homeRoster = [
-      { player_name: 'J. TATUM', team_name: homeTeam, jersey_number: 0, position: 'F', points: 34, rebounds: 11, assists: 6, steals: 2, blocks: 1, fouls: 2, fg_made: 12, fg_attempted: 22, ft_made: 6, ft_attempted: 7, minutes: '38' },
-      { player_name: 'J. BROWN', team_name: homeTeam, jersey_number: 7, position: 'G', points: 28, rebounds: 7, assists: 4, steals: 1, blocks: 1, fouls: 3, fg_made: 10, fg_attempted: 19, ft_made: 5, ft_attempted: 6, minutes: '36' },
-      { player_name: 'K. PORZINGIS', team_name: homeTeam, jersey_number: 8, position: 'C', points: 21, rebounds: 9, assists: 2, steals: 0, blocks: 3, fouls: 2, fg_made: 7, fg_attempted: 14, ft_made: 5, ft_attempted: 5, minutes: '32' },
-      { player_name: 'D. WHITE', team_name: homeTeam, jersey_number: 9, position: 'G', points: 14, rebounds: 4, assists: 7, steals: 3, blocks: 2, fouls: 1, fg_made: 5, fg_attempted: 11, ft_made: 2, ft_attempted: 2, minutes: '34' },
-      { player_name: 'J. HOLIDAY', team_name: homeTeam, jersey_number: 4, position: 'G', points: 10, rebounds: 5, assists: 8, steals: 2, blocks: 1, fouls: 2, fg_made: 4, fg_attempted: 9, ft_made: 1, ft_attempted: 2, minutes: '33' },
-    ];
-
-    const awayRoster = [
-      { player_name: 'T. YOUNG', team_name: awayTeam, jersey_number: 11, position: 'G', points: 35, rebounds: 3, assists: 12, steals: 2, blocks: 0, fouls: 2, fg_made: 11, fg_attempted: 24, ft_made: 8, ft_attempted: 9, minutes: '39' },
-      { player_name: 'D. MURRAY', team_name: awayTeam, jersey_number: 5, position: 'G', points: 24, rebounds: 6, assists: 7, steals: 3, blocks: 1, fouls: 3, fg_made: 9, fg_attempted: 20, ft_made: 4, ft_attempted: 4, minutes: '37' },
-      { player_name: 'D. HUNTER', team_name: awayTeam, jersey_number: 12, position: 'F', points: 18, rebounds: 5, assists: 2, steals: 1, blocks: 0, fouls: 4, fg_made: 6, fg_attempted: 13, ft_made: 3, ft_attempted: 4, minutes: '31' },
-      { player_name: 'C. CAPELA', team_name: awayTeam, jersey_number: 15, position: 'C', points: 14, rebounds: 13, assists: 1, steals: 1, blocks: 2, fouls: 3, fg_made: 6, fg_attempted: 8, ft_made: 2, ft_attempted: 4, minutes: '29' },
-      { player_name: 'S. BEY', team_name: awayTeam, jersey_number: 41, position: 'F', points: 12, rebounds: 6, assists: 3, steals: 1, blocks: 0, fouls: 2, fg_made: 4, fg_attempted: 10, ft_made: 2, ft_attempted: 2, minutes: '30' },
-    ];
-
-    return {
-      scoresheet_url: dataUrl,
-      team_scores: [
-        { team: homeTeam, score: 107 },
-        { team: awayTeam, score: 103 }
-      ],
-      player_summary: [...homeRoster, ...awayRoster],
-      parsed_tables: {
-        team_scores: [{ team: homeTeam, score: 107 }, { team: awayTeam, score: 103 }],
-        player_summary: [...homeRoster, ...awayRoster],
-      },
-    };
-  }
-
   return {
     scoresheet_url: dataUrl,
-    ...ocrResult,
+    ...(ocrResult || {
+      match_info: {},
+      team_scores: [],
+      player_summary: [],
+      parsed_tables: {
+        team_scores: [],
+        player_summary: [],
+      },
+    }),
   };
 };
 
