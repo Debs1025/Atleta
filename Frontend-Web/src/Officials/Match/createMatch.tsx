@@ -217,53 +217,50 @@ export const CreateMatch: React.FC = () => {
           const homeScoreItem = teamScoresArr.find(
             (t: any) => t.is_home === true || (finalHome && String(t.team || '').toUpperCase().includes(finalHome.toUpperCase()))
           ) || teamScoresArr[0];
+          const awayScoreItem = teamScoresArr.find(
+            (t: any) => t.is_home === false || (finalAway && String(t.team || '').toUpperCase().includes(finalAway.toUpperCase()))
+          ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
+
           const ocrHomeName = String(
             ocrRes?.match_info?.home_team ||
             ocrRes?.match_info?.home_team_name ||
             homeScoreItem?.team ||
-            ''
+            finalHome
           ).toUpperCase().trim();
-
-          const awayScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === false || (finalAway && String(t.team || '').toUpperCase().includes(finalAway.toUpperCase()))
-          ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
 
           const ocrAwayName = String(
             ocrRes?.match_info?.away_team ||
             ocrRes?.match_info?.opponent_team_name ||
             awayScoreItem?.team ||
-            ''
+            finalAway
           ).toUpperCase().trim();
 
-          // Strictly preserve the user's input team names
-          const hName = finalHome.trim().toUpperCase();
-          const aName = finalAway.trim().toUpperCase();
+          if (ocrHomeName && ocrHomeName !== 'HOME TEAM' && ocrHomeName !== 'TEAM B') {
+            finalHome = ocrHomeName;
+          }
+          if (ocrAwayName && ocrAwayName !== 'AWAY TEAM' && ocrAwayName !== 'TEAM A' && ocrAwayName !== 'OPPONENT') {
+            finalAway = ocrAwayName;
+          }
+
+          const hName = finalHome.toUpperCase();
+          const aName = finalAway.toUpperCase();
 
           const totalPlayers = rawPlayers.length;
           const halfCount = Math.ceil(totalPlayers / 2);
 
-          // Find distinct team labels inside the OCR players
-          const distinctTeamsInRoster = Array.from(
-            new Set(rawPlayers.map((p: any) => String(p.team_name || p.team || '').trim().toUpperCase()).filter(Boolean))
-          );
-          const firstTeamKey = distinctTeamsInRoster[0] || '';
-
           rawPlayers.forEach((p: any, idx: number) => {
             const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase().trim() : '';
             let isHome = false;
-
-            if (distinctTeamsInRoster.length >= 2) {
-              isHome = rawTeam === firstTeamKey;
-            } else if (rawTeam && hName !== aName) {
-              if (rawTeam === hName || rawTeam.includes(hName) || (ocrHomeName && (rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)))) {
+            if (rawTeam) {
+              if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam) || rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName) || rawTeam.includes('HOME') || rawTeam.includes('TEAM B')) {
                 isHome = true;
-              } else if (rawTeam === aName || rawTeam.includes(aName) || (ocrAwayName && (rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)))) {
+              } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam) || rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName) || rawTeam.includes('AWAY') || rawTeam.includes('VISITOR') || rawTeam.includes('TEAM A')) {
                 isHome = false;
               } else {
-                isHome = idx < halfCount;
+                isHome = idx >= halfCount;
               }
             } else {
-              isHome = idx < halfCount;
+              isHome = idx >= halfCount;
             }
 
             const resolvedTeam = isHome ? hName : aName;
@@ -308,8 +305,6 @@ export const CreateMatch: React.FC = () => {
               team_name: resolvedTeam,
               jersey_number: Number(jersey),
               position: p.position || 'G',
-              is_home: isHome,
-              team_side: isHome ? 'home' : 'away',
               stats: {
                 points: Number(p.points ?? p.pts ?? 0),
                 rebounds: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),

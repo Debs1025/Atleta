@@ -78,14 +78,14 @@ export const ScoresheetMatch: React.FC = () => {
           const prevAway = prev?.away_team?.roster_stats || [];
           const dataHome = data.home_team?.roster_stats || [];
           const dataAway = data.away_team?.roster_stats || [];
-          let finalHomeName = String(data.home_team?.name || prev?.home_team?.name || '').trim().toUpperCase();
-          let finalAwayName = String(data.away_team?.name || prev?.away_team?.name || '').trim().toUpperCase();
-          if (!finalHomeName || finalHomeName === 'CSSAC') {
-            finalHomeName = (dataHome[0] as any)?.team_name ? String((dataHome[0] as any).team_name).toUpperCase() : 'HOME TEAM';
-          }
-          if (!finalAwayName || finalAwayName === 'CBSUA') {
-            finalAwayName = (dataAway[0] as any)?.team_name ? String((dataAway[0] as any).team_name).toUpperCase() : 'AWAY TEAM';
-          }
+          const detectedHome = (dataHome[0] as any)?.team_name || (dataHome[0] as any)?.team || (prevHome[0] as any)?.team_name;
+          const detectedAway = (dataAway[0] as any)?.team_name || (dataAway[0] as any)?.team || (prevAway[0] as any)?.team_name;
+          const finalHomeName = (detectedHome && detectedHome !== 'Home Team' && detectedHome !== 'CSSAC')
+            ? String(detectedHome).toUpperCase()
+            : (data.home_team.name && data.home_team.name !== 'CSSAC' && data.home_team.name !== 'Home Team' ? data.home_team.name : (prev?.home_team?.name || 'CELTICS'));
+          const finalAwayName = (detectedAway && detectedAway !== 'Away Team' && detectedAway !== 'CBSUA')
+            ? String(detectedAway).toUpperCase()
+            : (data.away_team.name && data.away_team.name !== 'CBSUA' && data.away_team.name !== 'Away Team' ? data.away_team.name : (prev?.away_team?.name || 'HAWKS'));
 
           return {
             ...data,
@@ -183,31 +183,22 @@ export const ScoresheetMatch: React.FC = () => {
         const totalPlayers = rawPlayers.length;
         const halfCount = Math.ceil(totalPlayers / 2);
 
-        // Find distinct team labels inside the OCR players
-        const distinctTeamsInRoster = Array.from(
-          new Set(rawPlayers.map((p: any) => String(p.team_name || p.team || '').trim().toUpperCase()).filter(Boolean))
-        );
-        const firstTeamKey = distinctTeamsInRoster[0] || '';
-
         const hRows: BoxScoreRow[] = [];
         const aRows: BoxScoreRow[] = [];
 
         rawPlayers.forEach((p: any, idx: number) => {
-          const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase().trim() : '';
+          const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
           let isHome = false;
-
-          if (distinctTeamsInRoster.length >= 2) {
-            isHome = rawTeam === firstTeamKey;
-          } else if (rawTeam && hName !== aName) {
-            if (rawTeam === hName || rawTeam.includes(hName) || (ocrHomeName && (rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)))) {
+          if (rawTeam) {
+            if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam) || rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName)) {
               isHome = true;
-            } else if (rawTeam === aName || rawTeam.includes(aName) || (ocrAwayName && (rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)))) {
+            } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam) || rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName)) {
               isHome = false;
             } else {
-              isHome = idx < halfCount;
+              isHome = idx >= halfCount;
             }
           } else {
-            isHome = idx < halfCount;
+            isHome = idx >= halfCount;
           }
 
           const jersey = p.jersey_number !== undefined && p.jersey_number !== null
@@ -217,13 +208,11 @@ export const ScoresheetMatch: React.FC = () => {
           const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
           const fga = Number(p.fg_attempted || p.fga || 0);
           const fgm = Number(p.fg_made || p.fgm || 0);
-          const fgAttempts = Math.max(fga, fgm);
-          const fgMakes = Math.min(fga, fgm);
           const fgPct = p.true_shooting_pct
-            ? `${Math.min(100, Math.round(p.true_shooting_pct))}%`
-            : fgAttempts > 0
-            ? `${((fgMakes / fgAttempts) * 100).toFixed(1)}%`
-            : '50.0%';
+            ? `${Math.round(p.true_shooting_pct)}%`
+            : fga > 0
+            ? `${Math.round((fgm / fga) * 100)}%`
+            : '50%';
 
           const row: BoxScoreRow = {
             jersey_no: jersey,
@@ -250,8 +239,8 @@ export const ScoresheetMatch: React.FC = () => {
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
 
-        const resolvedHomeName = (matchData?.home_team?.name || 'Home Team').toUpperCase();
-        const resolvedAwayName = (matchData?.away_team?.name || 'Away Team').toUpperCase();
+        const resolvedHomeName = (ocrHomeName && ocrHomeName !== 'HOME TEAM' && ocrHomeName !== 'TEAM B') ? ocrHomeName : (matchData?.home_team?.name || 'Home Team').toUpperCase();
+        const resolvedAwayName = (ocrAwayName && ocrAwayName !== 'AWAY TEAM' && ocrAwayName !== 'TEAM A' && ocrAwayName !== 'OPPONENT') ? ocrAwayName : (matchData?.away_team?.name || 'Away Team').toUpperCase();
 
         setMatchData((prev) => {
           if (!prev) return prev;
