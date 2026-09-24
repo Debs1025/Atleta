@@ -1318,21 +1318,36 @@ export const getMatchAuditDetail = async (
     const pendingVal = Array.isArray(pendingRes) ? pendingRes.find((p: any) => p.match_id === matchId) : null;
     const validationId = pendingVal?.validation_id || match?.validation_id || matchId;
 
+    const playerMetrics: any[] = boxscore.player_metrics || details.player_metrics || match.player_stats || [];
+
+    const distinctTeams: string[] = Array.from(
+      new Set(
+        playerMetrics
+          .map((p: any) => String(p.team_name || p.team || '').trim())
+          .filter((t: string) => Boolean(t) && t.toUpperCase() !== 'HOME TEAM' && t.toUpperCase() !== 'AWAY TEAM' && t.toUpperCase() !== 'CSSAC' && t.toUpperCase() !== 'CBSUA')
+      )
+    );
+
+    const scoresheetHome = match.scoresheet_data?.match_info?.home_team || match.parsed_tables?.match_info?.home_team;
+    const scoresheetAway = match.scoresheet_data?.match_info?.away_team || match.parsed_tables?.match_info?.away_team;
+
     const homeTeamName = (
-      (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' ? match.team_summary.team_name : null) ||
-      match.home_team_name ||
+      scoresheetHome ||
+      (distinctTeams.length > 0 ? distinctTeams[0] : null) ||
+      (match.home_team_name && match.home_team_name !== 'CSSAC' && match.home_team_name !== 'Home Team' ? match.home_team_name : null) ||
+      (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' && match.team_summary.team_name !== 'CSSAC' ? match.team_summary.team_name : null) ||
       match.home_team_id ||
-      (match.team_summary?.team_id && match.team_summary.team_id !== 'Home Team' ? match.team_summary.team_id : null) ||
       match.team_id ||
-      'CSSAC'
+      'CELTICS'
     ).toUpperCase();
 
     const awayTeamName = (
-      match.opponent_team_name ||
-      match.away_team_name ||
+      scoresheetAway ||
+      (distinctTeams.length > 1 ? distinctTeams[1] : null) ||
+      (match.opponent_team_name && match.opponent_team_name !== 'CBSUA' && match.opponent_team_name !== 'Away Team' ? match.opponent_team_name : null) ||
+      (match.away_team_name && match.away_team_name !== 'CBSUA' && match.away_team_name !== 'Away Team' ? match.away_team_name : null) ||
       match.away_team_id ||
-      match.team_summary?.opponent_team_name ||
-      'CBSUA'
+      'HAWKS'
     ).toUpperCase();
     const sportType = match.sport_type || 'Basketball';
     const leagueClass = match.match_type
@@ -1343,8 +1358,6 @@ export const getMatchAuditDetail = async (
     const matchDateFormatted = !isNaN(d.getTime())
       ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()} / ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
       : 'DATE TBD';
-
-    const playerMetrics: any[] = boxscore.player_metrics || details.player_metrics || match.player_stats || [];
 
     // Check if individual sport (Swimming or Track & Field)
     const isIndividual = sportType.toLowerCase().includes('swim') || sportType.toLowerCase().includes('track') || sportType.toLowerCase().includes('field');
