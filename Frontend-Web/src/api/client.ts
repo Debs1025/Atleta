@@ -1748,14 +1748,38 @@ export const scanScoresheetClientDirect = async (
       'gemini-pro-latest',
     ];
 
-    const promptText = `Analyze this sports scoresheet (${sport}). Extract team scores and player statistics in JSON:
+    const promptText = `Extract all sports data from this scoresheet image with complete fidelity into structured JSON:
 {
-  "team_scores": [{"team": "${homeTeam}", "score": 88}, {"team": "${awayTeam}", "score": 82}],
+  "match_info": {
+    "home_team": "Home Team Name",
+    "away_team": "Away Team Name",
+    "home_score": 107,
+    "away_score": 103
+  },
+  "team_scores": [
+    {"team": "Home Team Name", "score": 107, "is_home": true},
+    {"team": "Away Team Name", "score": 103, "is_home": false}
+  ],
   "player_summary": [
-    {"player_name": "Player Name", "team_name": "${homeTeam}", "jersey_number": 0, "points": 18, "rebounds": 6, "assists": 4, "steals": 1, "blocks": 0, "fouls": 2, "fg_made": 7, "fg_attempted": 14, "ft_made": 4, "ft_attempted": 5, "minutes": "32"}
+    {
+      "player_name": "Player Name",
+      "jersey_number": 7,
+      "team_name": "Team Name",
+      "position": "PG",
+      "points": 16,
+      "rebounds": 4,
+      "assists": 5,
+      "steals": 2,
+      "blocks": 0,
+      "fouls": 2,
+      "fg_made": 6,
+      "fg_attempted": 12,
+      "ft_made": 4,
+      "ft_attempted": 4
+    }
   ]
 }
-Return ONLY valid JSON.`;
+Extract EVERY player listed on Team A and Team B with their exact jersey numbers, actual names, and exact points/stats recorded on the sheet. Return ONLY valid JSON.`;
 
     for (const model of modelsToTry) {
       try {

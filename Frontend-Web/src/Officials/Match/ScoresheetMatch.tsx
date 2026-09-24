@@ -228,21 +228,33 @@ export const ScoresheetMatch: React.FC = () => {
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
 
+        const resolvedHomeName = (ocrHomeName && ocrHomeName !== 'HOME TEAM' && ocrHomeName !== 'TEAM B') ? ocrHomeName : (matchData?.home_team?.name || 'Home Team').toUpperCase();
+        const resolvedAwayName = (ocrAwayName && ocrAwayName !== 'AWAY TEAM' && ocrAwayName !== 'TEAM A' && ocrAwayName !== 'OPPONENT') ? ocrAwayName : (matchData?.away_team?.name || 'Away Team').toUpperCase();
+
         setMatchData((prev) => {
           if (!prev) return prev;
-          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
-          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
+          let hSum = hRows.reduce((a, b) => a + b.pts, 0);
+          let aSum = aRows.reduce((a, b) => a + b.pts, 0);
+          if (hSum === 0 && Number(res?.match_info?.home_score) > 0) {
+            hSum = Number(res.match_info.home_score);
+          }
+          if (aSum === 0 && Number(res?.match_info?.away_score) > 0) {
+            aSum = Number(res.match_info.away_score);
+          }
           const updated: MatchAuditDetail = {
             ...prev,
+            game_name: `${resolvedHomeName} vs ${resolvedAwayName}`,
             scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
             home_team: {
               ...prev.home_team,
+              name: resolvedHomeName,
               score: hSum,
               result: hSum >= aSum ? 'WIN' : 'LOSE',
               roster_stats: hRows,
             },
             away_team: {
               ...prev.away_team,
+              name: resolvedAwayName,
               score: aSum,
               result: aSum > hSum ? 'WIN' : 'LOSE',
               roster_stats: aRows,
