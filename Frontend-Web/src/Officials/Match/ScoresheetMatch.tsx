@@ -78,14 +78,8 @@ export const ScoresheetMatch: React.FC = () => {
           const prevAway = prev?.away_team?.roster_stats || [];
           const dataHome = data.home_team?.roster_stats || [];
           const dataAway = data.away_team?.roster_stats || [];
-          const detectedHome = (dataHome[0] as any)?.team_name || (dataHome[0] as any)?.team || (prevHome[0] as any)?.team_name;
-          const detectedAway = (dataAway[0] as any)?.team_name || (dataAway[0] as any)?.team || (prevAway[0] as any)?.team_name;
-          const finalHomeName = (detectedHome && detectedHome !== 'Home Team' && detectedHome !== 'CSSAC')
-            ? String(detectedHome).toUpperCase()
-            : (data.home_team.name && data.home_team.name !== 'CSSAC' && data.home_team.name !== 'Home Team' ? data.home_team.name : (prev?.home_team?.name || 'CELTICS'));
-          const finalAwayName = (detectedAway && detectedAway !== 'Away Team' && detectedAway !== 'CBSUA')
-            ? String(detectedAway).toUpperCase()
-            : (data.away_team.name && data.away_team.name !== 'CBSUA' && data.away_team.name !== 'Away Team' ? data.away_team.name : (prev?.away_team?.name || 'HAWKS'));
+          const finalHomeName = String(data.home_team?.name || prev?.home_team?.name || 'HOME TEAM').toUpperCase();
+          const finalAwayName = String(data.away_team?.name || prev?.away_team?.name || 'AWAY TEAM').toUpperCase();
 
           return {
             ...data,
@@ -239,8 +233,8 @@ export const ScoresheetMatch: React.FC = () => {
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
 
-        const resolvedHomeName = (ocrHomeName && ocrHomeName !== 'HOME TEAM' && ocrHomeName !== 'TEAM B') ? ocrHomeName : (matchData?.home_team?.name || 'Home Team').toUpperCase();
-        const resolvedAwayName = (ocrAwayName && ocrAwayName !== 'AWAY TEAM' && ocrAwayName !== 'TEAM A' && ocrAwayName !== 'OPPONENT') ? ocrAwayName : (matchData?.away_team?.name || 'Away Team').toUpperCase();
+        const resolvedHomeName = (matchData?.home_team?.name || 'Home Team').toUpperCase();
+        const resolvedAwayName = (matchData?.away_team?.name || 'Away Team').toUpperCase();
 
         setMatchData((prev) => {
           if (!prev) return prev;

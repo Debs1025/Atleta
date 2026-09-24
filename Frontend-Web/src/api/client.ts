@@ -1332,22 +1332,23 @@ export const getMatchAuditDetail = async (
     const scoresheetAway = match.scoresheet_data?.match_info?.away_team || match.parsed_tables?.match_info?.away_team;
 
     const homeTeamName = (
+      match.home_team_name ||
+      match.home_team_id ||
+      (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' ? match.team_summary.team_name : null) ||
+      match.team_id ||
       scoresheetHome ||
       (distinctTeams.length > 0 ? distinctTeams[0] : null) ||
-      (match.home_team_name && match.home_team_name !== 'CSSAC' && match.home_team_name !== 'Home Team' ? match.home_team_name : null) ||
-      (match.team_summary?.team_name && match.team_summary.team_name !== 'Home Team' && match.team_summary.team_name !== 'CSSAC' ? match.team_summary.team_name : null) ||
-      match.home_team_id ||
-      match.team_id ||
-      'CELTICS'
+      'HOME TEAM'
     ).toUpperCase();
 
     const awayTeamName = (
+      match.opponent_team_name ||
+      match.away_team_name ||
+      match.away_team_id ||
+      match.team_summary?.opponent_team_name ||
       scoresheetAway ||
       (distinctTeams.length > 1 ? distinctTeams[1] : null) ||
-      (match.opponent_team_name && match.opponent_team_name !== 'CBSUA' && match.opponent_team_name !== 'Away Team' ? match.opponent_team_name : null) ||
-      (match.away_team_name && match.away_team_name !== 'CBSUA' && match.away_team_name !== 'Away Team' ? match.away_team_name : null) ||
-      match.away_team_id ||
-      'HAWKS'
+      'AWAY TEAM'
     ).toUpperCase();
     const sportType = match.sport_type || 'Basketball';
     const leagueClass = match.match_type
