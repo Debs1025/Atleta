@@ -78,8 +78,14 @@ export const ScoresheetMatch: React.FC = () => {
           const prevAway = prev?.away_team?.roster_stats || [];
           const dataHome = data.home_team?.roster_stats || [];
           const dataAway = data.away_team?.roster_stats || [];
-          const finalHomeName = String(data.home_team?.name || prev?.home_team?.name || 'HOME TEAM').toUpperCase();
-          const finalAwayName = String(data.away_team?.name || prev?.away_team?.name || 'AWAY TEAM').toUpperCase();
+          let finalHomeName = String(data.home_team?.name || prev?.home_team?.name || '').trim().toUpperCase();
+          let finalAwayName = String(data.away_team?.name || prev?.away_team?.name || '').trim().toUpperCase();
+          if (!finalHomeName || finalHomeName === 'CSSAC') {
+            finalHomeName = (dataHome[0] as any)?.team_name ? String((dataHome[0] as any).team_name).toUpperCase() : 'HOME TEAM';
+          }
+          if (!finalAwayName || finalAwayName === 'CBSUA') {
+            finalAwayName = (dataAway[0] as any)?.team_name ? String((dataAway[0] as any).team_name).toUpperCase() : 'AWAY TEAM';
+          }
 
           return {
             ...data,
