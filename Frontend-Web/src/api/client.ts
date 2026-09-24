@@ -1655,15 +1655,84 @@ export const readFileAsDataUrl = (file: File): Promise<string> => {
   });
 };
 
+export const compressImageForOcr = (
+  file: File,
+  maxDimension = 1600,
+  quality = 0.85
+): Promise<{ base64Data: string; mimeType: string; dataUrl: string }> => {
+  return new Promise((resolve) => {
+    if (!file.type || !file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+        resolve({
+          base64Data: dataUrl.split(',')[1] || '',
+          mimeType: file.type || 'image/jpeg',
+          dataUrl,
+        });
+      };
+      reader.onerror = () => resolve({ base64Data: '', mimeType: '', dataUrl: '' });
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve({
+            base64Data: compressedDataUrl.split(',')[1] || '',
+            mimeType: 'image/jpeg',
+            dataUrl: compressedDataUrl,
+          });
+          return;
+        }
+        const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
+        resolve({
+          base64Data: rawUrl.split(',')[1] || '',
+          mimeType: file.type || 'image/jpeg',
+          dataUrl: rawUrl,
+        });
+      };
+      img.onerror = () => {
+        const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
+        resolve({
+          base64Data: rawUrl.split(',')[1] || '',
+          mimeType: file.type || 'image/jpeg',
+          dataUrl: rawUrl,
+        });
+      };
+      img.src = typeof e.target?.result === 'string' ? e.target.result : '';
+    };
+    reader.onerror = () => resolve({ base64Data: '', mimeType: '', dataUrl: '' });
+    reader.readAsDataURL(file);
+  });
+};
+
 export const scanScoresheetClientDirect = async (
   rawFile: File,
   homeTeam = 'Home Team',
   awayTeam = 'Away Team',
   sport = 'Basketball'
 ): Promise<any> => {
-  const dataUrl = await readFileAsDataUrl(rawFile);
-  const base64Data = dataUrl.split(',')[1] || '';
-  const mimeType = rawFile.type || 'image/jpeg';
+  const { base64Data, mimeType, dataUrl } = await compressImageForOcr(rawFile);
   const geminiKey = getClientGeminiKey();
 
   let ocrResult: any = null;
@@ -1691,9 +1760,13 @@ Return ONLY valid JSON.`;
     for (const model of modelsToTry) {
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
+
         const res = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             contents: [{
               parts: [
@@ -1704,6 +1777,7 @@ Return ONLY valid JSON.`;
             generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
           })
         });
+        clearTimeout(timeoutId);
 
         if (res.ok) {
           const json = await res.json();
@@ -1717,7 +1791,7 @@ Return ONLY valid JSON.`;
           }
         }
       } catch (err) {
-        console.warn(`Direct client-side Gemini model ${model} failed, trying next:`, err);
+        console.warn(`Direct client-side Gemini model ${model} failed/timed out, trying next:`, err);
       }
     }
   }
