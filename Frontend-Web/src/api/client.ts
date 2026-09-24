@@ -1739,17 +1739,24 @@ export const scanScoresheetClientDirect = async (
 
   let ocrResult: any = null;
 
-  // 1. Try backend standalone scan endpoint first (uses Sharp preprocessing and server waterfall)
+  // 1. Try dedicated Web OCR endpoint first (uses Sharp preprocessing and server waterfall)
   try {
     const formData = new FormData();
     formData.append('file', rawFile);
     formData.append('scoresheet', rawFile);
     const token = getStoredToken();
-    const backendRes = await fetch(`${BASE_URL}/matches/scan-scoresheet`, {
+    let backendRes = await fetch(`${BASE_URL}/matches/web/scan-scoresheet`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
+    if (!backendRes.ok) {
+      backendRes = await fetch(`${BASE_URL}/matches/scan-scoresheet`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+    }
     if (backendRes.ok) {
       const data = await backendRes.json();
       if (data && (Array.isArray(data.player_summary) || Array.isArray(data.team_scores))) {
@@ -1760,7 +1767,7 @@ export const scanScoresheetClientDirect = async (
       }
     }
   } catch (backendErr) {
-    console.warn('Backend scan-scoresheet unreachable, trying direct client AI call:', backendErr);
+    console.warn('Backend web scan-scoresheet unreachable, trying direct client AI call:', backendErr);
   }
 
   // 2. Try direct client-side Gemini Vision OCR call with waterfall
