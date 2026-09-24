@@ -1739,11 +1739,15 @@ export const scanScoresheetClientDirect = async (
 
   let ocrResult: any = null;
 
-  // 1. Try dedicated Web OCR endpoint first (uses Sharp preprocessing and server waterfall)
+  // 1. Try dedicated Web OCR endpoint first (uses pre-optimized blob and server waterfall)
   try {
+    const blob = dataUrl ? await fetch(dataUrl).then((r) => r.blob()).catch(() => rawFile) : rawFile;
+    const cleanName = rawFile.name.replace(/\.[^/.]+$/, '') + '.jpg';
+    const optimizedFile = new File([blob], cleanName, { type: mimeType || 'image/jpeg' });
+
     const formData = new FormData();
-    formData.append('file', rawFile);
-    formData.append('scoresheet', rawFile);
+    formData.append('file', optimizedFile);
+    formData.append('scoresheet', optimizedFile);
     const token = getStoredToken();
     let backendRes = await fetch(`${BASE_URL}/matches/web/scan-scoresheet`, {
       method: 'POST',
