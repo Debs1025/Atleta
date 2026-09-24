@@ -308,6 +308,8 @@ export const CreateMatch: React.FC = () => {
               team_name: resolvedTeam,
               jersey_number: Number(jersey),
               position: p.position || 'G',
+              is_home: isHome,
+              team_side: isHome ? 'home' : 'away',
               stats: {
                 points: Number(p.points ?? p.pts ?? 0),
                 rebounds: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),

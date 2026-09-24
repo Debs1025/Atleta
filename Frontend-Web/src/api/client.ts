@@ -1424,21 +1424,35 @@ export const getMatchAuditDetail = async (
 
     const totalMetrics = playerMetrics.length;
     const halfMetrics = Math.ceil(totalMetrics / 2);
+    const isSameTeamName = homeTeamName.trim().toUpperCase() === awayTeamName.trim().toUpperCase();
+
+    // Collect distinct team names in player metrics
+    const distinctMetricsTeams = Array.from(
+      new Set(playerMetrics.map((p: any) => String(p.team_name || p.team || '').trim().toUpperCase()).filter(Boolean))
+    );
+    const firstMetricTeam = distinctMetricsTeams[0] || '';
 
     playerMetrics.forEach((p, idx) => {
-      const pTeam = (p.team_name || p.team || '').toUpperCase();
+      const pTeam = (p.team_name || p.team || '').trim().toUpperCase();
+      const pSide = p.is_home !== undefined ? p.is_home : (p.team_side === 'home' ? true : p.team_side === 'away' ? false : undefined);
       let isHome = false;
-      if (pTeam) {
-        if (pTeam === homeTeamName || pTeam.includes(homeTeamName) || homeTeamName.includes(pTeam)) {
+
+      if (pSide !== undefined) {
+        isHome = Boolean(pSide);
+      } else if (distinctMetricsTeams.length >= 2) {
+        isHome = pTeam === firstMetricTeam;
+      } else if (!isSameTeamName && pTeam) {
+        if (pTeam === homeTeamName || pTeam.includes(homeTeamName)) {
           isHome = true;
-        } else if (pTeam === awayTeamName || pTeam.includes(awayTeamName) || awayTeamName.includes(pTeam)) {
+        } else if (pTeam === awayTeamName || pTeam.includes(awayTeamName)) {
           isHome = false;
         } else {
-          isHome = idx >= halfMetrics;
+          isHome = idx < halfMetrics;
         }
       } else {
-        isHome = idx >= halfMetrics;
+        isHome = idx < halfMetrics;
       }
+
       const row = mapPlayerToRow(p, idx);
       if (isHome) {
         homePlayers.push(row);
@@ -1799,7 +1813,7 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 90000);
 
         const res = await fetch(geminiUrl, {
           method: 'POST',
@@ -1857,19 +1871,19 @@ Extract EVERY player listed on Team A and Team B with their exact jersey numbers
     }
 
     const homeRoster = [
-      { player_name: 'J. TATUM', team_name: homeTeam, jersey_number: 0, position: 'F', points: 34, rebounds: 11, assists: 6, steals: 2, blocks: 1, fouls: 2, fg_made: 12, fg_attempted: 22, ft_made: 6, ft_attempted: 7, minutes: '38' },
-      { player_name: 'J. BROWN', team_name: homeTeam, jersey_number: 7, position: 'G', points: 28, rebounds: 7, assists: 4, steals: 1, blocks: 1, fouls: 3, fg_made: 10, fg_attempted: 19, ft_made: 5, ft_attempted: 6, minutes: '36' },
-      { player_name: 'K. PORZINGIS', team_name: homeTeam, jersey_number: 8, position: 'C', points: 21, rebounds: 9, assists: 2, steals: 0, blocks: 3, fouls: 2, fg_made: 7, fg_attempted: 14, ft_made: 5, ft_attempted: 5, minutes: '32' },
-      { player_name: 'D. WHITE', team_name: homeTeam, jersey_number: 9, position: 'G', points: 14, rebounds: 4, assists: 7, steals: 3, blocks: 2, fouls: 1, fg_made: 5, fg_attempted: 11, ft_made: 2, ft_attempted: 2, minutes: '34' },
-      { player_name: 'J. HOLIDAY', team_name: homeTeam, jersey_number: 4, position: 'G', points: 10, rebounds: 5, assists: 8, steals: 2, blocks: 1, fouls: 2, fg_made: 4, fg_attempted: 9, ft_made: 1, ft_attempted: 2, minutes: '33' },
+      { player_name: 'J. TATUM', team_name: homeTeam, is_home: true, jersey_number: 0, position: 'F', points: 34, rebounds: 11, assists: 6, steals: 2, blocks: 1, fouls: 2, fg_made: 12, fg_attempted: 22, ft_made: 6, ft_attempted: 7, minutes: '38' },
+      { player_name: 'J. BROWN', team_name: homeTeam, is_home: true, jersey_number: 7, position: 'G', points: 28, rebounds: 7, assists: 4, steals: 1, blocks: 1, fouls: 3, fg_made: 10, fg_attempted: 19, ft_made: 5, ft_attempted: 6, minutes: '36' },
+      { player_name: 'K. PORZINGIS', team_name: homeTeam, is_home: true, jersey_number: 8, position: 'C', points: 21, rebounds: 9, assists: 2, steals: 0, blocks: 3, fouls: 2, fg_made: 7, fg_attempted: 14, ft_made: 5, ft_attempted: 5, minutes: '32' },
+      { player_name: 'D. WHITE', team_name: homeTeam, is_home: true, jersey_number: 9, position: 'G', points: 14, rebounds: 4, assists: 7, steals: 3, blocks: 2, fouls: 1, fg_made: 5, fg_attempted: 11, ft_made: 2, ft_attempted: 2, minutes: '34' },
+      { player_name: 'J. HOLIDAY', team_name: homeTeam, is_home: true, jersey_number: 4, position: 'G', points: 10, rebounds: 5, assists: 8, steals: 2, blocks: 1, fouls: 2, fg_made: 4, fg_attempted: 9, ft_made: 1, ft_attempted: 2, minutes: '33' },
     ];
 
     const awayRoster = [
-      { player_name: 'T. YOUNG', team_name: awayTeam, jersey_number: 11, position: 'G', points: 35, rebounds: 3, assists: 12, steals: 2, blocks: 0, fouls: 2, fg_made: 11, fg_attempted: 24, ft_made: 8, ft_attempted: 9, minutes: '39' },
-      { player_name: 'D. MURRAY', team_name: awayTeam, jersey_number: 5, position: 'G', points: 24, rebounds: 6, assists: 7, steals: 3, blocks: 1, fouls: 3, fg_made: 9, fg_attempted: 20, ft_made: 4, ft_attempted: 4, minutes: '37' },
-      { player_name: 'D. HUNTER', team_name: awayTeam, jersey_number: 12, position: 'F', points: 18, rebounds: 5, assists: 2, steals: 1, blocks: 0, fouls: 4, fg_made: 6, fg_attempted: 13, ft_made: 3, ft_attempted: 4, minutes: '31' },
-      { player_name: 'C. CAPELA', team_name: awayTeam, jersey_number: 15, position: 'C', points: 14, rebounds: 13, assists: 1, steals: 1, blocks: 2, fouls: 3, fg_made: 6, fg_attempted: 8, ft_made: 2, ft_attempted: 4, minutes: '29' },
-      { player_name: 'S. BEY', team_name: awayTeam, jersey_number: 41, position: 'F', points: 12, rebounds: 6, assists: 3, steals: 1, blocks: 0, fouls: 2, fg_made: 4, fg_attempted: 10, ft_made: 2, ft_attempted: 2, minutes: '30' },
+      { player_name: 'T. YOUNG', team_name: awayTeam, is_home: false, jersey_number: 11, position: 'G', points: 35, rebounds: 3, assists: 12, steals: 2, blocks: 0, fouls: 2, fg_made: 11, fg_attempted: 24, ft_made: 8, ft_attempted: 9, minutes: '39' },
+      { player_name: 'D. MURRAY', team_name: awayTeam, is_home: false, jersey_number: 5, position: 'G', points: 24, rebounds: 6, assists: 7, steals: 3, blocks: 1, fouls: 3, fg_made: 9, fg_attempted: 20, ft_made: 4, ft_attempted: 4, minutes: '37' },
+      { player_name: 'D. HUNTER', team_name: awayTeam, is_home: false, jersey_number: 12, position: 'F', points: 18, rebounds: 5, assists: 2, steals: 1, blocks: 0, fouls: 4, fg_made: 6, fg_attempted: 13, ft_made: 3, ft_attempted: 4, minutes: '31' },
+      { player_name: 'C. CAPELA', team_name: awayTeam, is_home: false, jersey_number: 15, position: 'C', points: 14, rebounds: 13, assists: 1, steals: 1, blocks: 2, fouls: 3, fg_made: 6, fg_attempted: 8, ft_made: 2, ft_attempted: 4, minutes: '29' },
+      { player_name: 'S. BEY', team_name: awayTeam, is_home: false, jersey_number: 41, position: 'F', points: 12, rebounds: 6, assists: 3, steals: 1, blocks: 0, fouls: 2, fg_made: 4, fg_attempted: 10, ft_made: 2, ft_attempted: 2, minutes: '30' },
     ];
 
     return {
