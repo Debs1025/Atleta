@@ -16,7 +16,7 @@ import {
   getMatchAuditDetail,
   certifyMatchValidation,
   deleteOfficialMatch,
-  uploadScoresheetFile,
+  scanScoresheetClientDirect,
   getCachedData,
   setCachedData,
   downloadCertifiedMatchPdf,
@@ -124,7 +124,11 @@ export const ScoresheetMatch: React.FC = () => {
     setIsUploading(true);
     setUploadError(null);
     try {
-      const res = await uploadScoresheetFile(cleanId, file);
+      const hName = (matchData?.home_team?.name || 'Home Team').toUpperCase();
+      const aName = (matchData?.away_team?.name || 'Away Team').toUpperCase();
+      const sport = matchData?.sport_type || 'Basketball';
+
+      const res = await scanScoresheetClientDirect(file, hName, aName, sport);
       if (res?.scoresheet_url) setScoresheetUrl(res.scoresheet_url);
 
       // Map real AI-extracted player statistics following mobile OCR logging logic

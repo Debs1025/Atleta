@@ -15,7 +15,8 @@ import {
   getMe,
   createOfficialMatch,
   fetchBrowseTeams,
-  scanScoresheetStandalone,
+  scanScoresheetClientDirect,
+  readFileAsDataUrl,
   setCachedData,
 } from '../../api/client';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow } from '../../api/types';
@@ -192,11 +193,14 @@ export const CreateMatch: React.FC = () => {
       let hSum = 0;
       let aSum = 0;
 
-      // 1. Scan scoresheet first via standalone OCR (matching mobile OCR logging pipeline)
+      // 1. Scan scoresheet via direct client-side OCR & instant extraction
       if (selectedFile) {
         try {
-          ocrRes = await scanScoresheetStandalone(selectedFile);
+          ocrRes = await scanScoresheetClientDirect(selectedFile, finalHome, finalAway, normalizedSport);
           if (ocrRes?.scoresheet_url) scoresheetUrl = ocrRes.scoresheet_url;
+          if (!scoresheetUrl) {
+            scoresheetUrl = await readFileAsDataUrl(selectedFile);
+          }
 
           const rawPlayers: any[] = Array.isArray(ocrRes?.player_summary)
             ? ocrRes.player_summary
