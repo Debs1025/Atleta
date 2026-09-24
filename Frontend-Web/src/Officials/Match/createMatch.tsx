@@ -214,25 +214,19 @@ export const CreateMatch: React.FC = () => {
             ? ocrRes.parsed_tables.team_scores
             : [];
 
-          const homeScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === true || (finalHome && String(t.team || '').toUpperCase().includes(finalHome.toUpperCase()))
-          ) || teamScoresArr[0];
-          const awayScoreItem = teamScoresArr.find(
-            (t: any) => t.is_home === false || (finalAway && String(t.team || '').toUpperCase().includes(finalAway.toUpperCase()))
-          ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
-
           const ocrHomeName = String(
-            ocrRes?.match_info?.home_team ||
             ocrRes?.match_info?.home_team_name ||
-            homeScoreItem?.team ||
-            finalHome
+            ocrRes?.match_info?.home_team ||
+            (teamScoresArr.length > 0 ? teamScoresArr[0]?.team : '') ||
+            ''
           ).toUpperCase().trim();
 
           const ocrAwayName = String(
-            ocrRes?.match_info?.away_team ||
             ocrRes?.match_info?.opponent_team_name ||
-            awayScoreItem?.team ||
-            finalAway
+            ocrRes?.match_info?.away_team_name ||
+            ocrRes?.match_info?.away_team ||
+            (teamScoresArr.length > 1 ? teamScoresArr[1]?.team : '') ||
+            ''
           ).toUpperCase().trim();
 
           if (ocrHomeName && ocrHomeName !== 'HOME TEAM' && ocrHomeName !== 'TEAM B') {
@@ -245,22 +239,23 @@ export const CreateMatch: React.FC = () => {
           const hName = finalHome.toUpperCase();
           const aName = finalAway.toUpperCase();
 
-          const totalPlayers = rawPlayers.length;
-          const halfCount = Math.ceil(totalPlayers / 2);
+          const firstPlayerTeam = rawPlayers.length > 0 ? String(rawPlayers[0].team_name || rawPlayers[0].team || '').toUpperCase().trim() : '';
 
           rawPlayers.forEach((p: any, idx: number) => {
             const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase().trim() : '';
             let isHome = false;
             if (rawTeam) {
-              if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam) || rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName) || rawTeam.includes('HOME') || rawTeam.includes('TEAM B')) {
+              if (rawTeam === hName || rawTeam.includes(hName) || hName.includes(rawTeam)) {
                 isHome = true;
-              } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam) || rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName) || rawTeam.includes('AWAY') || rawTeam.includes('VISITOR') || rawTeam.includes('TEAM A')) {
+              } else if (rawTeam === aName || rawTeam.includes(aName) || aName.includes(rawTeam)) {
                 isHome = false;
+              } else if (firstPlayerTeam && rawTeam === firstPlayerTeam) {
+                isHome = true;
               } else {
-                isHome = idx >= halfCount;
+                isHome = false;
               }
             } else {
-              isHome = idx >= halfCount;
+              isHome = idx < Math.ceil(rawPlayers.length / 2);
             }
 
             const resolvedTeam = isHome ? hName : aName;

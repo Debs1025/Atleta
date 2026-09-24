@@ -1730,8 +1730,8 @@ export const compressImageForOcr = (
 
 export const scanScoresheetClientDirect = async (
   rawFile: File,
-  homeTeam = 'Home Team',
-  awayTeam = 'Away Team',
+  _homeTeam = 'Home Team',
+  _awayTeam = 'Away Team',
   sport = 'Basketball'
 ): Promise<any> => {
   const { base64Data, mimeType, dataUrl } = await compressImageForOcr(rawFile);
@@ -1766,22 +1766,29 @@ export const scanScoresheetClientDirect = async (
   // 2. Try direct client-side Gemini Vision OCR call with waterfall
   if (base64Data && geminiKey) {
     const modelsToTry = [
-      'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-flash-latest',
-      'gemini-3.7-flash',
+      {
+        name: 'gemini-3.5-flash-lite',
+        config: { temperature: 0.1, maxOutputTokens: 8192 },
+      },
+      {
+        name: 'gemini-3.5-flash',
+        config: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      },
     ];
 
     const promptText = `You are an expert sports scoresheet OCR and data extraction system.
 Carefully examine the provided document image/PDF/CSV.
-Context: Sport: ${sport}, Expected Home: ${homeTeam}, Expected Away: ${awayTeam}.
 Extract the match overview, exact team names from the header/team blocks, final scores, and ALL individual athlete statistics into this strict JSON structure:
 {
   "match_info": {
     "sport_type": "${sport}",
     "event_name": "League / Event Name",
-    "home_team_name": "${homeTeam !== 'Home Team' ? homeTeam : 'Home Team Name'}",
-    "opponent_team_name": "${awayTeam !== 'Away Team' ? awayTeam : 'Opponent Team Name'}",
+    "home_team_name": "Home Team Name",
+    "opponent_team_name": "Opponent Team Name",
     "game_result": "WIN",
     "final_score": "0 - 0"
   },
@@ -1815,9 +1822,9 @@ CRITICAL RULES:
 2. For each player, include their exact jersey number, actual name, team name, and exact points and stats recorded on the sheet.
 3. Return ONLY valid JSON, nothing else.`;
 
-    for (const model of modelsToTry) {
+    for (const mObj of modelsToTry) {
       try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mObj.name}:generateContent?key=${encodeURIComponent(geminiKey)}`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 45000);
 
@@ -1832,13 +1839,7 @@ CRITICAL RULES:
                 { inline_data: { mime_type: mimeType, data: base64Data } }
               ]
             }],
-            generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 8192,
-              thinkingConfig: {
-                thinkingBudget: 0,
-              },
-            }
+            generationConfig: mObj.config,
           })
         });
         clearTimeout(timeoutId);
@@ -1873,7 +1874,7 @@ CRITICAL RULES:
           }
         }
       } catch (err) {
-        console.warn(`Direct client-side Gemini model ${model} failed/timed out, trying next:`, err);
+        console.warn(`Direct client-side Gemini model ${mObj.name} failed/timed out, trying next:`, err);
       }
     }
   }
