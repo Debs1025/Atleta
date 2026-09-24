@@ -217,11 +217,13 @@ export const ScoresheetMatch: React.FC = () => {
           const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
           const fga = Number(p.fg_attempted || p.fga || 0);
           const fgm = Number(p.fg_made || p.fgm || 0);
+          const fgAttempts = Math.max(fga, fgm);
+          const fgMakes = Math.min(fga, fgm);
           const fgPct = p.true_shooting_pct
-            ? `${Math.round(p.true_shooting_pct)}%`
-            : fga > 0
-            ? `${Math.round((fgm / fga) * 100)}%`
-            : '50%';
+            ? `${Math.min(100, Math.round(p.true_shooting_pct))}%`
+            : fgAttempts > 0
+            ? `${((fgMakes / fgAttempts) * 100).toFixed(1)}%`
+            : '50.0%';
 
           const row: BoxScoreRow = {
             jersey_no: jersey,

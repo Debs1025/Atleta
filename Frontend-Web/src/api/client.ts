@@ -1389,15 +1389,21 @@ export const getMatchAuditDetail = async (
       const stats = p.sport_stats || p.stats || p || {};
       const fga = Number(stats.fg_attempted || stats.fga || 0);
       const fgm = Number(stats.fg_made || stats.fgm || 0);
-      const fgPct = fga > 0 ? `${((fgm / fga) * 100).toFixed(1)}%` : `${stats.fg_pct || 0}%`;
+      const fgAttempts = Math.max(fga, fgm);
+      const fgMakes = Math.min(fga, fgm);
+      const fgPct = fgAttempts > 0 ? `${((fgMakes / fgAttempts) * 100).toFixed(1)}%` : `${stats.fg_pct || '0.0%'}`;
 
       const tpa = Number(stats.three_p_attempted || stats.three_attempted || 0);
       const tpm = Number(stats.three_p_made || stats.three_made || 0);
-      const threePct = tpa > 0 ? `${((tpm / tpa) * 100).toFixed(1)}%` : `${stats.three_p_pct || stats.three_pct || 0}%`;
+      const tpAttempts = Math.max(tpa, tpm);
+      const tpMakes = Math.min(tpa, tpm);
+      const threePct = tpAttempts > 0 ? `${((tpMakes / tpAttempts) * 100).toFixed(1)}%` : `${stats.three_p_pct || stats.three_pct || '0.0%'}`;
 
       const fta = Number(stats.ft_attempted || stats.fta || 0);
       const ftm = Number(stats.ft_made || stats.ftm || 0);
-      const ftPct = fta > 0 ? `${((ftm / fta) * 100).toFixed(1)}%` : `${stats.ft_pct || 0}%`;
+      const ftAttempts = Math.max(fta, ftm);
+      const ftMakes = Math.min(fta, ftm);
+      const ftPct = ftAttempts > 0 ? `${((ftMakes / ftAttempts) * 100).toFixed(1)}%` : `${stats.ft_pct || '0.0%'}`;
 
       const jersey = p.jersey_number !== undefined && p.jersey_number !== null
         ? String(p.jersey_number).padStart(2, '0')
