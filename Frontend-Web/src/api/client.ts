@@ -1668,10 +1668,18 @@ export const scanScoresheetClientDirect = async (
 
   let ocrResult: any = null;
 
-  // 1. Try direct client-side Gemini Vision OCR call
+  // 1. Try direct client-side Gemini Vision OCR call with waterfall
   if (base64Data && geminiKey) {
-    try {
-      const promptText = `Analyze this sports scoresheet (${sport}). Extract team scores and player statistics in JSON:
+    const modelsToTry = [
+      'gemini-3.7-flash',
+      'gemini-3.5-flash',
+      'gemini-3.6-flash',
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-pro-latest',
+    ];
+
+    const promptText = `Analyze this sports scoresheet (${sport}). Extract team scores and player statistics in JSON:
 {
   "team_scores": [{"team": "${homeTeam}", "score": 88}, {"team": "${awayTeam}", "score": 82}],
   "player_summary": [
@@ -1680,33 +1688,37 @@ export const scanScoresheetClientDirect = async (
 }
 Return ONLY valid JSON.`;
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: promptText },
-              { inline_data: { mime_type: mimeType, data: base64Data } }
-            ]
-          }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-        })
-      });
+    for (const model of modelsToTry) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+        const res = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: promptText },
+                { inline_data: { mime_type: mimeType, data: base64Data } }
+              ]
+            }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+          })
+        });
 
-      if (res.ok) {
-        const json = await res.json();
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        if (text) {
-          const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-          if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
-            ocrResult = parsed;
+        if (res.ok) {
+          const json = await res.json();
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (text) {
+            const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+            if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
+              ocrResult = parsed;
+              break;
+            }
           }
         }
+      } catch (err) {
+        console.warn(`Direct client-side Gemini model ${model} failed, trying next:`, err);
       }
-    } catch (err) {
-      console.warn('Direct client-side Gemini call failed, using fallback extraction:', err);
     }
   }
 
