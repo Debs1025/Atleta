@@ -100,7 +100,9 @@ export const AdminHomePage: React.FC = () => {
     }
     const stored = getStoredUser();
     const roleStr = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
-    if (stored && !roleStr.includes('admin')) {
+    // Only redirect away if we have a stored user WITH a known non-admin role
+    // If role is empty/unknown, stay here (admin page) and let loadQueue verify
+    if (stored && roleStr && !roleStr.includes('admin')) {
       navigate('/dashboard', { replace: true });
       return;
     }

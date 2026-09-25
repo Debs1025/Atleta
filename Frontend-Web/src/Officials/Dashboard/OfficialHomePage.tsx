@@ -45,8 +45,8 @@ export const OfficialHomePage: React.FC = () => {
 
     // Redirect admin users to their own standalone dashboard
     const stored = getStoredUser();
-    const role = String(stored?.role || '').toLowerCase();
-    if (role.includes('admin')) {
+    const storedRole = String(stored?.role || '').toLowerCase();
+    if (storedRole && storedRole.includes('admin')) {
       navigate('/admin/dashboard', { replace: true });
       return;
     }
