@@ -45,8 +45,8 @@ export const OfficialHomePage: React.FC = () => {
 
     // Redirect admin users to their own standalone dashboard
     const stored = getStoredUser();
-    const storedRole = String(stored?.role || '').toLowerCase();
-    if (storedRole && storedRole.includes('admin')) {
+    const storedRole = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (storedRole.includes('admin')) {
       navigate('/admin/dashboard', { replace: true });
       return;
     }
@@ -54,7 +54,7 @@ export const OfficialHomePage: React.FC = () => {
     Promise.all([
       getMe().then((res) => {
         setUser(res);
-        const meRole = String(res?.role || '').toLowerCase();
+        const meRole = String(res?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
         if (meRole.includes('admin')) {
           navigate('/admin/dashboard', { replace: true });
         }
@@ -65,6 +65,13 @@ export const OfficialHomePage: React.FC = () => {
       prefetchAllOfficialAuditMatches().catch(() => { }),
     ]).finally(() => setLoading(false));
   }, [navigate]);
+
+  useEffect(() => {
+    const role = String(user?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (role.includes('admin')) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
 
   // Filter matches specifically created/assigned to current official
   const currentOfficialIds = useMemo(() => new Set(
@@ -157,6 +164,15 @@ export const OfficialHomePage: React.FC = () => {
   const auditedCount = String(
     officialMatches.filter((i) => i.status === 'AUDITED').length
   ).padStart(2, '0');
+
+  const roleStr = String(user?.role || getStoredUser()?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+  if (roleStr.includes('admin')) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' }}>
+        <Loader2 style={{ width: 32, height: 32, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={styles.shell}>

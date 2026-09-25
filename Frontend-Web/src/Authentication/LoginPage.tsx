@@ -14,13 +14,13 @@ export const LoginPage: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const user = getStoredUser();
     if (getStoredToken()) {
-      const role = String(user?.role || '').toLowerCase();
-      if (role.includes('admin')) {
-        navigate('/admin/dashboard');
+      const user = getStoredUser();
+      const roleStr = String(user?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+      if (roleStr.includes('admin')) {
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     }
   }, [navigate]);
@@ -33,11 +33,12 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       const res = await loginOfficial({ email, password, savePassword: savePass });
-      const role = String(res?.user?.role || '').toLowerCase();
-      if (role.includes('admin')) {
-        navigate('/admin/dashboard');
+      const stored = getStoredUser();
+      const roleStr = String(res?.user?.role || stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+      if (roleStr.includes('admin')) {
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (e: any) {
       setErr(e.message || 'Authentication failed.');

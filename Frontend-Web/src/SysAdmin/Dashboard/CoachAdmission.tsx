@@ -94,7 +94,7 @@ export const CoachAdmission: React.FC<CoachAdmissionProps> = ({
         <div style={styles.modalHeader}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <ShieldCheck style={{ width: 22, height: 22, color: '#0B132B' }} />
-            <h3 style={styles.modalTitle}>AUDIT COACH ACCREDITATION</h3>
+            <h3 style={styles.modalTitle}>COACH REGISTRY & DOCUMENTS</h3>
           </div>
           <button type="button" onClick={onClose} style={styles.closeBtn} title="Close Audit">
             <X style={{ width: 20, height: 20 }} />
@@ -139,6 +139,31 @@ export const CoachAdmission: React.FC<CoachAdmissionProps> = ({
                 {isVerified ? 'Professional License Validated' : 'PENDING_REVIEW'}
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Verification Protocol Box */}
+        <div
+          style={{
+            border: '1.5px solid #0B132B',
+            borderRadius: '3px',
+            padding: '14px 18px',
+            backgroundColor: '#F8FAFC',
+            marginBottom: '20px',
+          }}
+        >
+          <div style={{ fontSize: '11px', fontWeight: 900, color: '#0B132B', letterSpacing: '0.08em', marginBottom: '10px' }}>
+            VERIFICATION PROTOCOL
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#0B132B', cursor: 'pointer' }}>
+              <input type="checkbox" checked={isVerified} readOnly style={{ accentColor: '#0B132B' }} />
+              PROFESSIONAL LICENSE VALIDATED
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#0B132B', cursor: 'pointer' }}>
+              <input type="checkbox" checked={isVerified} readOnly style={{ accentColor: '#0B132B' }} />
+              INSTITUTIONAL AFFILIATION CONFIRMED
+            </label>
           </div>
         </div>
 

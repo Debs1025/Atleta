@@ -159,7 +159,7 @@ export const AdminHomePage: React.FC = () => {
 
   return (
     <div style={styles.shell}>
-      <Navbar title="ADMIN DASHBOARD" />
+      <Navbar title="SYSTEM DASHBOARD" />
 
       <div style={styles.layout}>
         <Sidebar activeTab="AUDIT_QUEUE" />
@@ -183,17 +183,38 @@ export const AdminHomePage: React.FC = () => {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <ShieldCheck style={{ width: 18, height: 18, color: '#0B132B' }} />
-                  <h2 style={styles.criticalTitle}>COACH ADMISSION & CREDENTIAL VERIFICATION</h2>
+                  <h2 style={styles.criticalTitle}>CRITICAL REVIEW NEEDED</h2>
                 </div>
                 <p style={styles.criticalText}>
-                  Review and authenticate incoming coach applications, verify submitted professional licenses and institutional affiliations. Approved admissions grant instant roster governance and athlete scouting privileges.
+                  A critical security vulnerability from ATLETA-01 database has been detected. Field empty credentials and OCR failure of credentials. Immediate action required.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilter('NON_AUDITED');
+                    setPage(1);
+                  }}
+                  style={{
+                    marginTop: '12px',
+                    padding: '8px 16px',
+                    backgroundColor: '#0B132B',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '2px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    cursor: 'pointer',
+                  }}
+                >
+                  VIEW AUDIT LOGS
+                </button>
               </div>
             </div>
 
             <div style={styles.healthCard}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={styles.healthLabel}>QUEUE HEALTH</div>
+                <div style={styles.healthLabel}>INTEGRITY AUDIT SCORE</div>
                 <span style={styles.liveIndicatorDot} title="All Systems Operational" />
               </div>
               <div>
@@ -263,11 +284,12 @@ export const AdminHomePage: React.FC = () => {
                 <tr>
                   {[
                     { label: 'COACH ID', width: '12%' },
-                    { label: 'FULL NAME', width: '25%' },
-                    { label: 'INSTITUTIONAL AFFILIATION', width: '25%' },
-                    { label: 'DATE UPLOADED', width: '15%' },
-                    { label: 'STATUS', width: '11%' },
-                    { label: 'AUDIT', width: '12%', align: 'center' },
+                    { label: 'FULL NAME', width: '22%' },
+                    { label: 'INSTITUTION', width: '22%' },
+                    { label: 'SPORT', width: '14%' },
+                    { label: 'DATE UPLOADED', width: '14%' },
+                    { label: 'STATUS', width: '8%' },
+                    { label: 'ACTION', width: '8%', align: 'center' },
                   ].map((col) => (
                     <th
                       key={col.label}
@@ -286,14 +308,14 @@ export const AdminHomePage: React.FC = () => {
               <tbody>
                 {loading && queue.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ height: '52px', padding: '16px 18px', textAlign: 'center', boxSizing: 'border-box' }}>
+                    <td colSpan={7} style={{ height: '52px', padding: '16px 18px', textAlign: 'center', boxSizing: 'border-box' }}>
                       <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#0B132B' }} />
                     </td>
                   </tr>
                 ) : displayedItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       style={{
                         height: '52px',
                         padding: '16px 18px',
@@ -337,6 +359,11 @@ export const AdminHomePage: React.FC = () => {
                         <td style={styles.td}>
                           <span style={styles.affiliationText}>
                             {item.institutional_affiliation || item.current_institution || 'UNASSIGNED ATHLETICS'}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0B132B' }}>
+                            {item.sport_type || 'Basketball'}
                           </span>
                         </td>
                         <td style={styles.td}>
