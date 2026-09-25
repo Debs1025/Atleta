@@ -25,33 +25,61 @@ const USER_KEY = 'atleta_official_user';
 const PERSIST_KEY = 'atleta_persist_session';
 const SETTINGS_KEY = 'atleta_official_settings';
 
-// In-Memory Client Cache for instant screen-to-screen navigation
+// In-Memory and Session Client Cache for instant screen-to-screen navigation
 const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes cache
 
 export const getCachedData = <T>(key: string): T | null => {
   const item = cache.get(key);
-  if (!item) return null;
-  if (Date.now() - item.timestamp > CACHE_TTL_MS) {
-    cache.delete(key);
-    return null;
+  if (item && Date.now() - item.timestamp < CACHE_TTL_MS) {
+    return item.data as T;
   }
-  return item.data as T;
+  try {
+    const sessionItem = sessionStorage.getItem(`atleta_cache_${key}`);
+    if (sessionItem) {
+      const parsed = JSON.parse(sessionItem);
+      if (parsed && Date.now() - parsed.timestamp < CACHE_TTL_MS) {
+        cache.set(key, parsed);
+        return parsed.data as T;
+      }
+    }
+  } catch {}
+  return null;
 };
 
 export const setCachedData = (key: string, data: any): void => {
-  cache.set(key, { data, timestamp: Date.now() });
+  const entry = { data, timestamp: Date.now() };
+  cache.set(key, entry);
+  try {
+    sessionStorage.setItem(`atleta_cache_${key}`, JSON.stringify(entry));
+  } catch {}
 };
 
 export const invalidateCache = (prefix?: string): void => {
   if (!prefix) {
     cache.clear();
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith('atleta_cache_')) toRemove.push(k);
+      }
+      toRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
   } else {
     for (const key of cache.keys()) {
       if (key.startsWith(prefix)) {
         cache.delete(key);
       }
     }
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith(`atleta_cache_${prefix}`)) toRemove.push(k);
+      }
+      toRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
   }
 };
 
