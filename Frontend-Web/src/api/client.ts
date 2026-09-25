@@ -83,41 +83,10 @@ export const invalidateCache = (prefix?: string): void => {
   }
 };
 
-export const formatMatchIdSchema = (rawId: string, fallbackIndex?: number): string => {
+export const formatMatchIdSchema = (rawId: string): string => {
   if (!rawId) return '#MATCH-001';
   const clean = String(rawId).replace(/^#/, '').trim();
-
-  // If already matches standard format MATCH-001, MATCH-012, MATCH-123
-  if (/^MATCH-\d+$/i.test(clean)) {
-    const numPart = clean.replace(/^MATCH-/i, '');
-    return `#MATCH-${numPart.padStart(3, '0')}`;
-  }
-
-  // If matches format like match_1 or match-1
-  if (/^MATCH[_-]\d+$/i.test(clean)) {
-    const num = clean.replace(/^MATCH[_-]/i, '');
-    return `#MATCH-${num.padStart(3, '0')}`;
-  }
-
-  // If VAL-001 or AUD-001
-  if (/^[A-Z]+-\d+$/i.test(clean)) {
-    const num = clean.split('-')[1];
-    return `#MATCH-${num.padStart(3, '0')}`;
-  }
-
-  // If sequential index provided
-  if (fallbackIndex !== undefined && fallbackIndex >= 0) {
-    return `#MATCH-${String(fallbackIndex).padStart(3, '0')}`;
-  }
-
-  // Deterministic 3-digit hash
-  let hash = 0;
-  for (let i = 0; i < clean.length; i++) {
-    hash = (hash << 5) - hash + clean.charCodeAt(i);
-    hash |= 0;
-  }
-  const positiveNum = (Math.abs(hash) % 999) + 1;
-  return `#MATCH-${String(positiveNum).padStart(3, '0')}`;
+  return `#${clean}`;
 };
 
 export const getStoredOfficialSettings = (): OfficialSettings | null => {
@@ -1273,10 +1242,10 @@ export const getAuditMatches = async (
       return timeB - timeA;
     });
 
-    // Format match IDs using MATCH-00# schema
-    items = items.map((item, idx) => {
-      const explicitId = item.raw_match?.match_id || item.match_id;
-      const displayId = formatMatchIdSchema(explicitId, items.length - idx);
+    // Use genuine Firestore match_id from Match_Logs
+    items = items.map((item) => {
+      const dbMatchId = String(item.raw_match?.match_id || item.raw_match?.id || item.match_id || '').replace(/^#/, '').trim();
+      const displayId = dbMatchId ? (dbMatchId.startsWith('#') ? dbMatchId : `#${dbMatchId}`) : '#MATCH-001';
       return {
         ...item,
         match_id: displayId,
