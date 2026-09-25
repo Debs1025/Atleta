@@ -83,6 +83,43 @@ export const invalidateCache = (prefix?: string): void => {
   }
 };
 
+export const formatMatchIdSchema = (rawId: string, fallbackIndex?: number): string => {
+  if (!rawId) return '#MATCH-001';
+  const clean = String(rawId).replace(/^#/, '').trim();
+
+  // If already matches standard format MATCH-001, MATCH-012, MATCH-123
+  if (/^MATCH-\d+$/i.test(clean)) {
+    const numPart = clean.replace(/^MATCH-/i, '');
+    return `#MATCH-${numPart.padStart(3, '0')}`;
+  }
+
+  // If matches format like match_1 or match-1
+  if (/^MATCH[_-]\d+$/i.test(clean)) {
+    const num = clean.replace(/^MATCH[_-]/i, '');
+    return `#MATCH-${num.padStart(3, '0')}`;
+  }
+
+  // If VAL-001 or AUD-001
+  if (/^[A-Z]+-\d+$/i.test(clean)) {
+    const num = clean.split('-')[1];
+    return `#MATCH-${num.padStart(3, '0')}`;
+  }
+
+  // If sequential index provided
+  if (fallbackIndex !== undefined && fallbackIndex >= 0) {
+    return `#MATCH-${String(fallbackIndex).padStart(3, '0')}`;
+  }
+
+  // Deterministic 3-digit hash
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  const positiveNum = (Math.abs(hash) % 999) + 1;
+  return `#MATCH-${String(positiveNum).padStart(3, '0')}`;
+};
+
 export const getStoredOfficialSettings = (): OfficialSettings | null => {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY) || sessionStorage.getItem(SETTINGS_KEY);
@@ -1228,6 +1265,24 @@ export const getAuditMatches = async (
     allMatchesList.forEach((m) => parseMatchItem(m));
 
     let items = Array.from(combinedMap.values());
+
+    // Sort items chronologically by date/time
+    items.sort((a, b) => {
+      const timeA = new Date(a.raw_match?.match_date || a.raw_match?.timestamp || 0).getTime();
+      const timeB = new Date(b.raw_match?.match_date || b.raw_match?.timestamp || 0).getTime();
+      return timeB - timeA;
+    });
+
+    // Format match IDs using MATCH-00# schema
+    items = items.map((item, idx) => {
+      const explicitId = item.raw_match?.match_id || item.match_id;
+      const displayId = formatMatchIdSchema(explicitId, items.length - idx);
+      return {
+        ...item,
+        match_id: displayId,
+      };
+    });
+
     setCachedData('all_official_matches_master', items);
 
     // Filter by tab status

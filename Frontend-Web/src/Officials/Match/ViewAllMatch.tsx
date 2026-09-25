@@ -17,6 +17,7 @@ interface MatchRowProps {
 
 const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
   const isPending = item.status === 'PENDING';
+  const lookupId = item.raw_match?.match_id || item.validation_id || item.match_id.replace(/^#/, '');
 
   return (
     <tr
@@ -25,7 +26,7 @@ const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
       onClick={onClick}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = '#F8FAFC';
-        prefetchMatchAuditDetail(item.match_id);
+        prefetchMatchAuditDetail(lookupId);
       }}
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
     >
@@ -122,8 +123,9 @@ export const ViewAllMatch: React.FC = () => {
     });
   }, [allMatches, activeTab, selectedSport, user]);
 
-  const handleRowClick = (matchId: string) => {
-    const cleanId = matchId.replace(/^#/, '');
+  const handleRowClick = (item: MatchSummaryItem) => {
+    const lookupId = item.raw_match?.match_id || item.validation_id || item.match_id.replace(/^#/, '');
+    const cleanId = String(lookupId).replace(/^#/, '');
     navigate(`/matches/${cleanId}`);
   };
 
@@ -230,7 +232,7 @@ export const ViewAllMatch: React.FC = () => {
                   <MatchRow
                     key={item.match_id}
                     item={item}
-                    onClick={() => handleRowClick(item.match_id)}
+                    onClick={() => handleRowClick(item)}
                   />
                 ))
               ) : (

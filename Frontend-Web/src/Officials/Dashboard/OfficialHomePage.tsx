@@ -213,16 +213,16 @@ export const OfficialHomePage: React.FC = () => {
                   </tr>
                 ) : newMatchesList.length > 0 ? (
                   newMatchesList.map((item, idx) => {
-                    const rawId = item.match_id.replace(/^#/, '');
-                    const isAudited = item.status === 'AUDITED' || isMatchLocallyCertified(rawId);
+                    const lookupId = item.raw_match?.match_id || item.validation_id || item.match_id.replace(/^#/, '');
+                    const isAudited = item.status === 'AUDITED' || isMatchLocallyCertified(lookupId);
 
                     return (
                       <tr
                         key={item.match_id || idx}
                         className="hover-match-row"
                         style={{ cursor: 'pointer' }}
-                        onMouseEnter={() => prefetchMatchAuditDetail(rawId)}
-                        onClick={() => navigate(`/matches/${rawId}`)}
+                        onMouseEnter={() => prefetchMatchAuditDetail(lookupId)}
+                        onClick={() => navigate(`/matches/${lookupId}`)}
                       >
                         <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
                         <td style={styles.td}>{item.match_class}</td>
