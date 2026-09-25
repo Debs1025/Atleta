@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { loginOfficial, getStoredToken } from '../api/client';
+import { loginOfficial, getStoredToken, getStoredUser } from '../api/client';
 import { styles } from './styles/LoginPage';
 
 export const LoginPage: React.FC = () => {
@@ -14,8 +14,14 @@ export const LoginPage: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
+    const user = getStoredUser();
     if (getStoredToken()) {
-      navigate('/dashboard');
+      const role = String(user?.role || '').toLowerCase();
+      if (role.includes('admin')) {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     }
   }, [navigate]);
 
@@ -26,8 +32,13 @@ export const LoginPage: React.FC = () => {
 
     try {
       setLoading(true);
-      await loginOfficial({ email, password, savePassword: savePass });
-      navigate('/dashboard');
+      const res = await loginOfficial({ email, password, savePassword: savePass });
+      const role = String(res?.user?.role || '').toLowerCase();
+      if (role.includes('admin')) {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (e: any) {
       setErr(e.message || 'Authentication failed.');
     } finally {

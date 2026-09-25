@@ -37,20 +37,28 @@ export const OfficialHomePage: React.FC = () => {
     getAllOfficialMatchesMaster(true).then((res) => setMasterMatches(res || [])).catch(() => { });
   };
 
-  const storedUser = getStoredUser();
-  const isAdmin = Boolean(
-    String(user?.role || '').toLowerCase().includes('admin') ||
-    String(storedUser?.role || '').toLowerCase().includes('admin')
-  );
-
   useEffect(() => {
     if (!getStoredToken()) {
       navigate('/login');
       return;
     }
 
+    // Redirect admin users to their own standalone dashboard
+    const stored = getStoredUser();
+    const role = String(stored?.role || '').toLowerCase();
+    if (role.includes('admin')) {
+      navigate('/admin/dashboard', { replace: true });
+      return;
+    }
+
     Promise.all([
-      getMe().then((res) => setUser(res)).catch(() => { }),
+      getMe().then((res) => {
+        setUser(res);
+        const meRole = String(res?.role || '').toLowerCase();
+        if (meRole.includes('admin')) {
+          navigate('/admin/dashboard', { replace: true });
+        }
+      }).catch(() => { }),
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
       getAllOfficialMatchesMaster().then((res) => setMasterMatches(res || [])).catch(() => { }),
       getOfficialSettings().catch(() => { }),
@@ -58,7 +66,7 @@ export const OfficialHomePage: React.FC = () => {
     ]).finally(() => setLoading(false));
   }, [navigate]);
 
-  // Filter matches specifically created/assigned to current official (or all for admin)
+  // Filter matches specifically created/assigned to current official
   const currentOfficialIds = useMemo(() => new Set(
     [
       user?.uid,
@@ -71,12 +79,10 @@ export const OfficialHomePage: React.FC = () => {
   ), [user]);
 
   const officialMatches = useMemo(() => {
-    const list: MatchSummaryItem[] = isAdmin
-      ? [...masterMatches]
-      : masterMatches.filter((m) => isMatchCreatedByOfficial(m, user));
+    const list: MatchSummaryItem[] = masterMatches.filter((m) => isMatchCreatedByOfficial(m, user));
     const existingIds = new Set(list.map((m) => m.match_id.replace(/^#/, '')));
 
-    // Also include any items from dashboard.audit_queue
+    // Also include any items from dashboard.audit_queue if they belong to this official
     (dashboard?.audit_queue || []).forEach((item: any, idx: number) => {
       const match = item.match_details || {};
       const rawId = String(match.match_id || item.match_id || `queue_${idx}`).replace(/^#/, '');
@@ -91,7 +97,7 @@ export const OfficialHomePage: React.FC = () => {
         raw_match: { ...match, ...item },
       };
 
-      const belongsToMe = isAdmin || isMatchCreatedByOfficial(fakeSummary, user) || (
+      const belongsToMe = isMatchCreatedByOfficial(fakeSummary, user) || (
         (item.requested_by && currentOfficialIds.has(item.requested_by)) ||
         (item.official_id && currentOfficialIds.has(item.official_id))
       );
@@ -137,7 +143,7 @@ export const OfficialHomePage: React.FC = () => {
       };
       return getT(b) - getT(a);
     });
-  }, [masterMatches, dashboard, user, currentOfficialIds, isAdmin]);
+  }, [masterMatches, dashboard, user, currentOfficialIds]);
 
   // Show the last 3 new matches instead of 1 only
   const newMatchesList = useMemo(() => {
@@ -168,14 +174,8 @@ export const OfficialHomePage: React.FC = () => {
         {/* Dashboard Content Area */}
         <main style={styles.contentArea}>
           <div style={styles.pageHeader}>
-            <h1 style={styles.pageTitle}>
-              {isAdmin ? 'SYSTEM ADMINISTRATOR DASHBOARD' : 'OFFICIALS DASHBOARD'}
-            </h1>
-            <p style={styles.pageSubtitle}>
-              {isAdmin
-                ? 'MANAGE ALL SYSTEM GAMES, MATCH STATISTICS AND PERFORMANCE METRICS !'
-                : 'MANAGE YOUR GAMES, MATCH STATISTICS AND PERFORMANCE METRICS !'}
-            </p>
+            <h1 style={styles.pageTitle}>OFFICIALS DASHBOARD</h1>
+            <p style={styles.pageSubtitle}>MANAGE YOUR GAMES, MATCH STATISTICS AND PERFORMANCE METRICS !</p>
           </div>
 
           {/* Metric Summary KPI Cards */}
