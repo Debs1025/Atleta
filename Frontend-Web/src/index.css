@@ -1,37 +1,156 @@
 @import "tailwindcss";
 
+/* Base Designs */
 @layer base {
-  * {
+
+  *,
+  *::before,
+  *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
   }
+
+  html,
   body {
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #F8FAFC;
+    background-color: #FFFFFF;
     color: #0B132B;
     -webkit-font-smoothing: antialiased;
-    min-height: 100vh;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Remove text thingy in the icons */
+  h1,
+  h2,
+  h3, 
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  table,
+  tr,
+  th,
+  td,
+  aside,
+  main,
+  header,
+  section,
+  label,
+  b,
+  strong {
+    user-select: none;
+    -webkit-user-select: none;
+    caret-color: transparent !important;
+    cursor: default;
+  }
+
+  /* Interactive Links, Selects, and Buttons */
+  button,
+  a,
+  [role="button"],
+  select,
+  .btn-primary,
+  .nav-item,
+  .nav-link,
+  .nav-btn,
+  .text-link {
+    cursor: pointer !important;
+    outline: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
+    caret-color: transparent !important;
+  }
+
+  button:focus,
+  button:focus-visible,
+  a:focus,
+  a:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Text and Data Form Inputs */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="search"],
+  textarea {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text !important;
+    caret-color: #0B132B !important;
   }
 }
 
-/* Interactive Hover */
+/* Notification Pop Up Designs */
+@keyframes notifPopFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.notif-popover-enter {
+  animation: notifPopFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top right;
+}
+
+/* Global Scrollbar Designs */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Auth and Global Nav Designs */
 .btn-primary {
   transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
   cursor: pointer;
 }
+
 .btn-primary:hover:not(:disabled) {
   background-color: #1E293B !important;
-  box-shadow: 0 4px 12px rgba(11, 19, 43, 0.25) !important;
+  box-shadow: 0 4px 12px rgba(11, 19, 43, 0.2) !important;
 }
+
 .btn-primary:active:not(:disabled) {
   transform: scale(0.99);
 }
 
+/* Navbar Links & Action Buttons */
 .nav-link {
   transition: color 0.2s ease, opacity 0.2s ease;
   cursor: pointer;
 }
+
 .nav-link:hover {
   color: #FFFFFF !important;
   opacity: 0.85;
@@ -41,44 +160,312 @@
   transition: background-color 0.2s ease, transform 0.15s ease;
   cursor: pointer;
 }
+
 .nav-btn:hover {
   background-color: #E2E8F0 !important;
 }
 
+/* Text Links */
 .text-link {
   transition: color 0.2s ease, text-decoration 0.2s ease;
   cursor: pointer;
 }
+
 .text-link:hover {
   color: #0B132B !important;
   text-decoration: underline !important;
 }
 
+/* Footer Links */
 .footer-link {
   transition: color 0.2s ease;
   cursor: pointer;
 }
+
 .footer-link:hover {
   color: #0B132B !important;
 }
 
-/* Mobile Responsive Helpers */
+/* Responsive Designs */
+@media (max-width: 900px) {
+  .resp-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  .resp-content-area {
+    padding: 20px 16px !important;
+  }
+
+  .resp-sidebar {
+    width: 70px !important;
+    padding: 16px 8px !important;
+  }
+
+  .resp-sidebar-text {
+    display: none !important;
+  }
+}
+
 @media (max-width: 640px) {
   .resp-grid {
     grid-template-columns: 1fr !important;
   }
+
   .resp-card {
-    padding: 24px 18px !important;
+    padding: 20px 14px !important;
   }
+
   .resp-header {
-    padding: 14px 20px !important;
+    padding: 12px 16px !important;
   }
-  .resp-footer {
-    padding: 18px 20px !important;
+
+  .resp-kpi-grid {
+    grid-template-columns: 1fr !important;
   }
-  .resp-foot-wrap {
-    flex-direction: column !important;
-    gap: 12px !important;
-    text-align: center;
+}
+
+/* Homepage (Officials Dashboard) Hover Designs */
+.hover-view-all {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-view-all:hover {
+  color: #0284C7 !important;
+  opacity: 0.85;
+}
+
+/* Homepage & All Matches: Match Table Rows */
+.hover-match-row {
+  cursor: pointer !important;
+  transition: background-color 0.15s ease !important;
+}
+.hover-match-row:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* All Matches (View All Page) Hover Designs */
+.hover-back-link {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-back-link:hover {
+  color: #0284C7 !important;
+  opacity: 0.85;
+}
+
+/* "PENDING AUDITS" & "PROCESSED AUDITS" Tabs */
+.hover-tab-btn {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-tab-btn:hover:not(.active) {
+  background-color: #F1F5F9 !important;
+  color: #0B132B !important;
+}
+
+/* Sport Filter Buttons */
+.hover-sport-btn {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-sport-btn:hover:not(.active) {
+  background-color: #F1F5F9 !important;
+  color: #0B132B !important;
+}
+
+/* Notification Center & Notification Pop-up Hover Designs */
+.hover-btn-ghost {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-ghost:hover {
+  color: #0284C7 !important;
+  opacity: 0.85;
+}
+
+/* Notification Pop-up & Notification Center Buttons */
+.hover-btn-solid {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-solid:hover {
+  background-color: #1E293B !important;
+  opacity: 0.92;
+}
+
+/* Notification "Go Back", "CLEAR HISTORY", "REVIEW & ATTACH" Buttons */
+.hover-btn-outline {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-outline:hover {
+  background-color: #F8FAFC !important;
+  color: #0284C7 !important;
+  border-color: #0284C7 !important;
+}
+
+/* Notification "VIEW DETAILS" Action Link */
+.hover-link-accent {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-link-accent:hover {
+  color: #0284C7 !important;
+  text-decoration: underline !important;
+}
+
+/* Notification Category Tabs (ALL LOGS, AUDIT REQUESTS, SCHEDULE UPDATES) */
+.hover-tab-underline {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-tab-underline:hover:not(.active) {
+  color: #0B132B !important;
+  border-bottom-color: #94A3B8 !important;
+}
+
+/* Modal Close (X) Buttons */
+.hover-close-x {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-close-x:hover {
+  color: #EF4444 !important;
+}
+
+/* Schedule Page: Calendar Month Navigation & Day Squares */
+.hover-step-btn {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-step-btn:hover {
+  background-color: #F1F5F9 !important;
+  color: #0284C7 !important;
+}
+
+.hover-calendar-cell {
+  transition: background-color 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-calendar-cell:hover {
+  background-color: #F8FAFC !important;
+}
+.hover-calendar-cell.selected:hover {
+  background-color: #E0F2FE !important;
+}
+
+/* Tournament Official Settings Page Hover Designs */
+.hover-settings-row {
+  transition: background-color 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-settings-row:hover {
+  background-color: #F8FAFC !important;
+}
+.hover-settings-row:hover svg {
+  color: #0284C7 !important;
+}
+
+.hover-switch {
+  transition: opacity 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-switch:hover {
+  opacity: 0.85 !important;
+}
+
+/* Create Match: Inputs, Dropdowns, Placeholders, Selects & Action Buttons */
+.hover-input {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.hover-input:hover {
+  border-color: #0284C7 !important;
+}
+.hover-input:focus {
+  border-color: #0284C7 !important;
+  box-shadow: 0 0 0 1px #0284C7 !important;
+}
+
+.hover-dropzone {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-dropzone:hover {
+  border-color: #0284C7 !important;
+  background-color: #F0F9FF !important;
+}
+.hover-dropzone:hover svg {
+  color: #0284C7 !important;
+}
+
+/* Scoresheet / Match Audit Action Buttons */
+.hover-btn-danger {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-danger:hover {
+  background-color: #DC2626 !important;
+  opacity: 0.92;
+}
+
+.hover-btn-success {
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+.hover-btn-success:hover {
+  background-color: #059669 !important;
+  opacity: 0.92;
+}
+
+/* Global Loading & Spinner Keyframe Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
   }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+}
+
+@keyframes progressIndeterminate {
+  0% {
+    left: -40%;
+    width: 40%;
+  }
+  50% {
+    left: 25%;
+    width: 50%;
+  }
+  100% {
+    left: 100%;
+    width: 40%;
+  }
+}
+
+.progress-bar-indeterminate {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  background-color: #0B132B;
+  border-radius: 2px;
+  animation: progressIndeterminate 1.5s ease-in-out infinite;
 }
