@@ -15,10 +15,9 @@ import type {
   CreateSportPayload,
 } from './types';
 
-const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-const DEFAULT_API = isLocalhost ? 'http://localhost:5000/api/v1' : 'https://atleta-backend.vercel.app/api/v1';
+const DEFAULT_DEPLOYED_API = 'https://atleta-backend.vercel.app/api/v1';
 const envApi = (import.meta.env.VITE_ATLETA_API || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '') as string;
-const rawBase = (envApi && envApi.trim() ? envApi.trim() : DEFAULT_API).replace(/\/+$/, '');
+const rawBase = (envApi && envApi.trim() ? envApi.trim() : DEFAULT_DEPLOYED_API).replace(/\/+$/, '');
 const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
 
 const TOKEN_KEY = 'atleta_official_token';
