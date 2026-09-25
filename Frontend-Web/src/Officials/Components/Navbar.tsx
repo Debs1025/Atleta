@@ -31,6 +31,8 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     (user?.email ? user.email.split('@')[0].toUpperCase() : '') ||
     'OFFICIAL';
 
+  const roleLabel = (user?.role || '').toUpperCase().includes('ADMIN') ? 'SYSTEM ADMINISTRATOR' : 'OFFICIAL';
+
   return (
     <header style={styles.header}>
       <Link to="/dashboard" style={styles.logo}>
@@ -79,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           }}
         >
           <div style={styles.profileCol}>
-            <span style={styles.profileRole}>OFFICIAL</span>
+            <span style={styles.profileRole}>{roleLabel}</span>
             <span
               style={{
                 ...styles.profileName,
