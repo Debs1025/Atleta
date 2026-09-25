@@ -178,26 +178,48 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
 
   let lastError: Error | null = null;
   let data: AuthResponse | null = null;
+  const isLikelyAdmin = email.toLowerCase().includes('admin');
 
-  // 1. Try officials login endpoint first
-  try {
-    const res = await fetch(`${BASE_URL}/officials/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (res.ok) {
-      data = await handleResponse<AuthResponse>(res);
-    } else {
-      const errJson = await res.json().catch(() => ({}));
-      lastError = new Error(errJson.error || errJson.message || `Login failed (${res.status})`);
+  // 1. If email indicates admin account, try /admin/login first
+  if (isLikelyAdmin) {
+    try {
+      const adminRes = await fetch(`${BASE_URL}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (adminRes.ok) {
+        data = await handleResponse<AuthResponse>(adminRes);
+      } else {
+        const errJson = await adminRes.json().catch(() => ({}));
+        lastError = new Error(errJson.error || errJson.message || `Admin login failed (${adminRes.status})`);
+      }
+    } catch (err: any) {
+      lastError = err;
     }
-  } catch (err: any) {
-    lastError = err;
   }
 
-  // 2. If not authenticated or denied, try admin login endpoint
+  // 2. Try officials login endpoint
   if (!data || !data.token) {
+    try {
+      const res = await fetch(`${BASE_URL}/officials/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        data = await handleResponse<AuthResponse>(res);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        lastError = new Error(errJson.error || errJson.message || `Login failed (${res.status})`);
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  // 3. If still not authenticated, try admin login endpoint if not already tried
+  if ((!data || !data.token) && !isLikelyAdmin) {
     try {
       const adminRes = await fetch(`${BASE_URL}/admin/login`, {
         method: 'POST',

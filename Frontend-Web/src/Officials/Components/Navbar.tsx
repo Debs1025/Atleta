@@ -24,14 +24,15 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   } = useNotifications();
 
   // Extract official's name from auth user record
-  const displayName =
+  const rawName =
     user?.full_legal_name ||
     user?.full_name ||
     (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : null) ||
-    (user?.email ? user.email.split('@')[0].toUpperCase() : '') ||
-    'OFFICIAL';
+    (user?.email ? user.email.split('@')[0] : '') ||
+    'TOURNAMENT OFFICIAL';
 
-  const roleLabel = (user?.role || '').toUpperCase().includes('ADMIN') ? 'SYSTEM ADMINISTRATOR' : 'OFFICIAL';
+  const displayName = rawName.toUpperCase();
+  const roleLabel = 'OFFICIAL';
 
   return (
     <header style={styles.header}>
