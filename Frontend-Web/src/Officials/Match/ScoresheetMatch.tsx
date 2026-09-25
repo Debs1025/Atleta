@@ -698,7 +698,7 @@ export const ScoresheetMatch: React.FC = () => {
               if (window.history.length > 1) {
                 navigate(-1);
               } else {
-                navigate('/dashboard');
+                navigate('/dashboard-official');
               }
             }}
             className="hover-btn-outline"

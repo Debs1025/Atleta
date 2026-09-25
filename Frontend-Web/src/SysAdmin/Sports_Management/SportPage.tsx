@@ -319,7 +319,7 @@ export const SportPage: React.FC = () => {
     const stored = getStoredUser();
     const roleStr = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
     if (stored && roleStr && !roleStr.includes('admin')) {
-      navigate('/dashboard', { replace: true });
+      navigate('/dashboard-official', { replace: true });
       return;
     }
     loadCatalog(false);

@@ -209,7 +209,7 @@ export const NotificationPage: React.FC = () => {
                         type="button"
                         onClick={() => {
                           if (!notif.is_read) markSingleRead(notif.notification_id);
-                          navigate('/dashboard');
+                          navigate('/dashboard-official');
                         }}
                         className="hover-btn-outline"
                         style={styles.auditActionBtn}

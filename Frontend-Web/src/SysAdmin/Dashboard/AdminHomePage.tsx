@@ -103,7 +103,7 @@ export const AdminHomePage: React.FC = () => {
     // Only redirect away if we have a stored user WITH a known non-admin role
     // If role is empty/unknown, stay here (admin page) and let loadQueue verify
     if (stored && roleStr && !roleStr.includes('admin')) {
-      navigate('/dashboard', { replace: true });
+      navigate('/dashboard-official', { replace: true });
       return;
     }
     loadQueue();

@@ -18,9 +18,9 @@ export const LoginPage: React.FC = () => {
       const user = getStoredUser();
       const roleStr = String(user?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
       if (roleStr.includes('admin')) {
-        navigate('/admin/dashboard', { replace: true });
+        navigate('/dashboard-admin', { replace: true });
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate('/dashboard-official', { replace: true });
       }
     }
   }, [navigate]);
@@ -36,9 +36,9 @@ export const LoginPage: React.FC = () => {
       const stored = getStoredUser();
       const roleStr = String(res?.user?.role || stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
       if (roleStr.includes('admin')) {
-        navigate('/admin/dashboard', { replace: true });
+        navigate('/dashboard-admin', { replace: true });
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate('/dashboard-official', { replace: true });
       }
     } catch (e: any) {
       setErr(e.message || 'Authentication failed.');

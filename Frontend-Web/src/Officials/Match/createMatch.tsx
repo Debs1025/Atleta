@@ -672,7 +672,7 @@ export const CreateMatch: React.FC = () => {
 
             {/* Footer Actions */}
             <div style={styles.footerActionsRow}>
-              <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-outline" style={styles.cancelBtn}>
+              <button type="button" onClick={() => navigate('/dashboard-official')} className="hover-btn-outline" style={styles.cancelBtn}>
                 CANCEL
               </button>
               <button type="submit" disabled={submitting} className="hover-btn-solid" style={styles.createMatchBtn}>
@@ -768,7 +768,7 @@ export const CreateMatch: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/dashboard-official')}
                 className="hover-btn-outline"
                 style={styles.modalSecondaryBtn}
               >

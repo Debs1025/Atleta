@@ -47,7 +47,7 @@ export const OfficialHomePage: React.FC = () => {
     const stored = getStoredUser();
     const storedRole = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
     if (storedRole.includes('admin')) {
-      navigate('/admin/dashboard', { replace: true });
+      navigate('/dashboard-admin', { replace: true });
       return;
     }
 
@@ -56,7 +56,7 @@ export const OfficialHomePage: React.FC = () => {
         setUser(res);
         const meRole = String(res?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
         if (meRole.includes('admin')) {
-          navigate('/admin/dashboard', { replace: true });
+          navigate('/dashboard-admin', { replace: true });
         }
       }).catch(() => { }),
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
@@ -69,7 +69,7 @@ export const OfficialHomePage: React.FC = () => {
   useEffect(() => {
     const role = String(user?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
     if (role.includes('admin')) {
-      navigate('/admin/dashboard', { replace: true });
+      navigate('/dashboard-admin', { replace: true });
     }
   }, [user, navigate]);
 

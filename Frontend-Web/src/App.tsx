@@ -24,14 +24,18 @@ function App() {
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* System Administrator Standalone Routes */}
+        {/* System Administrator Standalone Dashboard */}
         <Route
-          path="/admin/dashboard"
+          path="/dashboard-admin"
           element={
             <AdminRoute>
               <AdminHomePage />
             </AdminRoute>
           }
+        />
+        <Route
+          path="/admin/dashboard"
+          element={<Navigate to="/dashboard-admin" replace />}
         />
         <Route
           path="/admin/admission"
@@ -65,17 +69,21 @@ function App() {
             </AdminRoute>
           }
         />
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin" element={<Navigate to="/dashboard-admin" replace />} />
 
-        {/* Tournament Officials Standalone Routes */}
+        {/* Tournament Officials Standalone Dashboard */}
         <Route
-          path="/dashboard"
+          path="/dashboard-official"
           element={
             <OfficialRoute>
               <OfficialHomePage />
             </OfficialRoute>
           }
         />
+        {/* Route /dashboard automatically resolves based on user's role */}
+        <Route path="/dashboard" element={<HomeRedirect />} />
+
+        {/* Tournament Officials Match & Schedules Management */}
         <Route
           path="/matches"
           element={

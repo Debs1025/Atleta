@@ -9,7 +9,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ title = 'ADMIN DASHBOARD' }) => {
   return (
     <header style={styles.header}>
-      <Link to="/admin/dashboard" style={styles.logo}>
+      <Link to="/dashboard-admin" style={styles.logo}>
         ATLETA<sup style={styles.logoSup}>WEB</sup>
       </Link>
       <div style={styles.headerRight}>

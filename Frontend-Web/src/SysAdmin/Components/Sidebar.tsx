@@ -17,7 +17,7 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { key: 'AUDIT_QUEUE' as SysAdminTab, label: 'AUDIT QUEUE', to: '/admin/dashboard', Icon: ClipboardCheck },
+  { key: 'AUDIT_QUEUE' as SysAdminTab, label: 'AUDIT QUEUE', to: '/dashboard-admin', Icon: ClipboardCheck },
   { key: 'SPORT_MANAGER' as SysAdminTab, label: 'SPORT MANAGER', to: '/admin/sports', Icon: DraftingCompass },
 ] as const;
 

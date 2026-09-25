@@ -135,7 +135,7 @@ export const ViewAllMatch: React.FC = () => {
         {/* Header Row */}
         <div style={styles.pageHeaderRow}>
           <h1 style={styles.pageTitle}>ALL MATCHES</h1>
-          <Link to="/dashboard" className="hover-back-link" style={styles.backLink}>
+          <Link to="/dashboard-official" className="hover-back-link" style={styles.backLink}>
             <span>Back to Main Page</span>
             <span>↩</span>
           </Link>

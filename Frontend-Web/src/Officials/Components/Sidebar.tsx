@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'DASHBOARD', Icon: LayoutGrid, key: 'DASHBOARD' },
+  { to: '/dashboard-official', label: 'DASHBOARD', Icon: LayoutGrid, key: 'DASHBOARD' },
   { to: '/schedules', label: 'SCHEDULES', Icon: Calendar, key: 'SCHEDULES' },
   { to: '/settings', label: 'SETTINGS', Icon: Settings, key: 'SETTINGS' },
 ] as const;

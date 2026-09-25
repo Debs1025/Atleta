@@ -12,7 +12,7 @@ export const isUserAdmin = (user?: AuthUser | null): boolean => {
 /**
  * Guard for routes reserved strictly for System Administrators.
  * If user is not logged in -> /login
- * If user is logged in as Official -> redirect to /dashboard
+ * If user is logged in as Official -> redirect to /dashboard-official
  */
 export const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = getStoredToken();
@@ -25,7 +25,7 @@ export const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // Only redirect away to official dashboard if role is definitively known and NOT admin
   if (stored && role && !role.includes('admin')) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/dashboard-official" replace />;
   }
 
   return <>{children}</>;
@@ -34,7 +34,7 @@ export const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }
 /**
  * Guard for routes reserved for Tournament Officials.
  * If user is not logged in -> /login
- * If user is logged in as System Administrator -> redirect to /admin/dashboard
+ * If user is logged in as System Administrator -> redirect to /dashboard-admin
  */
 export const OfficialRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = getStoredToken();
@@ -46,7 +46,7 @@ export const OfficialRoute: React.FC<{ children: React.ReactNode }> = ({ childre
   const role = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
 
   if (role.includes('admin')) {
-    return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to="/dashboard-admin" replace />;
   }
 
   return <>{children}</>;
@@ -54,7 +54,7 @@ export const OfficialRoute: React.FC<{ children: React.ReactNode }> = ({ childre
 
 /**
  * Root route / redirector that automatically routes authenticated users
- * to their respective role dashboard.
+ * to their respective role dashboard: /dashboard-admin or /dashboard-official.
  */
 export const HomeRedirect: React.FC = () => {
   const token = getStoredToken();
@@ -65,7 +65,7 @@ export const HomeRedirect: React.FC = () => {
   const stored = getStoredUser();
   const role = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
   if (role.includes('admin')) {
-    return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to="/dashboard-admin" replace />;
   }
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/dashboard-official" replace />;
 };

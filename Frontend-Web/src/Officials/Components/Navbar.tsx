@@ -35,7 +35,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
 
   return (
     <header style={styles.header}>
-      <Link to="/dashboard" style={styles.logo}>
+      <Link to="/dashboard-official" style={styles.logo}>
         ATLETA<sup style={styles.logoSup}>WEB</sup>
       </Link>
 
