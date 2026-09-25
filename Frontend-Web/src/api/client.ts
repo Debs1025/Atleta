@@ -176,62 +176,64 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
   const email = payload.email.trim();
   const password = payload.password;
 
-  const res = await fetch(`${BASE_URL}/officials/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (res.ok) {
-    const data = await handleResponse<AuthResponse>(res);
-    if (data.token && data.user) {
-      storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
-    }
-    return data;
-  }
-
-  // If officials login returned an error response, handle and throw descriptive message
-  const errorData = await res.json().catch(() => ({}));
-  const errorMsg = errorData.error || errorData.message || (res.status === 404 ? 'User profile not found in Firestore.' : 'Authentication failed.');
-  throw new Error(errorMsg);
-};
-
-export const loginAdmin = async (payload: AdminLoginPayload): Promise<AuthResponse> => {
-  const email = payload.email.trim();
-  const password = payload.password;
-
-  // Try admin login endpoint
+  let lastError: Error | null = null;
   let data: AuthResponse | null = null;
+
+  // 1. Try officials login endpoint first
   try {
-    const res = await fetch(`${BASE_URL}/admin/login`, {
+    const res = await fetch(`${BASE_URL}/officials/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
       data = await handleResponse<AuthResponse>(res);
+    } else {
+      const errJson = await res.json().catch(() => ({}));
+      lastError = new Error(errJson.error || errJson.message || `Login failed (${res.status})`);
     }
-  } catch { }
+  } catch (err: any) {
+    lastError = err;
+  }
 
-  // Fallback to general user login
+  // 2. If not authenticated or denied, try admin login endpoint
   if (!data || !data.token) {
-    const userRes = await fetch(`${BASE_URL}/users/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    data = await handleResponse<AuthResponse>(userRes);
+    try {
+      const adminRes = await fetch(`${BASE_URL}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (adminRes.ok) {
+        data = await handleResponse<AuthResponse>(adminRes);
+      }
+    } catch {}
+  }
+
+  // 3. Fallback to general users login endpoint
+  if (!data || !data.token) {
+    try {
+      const userRes = await fetch(`${BASE_URL}/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (userRes.ok) {
+        data = await handleResponse<AuthResponse>(userRes);
+      }
+    } catch {}
   }
 
   if (data && data.token && data.user) {
-    if (!data.user.role || data.user.role === 'User' || data.user.role === 'System Admin') {
-      data.user.role = 'SystemAdmin';
-    }
     storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
     return data;
   }
 
-  throw new Error('Invalid email or password.');
+  throw lastError || new Error('Invalid email or password.');
+};
+
+export const loginAdmin = async (payload: AdminLoginPayload): Promise<AuthResponse> => {
+  return loginOfficial(payload as any);
 };
 
 export const getAdminProfile = async (forceRefresh = false): Promise<any> => {

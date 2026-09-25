@@ -16,7 +16,8 @@ export const LoginPage: React.FC = () => {
   useEffect(() => {
     const user = getStoredUser();
     if (getStoredToken()) {
-      if (user?.role === 'admin' || user?.role === 'system_admin') {
+      const roleStr = String(user?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+      if (roleStr.includes('admin')) {
         navigate('/admin/dashboard');
       } else {
         navigate('/dashboard');
@@ -32,7 +33,8 @@ export const LoginPage: React.FC = () => {
     try {
       setLoading(true);
       const res = await loginOfficial({ email, password, savePassword: savePass });
-      if (res?.user?.role === 'admin' || res?.user?.role === 'system_admin') {
+      const roleStr = String(res?.user?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+      if (roleStr.includes('admin')) {
         navigate('/admin/dashboard');
       } else {
         navigate('/dashboard');

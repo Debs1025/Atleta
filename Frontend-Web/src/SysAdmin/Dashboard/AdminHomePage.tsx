@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import {
   getStoredToken,
+  getStoredUser,
   getCachedData,
   getAdminCoachQueue,
 } from '../../api/client';
@@ -95,6 +96,12 @@ export const AdminHomePage: React.FC = () => {
   useEffect(() => {
     if (!getStoredToken()) {
       navigate('/login');
+      return;
+    }
+    const stored = getStoredUser();
+    const roleStr = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (stored && !roleStr.includes('admin')) {
+      navigate('/dashboard', { replace: true });
       return;
     }
     loadQueue();

@@ -43,8 +43,21 @@ export const OfficialHomePage: React.FC = () => {
       return;
     }
 
+    const stored = getStoredUser();
+    const roleStr = String(stored?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (roleStr.includes('admin')) {
+      navigate('/admin/dashboard', { replace: true });
+      return;
+    }
+
     Promise.all([
-      getMe().then((res) => setUser(res)).catch(() => { }),
+      getMe().then((res) => {
+        setUser(res);
+        const meRole = String(res?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+        if (meRole.includes('admin')) {
+          navigate('/admin/dashboard', { replace: true });
+        }
+      }).catch(() => { }),
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
       getAllOfficialMatchesMaster().then((res) => setMasterMatches(res || [])).catch(() => { }),
       getOfficialSettings().catch(() => { }),
