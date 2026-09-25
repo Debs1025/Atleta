@@ -49,6 +49,7 @@ export const CreateMatch: React.FC = () => {
 
   // Status & Modal Interruption State
   const [submitting, setSubmitting] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdMatchInfo, setCreatedMatchInfo] = useState<{
     matchId: string;
@@ -63,8 +64,6 @@ export const CreateMatch: React.FC = () => {
     sportCategory.toLowerCase().includes('track') ||
     sportCategory.toLowerCase().includes('swim') ||
     sportCategory.toLowerCase().includes('field');
-
-  const todayStr = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     if (!getStoredToken()) {
@@ -122,15 +121,6 @@ export const CreateMatch: React.FC = () => {
       return;
     }
 
-    // Date validation: past date disallowed
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const chosen = new Date(matchDate);
-    if (chosen < today) {
-      setErrorMessage('Cannot schedule a match for a past date. Please choose today or a future date.');
-      return;
-    }
-
     let finalHome = '';
     let finalAway = '';
     let participating: string[] = [];
@@ -156,6 +146,7 @@ export const CreateMatch: React.FC = () => {
 
     try {
       setSubmitting(true);
+      setProcessingStatus('Starting match creation...');
 
       let normalizedSport = sportCategory.trim() || 'Basketball';
       if (sportCategory.toLowerCase().includes('swim')) {
@@ -195,6 +186,7 @@ export const CreateMatch: React.FC = () => {
 
       // 1. Scan scoresheet via direct client-side OCR & instant extraction
       if (selectedFile) {
+        setProcessingStatus('Scanning Scoresheet & Extracting Athlete Statistics with OCR...');
         try {
           ocrRes = await scanScoresheetClientDirect(selectedFile, finalHome, finalAway, normalizedSport);
           if (ocrRes?.scoresheet_url) scoresheetUrl = ocrRes.scoresheet_url;
@@ -332,6 +324,7 @@ export const CreateMatch: React.FC = () => {
       // 2. Create official match directly with player stats and scoresheet URL attached
       const targetMatchId = queryMatchId ? queryMatchId.toUpperCase() : (/^MATCH-\d+$/i.test(gameName.trim()) ? gameName.trim().toUpperCase() : undefined);
 
+      setProcessingStatus('Saving Official Tournament Record to Database...');
       const createdMatch = await createOfficialMatch({
         match_id: targetMatchId,
         team_id: finalHome,
@@ -507,7 +500,6 @@ export const CreateMatch: React.FC = () => {
                   <input
                     type="date"
                     required
-                    min={todayStr}
                     value={matchDate}
                     onChange={(e) => setMatchDate(e.target.value)}
                     className="hover-input"
@@ -672,6 +664,12 @@ export const CreateMatch: React.FC = () => {
               </div>
             </div>
 
+            {errorMessage && (
+              <div style={{ ...styles.errorNotice, marginBottom: '16px' }}>
+                {errorMessage}
+              </div>
+            )}
+
             {/* Footer Actions */}
             <div style={styles.footerActionsRow}>
               <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-outline" style={styles.cancelBtn}>
@@ -694,6 +692,24 @@ export const CreateMatch: React.FC = () => {
           </form>
         </main>
       </div>
+
+      {/* OCR & CREATION PROCESSING OVERLAY */}
+      {submitting && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalCard, maxWidth: '440px', textAlign: 'center', padding: '36px 28px' }}>
+            <Loader2 style={{ width: 44, height: 44, color: '#0B132B', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+            <h2 style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '8px', color: '#0B132B' }}>
+              PROCESSING SCORESHEET & OCR
+            </h2>
+            <p style={{ fontSize: '13px', color: '#475569', lineHeight: '1.5', margin: '0 0 16px 0', fontWeight: 600 }}>
+              {processingStatus || 'Analyzing scoresheet document and extracting athlete statistics...'}
+            </p>
+            <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, borderTop: '1px solid #E2E8F0', paddingTop: '12px' }}>
+              Please hold on, do not close or refresh this browser tab.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SUCCESS INTERRUPTION MODAL */}
       {createdMatchInfo && (
