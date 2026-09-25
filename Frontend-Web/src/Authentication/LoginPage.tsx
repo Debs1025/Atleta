@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { loginOfficial, getStoredToken } from '../api/client';
+import { loginOfficial, getStoredToken, getStoredUser } from '../api/client';
 import { styles } from './styles/LoginPage';
 
 export const LoginPage: React.FC = () => {
@@ -14,7 +14,14 @@ export const LoginPage: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getStoredToken()) navigate('/settings');
+    const user = getStoredUser();
+    if (getStoredToken()) {
+      if (user?.role === 'admin' || user?.role === 'system_admin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
+    }
   }, [navigate]);
 
   const onLogin = async (e: React.FormEvent) => {
@@ -24,8 +31,12 @@ export const LoginPage: React.FC = () => {
 
     try {
       setLoading(true);
-      await loginOfficial({ email, password, savePassword: savePass });
-      navigate('/settings');
+      const res = await loginOfficial({ email, password, savePassword: savePass });
+      if (res?.user?.role === 'admin' || res?.user?.role === 'system_admin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (e: any) {
       setErr(e.message || 'Authentication failed.');
     } finally {

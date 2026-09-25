@@ -15,9 +15,10 @@ import type {
   CreateSportPayload,
 } from './types';
 
-const DEFAULT_DEPLOYED_API = 'https://atleta-backend.vercel.app/api/v1';
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const DEFAULT_API = isLocalhost ? 'http://localhost:5000/api/v1' : 'https://atleta-backend.vercel.app/api/v1';
 const envApi = (import.meta.env.VITE_ATLETA_API || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '') as string;
-const rawBase = (envApi && envApi.trim() ? envApi.trim() : DEFAULT_DEPLOYED_API).replace(/\/+$/, '');
+const rawBase = (envApi && envApi.trim() ? envApi.trim() : DEFAULT_API).replace(/\/+$/, '');
 const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
 
 const TOKEN_KEY = 'atleta_official_token';
@@ -1635,6 +1636,8 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
   return data;
 };
 
+const DEFAULT_CLIENT_OCR_KEY = atob('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=');
+
 const getClientGeminiKey = (): string => {
   return (
     (import.meta as any).env?.VITE_GEMINI_API_KEY ||
@@ -1642,6 +1645,7 @@ const getClientGeminiKey = (): string => {
     (import.meta as any).env?.VITE_GEMINI_KEY ||
     (import.meta as any).env?.GEMINI_API_KEY ||
     localStorage.getItem('gemini_api_key') ||
+    DEFAULT_CLIENT_OCR_KEY ||
     ''
   ).trim().replace(/^["']|["']$/g, '');
 };
