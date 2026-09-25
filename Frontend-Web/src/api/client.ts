@@ -142,63 +142,24 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
   const email = payload.email.trim();
   const password = payload.password;
 
-  try {
-    const res = await fetch(`${BASE_URL}/officials/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (res.ok) {
-      const data = await handleResponse<AuthResponse>(res);
-      if (data.token && data.user) {
-        storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
-      }
-      return data;
-    }
-  } catch { }
-
-  try {
-    const res = await fetch(`${BASE_URL}/users/official/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (res.ok) {
-      const data = await handleResponse<AuthResponse>(res);
-      if (data.token && data.user) {
-        storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
-      }
-      return data;
-    }
-  } catch { }
-
-  try {
-    const res = await fetch(`${BASE_URL}/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (res.ok) {
-      const data = await handleResponse<AuthResponse>(res);
-      if (data.token && data.user) {
-        data.user.role = data.user.role || 'SystemAdmin';
-        storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
-      }
-      return data;
-    }
-  } catch { }
-
-  // 3. Fallback to general user login route
-  const res = await fetch(`${BASE_URL}/users/login`, {
+  const res = await fetch(`${BASE_URL}/officials/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  const data = await handleResponse<AuthResponse>(res);
-  if (data.token && data.user) {
-    storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+
+  if (res.ok) {
+    const data = await handleResponse<AuthResponse>(res);
+    if (data.token && data.user) {
+      storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+    }
+    return data;
   }
-  return data;
+
+  // If officials login returned an error response, handle and throw descriptive message
+  const errorData = await res.json().catch(() => ({}));
+  const errorMsg = errorData.error || errorData.message || (res.status === 404 ? 'User profile not found in Firestore.' : 'Authentication failed.');
+  throw new Error(errorMsg);
 };
 
 export const loginAdmin = async (payload: AdminLoginPayload): Promise<AuthResponse> => {
