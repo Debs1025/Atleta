@@ -170,16 +170,45 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
     fetchSportsFromDb();
   }, []);
 
-  const renderSportIcon = (sportName: string) => {
+  const renderSportIcon = (sport: SportConfigurationItem | string) => {
+    const sportObj = typeof sport === "object" ? sport : { sport_name: sport };
+    const sportName = sportObj.sport_name || "";
+    const iconUrl =
+      (sportObj as any).icon_url ||
+      (sportObj as any).logo_url ||
+      (sportObj as any).image_url ||
+      (sportObj as any).icon;
+
+    if (
+      iconUrl &&
+      typeof iconUrl === "string" &&
+      (iconUrl.startsWith("http://") || iconUrl.startsWith("https://") || iconUrl.startsWith("data:"))
+    ) {
+      return (
+        <Image
+          source={{ uri: iconUrl }}
+          style={{ width: 28, height: 28, borderRadius: 14 }}
+          resizeMode="contain"
+        />
+      );
+    }
+
     const lower = sportName.toLowerCase();
     const iconColor = "#00D2FF";
+
     if (lower.includes("basket")) {
       return <FontAwesome5 name="basketball-ball" size={24} color={iconColor} />;
     }
-    if (lower.includes("swim")) {
+    if (lower.includes("swim") || lower.includes("water") || lower.includes("pool")) {
       return <FontAwesome5 name="swimmer" size={22} color={iconColor} />;
     }
-    if (lower.includes("track") || lower.includes("field") || lower.includes("run")) {
+    if (
+      lower.includes("track") ||
+      lower.includes("field") ||
+      lower.includes("run") ||
+      lower.includes("sprint") ||
+      lower.includes("athletics")
+    ) {
       return <FontAwesome5 name="running" size={24} color={iconColor} />;
     }
     if (lower.includes("volley")) {
@@ -191,7 +220,8 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
       lower.includes("badminton") ||
       lower.includes("racket") ||
       lower.includes("racquet") ||
-      lower.includes("table")
+      lower.includes("table") ||
+      lower.includes("ping")
     ) {
       return <FontAwesome5 name="table-tennis" size={22} color={iconColor} />;
     }
@@ -200,6 +230,25 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
     }
     if (lower.includes("base") || lower.includes("soft")) {
       return <FontAwesome5 name="baseball-ball" size={24} color={iconColor} />;
+    }
+    if (
+      lower.includes("box") ||
+      lower.includes("mma") ||
+      lower.includes("combat") ||
+      lower.includes("martial") ||
+      lower.includes("karate") ||
+      lower.includes("taekwondo")
+    ) {
+      return <MaterialCommunityIcons name="boxing-glove" size={24} color={iconColor} />;
+    }
+    if (lower.includes("golf")) {
+      return <FontAwesome5 name="golf-ball" size={22} color={iconColor} />;
+    }
+    if (lower.includes("cycle") || lower.includes("biking") || lower.includes("bike")) {
+      return <FontAwesome5 name="biking" size={22} color={iconColor} />;
+    }
+    if (lower.includes("weight") || lower.includes("lift") || lower.includes("gym")) {
+      return <FontAwesome5 name="dumbbell" size={20} color={iconColor} />;
     }
     return <FontAwesome5 name="medal" size={22} color={iconColor} />;
   };
@@ -435,7 +484,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                   activeOpacity={0.8}
                 >
                   <View style={styles.sportTileIcon}>
-                    {renderSportIcon(sport.sport_name)}
+                    {renderSportIcon(sport)}
                   </View>
                   <Text
                     style={[
