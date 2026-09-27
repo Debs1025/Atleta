@@ -184,13 +184,17 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
         onAuthenticated?.(role);
         form.reset(values);
-      } catch (error) {
+      } catch (error: any) {
+        const rawMsg = error?.message || String(error);
         const errorMessage = getAuthErrorMessage(error, "Invalid email or password. Please check your credentials and try again.");
+        const displayMsg = rawMsg && rawMsg !== "Something went wrong." && !rawMsg.includes("Invalid email")
+          ? `${errorMessage} (${rawMsg})`
+          : errorMessage;
         setFeedback({
           tone: "error",
-          message: errorMessage
+          message: displayMsg
         });
-        Alert.alert("Authentication Failed", errorMessage);
+        Alert.alert("Authentication Failed", `${displayMsg}\n\nServer: ${API_BASE}`);
       } finally {
         setLoading(false);
       }
