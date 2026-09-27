@@ -1,17 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   Modal,
-  Alert,
 } from "react-native";
 import {
   Ionicons,
   FontAwesome5,
   MaterialCommunityIcons,
-  MaterialIcons,
 } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/basketballMatch";
@@ -34,16 +32,13 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
   // Selected bench player for substitution
   const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<AthleteRosterItem | null>(null);
 
-  // Selected player for action modal
+  // Selected player for "MORE" action modal (Restricted popup ONLY)
   const [selectedActionPlayer, setSelectedActionPlayer] = useState<AthleteRosterItem | null>(null);
 
-  // Shot tally sub-modal
-  const [showShotModal, setShowShotModal] = useState(false);
-
-  // Handle player selection & rotation substitution swap
+  // Handle player selection for rotation substitution swap ONLY
   const handlePlayerCardPress = (activePlayer: AthleteRosterItem) => {
     if (selectedBenchPlayer) {
-      // Execute rotation substitution swap!
+      // Execute rotation substitution swap
       const newActive = activeRoster.map((item) =>
         item.athlete_id === activePlayer.athlete_id
           ? { ...selectedBenchPlayer, is_active_on_field: true }
@@ -57,9 +52,6 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
 
       setSessionDetails({ active_roster: newActive, bench_roster: newBench });
       setSelectedBenchPlayer(null);
-    } else {
-      // Trigger Action Modal for active player
-      setSelectedActionPlayer(activePlayer);
     }
   };
 
@@ -72,8 +64,11 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
     }
   };
 
-  // Stat action handler
-  const handleStatAction = (statKey: keyof NonNullable<AthleteRosterItem["basketball_stats"]>, delta: number = 1) => {
+  // Stat action handler for direct and modal stat updates
+  const handleStatAction = (
+    statKey: keyof NonNullable<AthleteRosterItem["basketball_stats"]>,
+    delta: number = 1
+  ) => {
     if (!selectedActionPlayer) return;
     const targetId = selectedActionPlayer.athlete_id;
 
@@ -116,32 +111,83 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
           const isSwapTarget = selectedBenchPlayer !== null;
 
           return (
-            <TouchableOpacity
+            <View
               key={player.athlete_id}
               style={[
                 styles.playerCard,
                 isSwapTarget && styles.playerCardSelected,
               ]}
-              onPress={() => handlePlayerCardPress(player)}
-              activeOpacity={0.85}
             >
-              <View style={styles.playerCardHeader}>
-                <Text style={styles.jerseyNumber}>{player.jersey_number}</Text>
+              {/* Player Header & Substitution Indicator */}
+              <TouchableOpacity
+                onPress={() => handlePlayerCardPress(player)}
+                activeOpacity={selectedBenchPlayer ? 0.75 : 1}
+                style={styles.playerCardHeader}
+              >
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+                  <Text style={styles.jerseyNumber}>#{player.jersey_number}</Text>
+                  <Text style={styles.lastName}>{player.last_name}</Text>
+                </View>
+
                 {selectedBenchPlayer ? (
                   <View style={styles.benchBadge}>
-                    <Text style={styles.benchBadgeText}>{selectedBenchPlayer.jersey_number}</Text>
+                    <Text style={styles.benchBadgeText}>SUB #{selectedBenchPlayer.jersey_number}</Text>
                   </View>
                 ) : (
-                  <Ionicons name="chevron-forward" size={22} color="#00D2FF" style={styles.chevronIcon} />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.statsSummary}>
+                      {stats.pts} PTS • {stats.ast} AST • {stats.reb} REB
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.moreActionsBtn}
+                      onPress={() => setSelectedActionPlayer(player)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={18} color="#00D2FF" />
+                    </TouchableOpacity>
+                  </View>
                 )}
+              </TouchableOpacity>
+
+              {/* Quick Action Buttons Row (Direct Taps - No Popups) */}
+              <View style={styles.quickActionRow}>
+                {/* 1. Direct Tap: +1 PTS per individual tap */}
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "pts", 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+PTS</Text>
+                </TouchableOpacity>
+
+                {/* 2. Direct Tap: +1 AST per tap */}
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "ast", 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+AST</Text>
+                </TouchableOpacity>
+
+                {/* 3. Direct Tap: +1 REB per tap */}
+                <TouchableOpacity
+                  style={styles.quickActionBtn}
+                  onPress={() => updateBasketballStats(player.athlete_id, "reb", 1)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickActionBtnText}>+REB</Text>
+                </TouchableOpacity>
+
+                {/* 4. Restricted MORE Button: Houses secondary stats & fouls */}
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, { borderColor: "#334155" }]}
+                  onPress={() => setSelectedActionPlayer(player)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.quickActionBtnText, { color: "#94A3B8" }]}>MORE</Text>
+                </TouchableOpacity>
               </View>
-
-              <Text style={styles.lastName}>{player.last_name}</Text>
-
-              <Text style={styles.statsSummary}>
-                {stats.pts} PTS | {stats.ast} AST | {stats.reb} REB | {stats.pf} PF
-              </Text>
-            </TouchableOpacity>
+            </View>
           );
         })}
       </ScrollView>
@@ -193,7 +239,7 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
         </ScrollView>
       </View>
 
-      {/* Basketball Player Action Modal */}
+      {/* RESTRICTED POPUP: Secondary Stats & Corrections (Only opens when clicking MORE) */}
       <Modal
         visible={selectedActionPlayer !== null}
         transparent
@@ -212,46 +258,16 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
               </TouchableOpacity>
             </View>
 
-            {/* 6-Tile Action Grid */}
+            {/* Secondary Stats Grid */}
             <View style={styles.gridContainer}>
-              {/* SHOT */}
-              <TouchableOpacity
-                style={styles.actionTile}
-                onPress={() => setShowShotModal(true)}
-                activeOpacity={0.8}
-              >
-                <FontAwesome5 name="basketball-ball" size={26} color="#00D2FF" />
-                <Text style={styles.actionTileText}>SHOT</Text>
-              </TouchableOpacity>
-
-              {/* ASSIST */}
-              <TouchableOpacity
-                style={styles.actionTile}
-                onPress={() => handleStatAction("ast", 1)}
-                activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons name="gesture-tap-button" size={28} color="#00D2FF" />
-                <Text style={styles.actionTileText}>ASSIST</Text>
-              </TouchableOpacity>
-
               {/* FOUL */}
               <TouchableOpacity
                 style={styles.actionTile}
                 onPress={() => handleStatAction("pf", 1)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="warning-outline" size={26} color="#00D2FF" />
-                <Text style={styles.actionTileText}>FOUL</Text>
-              </TouchableOpacity>
-
-              {/* REBOUND */}
-              <TouchableOpacity
-                style={styles.actionTile}
-                onPress={() => handleStatAction("reb", 1)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="diamond-outline" size={26} color="#00D2FF" />
-                <Text style={styles.actionTileText}>REBOUND</Text>
+                <Ionicons name="warning-outline" size={26} color="#EF4444" />
+                <Text style={[styles.actionTileText, { color: "#EF4444" }]}>FOUL (+1 PF)</Text>
               </TouchableOpacity>
 
               {/* TURNOVER */}
@@ -260,8 +276,8 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
                 onPress={() => handleStatAction("to", 1)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="refresh-outline" size={26} color="#00D2FF" />
-                <Text style={styles.actionTileText}>TURNOVER</Text>
+                <Ionicons name="refresh-outline" size={26} color="#F59E0B" />
+                <Text style={[styles.actionTileText, { color: "#F59E0B" }]}>TURNOVER (+1 TO)</Text>
               </TouchableOpacity>
 
               {/* STEAL */}
@@ -270,65 +286,83 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
                 onPress={() => handleStatAction("stl", 1)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="hand-left-outline" size={26} color="#00D2FF" />
-                <Text style={styles.actionTileText}>STEAL</Text>
+                <Ionicons name="hand-left-outline" size={26} color="#10B981" />
+                <Text style={[styles.actionTileText, { color: "#10B981" }]}>STEAL (+1 STL)</Text>
+              </TouchableOpacity>
+
+              {/* BLOCK */}
+              <TouchableOpacity
+                style={styles.actionTile}
+                onPress={() => handleStatAction("blk" as any, 1)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="shield-checkmark-outline" size={26} color="#00D2FF" />
+                <Text style={styles.actionTileText}>BLOCK (+1 BLK)</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
 
-      {/* Shot Points Tally Modal */}
-      <Modal
-        visible={showShotModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowShotModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.shotModalCard}>
-            <Text style={styles.shotModalTitle}>RECORD SHOT</Text>
+            {/* Quick Multi-Point Field Goals inside More Menu */}
+            <Text style={styles.modalSectionTitle}>Multi-Point Shots</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
+              <TouchableOpacity
+                style={[styles.correctionBtn, { flex: 1, borderColor: "#00D2FF", backgroundColor: "rgba(0, 210, 255, 0.1)" }]}
+                onPress={() => handleStatAction("pts", 2)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.correctionBtnText, { color: "#00D2FF", textAlign: "center" }]}>+2 PTS (FG)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.correctionBtn, { flex: 1, borderColor: "#00D2FF", backgroundColor: "rgba(0, 210, 255, 0.1)" }]}
+                onPress={() => handleStatAction("pts", 3)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.correctionBtnText, { color: "#00D2FF", textAlign: "center" }]}>+3 PTS (3PT)</Text>
+              </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity
-              style={styles.shotBtn}
-              onPress={() => {
-                handleStatAction("pts", 1);
-                setShowShotModal(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.shotBtnText}>+1 FT (Free Throw)</Text>
-            </TouchableOpacity>
+            {/* Quick Stat Corrections (Decrements) */}
+            <Text style={styles.modalSectionTitle}>Stat Corrections (Undo)</Text>
+            <View style={styles.correctionRow}>
+              <TouchableOpacity
+                style={styles.correctionBtn}
+                onPress={() => handleStatAction("pts", -1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.correctionBtnText}>-1 PTS</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.shotBtn}
-              onPress={() => {
-                handleStatAction("pts", 2);
-                setShowShotModal(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.shotBtnText}>+2 FG (Field Goal)</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.correctionBtn}
+                onPress={() => handleStatAction("ast", -1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.correctionBtnText}>-1 AST</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.shotBtn}
-              onPress={() => {
-                handleStatAction("pts", 3);
-                setShowShotModal(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.shotBtnText}>+3 3PT (Three-Pointer)</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.correctionBtn}
+                onPress={() => handleStatAction("reb", -1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.correctionBtnText}>-1 REB</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.shotBtn, { backgroundColor: "#1C0D19", borderColor: "#EF4444" }]}
-              onPress={() => setShowShotModal(false)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.shotBtnText, { color: "#EF4444" }]}>CANCEL</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.correctionBtn}
+                onPress={() => handleStatAction("pf", -1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.correctionBtnText}>-1 PF</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.correctionBtn}
+                onPress={() => handleStatAction("to", -1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.correctionBtnText}>-1 TO</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

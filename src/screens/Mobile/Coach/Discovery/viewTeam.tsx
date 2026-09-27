@@ -25,7 +25,7 @@ export const ViewTeam: React.FC<ViewTeamProps> = ({ onBack, team }) => {
   const currentTeam = team || contextTeam;
 
   const handleSelectPlayer = (player: AthleteDiscoveryItem) => {
-    const match = athletes.find((a) => a.athlete_id === player.athlete_id || a.full_name.toLowerCase() === player.full_name.toLowerCase()) || player;
+    const match = athletes.find((a) => a.athlete_id === player.athlete_id || (a.full_name || '').toLowerCase() === (player.full_name || '').toLowerCase()) || player;
     setSelectedAthlete(match);
   };
 

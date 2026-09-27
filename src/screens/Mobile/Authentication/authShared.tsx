@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -9,6 +9,7 @@ import {
   type ImageSourcePropType,
   type TextInputProps
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import {
   authScreenStyles,
   bannerStyles,
@@ -119,6 +120,8 @@ export const coachSignupSchema = z.object({
   certification_license_num: z.string().trim().max(100, "License number is too long.").optional().or(z.literal("")),
   years_of_experience: z.coerce.number({ invalid_type_error: "Years of experience is required." }).int().min(0).max(60),
   current_institution: z.string().trim().min(1, "Current institution is required.").max(255, "Current institution is too long."),
+  regional_affiliation: z.string().trim().min(1, "Regional affiliation is required.").max(255, "Regional affiliation is too long."),
+  national_sports_league: z.string().trim().max(255, "League name is too long.").optional().or(z.literal("")),
   eligible_documents: z
     .object({
       name: z.string().optional(),
@@ -136,8 +139,8 @@ export const coachSignupSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema
+  email: z.string().trim().min(1, "Email or username is required."),
+  password: z.string().min(1, "Password is required.")
 });
 
 export const resetSchema = z.object({
@@ -326,8 +329,28 @@ type FieldProps = TextInputProps & {
   rightAccessory?: ReactNode;
 };
 
-export function Field({ label, helperText, error, rightAccessory, style, ...props }: FieldProps) {
+export function Field({ label, helperText, error, rightAccessory, secureTextEntry, style, ...props }: FieldProps) {
   const inputRef = useRef<TextInput>(null);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
+  const isPasswordField = Boolean(secureTextEntry);
+  const effectiveSecure = isPasswordField ? !isPasswordVisible : false;
+
+  const renderedAccessory = rightAccessory ? (
+    <Pressable accessibilityRole="button" onPress={() => inputRef.current?.focus()} style={fieldStyles.rightAccessory}>
+      {rightAccessory}
+    </Pressable>
+  ) : isPasswordField ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={isPasswordVisible ? "Hide password" : "Show password"}
+      onPress={() => setIsPasswordVisible((prev) => !prev)}
+      style={fieldStyles.rightAccessory}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    >
+      <Ionicons name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} size={22} color="#6b7280" />
+    </Pressable>
+  ) : null;
 
   return (
     <View style={fieldStyles.group}>
@@ -336,14 +359,11 @@ export function Field({ label, helperText, error, rightAccessory, style, ...prop
         <TextInput
           ref={inputRef}
           placeholderTextColor="#9aa2b8"
-          style={[fieldStyles.input, rightAccessory ? fieldStyles.inputWithAccessory : undefined, style]}
+          secureTextEntry={effectiveSecure}
+          style={[fieldStyles.input, renderedAccessory ? fieldStyles.inputWithAccessory : undefined, style]}
           {...props}
         />
-        {rightAccessory ? (
-          <Pressable accessibilityRole="button" onPress={() => inputRef.current?.focus()} style={fieldStyles.rightAccessory}>
-            {rightAccessory}
-          </Pressable>
-        ) : null}
+        {renderedAccessory}
       </View>
       {error ? <Text style={fieldStyles.errorText}>{error}</Text> : helperText ? <Text style={fieldStyles.helperText}>{helperText}</Text> : null}
     </View>
@@ -356,7 +376,7 @@ type FormFieldProps<T extends FieldValues> = Omit<FieldProps, "value" | "onChang
 };
 
 export function FormField<T extends FieldValues>({ control, name, ...props }: FormFieldProps<T>) {
-  const { field } = useController({ control, name });
+  const { field, fieldState } = useController({ control, name });
 
   return (
     <Field
@@ -364,6 +384,7 @@ export function FormField<T extends FieldValues>({ control, name, ...props }: Fo
       value={field.value === null || field.value === undefined ? "" : String(field.value)}
       onBlur={field.onBlur}
       onChangeText={field.onChange}
+      error={fieldState.error?.message}
     />
   );
 }

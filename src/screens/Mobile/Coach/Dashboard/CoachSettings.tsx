@@ -82,6 +82,8 @@ export function CoachSettings({
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showPasswordSuccessModal, setShowPasswordSuccessModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -209,12 +211,26 @@ export function CoachSettings({
             <Ionicons name="key-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.rowItem, styles.rowBorder]} onPress={onOpenTerms} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={[styles.rowItem, styles.rowBorder]}
+            onPress={() => {
+              if (onOpenTerms) onOpenTerms();
+              else setShowTermsModal(true);
+            }}
+            activeOpacity={0.7}
+          >
             <Text style={styles.itemTitle}>Terms of Service</Text>
             <Ionicons name="open-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.rowItem} onPress={onOpenPrivacy} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.rowItem}
+            onPress={() => {
+              if (onOpenPrivacy) onOpenPrivacy();
+              else setShowPrivacyModal(true);
+            }}
+            activeOpacity={0.7}
+          >
             <Text style={styles.itemTitle}>Privacy Protocol</Text>
             <Ionicons name="shield-checkmark-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -226,6 +242,102 @@ export function CoachSettings({
           <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </ScrollView>
+
+      {/* TERMS OF SERVICE MODAL */}
+      <Modal visible={showTermsModal} transparent animationType="slide" onRequestClose={() => setShowTermsModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowTermsModal(false)}>
+          <TouchableOpacity style={[styles.modalContentCard, { maxHeight: "80%" }]} activeOpacity={1} onPress={(e) => e.stopPropagation?.()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>TERMS OF SERVICE</Text>
+              <TouchableOpacity onPress={() => setShowTermsModal(false)}>
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginVertical: 10 }}>
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                1. ACCEPTANCE OF TERMS & ATHLETIC INTEGRITY
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                By accessing the Atleta Sports Management Platform, coaches agree to uphold professional coaching ethics, verify athlete roster eligibility, and adhere to national and regional tournament standards (e.g., Batang Pinoy, BRAA, DepEd, PSC).
+              </Text>
+
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                2. CREDENTIALS & INSTITUTION AFFILIATIONS
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                Coaches must provide authentic certifications, license credentials, and institutional affiliations. Misrepresentation of official credentials or tournament qualifications may result in account termination.
+              </Text>
+
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                3. SCORESHEET LOGGING & AUDIT VALIDATION
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                All match logs, box score data, and OCR-scanned scoresheets are submitted for validation and certification by authorized Tournament Officials. Falsifying athlete stats or box scores is strictly prohibited.
+              </Text>
+
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                4. SCOUTING & RECRUITMENT ETHICS
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                Recruitment inquiries and scouting proposals sent through the discovery network must respect student-athlete amateur status, school transfer protocols, and youth protection guidelines.
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity style={styles.primaryCtaBtn} onPress={() => setShowTermsModal(false)} activeOpacity={0.85}>
+              <Text style={styles.primaryCtaBtnText}>I UNDERSTAND</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* PRIVACY PROTOCOL MODAL */}
+      <Modal visible={showPrivacyModal} transparent animationType="slide" onRequestClose={() => setShowPrivacyModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowPrivacyModal(false)}>
+          <TouchableOpacity style={[styles.modalContentCard, { maxHeight: "80%" }]} activeOpacity={1} onPress={(e) => e.stopPropagation?.()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>PRIVACY PROTOCOL</Text>
+              <TouchableOpacity onPress={() => setShowPrivacyModal(false)}>
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginVertical: 10 }}>
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                1. ATHLETE PERFORMANCE DATA PROTECTION
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                Atleta complies with the Philippine Data Privacy Act of 2012 (RA 10173). Performance metrics, biometrics (height, weight, wingspan), and workload analytics (ACWR, fatigue scores) are processed securely for sports analytics and development.
+              </Text>
+
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                2. CONTACT INFORMATION & IDENTITY CONFIDENTIALITY
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                Student-athlete personal contact numbers, email addresses, and PSA documents are protected. Contact details are accessible only to verified coaches through authorized scouting workflows.
+              </Text>
+
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                3. ENCRYPTED CLOUD SYNCHRONIZATION
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                All synchronized data transmissions use HTTPS/TLS encryption. Offline-cached records are securely stored and synced to Firestore when internet connectivity is re-established.
+              </Text>
+
+              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 13, marginBottom: 4 }}>
+                4. USER CONTROL & PREFERENCES
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12.5, lineHeight: 18, marginBottom: 12 }}>
+                Coaches can configure their notification preferences and data sync settings directly in this menu. Account deletion and data export requests can be initiated at any time.
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity style={styles.primaryCtaBtn} onPress={() => setShowPrivacyModal(false)} activeOpacity={0.85}>
+              <Text style={styles.primaryCtaBtnText}>CLOSE</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* LOGOUT CONFIRMATION MODAL */}
       <Modal visible={showLogoutModal} transparent animationType="fade" onRequestClose={() => setShowLogoutModal(false)}>

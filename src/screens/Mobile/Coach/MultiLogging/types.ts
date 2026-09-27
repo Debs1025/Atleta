@@ -7,6 +7,7 @@ export interface BasketballStats {
   pf: number;
   stl: number;
   to: number;
+  blk?: number;
 }
 
 export interface TimingStats {

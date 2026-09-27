@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
+import { Alert, Platform, ScrollView, Text, View } from "react-native";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -165,29 +165,50 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     }
   };
 
-  const submit = form.handleSubmit(async (values) => {
-    setLoading(true);
-    setFeedback(null);
+  const submit = form.handleSubmit(
+    async (values) => {
+      setLoading(true);
+      setFeedback(null);
 
-    try {
-      const result = await requestJson("/users/login", values);
-      const token = extractAuthToken(result);
-      const role = extractAuthRole(result, values.email);
+      try {
+        const payload = {
+          email: values.email.trim().toLowerCase(),
+          password: values.password.trim()
+        };
+        const result = await requestJson("/users/login", payload);
+        const token = extractAuthToken(result);
+        const role = extractAuthRole(result, payload.email);
 
-      if (token) await storeAuthToken(token);
-      await storeAuthRole(role);
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(role);
 
-      onAuthenticated?.(role);
-      form.reset(values);
-    } catch (error) {
+        onAuthenticated?.(role);
+        form.reset(values);
+      } catch (error: any) {
+        const rawMsg = error?.message || String(error);
+        const errorMessage = getAuthErrorMessage(error, "Invalid email or password. Please check your credentials and try again.");
+        const displayMsg = rawMsg && rawMsg !== "Something went wrong." && !rawMsg.includes("Invalid email")
+          ? `${errorMessage} (${rawMsg})`
+          : errorMessage;
+        setFeedback({
+          tone: "error",
+          message: displayMsg
+        });
+        Alert.alert("Authentication Failed", `${displayMsg}\n\nServer: ${API_BASE}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    (errors) => {
+      const firstError = Object.values(errors)[0]?.message as string | undefined;
+      const msg = firstError || "Please enter your email and password.";
       setFeedback({
         tone: "error",
-        message: getAuthErrorMessage(error, "Invalid login credentials.")
+        message: msg
       });
-    } finally {
-      setLoading(false);
+      Alert.alert("Authentication Failed", msg);
     }
-  });
+  );
 
   return (
     <ScrollView contentContainerStyle={authScreenStyles.content} keyboardShouldPersistTaps="handled">
@@ -196,8 +217,24 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         <SectionTitle title="Log In" subtitle="Access your ATLETA dashboard using your credentials or social account." />
         <Banner tone={feedback?.tone ?? "info"} message={feedback?.message} />
 
-        <FormField control={form.control} name="email" label="Email Address" placeholder="athlete@domain.com" />
-        <FormField control={form.control} name="password" label="Password" placeholder="••••••••" secureTextEntry />
+        <FormField
+          control={form.control}
+          name="email"
+          label="Email Address"
+          placeholder="athlete@domain.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoCorrect={false}
+        />
+        <FormField
+          control={form.control}
+          name="password"
+          label="Password"
+          placeholder="••••••••"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
         <Button label="Login" loading={loading} onPress={submit} />
 

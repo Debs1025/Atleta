@@ -56,8 +56,16 @@ export function InquireCoachScreen({
       setHasSentInquiry(true);
       setModalMode("SUCCESS");
     } catch (err: any) {
-      setHasSentInquiry(true);
-      setModalMode("ALREADY_SENT");
+      const errMsg = err?.message || err?.error || String(err);
+      if (
+        errMsg.toLowerCase().includes("already have an active") ||
+        errMsg.toLowerCase().includes("already inquired")
+      ) {
+        setHasSentInquiry(true);
+        setModalMode("ALREADY_SENT");
+      } else {
+        Alert.alert("Inquiry Error", errMsg || "Failed to submit recruitment inquiry. Please try again.");
+      }
     } finally {
       setIsSending(false);
     }

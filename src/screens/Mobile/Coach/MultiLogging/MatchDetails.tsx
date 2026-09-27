@@ -22,6 +22,7 @@ interface MatchDetailsProps {
 }
 
 export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDetailsProps) {
+  // Insets and Match Session
   const insets = useSafeAreaInsets();
   const { session, setSessionDetails, resetSession } = useMatchSession();
 

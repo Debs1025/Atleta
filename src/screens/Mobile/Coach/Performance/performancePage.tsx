@@ -153,25 +153,25 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                   </Text>
                 ) : athlete.sport_category === "SWIMMING" && athlete.averages ? (
                   <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.pb_50m_free || "23.45s"} 50M • {athlete.averages.swim_index_score || "850"} SWIM INDEX
+                    {athlete.averages.pb_50m_free ? `${athlete.averages.pb_50m_free} 50M` : "- 50M"} • {athlete.averages.swim_index_score ? `${athlete.averages.swim_index_score} SWIM INDEX` : "- SWIM INDEX"}
                   </Text>
                 ) : athlete.sport_category === "TRACK AND FIELD" && athlete.averages ? (
                   <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.pb_100m || "10.12s"} 100M • {athlete.averages.win_rate_pct ? `${athlete.averages.win_rate_pct}%` : "86%"} WIN
+                    {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "- 100M"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "- WIN"}
                   </Text>
                 ) : null}
                 <View style={[styles.progressTrack, { marginTop: 6 }]}>
                   <View
                     style={[
                       styles.progressFill,
-                      { width: `${Math.min(100, athlete.rating_score || 85)}%` },
+                      { width: `${Math.min(100, Math.max(0, athlete.rating_score || 0))}%` },
                     ]}
                   />
                 </View>
               </View>
 
               <View style={styles.cardRight}>
-                <Text style={styles.ratingValue}>{athlete.rating_score || 85}</Text>
+                <Text style={styles.ratingValue}>{athlete.rating_score || "-"}</Text>
                 <Text style={styles.ratingLabel}>RATING</Text>
               </View>
             </TouchableOpacity>

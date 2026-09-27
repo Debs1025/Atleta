@@ -88,10 +88,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     position: "relative",
   },
+  avatarPhoto: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 20,
+  },
+  avatarPlaceholderImage: {
+    width: 50,
+    height: 50,
+    tintColor: "#94A3B8",
+  },
   avatarImage: {
     width: 50,
     height: 50,
-    tintColor: "#FFFFFF",
   },
   cameraBadge: {
     position: "absolute",
