@@ -13,6 +13,7 @@ import {
   prefetchMatchAuditDetail,
   isMatchCreatedByOfficial,
   isMatchLocallyCertified,
+  getSports,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse, MatchSummaryItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -62,6 +63,7 @@ export const OfficialHomePage: React.FC = () => {
       getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
       getAllOfficialMatchesMaster().then((res) => setMasterMatches(res || [])).catch(() => { }),
       getOfficialSettings().catch(() => { }),
+      getSports(false, true).catch(() => { }),
       prefetchAllOfficialAuditMatches().catch(() => { }),
     ]).finally(() => setLoading(false));
   }, [navigate]);

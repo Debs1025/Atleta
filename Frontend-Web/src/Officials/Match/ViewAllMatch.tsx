@@ -6,6 +6,7 @@ import {
   getCachedData,
   prefetchMatchAuditDetail,
   isMatchCreatedByOfficial,
+  getSports,
 } from '../../api/client';
 import type { MatchSummaryItem } from '../../api/types';
 import { styles } from './styles/ViewAllMatch';
@@ -44,11 +45,56 @@ const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
   );
 });
 
+const normalizeSportKey = (name: string): string => (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
+
+const buildNormalizedSportsList = (rawSports?: any[]): string[] => {
+  let list: any[] = [];
+  if (Array.isArray(rawSports) && rawSports.length > 0) {
+    list = rawSports;
+  } else {
+    const falseCache = getCachedData<any>('sports_catalog_false');
+    const trueCache = getCachedData<any>('sports_catalog_true');
+    const adminCache = getCachedData<any>('admin_sports_catalog');
+
+    if (falseCache?.sports && Array.isArray(falseCache.sports) && falseCache.sports.length > 0) {
+      list = falseCache.sports;
+    } else if (trueCache?.sports && Array.isArray(trueCache.sports) && trueCache.sports.length > 0) {
+      list = trueCache.sports;
+    } else if (Array.isArray(adminCache) && adminCache.length > 0) {
+      list = adminCache;
+    }
+  }
+
+  const seen = new Set<string>(['ALL SPORTS']);
+  const sports: string[] = ['ALL SPORTS'];
+
+  list.forEach((s: any) => {
+    if (s && s.active !== false && s.is_active !== false) {
+      const raw = (s.sport_name || s.name || s.sport || '').trim();
+      const norm = normalizeSportKey(raw);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        sports.push(raw.toUpperCase());
+      }
+    }
+  });
+
+  ['BASKETBALL', 'TRACK AND FIELD', 'SWIMMING'].forEach((def) => {
+    const norm = normalizeSportKey(def);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      sports.push(def);
+    }
+  });
+  return sports;
+};
+
 export const ViewAllMatch: React.FC = () => {
   const navigate = useNavigate();
   const user = useMemo(() => getStoredUser(), []);
   const [activeTab, setActiveTab] = useState<'PENDING' | 'PROCESSED'>('PENDING');
   const [selectedSport, setSelectedSport] = useState<string>('ALL');
+  const [dynamicSports, setDynamicSports] = useState<string[]>(() => buildNormalizedSportsList());
 
   // Master in-memory dataset of all official's matches
   const [allMatches, setAllMatches] = useState<MatchSummaryItem[]>(
@@ -83,15 +129,30 @@ export const ViewAllMatch: React.FC = () => {
         if (isMounted) setLoading(false);
       });
 
+    const fetchSports = () => {
+      getSports(false, true)
+        .then((res) => {
+          if (isMounted && res) {
+            const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+            setDynamicSports(buildNormalizedSportsList(list));
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchSports();
+
+    window.addEventListener('storage', fetchSports);
+    window.addEventListener('sports_updated', fetchSports);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('storage', fetchSports);
+      window.removeEventListener('sports_updated', fetchSports);
     };
   }, []);
 
-  const sportsList = useMemo(
-    () => ['ALL SPORTS', 'BASKETBALL', 'TRACK AND FIELD', 'SWIMMING'],
-    []
-  );
+  const sportsList = dynamicSports;
 
   // Filter Sports, Pending/Processed, and ONLY matches created by this official user
   const displayedMatches = useMemo(() => {

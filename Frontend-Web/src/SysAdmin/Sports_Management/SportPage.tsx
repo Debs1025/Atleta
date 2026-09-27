@@ -23,6 +23,7 @@ import {
   getSports,
   createSport,
   updateSport,
+  deleteSport,
 } from '../../api/client';
 import type {
   SportConfiguration,
@@ -286,6 +287,59 @@ export const SportPage: React.FC = () => {
 
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Deletion State
+  const [sportToDelete, setSportToDelete] = useState<SportConfiguration | null>(null);
+  const [deletingSport, setDeletingSport] = useState(false);
+
+  // Helper: Detect core default sports that cannot be deleted
+  const isCoreSport = (sport?: SportConfiguration | null): boolean => {
+    if (!sport) return false;
+    const id = (sport.sport_id || '').toLowerCase();
+    const name = (sport.sport_name || '').toLowerCase();
+    return (
+      id.includes('basketball') ||
+      id.includes('swimming') ||
+      id.includes('track_field') ||
+      name === 'basketball' ||
+      name === 'swimming' ||
+      name === 'track & field' ||
+      name === 'track and field'
+    );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!sportToDelete) return;
+    try {
+      setDeletingSport(true);
+      await deleteSport(sportToDelete.sport_id);
+
+      setSports((prev) => {
+        const updated = prev.filter((s) => s.sport_id !== sportToDelete.sport_id);
+        setCachedData('admin_sports_catalog', updated);
+        setCachedData('sports_catalog_false', { total_sports: updated.length, sports: updated });
+        setCachedData('sports_catalog_true', {
+          total_sports: updated.filter((s) => s.is_active !== false).length,
+          sports: updated.filter((s) => s.is_active !== false),
+        });
+        return updated;
+      });
+
+      try {
+        window.dispatchEvent(new Event('sports_updated'));
+      } catch {}
+
+      if (viewMode === 'BUILDER' && editingSportId === sportToDelete.sport_id) {
+        setViewMode('CATALOG');
+        setEditingSportId(null);
+      }
+      setSportToDelete(null);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete sport configuration.');
+    } finally {
+      setDeletingSport(false);
+    }
+  };
 
   // Load catalog
   const loadCatalog = async (forceRefresh = false) => {
@@ -616,8 +670,17 @@ export const SportPage: React.FC = () => {
             )
           : [...prev, savedSport];
         setCachedData('admin_sports_catalog', updated);
+        setCachedData('sports_catalog_false', { total_sports: updated.length, sports: updated });
+        setCachedData('sports_catalog_true', {
+          total_sports: updated.filter((s) => s.is_active !== false).length,
+          sports: updated.filter((s) => s.is_active !== false),
+        });
         return updated;
       });
+
+      try {
+        window.dispatchEvent(new Event('sports_updated'));
+      } catch {}
 
       setTimeout(() => {
         setViewMode('CATALOG');
@@ -756,13 +819,34 @@ export const SportPage: React.FC = () => {
                               )}
                             </td>
                             <td style={{ ...styles.td, textAlign: 'center', borderRight: 'none' }}>
-                              <button
-                                type="button"
-                                onClick={() => handleEditSport(sport)}
-                                style={styles.actionBtnOutline}
-                              >
-                                EDIT
-                              </button>
+                              <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditSport(sport)}
+                                  style={styles.actionBtnOutline}
+                                >
+                                  EDIT
+                                </button>
+                                {!isCoreSport(sport) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSportToDelete(sport)}
+                                    title={`Delete ${sport.sport_name}`}
+                                    style={{
+                                      ...styles.actionBtnOutline,
+                                      borderColor: '#EF4444',
+                                      color: '#EF4444',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '6px 10px',
+                                    }}
+                                  >
+                                    <Trash2 style={{ width: 14, height: 14 }} />
+                                    <span>DELETE</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1105,9 +1189,39 @@ export const SportPage: React.FC = () => {
 
                     {/* Footer */}
                     <div style={styles.panelFooter}>
-                      <p style={styles.footerNoticeText}>
-                        Configured metrics and formulas automatically sync across the coach mobile app and official scorekeeping screens.
-                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {editingSportId && (() => {
+                          const currentSport = sports.find((s) => s.sport_id === editingSportId);
+                          if (currentSport && !isCoreSport(currentSport)) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setSportToDelete(currentSport)}
+                                style={{
+                                  padding: '10px 16px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #EF4444',
+                                  backgroundColor: '#FEF2F2',
+                                  color: '#DC2626',
+                                  fontWeight: 700,
+                                  fontSize: '13px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                }}
+                              >
+                                <Trash2 style={{ width: 15, height: 15 }} />
+                                <span>DELETE SPORT</span>
+                              </button>
+                            );
+                          }
+                          return null;
+                        })()}
+                        <p style={styles.footerNoticeText}>
+                          Configured metrics and formulas automatically sync across the coach mobile app and official scorekeeping screens.
+                        </p>
+                      </div>
                       <button
                         type="submit"
                         disabled={submitting}
@@ -1136,6 +1250,118 @@ export const SportPage: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {sportToDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FEE2E2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626',
+                  flexShrink: 0,
+                }}
+              >
+                <Trash2 style={{ width: 20, height: 20 }} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
+                  Delete Sport Configuration
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748B' }}>
+                  Permanent deletion confirmation
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.5, marginBottom: '24px' }}>
+              Are you sure you want to permanently delete{' '}
+              <strong>{sportToDelete.sport_name}</strong> ({sportToDelete.short_identifier})?
+              All configured metrics and scoring rules for this sport will be removed from the system.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={deletingSport}
+                onClick={() => setSportToDelete(null)}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingSport}
+                onClick={handleConfirmDelete}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {deletingSport ? (
+                  <>
+                    <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 style={{ width: 14, height: 14 }} />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

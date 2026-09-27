@@ -35,7 +35,28 @@ export const ScoresheetMatch: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const cleanId = matchId ? matchId.replace(/^#/, '') : '';
-  const cached = cleanId ? getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) : null;
+  const cached = cleanId ? (getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) || (() => {
+    const list = (getCachedData<any[]>('all_official_matches_master') || []).concat(getCachedData<any[]>('official_schedules') || []);
+    const item = list.find((m: any) => String(m.match_id || m.id || '').replace(/^#/, '') === cleanId);
+    if (!item) return null;
+    const raw = item.raw_match || {};
+    const hName = (item.home_team_name || raw.home_team_name || 'HOME TEAM').toUpperCase();
+    const aName = (item.opponent_team_name || raw.opponent_team_name || 'AWAY TEAM').toUpperCase();
+    const sType = item.sport || raw.sport_type || 'Basketball';
+    return {
+      match_id: cleanId,
+      validation_id: item.validation_id || raw.validation_id || cleanId,
+      game_name: item.match_name || raw.match_name || `${hName} vs ${aName}`,
+      sport_type: sType,
+      league_class: item.match_class || `${sType.toUpperCase()} • VARSITY LEAGUE`,
+      match_date_formatted: item.date_time || item.match_date_formatted || 'DATE TBD',
+      home_team: { name: hName, score: Number(raw.home_score || 0), result: 'WIN', roster_stats: [] },
+      away_team: { name: aName, score: Number(raw.away_score || 0), result: 'LOSE', roster_stats: [] },
+      is_certified: Boolean(item.status === 'AUDITED' || item.status === 'Certified' || raw.is_certified),
+      scoresheet_url: raw.scoresheet_url || item.scoresheet_url,
+      audit_context_notes: raw.notes || '',
+    } as unknown as MatchAuditDetail;
+  })()) : null;
 
   const [matchData, setMatchData] = useState<MatchAuditDetail | null>(() => cached || null);
   const [loading, setLoading] = useState(() => !cached);
@@ -64,24 +85,42 @@ export const ScoresheetMatch: React.FC = () => {
     // Session token verified when performing restricted actions
   }, [navigate]);
 
-  const loadMatchData = async () => {
+  const loadMatchData = async (silent = Boolean(cached || matchData)) => {
     if (!cleanId) return;
-    const hasCached = Boolean(getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`));
-    if (!hasCached) {
-      setLoading(true);
-    }
+    if (!silent) setLoading(true);
 
     try {
       const data = await getMatchAuditDetail(cleanId, true);
       if (data) {
-        setMatchData(data);
+        setMatchData((prev) => {
+          const prevHome = prev?.home_team?.roster_stats || [];
+          const prevAway = prev?.away_team?.roster_stats || [];
+          const dataHome = data.home_team?.roster_stats || [];
+          const dataAway = data.away_team?.roster_stats || [];
+
+          return {
+            ...data,
+            home_team: {
+              ...data.home_team,
+              roster_stats: dataHome.length > 0 ? dataHome : prevHome,
+            },
+            away_team: {
+              ...data.away_team,
+              roster_stats: dataAway.length > 0 ? dataAway : prevAway,
+            },
+          };
+        });
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
         setNotes((prev) => (prev ? prev : resolvedNote));
         if (data.scoresheet_url) setScoresheetUrl(data.scoresheet_url);
-        setHomeRoster(data.home_team?.roster_stats || []);
-        setAwayRoster(data.away_team?.roster_stats || []);
+        if (data.home_team?.roster_stats && data.home_team.roster_stats.length > 0) {
+          setHomeRoster(data.home_team.roster_stats);
+        }
+        if (data.away_team?.roster_stats && data.away_team.roster_stats.length > 0) {
+          setAwayRoster(data.away_team.roster_stats);
+        }
         if (data.race_results && data.race_results.length > 0) {
           setRaceResults(data.race_results);
         }

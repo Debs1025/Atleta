@@ -97,11 +97,14 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
     pointerEvents: visible ? 'auto' : 'none',
   };
 
+  const unreadNotifications = notifications.filter((item) => !item.is_read);
+  const displayCount = unreadCount > 0 ? unreadCount : unreadNotifications.length;
+
   return (
     <div ref={popoverRef} style={transitionStyle}>
       {/* Popover Header */}
       <div style={styles.popoverHeader}>
-        <h3 style={styles.headerTitle}>NOTIFICATIONS ({unreadCount})</h3>
+        <h3 style={styles.headerTitle}>NOTIFICATIONS ({displayCount})</h3>
         <button
           type="button"
           onClick={onMarkAllRead}
@@ -114,19 +117,14 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
 
       {/* Notification Items List */}
       <div style={styles.itemsList}>
-        {(() => {
-          const unreadNotifications = notifications.filter((item) => !item.is_read);
-          if (loading && unreadNotifications.length === 0) {
-            return (
-              <div style={{ padding: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
-              </div>
-            );
-          }
-          if (unreadNotifications.length === 0) {
-            return <div style={styles.emptyState}>No notifications right now.</div>;
-          }
-          return unreadNotifications.slice(0, 10).map((item, idx) => {
+        {loading && unreadNotifications.length === 0 ? (
+          <div style={{ padding: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+          </div>
+        ) : unreadNotifications.length === 0 ? (
+          <div style={styles.emptyState}>No notifications right now.</div>
+        ) : (
+          unreadNotifications.slice(0, 10).map((item, idx) => {
             const isAudit = item.type === 'AUDIT_REQUEST' || item.title.toLowerCase().includes('audit') || item.title.toLowerCase().includes('stats');
             const pillText = isAudit ? 'AUDIT REQUEST' : 'SCHEDULE UPDATES';
             const isLast = idx === Math.min(unreadNotifications.length, 10) - 1;
@@ -171,8 +169,8 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
                 </div>
               </div>
             );
-          });
-        })()}
+          })
+        )}
       </div>
 
       {/* Footer CTA Container */}

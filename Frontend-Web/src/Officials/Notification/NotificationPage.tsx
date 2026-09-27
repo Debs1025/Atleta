@@ -171,6 +171,7 @@ export const NotificationPage: React.FC = () => {
                   notif.type === 'AUDIT_REQUEST' ||
                   notif.title.toLowerCase().includes('audit') ||
                   notif.title.toLowerCase().includes('stats');
+                const isRead = Boolean(notif.is_read);
 
                 if (isAudit) {
                   const coachName = notif.requested_by_coach || notif.requested_by || 'N/A';
@@ -178,9 +179,15 @@ export const NotificationPage: React.FC = () => {
                   const sportDiscipline = notif.sport_discipline || notif.sport || 'GENERAL';
 
                   return (
-                    <div key={notif.notification_id} style={styles.auditCard}>
+                    <div
+                      key={notif.notification_id}
+                      style={{
+                        ...styles.auditCard,
+                        ...(isRead ? styles.auditCardRead : {}),
+                      }}
+                    >
                       <div style={styles.cardTopLine}>
-                        <h3 style={styles.auditCardTitle}>
+                        <h3 style={isRead ? styles.auditCardTitleRead : styles.auditCardTitle}>
                           AUDIT REQUEST: {notif.title.toUpperCase()}
                         </h3>
                         <span style={styles.cardTimestamp}>
@@ -189,19 +196,19 @@ export const NotificationPage: React.FC = () => {
                       </div>
 
                       <div style={styles.auditGrid}>
-                        <div style={styles.gridCol}>
+                        <div style={isRead ? styles.gridColRead : styles.gridCol}>
                           <span style={styles.gridColLabel}>REQUESTED BY</span>
-                          <span style={styles.gridColVal}>{coachName}</span>
+                          <span style={isRead ? styles.gridColValRead : styles.gridColVal}>{coachName}</span>
                         </div>
 
-                        <div style={styles.gridCol}>
+                        <div style={isRead ? styles.gridColRead : styles.gridCol}>
                           <span style={styles.gridColLabel}>MATCH CONTEXT</span>
-                          <span style={styles.gridColVal}>{matchContext}</span>
+                          <span style={isRead ? styles.gridColValRead : styles.gridColVal}>{matchContext}</span>
                         </div>
 
-                        <div style={styles.gridCol}>
+                        <div style={isRead ? styles.gridColRead : styles.gridCol}>
                           <span style={styles.gridColLabel}>SPORT DISCIPLINE</span>
-                          <span style={styles.gridColVal}>{sportDiscipline}</span>
+                          <span style={isRead ? styles.gridColValRead : styles.gridColVal}>{sportDiscipline}</span>
                         </div>
                       </div>
 
@@ -212,7 +219,7 @@ export const NotificationPage: React.FC = () => {
                           navigate('/dashboard-official');
                         }}
                         className="hover-btn-outline"
-                        style={styles.auditActionBtn}
+                        style={isRead ? styles.auditActionBtnRead : styles.auditActionBtn}
                       >
                         <span>REVIEW & ATTACH SCORESHEET</span>
                         <ArrowRight style={{ width: 14, height: 14 }} />
@@ -223,10 +230,16 @@ export const NotificationPage: React.FC = () => {
 
                 // Schedule Updates Card
                 return (
-                  <div key={notif.notification_id} style={styles.scheduleCard}>
+                  <div
+                    key={notif.notification_id}
+                    style={{
+                      ...styles.scheduleCard,
+                      ...(isRead ? styles.scheduleCardRead : {}),
+                    }}
+                  >
                     <div style={styles.scheduleTopRow}>
-                      <h3 style={styles.scheduleHeaderTitle}>
-                        <span style={styles.squareBullet} />
+                      <h3 style={isRead ? styles.scheduleHeaderTitleRead : styles.scheduleHeaderTitle}>
+                        <span style={isRead ? styles.squareBulletRead : styles.squareBullet} />
                         <span>SCHEDULE UPDATES: {notif.title.toUpperCase()}</span>
                       </h3>
                       <span style={styles.cardTimestamp}>
@@ -234,9 +247,9 @@ export const NotificationPage: React.FC = () => {
                       </span>
                     </div>
 
-                    <div style={styles.scheduleDivider} />
+                    <div style={isRead ? styles.scheduleDividerRead : styles.scheduleDivider} />
 
-                    <p style={styles.scheduleDescription}>
+                    <p style={isRead ? styles.scheduleDescriptionRead : styles.scheduleDescription}>
                       {notif.message || notif.title}
                     </p>
 
@@ -248,7 +261,7 @@ export const NotificationPage: React.FC = () => {
                           navigate('/schedules');
                         }}
                         className="hover-link-accent"
-                        style={styles.viewDetailsLink}
+                        style={isRead ? styles.viewDetailsLinkRead : styles.viewDetailsLink}
                       >
                         VIEW DETAILS
                       </button>

@@ -35,6 +35,8 @@ export const SettingsPage: React.FC = () => {
       }
   );
 
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
   useEffect(() => {
     if (!getStoredToken()) {
       navigate('/login');
@@ -50,6 +52,7 @@ export const SettingsPage: React.FC = () => {
   }, [navigate]);
 
   const toggleSetting = async (key: keyof OfficialSettings) => {
+    setSavingKey(String(key));
     const updated = {
       ...settings,
       [key]: !settings[key],
@@ -59,6 +62,8 @@ export const SettingsPage: React.FC = () => {
       await updateOfficialSettings({ [key]: updated[key] });
     } catch {
       setSettings(settings);
+    } finally {
+      setSavingKey(null);
     }
   };
 
@@ -126,6 +131,7 @@ export const SettingsPage: React.FC = () => {
                   style={{
                     ...styles.switchTrack,
                     ...(settings.split_screen_defaults ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'split_screen_defaults' ? { opacity: 0.7 } : {}),
                   }}
                 >
                   <span
@@ -151,6 +157,7 @@ export const SettingsPage: React.FC = () => {
                   style={{
                     ...styles.switchTrack,
                     ...(settings.discrepancy_presets ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'discrepancy_presets' ? { opacity: 0.7 } : {}),
                   }}
                 >
                   <span
@@ -182,6 +189,7 @@ export const SettingsPage: React.FC = () => {
                   style={{
                     ...styles.switchTrack,
                     ...(settings.match_reminders ? styles.switchTrackActive : {}),
+                    ...(savingKey === 'match_reminders' ? { opacity: 0.7 } : {}),
                   }}
                 >
                   <span
@@ -238,3 +246,5 @@ export const SettingsPage: React.FC = () => {
     </div>
   );
 };
+
+export default SettingsPage;

@@ -18,11 +18,57 @@ import {
   scanScoresheetClientDirect,
   readFileAsDataUrl,
   setCachedData,
+  getCachedData,
+  getSports,
 } from '../../api/client';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
+
+const normalizeSportKey = (name: string): string => (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
+
+const buildCreateSportsList = (rawSports?: any[]): string[] => {
+  let list: any[] = [];
+  if (Array.isArray(rawSports) && rawSports.length > 0) {
+    list = rawSports;
+  } else {
+    const falseCache = getCachedData<any>('sports_catalog_false');
+    const trueCache = getCachedData<any>('sports_catalog_true');
+    const adminCache = getCachedData<any>('admin_sports_catalog');
+
+    if (falseCache?.sports && Array.isArray(falseCache.sports) && falseCache.sports.length > 0) {
+      list = falseCache.sports;
+    } else if (trueCache?.sports && Array.isArray(trueCache.sports) && trueCache.sports.length > 0) {
+      list = trueCache.sports;
+    } else if (Array.isArray(adminCache) && adminCache.length > 0) {
+      list = adminCache;
+    }
+  }
+
+  const seen = new Set<string>();
+  const sports: string[] = [];
+
+  list.forEach((s: any) => {
+    if (s && s.active !== false && s.is_active !== false) {
+      const raw = (s.sport_name || s.name || s.sport || '').trim();
+      const norm = normalizeSportKey(raw);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        sports.push(raw);
+      }
+    }
+  });
+
+  ['Basketball', 'Track & Field', 'Swimming'].forEach((def) => {
+    const norm = normalizeSportKey(def);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      sports.push(def);
+    }
+  });
+  return sports;
+};
 
 export const CreateMatch: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +79,7 @@ export const CreateMatch: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [gameName, setGameName] = useState(() => (queryMatchId ? queryMatchId.toUpperCase() : ''));
   const [sportCategory, setSportCategory] = useState('Basketball');
+  const [sportsList, setSportsList] = useState<string[]>(() => buildCreateSportsList());
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
@@ -72,6 +119,28 @@ export const CreateMatch: React.FC = () => {
     }
     getMe().then((res) => setUser(res)).catch(() => {});
     fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
+
+    const fetchSports = () => {
+      getSports(false, true)
+        .then((res) => {
+          if (res) {
+            const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+            setSportsList(buildCreateSportsList(list));
+          }
+        })
+        .catch(() => {
+          setSportsList(buildCreateSportsList());
+        });
+    };
+
+    fetchSports();
+
+    window.addEventListener('storage', fetchSports);
+    window.addEventListener('sports_updated', fetchSports);
+    return () => {
+      window.removeEventListener('storage', fetchSports);
+      window.removeEventListener('sports_updated', fetchSports);
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -475,9 +544,11 @@ export const CreateMatch: React.FC = () => {
                     className="hover-input"
                     style={styles.select}
                   >
-                    <option value="Basketball">Basketball</option>
-                    <option value="Track & Field">Track & Field</option>
-                    <option value="Swimming">Swimming</option>
+                    {sportsList.map((sport) => (
+                      <option key={sport} value={sport}>
+                        {sport}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

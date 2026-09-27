@@ -24,6 +24,36 @@ const TOKEN_KEY = 'atleta_official_token';
 const USER_KEY = 'atleta_official_user';
 const PERSIST_KEY = 'atleta_persist_session';
 const SETTINGS_KEY = 'atleta_official_settings';
+const READ_NOTIFS_KEY = 'atleta_read_notification_ids';
+
+export const getStoredReadNotificationIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(READ_NOTIFS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch { }
+  return new Set();
+};
+
+export const storeReadNotificationId = (id: string): void => {
+  if (!id) return;
+  try {
+    const set = getStoredReadNotificationIds();
+    set.add(id);
+    localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify(Array.from(set)));
+  } catch { }
+};
+
+export const storeAllReadNotificationIds = (ids: string[]): void => {
+  if (!ids || ids.length === 0) return;
+  try {
+    const set = getStoredReadNotificationIds();
+    ids.forEach((id) => id && set.add(id));
+    localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify(Array.from(set)));
+  } catch { }
+};
 
 // In-Memory and Session Client Cache for instant screen-to-screen navigation
 const cache = new Map<string, { data: any; timestamp: number }>();
@@ -908,19 +938,24 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
         ? data.data
         : [];
 
-  const notifications: import('./types').OfficialNotificationItem[] = rawList.map((n: any, idx: number) => ({
-    notification_id: n.notification_id || `notif_${idx}`,
-    official_id: n.official_id || '',
-    type: n.type || 'AUDIT_REQUEST',
-    title: n.title || '',
-    message: n.message || '',
-    reference_id: n.reference_id || null,
-    is_read: Boolean(n.is_read),
-    created_at: n.created_at || new Date().toISOString(),
-    requested_by_coach: n.requested_by_coach || n.requested_by || undefined,
-    match_context: n.match_context || n.match_class || undefined,
-    sport_discipline: n.sport_discipline || n.sport || undefined,
-  }));
+  const readSet = getStoredReadNotificationIds();
+
+  const notifications: import('./types').OfficialNotificationItem[] = rawList.map((n: any, idx: number) => {
+    const id = n.notification_id || `notif_${idx}`;
+    return {
+      notification_id: id,
+      official_id: n.official_id || '',
+      type: n.type || 'AUDIT_REQUEST',
+      title: n.title || '',
+      message: n.message || '',
+      reference_id: n.reference_id || null,
+      is_read: Boolean(n.is_read) || readSet.has(id),
+      created_at: n.created_at || new Date().toISOString(),
+      requested_by_coach: n.requested_by_coach || n.requested_by || undefined,
+      match_context: n.match_context || n.match_class || undefined,
+      sport_discipline: n.sport_discipline || n.sport || undefined,
+    };
+  });
 
   // Game Reminders: Notify official 3, 2, or 1 day before scheduled game/event for all 3 sports
   try {
@@ -957,7 +992,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
             type: 'SCHEDULE_UPDATE',
             title: `${sportName} ${eventNoun} in ${diffDays} Day${diffDays > 1 ? 's' : ''}`,
             message: `Scheduled ${sportName.toLowerCase()} reminder: ${matchTitle} is on ${new Date(gameTime).toLocaleDateString()} (${venueLabel}).`,
-            is_read: false,
+            is_read: readSet.has(reminderId),
             created_at: new Date().toISOString(),
             match_context: s.match_class || `${sportName} Competition`,
             sport_discipline: sportName,
@@ -967,9 +1002,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
     });
   } catch { }
 
-  const unread_count = typeof data?.unread_count === 'number'
-    ? data.unread_count
-    : notifications.filter((n) => !n.is_read).length;
+  const unread_count = notifications.filter((n) => !n.is_read).length;
 
   const result = { unread_count, notifications };
   setCachedData('official_notifications', result);
@@ -978,9 +1011,10 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
 
 export const markAllOfficialNotificationsAsRead = async (): Promise<void> => {
   const token = getStoredToken();
-  // Optimistically update cache
+  // Optimistically update cache and local storage
   const cached = getCachedData<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }>('official_notifications');
   if (cached) {
+    storeAllReadNotificationIds(cached.notifications.map((n) => n.notification_id));
     setCachedData('official_notifications', {
       unread_count: 0,
       notifications: cached.notifications.map((n) => ({ ...n, is_read: true })),
@@ -1010,6 +1044,8 @@ export const markAllOfficialNotificationsAsRead = async (): Promise<void> => {
 };
 
 export const markOfficialNotificationAsRead = async (notificationId: string): Promise<void> => {
+  if (!notificationId) return;
+  storeReadNotificationId(notificationId);
   const token = getStoredToken();
   // Optimistically update cache
   const cached = getCachedData<{ unread_count: number; notifications: import('./types').OfficialNotificationItem[] }>('official_notifications');
@@ -2047,6 +2083,10 @@ export const createSport = async (payload: CreateSportPayload): Promise<{ messag
 
   const data = await handleResponse<{ message: string; sport: SportConfiguration }>(res);
   invalidateCache('sports_catalog');
+  invalidateCache('admin_sports_catalog');
+  try {
+    localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
+  } catch {}
   return data;
 };
 
@@ -2066,6 +2106,31 @@ export const updateSport = async (
 
   const data = await handleResponse<{ message: string; sport: SportConfiguration }>(res);
   invalidateCache('sports_catalog');
+  invalidateCache('admin_sports_catalog');
+  try {
+    localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
+  } catch {}
+  return data;
+};
+
+export const deleteSport = async (
+  sportId: string
+): Promise<{ message: string; sport_id: string }> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/sports/${encodeURIComponent(sportId)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  const data = await handleResponse<{ message: string; sport_id: string }>(res);
+  invalidateCache('sports_catalog');
+  invalidateCache('admin_sports_catalog');
+  try {
+    localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
+  } catch {}
   return data;
 };
 
