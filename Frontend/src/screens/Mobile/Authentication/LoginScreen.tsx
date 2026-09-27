@@ -19,6 +19,7 @@ import {
   requestJson,
   storeAuthRole,
   storeAuthToken,
+  API_BASE,
   type AuthRole,
   type BannerTone,
   type LoginValues

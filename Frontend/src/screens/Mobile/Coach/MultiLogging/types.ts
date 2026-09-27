@@ -1,4 +1,16 @@
-export type SportCategory = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+export type SportCategory = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
+
+export interface SportConfigurationItem {
+  sport_id: string;
+  sport_name: string;
+  short_identifier?: string;
+  category?: string;
+  is_active?: boolean;
+  is_timed_sport?: boolean;
+  measurement_type?: string;
+  positions?: string[];
+  configurable_stats?: any[];
+}
 
 export interface BasketballStats {
   pts: number;

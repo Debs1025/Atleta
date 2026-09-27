@@ -79,6 +79,7 @@ export const db: Firestore = dbInstance;
 
 const OFFLINE_MATCHES_CACHE_KEY = "atleta_offline_matches_cache";
 const OFFLINE_ATHLETES_CACHE_KEY = "atleta_offline_athletes_cache";
+const OFFLINE_SPORTS_CACHE_KEY = "atleta_offline_sports_cache";
 
 /**
  * Save a match log with Firestore offline data persistence.
@@ -270,6 +271,63 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
 
   return [];
 }
+
+/**
+ * Fetch dynamic sports list with offline support.
+ * Tries REST API (/sports) -> falls back to Firestore persistent local cache (Sports_Configurations) -> falls back to AsyncStorage.
+ */
+export async function getSportsOfflineFirst(): Promise<any[]> {
+  try {
+    const token = await getStoredAuthToken();
+    const res = await fetch(`${API_BASE}/sports`, {
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list = Array.isArray(data?.sports)
+        ? data.sports
+        : Array.isArray(data)
+        ? data
+        : [];
+      if (list.length > 0) {
+        await AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+        return list;
+      }
+    }
+  } catch (netErr) {
+    // WiFi off or network timeout
+  }
+
+  // Fallback 1: Firestore persistent local/remote cache
+  try {
+    const snap = await getDocs(collection(db, "Sports_Configurations"));
+    if (!snap.empty) {
+      const list = snap.docs.map((d) => ({
+        sport_id: d.id,
+        ...d.data(),
+      }));
+      return list;
+    }
+  } catch (fsErr) {
+    // ignore offline warning
+  }
+
+  // Fallback 2: AsyncStorage cache
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (storageErr) {
+    //
+  }
+
+  return [];
+}
+
 
 /**
  * Fetch matches with offline support.

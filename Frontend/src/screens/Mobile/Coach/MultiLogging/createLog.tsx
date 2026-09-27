@@ -14,10 +14,10 @@ import {
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/createLog";
-import { SportCategory, AthleteRosterItem, MatchLogSessionState } from "./types";
+import { SportCategory, AthleteRosterItem, MatchLogSessionState, SportConfigurationItem } from "./types";
 import { useMatchSession } from "./MatchSessionContext";
 import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
-import { getAthletesOfflineFirst } from "../../../../services/firebaseClient";
+import { getAthletesOfflineFirst, getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 interface CreateLogProps {
   initialAthletes?: any[];
@@ -49,7 +49,19 @@ const matchesSport = (athleteSport?: string, athletePosition?: string, targetSpo
     return false;
   }
 
-  return sport === target;
+  if (target.includes("VOLLEY")) {
+    if (sport.includes("VOLLEY")) return true;
+    if (["SETTER", "OUTSIDE HITTER", "OPPOSITE HITTER", "MIDDLE BLOCKER", "LIBERO", "DEFENSIVE SPECIALIST", "SPIKER"].some((p) => pos.includes(p))) return true;
+    return false;
+  }
+
+  if (target.includes("PICKLE")) {
+    if (sport.includes("PICKLE")) return true;
+    if (["SINGLES", "DOUBLES", "DINKER", "RACKET"].some((p) => pos.includes(p))) return true;
+    return false;
+  }
+
+  return sport === target || sport.includes(target) || target.includes(sport);
 };
 
 export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: CreateLogProps) {
@@ -64,6 +76,8 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
 
   const [dbAthletes, setDbAthletes] = useState<AthleteRosterItem[]>([]);
   const [loadingAthletes, setLoadingAthletes] = useState(false);
+  const [sports, setSports] = useState<SportConfigurationItem[]>([]);
+  const [loadingSports, setLoadingSports] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionDate, setSessionDate] = useState("");
   const [sessionTime, setSessionTime] = useState("");
@@ -72,6 +86,123 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
   const [showInterruptionModal, setShowInterruptionModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [missingItems, setMissingItems] = useState<string[]>([]);
+
+  const fetchSportsFromDb = useCallback(async () => {
+    try {
+      setLoadingSports(true);
+      const token = await getStoredAuthToken();
+      let sportsList: SportConfigurationItem[] = [];
+
+      // 1. Live backend API query to fetch active sports configured by system admin
+      try {
+        const res = await fetch(`${API_BASE}/sports`, {
+          headers: {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const fetched = Array.isArray(data?.sports)
+            ? data.sports
+            : Array.isArray(data)
+            ? data
+            : [];
+          if (fetched.length > 0) {
+            sportsList = fetched;
+          }
+        }
+      } catch (netErr) {
+        // Network or timeout
+      }
+
+      // 2. Offline-first fallback to local Firestore cache or AsyncStorage
+      if (sportsList.length === 0) {
+        const offlineSports = await getSportsOfflineFirst();
+        if (offlineSports && offlineSports.length > 0) {
+          sportsList = offlineSports;
+        }
+      }
+
+      // 3. Fallback defaults if completely empty
+      if (sportsList.length === 0) {
+        sportsList = [
+          { sport_id: "sport_basketball", sport_name: "Basketball", short_identifier: "BBALL", is_active: true },
+          { sport_id: "sport_swimming", sport_name: "Swimming", short_identifier: "SWIM", is_active: true },
+          { sport_id: "sport_track_field", sport_name: "Track & Field", short_identifier: "TF", is_active: true },
+        ];
+      }
+
+      const seen = new Set<string>();
+      const uniqueSports: SportConfigurationItem[] = [];
+      for (const sp of sportsList) {
+        const rawName = String(sp.sport_name || (sp as any).name || "").trim();
+        if (!rawName) continue;
+        const normKey = rawName.toLowerCase();
+        if (seen.has(normKey)) continue;
+        seen.add(normKey);
+        uniqueSports.push({
+          ...sp,
+          sport_name: rawName,
+          is_active: sp.is_active !== false,
+        });
+      }
+
+      const activeSports = uniqueSports.filter((s) => s.is_active !== false);
+      setSports(activeSports);
+
+      // Auto-initialize selected sport if not currently set or valid
+      if (activeSports.length > 0) {
+        const currentUpper = (session.sport_type || "").toUpperCase();
+        const exists = activeSports.some((s) => s.sport_name.toUpperCase() === currentUpper);
+        if (!exists && !currentUpper) {
+          handleSelectSport(activeSports[0].sport_name.toUpperCase());
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch active sports from database:", err);
+    } finally {
+      setLoadingSports(false);
+    }
+  }, [session.sport_type]);
+
+  useEffect(() => {
+    fetchSportsFromDb();
+  }, []);
+
+  const renderSportIcon = (sportName: string) => {
+    const lower = sportName.toLowerCase();
+    const iconColor = "#00D2FF";
+    if (lower.includes("basket")) {
+      return <FontAwesome5 name="basketball-ball" size={24} color={iconColor} />;
+    }
+    if (lower.includes("swim")) {
+      return <FontAwesome5 name="swimmer" size={22} color={iconColor} />;
+    }
+    if (lower.includes("track") || lower.includes("field") || lower.includes("run")) {
+      return <FontAwesome5 name="running" size={24} color={iconColor} />;
+    }
+    if (lower.includes("volley")) {
+      return <FontAwesome5 name="volleyball-ball" size={24} color={iconColor} />;
+    }
+    if (
+      lower.includes("pickle") ||
+      lower.includes("tennis") ||
+      lower.includes("badminton") ||
+      lower.includes("racket") ||
+      lower.includes("racquet") ||
+      lower.includes("table")
+    ) {
+      return <FontAwesome5 name="table-tennis" size={22} color={iconColor} />;
+    }
+    if (lower.includes("soccer") || lower.includes("futbol") || lower.includes("football")) {
+      return <FontAwesome5 name="futbol" size={24} color={iconColor} />;
+    }
+    if (lower.includes("base") || lower.includes("soft")) {
+      return <FontAwesome5 name="baseball-ball" size={24} color={iconColor} />;
+    }
+    return <FontAwesome5 name="medal" size={22} color={iconColor} />;
+  };
 
   useEffect(() => {
     const now = new Date();
@@ -281,85 +412,45 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         {/* SELECT SPORT */}
         <Text style={styles.sectionLabel}>SELECT SPORT</Text>
 
-        <View style={styles.gridContainer}>
-          {/* Basketball Tile */}
-          <TouchableOpacity
-            style={[
-              styles.sportTileHalf,
-              session.sport_type === "BASKETBALL" && styles.sportTileActive,
-            ]}
-            onPress={() => handleSelectSport("BASKETBALL")}
-            activeOpacity={0.8}
-          >
-            <View style={styles.sportTileIcon}>
-              <FontAwesome5
-                name="basketball-ball"
-                size={24}
-                color={session.sport_type === "BASKETBALL" ? "#00D2FF" : "#00D2FF"}
-              />
-            </View>
-            <Text
-              style={[
-                styles.sportTileTitle,
-                session.sport_type === "BASKETBALL" && styles.sportTileTitleActive,
-              ]}
-            >
-              Basketball
-            </Text>
-          </TouchableOpacity>
-
-          {/* Swimming Tile */}
-          <TouchableOpacity
-            style={[
-              styles.sportTileHalf,
-              session.sport_type === "SWIMMING" && styles.sportTileActive,
-            ]}
-            onPress={() => handleSelectSport("SWIMMING")}
-            activeOpacity={0.8}
-          >
-            <View style={styles.sportTileIcon}>
-              <FontAwesome5
-                name="swimmer"
-                size={22}
-                color={session.sport_type === "SWIMMING" ? "#00D2FF" : "#00D2FF"}
-              />
-            </View>
-            <Text
-              style={[
-                styles.sportTileTitle,
-                session.sport_type === "SWIMMING" && styles.sportTileTitleActive,
-              ]}
-            >
-              Swimming
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Track & Field Tile */}
-        <TouchableOpacity
-          style={[
-            styles.sportTileFull,
-            session.sport_type === "TRACK AND FIELD" && styles.sportTileActive,
-          ]}
-          onPress={() => handleSelectSport("TRACK AND FIELD")}
-          activeOpacity={0.8}
-        >
-          <View style={styles.sportTileIcon}>
-            <FontAwesome5
-              name="running"
-              size={24}
-              color={session.sport_type === "TRACK AND FIELD" ? "#00D2FF" : "#00D2FF"}
-            />
+        {loadingSports && sports.length === 0 ? (
+          <View style={styles.loadingSportsContainer}>
+            <ActivityIndicator size="small" color="#00D2FF" />
+            <Text style={styles.loadingSportsText}>Loading active sports from database...</Text>
           </View>
-          <Text
-            style={[
-              styles.sportTileTitle,
-              session.sport_type === "TRACK AND FIELD" && styles.sportTileTitleActive,
-            ]}
-          >
-            Track & Field
-          </Text>
-        </TouchableOpacity>
+        ) : (
+          <View style={styles.gridContainer}>
+            {sports.map((sport, index) => {
+              const sportUpper = sport.sport_name.toUpperCase();
+              const isSelected = session.sport_type.toUpperCase() === sportUpper;
+              const isLastOdd = sports.length % 2 !== 0 && index === sports.length - 1;
+
+              return (
+                <TouchableOpacity
+                  key={sport.sport_id || sport.sport_name}
+                  style={[
+                    isLastOdd ? styles.sportTileFull : styles.sportTileHalf,
+                    isSelected && styles.sportTileActive,
+                  ]}
+                  onPress={() => handleSelectSport(sportUpper)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.sportTileIcon}>
+                    {renderSportIcon(sport.sport_name)}
+                  </View>
+                  <Text
+                    style={[
+                      styles.sportTileTitle,
+                      isSelected && styles.sportTileTitleActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {sport.sport_name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         <Text style={styles.subLabel}>Search Athletes</Text>
         <View style={styles.searchContainer}>

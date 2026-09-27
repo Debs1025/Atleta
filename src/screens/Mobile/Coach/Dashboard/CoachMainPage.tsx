@@ -1932,12 +1932,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 initialAthletes={athletesPool}
                 onBack={() => setActiveView("dashboard")}
                 onStartLogging={(session) => {
-                  if (session.sport_type === "BASKETBALL") {
-                    setActiveView("basketball_match");
-                  } else if (session.sport_type === "SWIMMING") {
+                  const s = (session.sport_type || "").toUpperCase();
+                  if (s.includes("SWIM")) {
                     setActiveView("swimming_match");
-                  } else if (session.sport_type === "TRACK AND FIELD") {
+                  } else if (s.includes("TRACK") || s.includes("FIELD") || s.includes("RUN")) {
                     setActiveView("track_field_match");
+                  } else {
+                    setActiveView("basketball_match");
                   }
                 }}
               />
