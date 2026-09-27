@@ -171,9 +171,13 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       setFeedback(null);
 
       try {
-        const result = await requestJson("/users/login", values);
+        const payload = {
+          email: values.email.trim().toLowerCase(),
+          password: values.password.trim()
+        };
+        const result = await requestJson("/users/login", payload);
         const token = extractAuthToken(result);
-        const role = extractAuthRole(result, values.email);
+        const role = extractAuthRole(result, payload.email);
 
         if (token) await storeAuthToken(token);
         await storeAuthRole(role);
@@ -209,8 +213,24 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         <SectionTitle title="Log In" subtitle="Access your ATLETA dashboard using your credentials or social account." />
         <Banner tone={feedback?.tone ?? "info"} message={feedback?.message} />
 
-        <FormField control={form.control} name="email" label="Email Address" placeholder="athlete@domain.com" />
-        <FormField control={form.control} name="password" label="Password" placeholder="••••••••" secureTextEntry />
+        <FormField
+          control={form.control}
+          name="email"
+          label="Email Address"
+          placeholder="athlete@domain.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoCorrect={false}
+        />
+        <FormField
+          control={form.control}
+          name="password"
+          label="Password"
+          placeholder="••••••••"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
         <Button label="Login" loading={loading} onPress={submit} />
 
