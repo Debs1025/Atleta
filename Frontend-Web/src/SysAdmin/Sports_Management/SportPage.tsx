@@ -347,16 +347,10 @@ export const SportPage: React.FC = () => {
       if (sports.length === 0) setLoading(true);
       const res = await getSports(false, forceRefresh);
       const serverSports = Array.isArray(res?.sports) ? res.sports : [];
+      const catalog = serverSports.length > 0 ? serverSports : INITIAL_DEFAULT_SPORTS;
 
-      const mergedList = [...serverSports];
-      for (const init of INITIAL_DEFAULT_SPORTS) {
-        if (!mergedList.some((s) => (s.sport_name || '').trim().toLowerCase() === init.sport_name.trim().toLowerCase())) {
-          mergedList.push(init);
-        }
-      }
-
-      setSports(mergedList);
-      setCachedData('admin_sports_catalog', mergedList);
+      setSports(catalog);
+      setCachedData('admin_sports_catalog', catalog);
     } catch (err: any) {
       console.error('Failed to load sports catalog:', err);
       if (sports.length === 0) setSports(INITIAL_DEFAULT_SPORTS);

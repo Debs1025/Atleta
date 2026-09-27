@@ -60,13 +60,6 @@ const buildCreateSportsList = (rawSports?: any[]): string[] => {
     }
   });
 
-  ['Basketball', 'Track & Field', 'Swimming'].forEach((def) => {
-    const norm = normalizeSportKey(def);
-    if (!seen.has(norm)) {
-      seen.add(norm);
-      sports.push(def);
-    }
-  });
   return sports;
 };
 
@@ -78,8 +71,11 @@ export const CreateMatch: React.FC = () => {
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [gameName, setGameName] = useState(() => (queryMatchId ? queryMatchId.toUpperCase() : ''));
-  const [sportCategory, setSportCategory] = useState('Basketball');
   const [sportsList, setSportsList] = useState<string[]>(() => buildCreateSportsList());
+  const [sportCategory, setSportCategory] = useState<string>(() => {
+    const initial = buildCreateSportsList();
+    return initial[0] || '';
+  });
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
@@ -125,11 +121,15 @@ export const CreateMatch: React.FC = () => {
         .then((res) => {
           if (res) {
             const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
-            setSportsList(buildCreateSportsList(list));
+            const built = buildCreateSportsList(list);
+            setSportsList(built);
+            setSportCategory((curr) => (curr && built.includes(curr) ? curr : (built[0] || '')));
           }
         })
         .catch(() => {
-          setSportsList(buildCreateSportsList());
+          const fallback = buildCreateSportsList();
+          setSportsList(fallback);
+          setSportCategory((curr) => (curr && fallback.includes(curr) ? curr : (fallback[0] || '')));
         });
     };
 
@@ -217,14 +217,7 @@ export const CreateMatch: React.FC = () => {
       setSubmitting(true);
       setProcessingStatus('Starting match creation...');
 
-      let normalizedSport = sportCategory.trim() || 'Basketball';
-      if (sportCategory.toLowerCase().includes('swim')) {
-        normalizedSport = 'Swimming';
-      } else if (sportCategory.toLowerCase().includes('track') || sportCategory.toLowerCase().includes('field')) {
-        normalizedSport = 'Track & Field';
-      } else if (sportCategory.toLowerCase().includes('basket')) {
-        normalizedSport = 'Basketball';
-      }
+      const normalizedSport = sportCategory.trim();
 
       let isoDate = new Date(matchDate).toISOString();
       if (matchTime) {

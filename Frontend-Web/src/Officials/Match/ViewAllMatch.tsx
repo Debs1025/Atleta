@@ -79,13 +79,6 @@ const buildNormalizedSportsList = (rawSports?: any[]): string[] => {
     }
   });
 
-  ['BASKETBALL', 'TRACK AND FIELD', 'SWIMMING'].forEach((def) => {
-    const norm = normalizeSportKey(def);
-    if (!seen.has(norm)) {
-      seen.add(norm);
-      sports.push(def);
-    }
-  });
   return sports;
 };
 
