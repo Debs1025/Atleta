@@ -14,20 +14,23 @@ import { styles } from './styles/ViewAllMatch';
 interface MatchRowProps {
   item: MatchSummaryItem;
   onClick: () => void;
+  isLast?: boolean;
 }
 
-const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
+const MatchRow = memo(({ item, onClick, isLast }: MatchRowProps) => {
   const isPending = item.status === 'PENDING';
-  const lookupId = item.raw_match?.match_id || item.validation_id || item.match_id.replace(/^#/, '');
 
   return (
     <tr
       className="hover-match-row"
-      style={styles.tr}
+      style={{
+        ...styles.tr,
+        ...(isLast ? { borderBottom: 'none' } : {}),
+      }}
       onClick={onClick}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = '#F8FAFC';
-        prefetchMatchAuditDetail(lookupId);
+        prefetchMatchAuditDetail(item.match_id);
       }}
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
     >
@@ -48,29 +51,14 @@ const MatchRow = memo(({ item, onClick }: MatchRowProps) => {
 const normalizeSportKey = (name: string): string => (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
 
 const buildNormalizedSportsList = (rawSports?: any[]): string[] => {
-  let list: any[] = [];
-  if (Array.isArray(rawSports) && rawSports.length > 0) {
-    list = rawSports;
-  } else {
-    const falseCache = getCachedData<any>('sports_catalog_false');
-    const trueCache = getCachedData<any>('sports_catalog_true');
-    const adminCache = getCachedData<any>('admin_sports_catalog');
-
-    if (falseCache?.sports && Array.isArray(falseCache.sports) && falseCache.sports.length > 0) {
-      list = falseCache.sports;
-    } else if (trueCache?.sports && Array.isArray(trueCache.sports) && trueCache.sports.length > 0) {
-      list = trueCache.sports;
-    } else if (Array.isArray(adminCache) && adminCache.length > 0) {
-      list = adminCache;
-    }
-  }
-
+  const cached = rawSports || getCachedData<any>('sports_catalog_false')?.sports || getCachedData<any>('sports_catalog_true')?.sports || [];
+  const list = Array.isArray(cached) ? cached : [];
   const seen = new Set<string>(['ALL SPORTS']);
   const sports: string[] = ['ALL SPORTS'];
 
   list.forEach((s: any) => {
-    if (s && s.active !== false && s.is_active !== false) {
-      const raw = (s.sport_name || s.name || s.sport || '').trim();
+    if (s && s.active !== false) {
+      const raw = (s.sport_name || s.name || '').trim();
       const norm = normalizeSportKey(raw);
       if (norm && !seen.has(norm)) {
         seen.add(norm);
@@ -79,6 +67,13 @@ const buildNormalizedSportsList = (rawSports?: any[]): string[] => {
     }
   });
 
+  ['BASKETBALL', 'TRACK & FIELD', 'SWIMMING'].forEach((def) => {
+    const norm = normalizeSportKey(def);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      sports.push(def);
+    }
+  });
   return sports;
 };
 
@@ -109,7 +104,7 @@ export const ViewAllMatch: React.FC = () => {
       setLoading(true);
     }
 
-    getAllOfficialMatchesMaster(true)
+    getAllOfficialMatchesMaster(false)
       .then((data) => {
         if (isMounted && data) {
           setAllMatches(data);
@@ -122,26 +117,15 @@ export const ViewAllMatch: React.FC = () => {
         if (isMounted) setLoading(false);
       });
 
-    const fetchSports = () => {
-      getSports(false, true)
-        .then((res) => {
-          if (isMounted && res) {
-            const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
-            setDynamicSports(buildNormalizedSportsList(list));
-          }
-        })
-        .catch(() => {});
-    };
-
-    fetchSports();
-
-    window.addEventListener('storage', fetchSports);
-    window.addEventListener('sports_updated', fetchSports);
+    getSports().then((res) => {
+      if (isMounted && res) {
+        const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+        setDynamicSports(buildNormalizedSportsList(list));
+      }
+    }).catch(() => {});
 
     return () => {
       isMounted = false;
-      window.removeEventListener('storage', fetchSports);
-      window.removeEventListener('sports_updated', fetchSports);
     };
   }, []);
 
@@ -177,9 +161,8 @@ export const ViewAllMatch: React.FC = () => {
     });
   }, [allMatches, activeTab, selectedSport, user]);
 
-  const handleRowClick = (item: MatchSummaryItem) => {
-    const lookupId = item.raw_match?.match_id || item.validation_id || item.match_id.replace(/^#/, '');
-    const cleanId = String(lookupId).replace(/^#/, '');
+  const handleRowClick = (matchId: string) => {
+    const cleanId = matchId.replace(/^#/, '');
     navigate(`/matches/${cleanId}`);
   };
 
@@ -189,7 +172,7 @@ export const ViewAllMatch: React.FC = () => {
         {/* Header Row */}
         <div style={styles.pageHeaderRow}>
           <h1 style={styles.pageTitle}>ALL MATCHES</h1>
-          <Link to="/dashboard-official" className="hover-back-link" style={styles.backLink}>
+          <Link to="/dashboard" className="hover-back-link" style={styles.backLink}>
             <span>Back to Main Page</span>
             <span>↩</span>
           </Link>
@@ -261,12 +244,12 @@ export const ViewAllMatch: React.FC = () => {
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={styles.th}>MATCH ID</th>
-                <th style={styles.th}>MATCH NAME</th>
-                <th style={styles.th}>SPORT</th>
-                <th style={styles.th}>COACHES (TEAM 1, TEAM 2)</th>
-                <th style={styles.th}>DATE / TIME</th>
-                <th style={{ ...styles.th, borderRight: 'none' }}>STATUS</th>
+                <th style={{ ...styles.th, width: '13%' }}>MATCH ID</th>
+                <th style={{ ...styles.th, width: '27%' }}>MATCH NAME</th>
+                <th style={{ ...styles.th, width: '13%' }}>SPORT</th>
+                <th style={{ ...styles.th, width: '23%' }}>COACHES (TEAM 1, TEAM 2)</th>
+                <th style={{ ...styles.th, width: '14%' }}>DATE / TIME</th>
+                <th style={{ ...styles.th, width: '10%', borderRight: 'none' }}>STATUS</th>
               </tr>
             </thead>
             <tbody>
@@ -282,11 +265,12 @@ export const ViewAllMatch: React.FC = () => {
                   </tr>
                 ))
               ) : displayedMatches.length > 0 ? (
-                displayedMatches.map((item) => (
+                displayedMatches.map((item, idx) => (
                   <MatchRow
                     key={item.match_id}
                     item={item}
-                    onClick={() => handleRowClick(item)}
+                    isLast={idx === displayedMatches.length - 1}
+                    onClick={() => handleRowClick(item.match_id)}
                   />
                 ))
               ) : (

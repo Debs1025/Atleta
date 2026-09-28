@@ -81,7 +81,7 @@ function App() {
             </OfficialRoute>
           }
         />
-        {/* Route /dashboard automatically resolves based on user's role */}
+        {/* Route automatically goes to the dashboard based on user's role */}
         <Route path="/dashboard" element={<HomeRedirect />} />
 
         {/* Tournament Officials Match & Schedules Management */}

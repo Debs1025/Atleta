@@ -7,7 +7,6 @@ export const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#FFFFFF',
     fontFamily: '"Outfit", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
     color: '#0B132B',
-    overflowY: 'auto',
   },
   contentArea: {
     maxWidth: '1540px',
@@ -123,6 +122,7 @@ export const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     borderCollapse: 'collapse',
     textAlign: 'left',
+    tableLayout: 'fixed',
   },
   th: {
     backgroundColor: '#0B132B',

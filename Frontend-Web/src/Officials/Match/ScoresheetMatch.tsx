@@ -10,17 +10,14 @@ import {
   Loader2,
   Eye,
   X,
-  Download,
 } from 'lucide-react';
 import {
   getMatchAuditDetail,
   certifyMatchValidation,
   deleteOfficialMatch,
-  scanScoresheetClientDirect,
   uploadScoresheetFile,
   getCachedData,
   setCachedData,
-  downloadCertifiedMatchPdf,
   markMatchAsCertified,
   isMatchLocallyCertified,
   recordOfficialCreatedMatchId,
@@ -34,18 +31,8 @@ export const ScoresheetMatch: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getSavedEdit = (id: string): MatchAuditDetail | null => {
-    if (!id) return null;
-    try {
-      const stored = localStorage.getItem(`atleta_edited_match_${id}`);
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return null;
-  };
-
   const cleanId = matchId ? matchId.replace(/^#/, '') : '';
-  const savedLocal = cleanId ? getSavedEdit(cleanId) : null;
-  const cached = cleanId ? (savedLocal || getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) || (() => {
+  const cached = cleanId ? (getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) || (() => {
     const list = (getCachedData<any[]>('all_official_matches_master') || []).concat(getCachedData<any[]>('official_schedules') || []);
     const item = list.find((m: any) => String(m.match_id || m.id || '').replace(/^#/, '') === cleanId);
     if (!item) return null;
@@ -88,61 +75,46 @@ export const ScoresheetMatch: React.FC = () => {
   const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | 'NO_SCORESHEET' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const loadMatchData = async (silent = Boolean(cached || matchData)) => {
     if (!cleanId) return;
     if (!silent) setLoading(true);
 
     try {
-      const data = await getMatchAuditDetail(cleanId, true);
+      const data = await getMatchAuditDetail(cleanId, false);
       if (data) {
-        const saved = getSavedEdit(cleanId);
-        const resolvedHomeRoster = saved?.home_team?.roster_stats && saved.home_team.roster_stats.length > 0
-          ? saved.home_team.roster_stats
-          : (data.home_team?.roster_stats || []);
-        const resolvedAwayRoster = saved?.away_team?.roster_stats && saved.away_team.roster_stats.length > 0
-          ? saved.away_team.roster_stats
-          : (data.away_team?.roster_stats || []);
-        const resolvedRaceResults = saved?.race_results && saved.race_results.length > 0
-          ? saved.race_results
-          : (data.race_results || []);
+        setMatchData((prev) => {
+          const prevHome = prev?.home_team?.roster_stats || [];
+          const prevAway = prev?.away_team?.roster_stats || [];
+          const dataHome = data.home_team?.roster_stats || [];
+          const dataAway = data.away_team?.roster_stats || [];
 
-        const hScore = resolvedHomeRoster.length > 0
-          ? resolvedHomeRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0)
-          : (saved?.home_team?.score ?? data.home_team?.score ?? 0);
-        const aScore = resolvedAwayRoster.length > 0
-          ? resolvedAwayRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0)
-          : (saved?.away_team?.score ?? data.away_team?.score ?? 0);
-
-        const merged: MatchAuditDetail = {
-          ...data,
-          home_team: {
-            ...data.home_team,
-            name: saved?.home_team?.name || data.home_team?.name,
-            score: hScore,
-            result: hScore >= aScore ? 'WIN' : 'LOSE',
-            roster_stats: resolvedHomeRoster,
-          },
-          away_team: {
-            ...data.away_team,
-            name: saved?.away_team?.name || data.away_team?.name,
-            score: aScore,
-            result: aScore > hScore ? 'WIN' : 'LOSE',
-            roster_stats: resolvedAwayRoster,
-          },
-          race_results: resolvedRaceResults,
-        };
-
-        setMatchData(merged);
+          return {
+            ...data,
+            home_team: {
+              ...data.home_team,
+              roster_stats: dataHome.length > 0 ? dataHome : prevHome,
+            },
+            away_team: {
+              ...data.away_team,
+              roster_stats: dataAway.length > 0 ? dataAway : prevAway,
+            },
+          };
+        });
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
         setNotes((prev) => (prev ? prev : resolvedNote));
         if (data.scoresheet_url) setScoresheetUrl(data.scoresheet_url);
-        setHomeRoster(resolvedHomeRoster);
-        setAwayRoster(resolvedAwayRoster);
-        setRaceResults(resolvedRaceResults);
+        if (data.home_team?.roster_stats && data.home_team.roster_stats.length > 0) {
+          setHomeRoster(data.home_team.roster_stats);
+        }
+        if (data.away_team?.roster_stats && data.away_team.roster_stats.length > 0) {
+          setAwayRoster(data.away_team.roster_stats);
+        }
+        if (data.race_results && data.race_results.length > 0) {
+          setRaceResults(data.race_results);
+        }
       }
     } catch (err) {
       console.error('Failed to load match detail:', err);
@@ -162,23 +134,10 @@ export const ScoresheetMatch: React.FC = () => {
     setIsUploading(true);
     setUploadError(null);
     try {
-      const hName = (matchData?.home_team?.name || 'Home Team').toUpperCase();
-      const aName = (matchData?.away_team?.name || 'Away Team').toUpperCase();
-      const sport = matchData?.sport_type || 'Basketball';
-
-      // Dynamically process OCR and sync to backend Firestore
-      let res: any = null;
-      try {
-        res = await uploadScoresheetFile(cleanId, file);
-      } catch (_) {
-        res = await scanScoresheetClientDirect(file, hName, aName, sport);
-      }
-      if (!res || (!res.player_summary && !res.parsed_tables)) {
-        res = await scanScoresheetClientDirect(file, hName, aName, sport);
-      }
+      const res = await uploadScoresheetFile(cleanId, file);
       if (res?.scoresheet_url) setScoresheetUrl(res.scoresheet_url);
 
-      // Map real AI-extracted player statistics following OCR logging logic
+      // Map real AI-extracted player statistics following mobile OCR logging logic
       const rawPlayers: any[] = Array.isArray(res?.player_summary)
         ? res.player_summary
         : Array.isArray(res?.parsed_tables?.player_summary)
@@ -192,26 +151,27 @@ export const ScoresheetMatch: React.FC = () => {
         : [];
 
       if (rawPlayers.length > 0) {
-        const homeScoreItem = teamScoresArr.find(
-          (t: any) => t.is_home === true || (hName && String(t.team || '').toUpperCase().includes(hName))
-        ) || teamScoresArr[0];
-        const awayScoreItem = teamScoresArr.find(
-          (t: any) => t.is_home === false || (aName && String(t.team || '').toUpperCase().includes(aName))
-        ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
+        const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
+        const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
 
         const ocrHomeName = String(
           res?.match_info?.home_team_name ||
           res?.match_info?.home_team ||
           homeScoreItem?.team ||
-          hName
+          matchData?.home_team.name ||
+          'HOME TEAM'
         ).toUpperCase();
 
         const ocrAwayName = String(
           res?.match_info?.opponent_team_name ||
           res?.match_info?.away_team ||
           awayScoreItem?.team ||
-          aName
+          matchData?.away_team.name ||
+          'AWAY TEAM'
         ).toUpperCase();
+
+        const hName = (matchData?.home_team.name || 'HOME TEAM').toUpperCase();
+        const aName = (matchData?.away_team.name || 'AWAY TEAM').toUpperCase();
 
         const totalPlayers = rawPlayers.length;
         const halfCount = Math.ceil(totalPlayers / 2);
@@ -272,62 +232,24 @@ export const ScoresheetMatch: React.FC = () => {
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
 
-        const resolvedHomeName = (ocrHomeName && ocrHomeName !== 'HOME TEAM' && ocrHomeName !== 'TEAM B') ? ocrHomeName : (matchData?.home_team?.name || 'Home Team').toUpperCase();
-        const resolvedAwayName = (ocrAwayName && ocrAwayName !== 'AWAY TEAM' && ocrAwayName !== 'TEAM A' && ocrAwayName !== 'OPPONENT') ? ocrAwayName : (matchData?.away_team?.name || 'Away Team').toUpperCase();
-
         setMatchData((prev) => {
           if (!prev) return prev;
-          let hSum = hRows.reduce((a, b) => a + b.pts, 0);
-          let aSum = aRows.reduce((a, b) => a + b.pts, 0);
-          if (hSum === 0 && Number(res?.match_info?.home_score) > 0) {
-            hSum = Number(res.match_info.home_score);
-          }
-          if (aSum === 0 && Number(res?.match_info?.away_score) > 0) {
-            aSum = Number(res.match_info.away_score);
-          }
+          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
+          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
           const updated: MatchAuditDetail = {
             ...prev,
-            game_name: `${resolvedHomeName} vs ${resolvedAwayName}`,
             scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
             home_team: {
               ...prev.home_team,
-              name: resolvedHomeName,
               score: hSum,
               result: hSum >= aSum ? 'WIN' : 'LOSE',
               roster_stats: hRows,
-              team_totals: {
-                jersey_no: '',
-                player_name: 'TEAM TOTALS',
-                minutes: '0',
-                pts: hSum,
-                reb: hRows.reduce((a, b) => a + b.reb, 0),
-                ast: hRows.reduce((a, b) => a + b.ast, 0),
-                stl: hRows.reduce((a, b) => a + b.stl, 0),
-                blk: hRows.reduce((a, b) => a + b.blk, 0),
-                fg_pct: '0.0%',
-                three_p_pct: '0.0%',
-                ft_pct: '0.0%',
-              },
             },
             away_team: {
               ...prev.away_team,
-              name: resolvedAwayName,
               score: aSum,
               result: aSum > hSum ? 'WIN' : 'LOSE',
               roster_stats: aRows,
-              team_totals: {
-                jersey_no: '',
-                player_name: 'TEAM TOTALS',
-                minutes: '0',
-                pts: aSum,
-                reb: aRows.reduce((a, b) => a + b.reb, 0),
-                ast: aRows.reduce((a, b) => a + b.ast, 0),
-                stl: aRows.reduce((a, b) => a + b.stl, 0),
-                blk: aRows.reduce((a, b) => a + b.blk, 0),
-                fg_pct: '0.0%',
-                three_p_pct: '0.0%',
-                ft_pct: '0.0%',
-              },
             },
           };
           setCachedData(`match_audit_detail_${cleanId}`, updated);
@@ -367,6 +289,7 @@ export const ScoresheetMatch: React.FC = () => {
     setActiveModal('CERTIFY');
   };
 
+  // HANDLES CERTIFY AND MAKE SURE IT DOESN'T DISAPPEAR
   const handleCertify = async () => {
     if (!matchData) return;
     if (!scoresheetUrl || !scoresheetUrl.trim()) {
@@ -396,8 +319,10 @@ export const ScoresheetMatch: React.FC = () => {
         markMatchAsCertified(vKey);
         if (uId) recordOfficialCreatedMatchId(vKey, uId);
       }
+      // Optimistically mark as certified in state so the UI updates instantly with zero screen flash
+      setMatchData((prev) => prev ? ({ ...prev, is_certified: true, audit_context_notes: notes }) : prev);
       setActiveModal(null);
-      await loadMatchData();
+      await loadMatchData(true);
     } catch (err: any) {
       setActionError(err?.message || 'Certification failed.');
     } finally {
@@ -410,11 +335,6 @@ export const ScoresheetMatch: React.FC = () => {
     setActionLoading(true);
     setActionError(null);
     try {
-      if (cleanId) {
-        try {
-          localStorage.removeItem(`atleta_edited_match_${cleanId}`);
-        } catch {}
-      }
       await deleteOfficialMatch(matchId);
       setActiveModal(null);
       navigate('/matches');
@@ -425,126 +345,10 @@ export const ScoresheetMatch: React.FC = () => {
     }
   };
 
-  const handleDownloadPdf = async () => {
-    if (!cleanId) return;
-    setIsDownloadingPdf(true);
-    setActionError(null);
-    try {
-      if (scoresheetUrl) {
-        const lower = scoresheetUrl.toLowerCase();
-        let ext = 'jpg';
-        if (lower.includes('.pdf') || lower.startsWith('data:application/pdf')) {
-          ext = 'pdf';
-        } else if (lower.includes('.png') || lower.startsWith('data:image/png')) {
-          ext = 'png';
-        } else if (lower.includes('.jpeg') || lower.startsWith('data:image/jpeg') || lower.includes('.jpg')) {
-          ext = 'jpg';
-        }
-        const a = document.createElement('a');
-        a.href = scoresheetUrl;
-        a.download = `scoresheet_${cleanId}.${ext}`;
-        a.target = '_blank';
-        a.rel = 'noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        return;
-      }
-      const blob = await downloadCertifiedMatchPdf(cleanId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `scoresheet_${cleanId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      if (scoresheetUrl) {
-        window.open(scoresheetUrl, '_blank');
-      } else {
-        setActionError(err?.message || 'Failed to download scoresheet.');
-      }
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
-
-  const handleToggleEdit = () => {
-    if (isEditing) {
-      if (matchData) {
-        const finalHomeScore = homeRoster.length > 0
-          ? homeRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0)
-          : (matchData.home_team.score || 0);
-
-        const finalAwayScore = awayRoster.length > 0
-          ? awayRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0)
-          : (matchData.away_team.score || 0);
-
-        const isHomeWinner = finalHomeScore >= finalAwayScore;
-
-        const updated: MatchAuditDetail = {
-          ...matchData,
-          home_team: {
-            ...matchData.home_team,
-            score: finalHomeScore,
-            result: isHomeWinner ? 'WIN' : 'LOSE',
-            roster_stats: homeRoster,
-            team_totals: {
-              ...(matchData.home_team?.team_totals || {}),
-              jersey_no: '',
-              player_name: 'TEAM TOTALS',
-              minutes: '0',
-              pts: finalHomeScore,
-              reb: homeRoster.reduce((a, b) => a + (Number(b.reb) || 0), 0),
-              ast: homeRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
-              stl: homeRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
-              blk: homeRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
-              fg_pct: matchData.home_team?.team_totals?.fg_pct || '0.0%',
-              three_p_pct: matchData.home_team?.team_totals?.three_p_pct || '0.0%',
-              ft_pct: matchData.home_team?.team_totals?.ft_pct || '0.0%',
-            },
-          },
-          away_team: {
-            ...matchData.away_team,
-            score: finalAwayScore,
-            result: !isHomeWinner ? 'WIN' : 'LOSE',
-            roster_stats: awayRoster,
-            team_totals: {
-              ...(matchData.away_team?.team_totals || {}),
-              jersey_no: '',
-              player_name: 'TEAM TOTALS',
-              minutes: '0',
-              pts: finalAwayScore,
-              reb: awayRoster.reduce((a, b) => a + (Number(b.reb) || 0), 0),
-              ast: awayRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
-              stl: awayRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
-              blk: awayRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
-              fg_pct: matchData.away_team?.team_totals?.fg_pct || '0.0%',
-              three_p_pct: matchData.away_team?.team_totals?.three_p_pct || '0.0%',
-              ft_pct: matchData.away_team?.team_totals?.ft_pct || '0.0%',
-            },
-          },
-          race_results: raceResults,
-        };
-        setMatchData(updated);
-        if (cleanId) {
-          setCachedData(`match_audit_detail_${cleanId}`, updated);
-          try {
-            localStorage.setItem(`atleta_edited_match_${cleanId}`, JSON.stringify(updated));
-          } catch {}
-        }
-      }
-      setIsEditing(false);
-    } else {
-      setIsEditing(true);
-    }
-  };
-
   const isIndividualSport = matchData?.sport_type
     ? matchData.sport_type.toLowerCase().includes('swim') ||
-      matchData.sport_type.toLowerCase().includes('track') ||
-      matchData.sport_type.toLowerCase().includes('field')
+    matchData.sport_type.toLowerCase().includes('track') ||
+    matchData.sport_type.toLowerCase().includes('field')
     : false;
 
   const assignedList = Array.isArray(matchData?.assigned_coaches) && matchData.assigned_coaches.length > 0
@@ -554,13 +358,8 @@ export const ScoresheetMatch: React.FC = () => {
       : [];
   const coachDisplay = assignedList.length > 0 ? assignedList.join(', ') : null;
 
-  const homeScore = homeRoster.length > 0
-    ? homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0)
-    : (matchData?.home_team.score || 0);
-
-  const awayScore = awayRoster.length > 0
-    ? awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0)
-    : (matchData?.away_team.score || 0);
+  const homeScore = matchData?.home_team.score || homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
+  const awayScore = matchData?.away_team.score || awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
 
   // Render Table for Team Basketball Stats
   const renderTeamStatsTable = (
@@ -570,25 +369,26 @@ export const ScoresheetMatch: React.FC = () => {
     score: number
   ) => (
     <div style={styles.tableSection}>
-      <div style={styles.tableSectionHeader}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={styles.tableSectionTitle}>{teamName} PLAYER PERFORMANCE STATISTICS</div>
         {teamType === 'home' && !matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
           <button
             type="button"
-            onClick={handleToggleEdit}
+            onClick={() => setIsEditing(!isEditing)}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'SAVE CHANGES' : 'EDIT RESULTS'}
+            {isEditing ? 'LOCK EDITING' : 'EDIT RESULTS'}
           </button>
         )}
       </div>
+      {/* temporary (will replace into dynamic stats based on sport) */}
       <div style={styles.statsTableFrame}>
         <table style={styles.statsTable}>
           <thead>
             <tr>
-              <th style={styles.statThFirst}>[ NO ]</th>
-              <th style={styles.statThName}>[ PLAYER NAME ]</th>
+              <th style={{ ...styles.statTh, width: '48px' }}>[ NO ]</th>
+              <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '14px' }}>[ PLAYER NAME ]</th>
               <th style={styles.statTh}>[ MIN ]</th>
               <th style={styles.statTh}>[ PTS ]</th>
               <th style={styles.statTh}>[ REB ]</th>
@@ -597,7 +397,7 @@ export const ScoresheetMatch: React.FC = () => {
               <th style={styles.statTh}>[ BLK ]</th>
               <th style={styles.statTh}>[ FG% ]</th>
               <th style={styles.statTh}>[ 3P% ]</th>
-              <th style={styles.statThLast}>[ FT% ]</th>
+              <th style={{ ...styles.statTh, borderRight: 'none' }}>[ FT% ]</th>
             </tr>
           </thead>
           <tbody>
@@ -616,7 +416,7 @@ export const ScoresheetMatch: React.FC = () => {
                       row.jersey_no
                     )}
                   </td>
-                  <td style={styles.statTdName}>
+                  <td style={{ ...styles.statTd, ...styles.statTdName }}>
                     {isEditing ? (
                       <input
                         type="text"
@@ -702,12 +502,12 @@ export const ScoresheetMatch: React.FC = () => {
                   </td>
                   <td style={styles.statTd}>{row.fg_pct}</td>
                   <td style={styles.statTd}>{row.three_p_pct}</td>
-                  <td style={styles.statTdLast}>{row.ft_pct}</td>
+                  <td style={{ ...styles.statTd, borderRight: 'none' }}>{row.ft_pct}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={11} style={styles.tableEmptyTd}>
+                <td colSpan={11} style={{ padding: '24px', color: '#64748B', textAlign: 'center' }}>
                   No player statistics recorded. Upload official scoresheet below to see results.
                 </td>
               </tr>
@@ -715,7 +515,7 @@ export const ScoresheetMatch: React.FC = () => {
 
             <tr style={styles.statTotalsTr}>
               <td style={styles.statTotalsTd}></td>
-              <td style={styles.statTotalsTdName}>TEAM TOTALS</td>
+              <td style={{ ...styles.statTotalsTd, textAlign: 'left', paddingLeft: '14px' }}>TEAM TOTALS</td>
               <td style={styles.statTotalsTd}>{'0'}</td>
               <td style={styles.statTotalsTd}>{score}</td>
               <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.reb) || 0), 0)}</td>
@@ -724,7 +524,7 @@ export const ScoresheetMatch: React.FC = () => {
               <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.blk) || 0), 0)}</td>
               <td style={styles.statTotalsTd}>{roster.length > 0 ? '48.8%' : '0.0%'}</td>
               <td style={styles.statTotalsTd}>{roster.length > 0 ? '28.5%' : '0.0%'}</td>
-              <td style={styles.statTotalsTdLast}>{roster.length > 0 ? '78.0%' : '0.0%'}</td>
+              <td style={{ ...styles.statTotalsTd, borderRight: 'none' }}>{roster.length > 0 ? '78.0%' : '0.0%'}</td>
             </tr>
           </tbody>
         </table>
@@ -735,18 +535,18 @@ export const ScoresheetMatch: React.FC = () => {
   // Render Table for Swimming & Track and Field
   const renderIndividualRaceTable = () => (
     <div style={styles.tableSection}>
-      <div style={styles.tableSectionHeader}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={styles.tableSectionTitle}>
           {matchData?.sport_type?.toUpperCase()} OFFICIAL RACE & EVENT RESULTS
         </div>
         {!matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
           <button
             type="button"
-            onClick={handleToggleEdit}
+            onClick={() => setIsEditing(!isEditing)}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'SAVE CHANGES' : 'EDIT RESULTS'}
+            {isEditing ? 'LOCK EDITING' : 'EDIT RESULTS'}
           </button>
         )}
       </div>
@@ -755,14 +555,14 @@ export const ScoresheetMatch: React.FC = () => {
         <table style={styles.statsTable}>
           <thead>
             <tr>
-              <th style={styles.statThFirst}>[ RANK ]</th>
-              <th style={styles.statThName}>[ ATHLETE NAME ]</th>
+              <th style={{ ...styles.statTh, width: '60px' }}>[ RANK ]</th>
+              <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '14px' }}>[ ATHLETE NAME ]</th>
               <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
               <th style={styles.statTh}>[ DISTANCE ]</th>
               <th style={styles.statTh}>[ FINISH TIME ]</th>
               <th style={styles.statTh}>[ SPLIT TIMES ]</th>
               <th style={styles.statTh}>[ EFFICIENCY ]</th>
-              <th style={styles.statThLast}>[ STATUS ]</th>
+              <th style={{ ...styles.statTh, borderRight: 'none' }}>[ STATUS ]</th>
             </tr>
           </thead>
           <tbody>
@@ -781,7 +581,7 @@ export const ScoresheetMatch: React.FC = () => {
                       `#${row.placement_rank}`
                     )}
                   </td>
-                  <td style={styles.statTdName}>
+                  <td style={{ ...styles.statTd, ...styles.statTdName }}>
                     {isEditing ? (
                       <input
                         type="text"
@@ -806,7 +606,7 @@ export const ScoresheetMatch: React.FC = () => {
                     )}
                   </td>
                   <td style={styles.statTd}>{row.distance}</td>
-                  <td style={styles.statTd}>
+                  <td style={{ ...styles.statTd, fontWeight: 800 }}>
                     {isEditing ? (
                       <input
                         type="text"
@@ -824,7 +624,7 @@ export const ScoresheetMatch: React.FC = () => {
                       : '—'}
                   </td>
                   <td style={styles.statTd}>{row.efficiency || 0}</td>
-                  <td style={styles.statTdLast}>
+                  <td style={{ ...styles.statTd, borderRight: 'none' }}>
                     {row.is_disqualified ? (
                       <span style={{ color: '#EF4444', fontWeight: 800 }}>DQ</span>
                     ) : (
@@ -835,7 +635,7 @@ export const ScoresheetMatch: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={8} style={styles.tableEmptyTd}>
+                <td colSpan={8} style={{ padding: '24px', color: '#64748B', textAlign: 'center' }}>
                   No race results recorded. Upload official meet scoresheet below to see results.
                 </td>
               </tr>
@@ -856,7 +656,7 @@ export const ScoresheetMatch: React.FC = () => {
               if (window.history.length > 1) {
                 navigate(-1);
               } else {
-                navigate('/dashboard-official');
+                navigate('/dashboard');
               }
             }}
             className="hover-btn-outline"
@@ -868,7 +668,7 @@ export const ScoresheetMatch: React.FC = () => {
         </div>
 
         {loading ? (
-          <div style={styles.loadingContainer}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)' }}>
             <Loader2 style={{ width: 40, height: 40, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
           </div>
         ) : matchData ? (
@@ -886,12 +686,12 @@ export const ScoresheetMatch: React.FC = () => {
                   <Calendar style={{ width: 15, height: 15, color: '#64748B' }} />
                   <span>{matchData.match_date_formatted}</span>
                   {coachDisplay && (
-                    <span style={styles.coachText}>
-                      • Coach: <strong style={styles.coachName}>{coachDisplay}</strong>
+                    <span style={{ marginLeft: '12px', color: '#64748B', fontWeight: 600 }}>
+                      • Coach: <strong style={{ color: '#0B132B' }}>{coachDisplay}</strong>
                     </span>
                   )}
                   {matchData.is_certified && (
-                    <span style={styles.officialMatchBadge}>
+                    <span style={{ ...styles.badgeWin, marginLeft: '12px' }}>
                       OFFICIAL MATCH
                     </span>
                   )}
@@ -904,17 +704,29 @@ export const ScoresheetMatch: React.FC = () => {
                   <div style={styles.scoreTeamBlock}>
                     <span style={styles.scoreTeamLabel}>{matchData.home_team.name}</span>
                     <span style={styles.scoreValue}>{homeScore}</span>
-                    <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
-                      {homeScore >= awayScore ? 'WIN' : 'LOSE'}
-                    </span>
+                    {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
+                      <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
+                        {homeScore >= awayScore ? 'WIN' : 'LOSE'}
+                      </span>
+                    ) : (
+                      <span style={{ ...styles.badgeLose, backgroundColor: '#E2E8F0', color: '#64748B', border: '1px solid #CBD5E1' }}>
+                        UNPLAYED
+                      </span>
+                    )}
                   </div>
                   <span style={styles.scoreDivider}>-</span>
                   <div style={styles.scoreTeamBlock}>
                     <span style={styles.scoreTeamLabel}>{matchData.away_team.name}</span>
                     <span style={styles.scoreValue}>{awayScore}</span>
-                    <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
-                      {awayScore > homeScore ? 'WIN' : 'LOSE'}
-                    </span>
+                    {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
+                      <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
+                        {awayScore > homeScore ? 'WIN' : 'LOSE'}
+                      </span>
+                    ) : (
+                      <span style={{ ...styles.badgeLose, backgroundColor: '#E2E8F0', color: '#64748B', border: '1px solid #CBD5E1' }}>
+                        UNPLAYED
+                      </span>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -970,16 +782,16 @@ export const ScoresheetMatch: React.FC = () => {
                 </div>
 
                 {uploadError && (
-                  <div style={styles.uploadErrorText}>
+                  <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>
                     {uploadError}
                   </div>
                 )}
 
                 {scoresheetUrl && (
                   <div style={styles.scoresheetPreview}>
-                    <div style={styles.scoresheetAttachedRow}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <FileText style={{ width: 16, height: 16, color: '#0B132B' }} />
-                      <span style={styles.scoresheetAttachedLabel}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0B132B' }}>
                         SCORESHEET ATTACHED
                       </span>
                     </div>
@@ -987,7 +799,7 @@ export const ScoresheetMatch: React.FC = () => {
                       type="button"
                       onClick={() => setActiveModal('PREVIEW')}
                       className="hover-btn-ghost"
-                      style={styles.scoresheetPreviewBtn}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
                     >
                       <Eye style={{ width: 14, height: 14 }} />
                       <span>PREVIEW</span>
@@ -1020,44 +832,30 @@ export const ScoresheetMatch: React.FC = () => {
                 REMOVE MATCH
               </button>
 
-              {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
-                <button
-                  type="button"
-                  onClick={handleOpenCertify}
-                  className="hover-btn-success"
-                  style={styles.certifyBtn}
-                >
-                  CERTIFY MATCH
-                </button>
-              ) : (
-                <>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
                   <button
                     type="button"
-                    onClick={handleDownloadPdf}
-                    disabled={isDownloadingPdf}
-                    className="hover-btn-solid"
-                    style={styles.downloadPdfBtn}
+                    onClick={handleOpenCertify}
+                    className="hover-btn-success"
+                    style={styles.certifyBtn}
                   >
-                    {isDownloadingPdf ? (
-                      <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <Download style={{ width: 15, height: 15 }} />
-                    )}
-                    <span>DOWNLOAD SCORESHEET</span>
+                    CERTIFY MATCH
                   </button>
+                ) : (
                   <button
                     type="button"
                     disabled
-                    style={styles.certifiedBadgeBtn}
+                    style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
                   >
                     MATCH CERTIFIED
                   </button>
-                </>
-              )}
+                )}
+              </div>
             </div>
           </>
         ) : (
-          <div style={styles.emptyStateContainer}>
+          <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
             Match record not found.
           </div>
         )}
@@ -1109,7 +907,7 @@ export const ScoresheetMatch: React.FC = () => {
             <p style={styles.modalDesc}>
               Are you sure you want to certify and lock this match record? Once certified, the official results will be committed to the standings and become read-only.
             </p>
-            {actionError && <div style={styles.uploadErrorText}>{actionError}</div>}
+            {actionError && <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>{actionError}</div>}
             <div style={styles.modalActions}>
               <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
               <button type="button" onClick={handleCertify} disabled={actionLoading} className="hover-btn-success" style={styles.modalConfirmBtnGreen}>
@@ -1130,7 +928,7 @@ export const ScoresheetMatch: React.FC = () => {
             <p style={styles.modalDesc}>
               Are you sure you want to remove this match record? All linked audit sessions and pending verifications will be permanently deleted.
             </p>
-            {actionError && <div style={styles.uploadErrorText}>{actionError}</div>}
+            {actionError && <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>{actionError}</div>}
             <div style={styles.modalActions}>
               <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
               <button type="button" onClick={handleRemove} disabled={actionLoading} className="hover-btn-danger" style={styles.modalConfirmBtnRed}>
@@ -1143,17 +941,17 @@ export const ScoresheetMatch: React.FC = () => {
 
       {activeModal === 'PREVIEW' && scoresheetUrl && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalPreviewCard}>
-            <div style={styles.modalHeaderRow}>
+          <div style={{ ...styles.modalCard, maxWidth: '720px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={styles.modalTitle}>SCORESHEET PREVIEW</h3>
-              <button type="button" onClick={() => setActiveModal(null)} className="hover-close-x" style={styles.modalCloseBtn}>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-close-x" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
                 <X style={{ width: 20, height: 20 }} />
               </button>
             </div>
             {scoresheetUrl.endsWith('.pdf') ? (
-              <iframe src={scoresheetUrl} title="Scoresheet Preview" style={styles.previewIframe} />
+              <iframe src={scoresheetUrl} title="Scoresheet Preview" style={{ width: '100%', height: '500px', border: '1px solid #CBD5E1' }} />
             ) : (
-              <img src={scoresheetUrl} alt="Scoresheet" style={styles.previewImg} />
+              <img src={scoresheetUrl} alt="Scoresheet" style={{ width: '100%', height: 'auto', border: '1px solid #CBD5E1', borderRadius: '4px' }} />
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
               <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CLOSE</button>
@@ -1165,5 +963,4 @@ export const ScoresheetMatch: React.FC = () => {
     </div>
   );
 };
-
 export default ScoresheetMatch;
