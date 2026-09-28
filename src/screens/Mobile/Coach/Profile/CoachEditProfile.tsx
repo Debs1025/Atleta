@@ -14,11 +14,14 @@ import * as DocumentPicker from "expo-document-picker";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
-const SPORT_OPTIONS: CoachProfileState["sports_focus"][] = [
+const DEFAULT_SPORT_OPTIONS: CoachProfileState["sports_focus"][] = [
   "BASKETBALL",
-  "SWIMMING",
+  "VOLLEYBALL",
   "TRACK AND FIELD",
+  "SWIMMING",
+  "PICKLEBALL",
 ];
 
 export interface CoachEditProfileProps {
@@ -37,6 +40,30 @@ export function CoachEditProfile({
   const currentProfile = profileData || DEFAULT_COACH_PROFILE;
 
   const [showSportDropdown, setShowSportDropdown] = useState(false);
+  const [sportOptions, setSportOptions] = useState<CoachProfileState["sports_focus"][]>(DEFAULT_SPORT_OPTIONS);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: CoachProfileState["sports_focus"][] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').trim().toUpperCase();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        if (mapped.length > 0) {
+          setSportOptions(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for coach profile edit:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Form State
   const [form, setForm] = useState({
@@ -245,6 +272,8 @@ export function CoachEditProfile({
         ? "Track and Field"
         : form.sports_focus === "SWIMMING"
         ? "Swimming"
+        : form.sports_focus
+        ? form.sports_focus.charAt(0).toUpperCase() + form.sports_focus.slice(1).toLowerCase()
         : "Basketball";
 
     const patchPayload = {
@@ -384,7 +413,7 @@ export function CoachEditProfile({
           {/* Dropdown Options */}
           {showSportDropdown && (
             <View style={styles.dropdownMenuCard}>
-              {SPORT_OPTIONS.map((sport) => {
+              {sportOptions.map((sport) => {
                 const isSelected = form.sports_focus === sport;
                 return (
                   <TouchableOpacity

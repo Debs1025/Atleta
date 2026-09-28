@@ -156,11 +156,11 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const fullName = rich.full_name || a.full_name || `${rich.first_name || a.first_name || ''} ${rich.last_name || a.last_name || ''}`.trim() || 'Athlete';
           const rawSport = (rich.sport_type || a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
           const sportCategory: SportCategoryFilter =
-            rawSport.includes('SWIM') ? 'SWIMMING' : rawSport.includes('TRACK') || rawSport.includes('FIELD') ? 'TRACK AND FIELD' : 'BASKETBALL';
+            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
 
           const rawPos = (rich.position || a.position || '').trim();
           const isGenericPos = !rawPos || rawPos.toLowerCase() === 'unassigned' || rawPos.toLowerCase() === 'player' || rawPos.toLowerCase() === rawSport.toLowerCase();
-          const positionTag = !isGenericPos ? rawPos : (sportCategory === 'SWIMMING' ? 'Freestyle' : sportCategory === 'TRACK AND FIELD' ? 'Sprinter' : 'Point Guard');
+          const positionTag = !isGenericPos ? rawPos : (sportCategory === 'SWIMMING' ? 'Freestyle' : sportCategory === 'TRACK AND FIELD' ? 'Sprinter' : sportCategory === 'BASKETBALL' ? 'Point Guard' : 'Player');
 
           mappedAthletes.push({
             athlete_id: rawId,
@@ -237,7 +237,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const mappedTeams: DiscoveryTeamItem[] = rawTeamsList.map((t: any) => {
           const rawSport = (t.sport_type || t.sport_category || 'BASKETBALL').toUpperCase().trim();
           const sportCategory: SportCategoryFilter =
-            rawSport.includes('SWIM') ? 'SWIMMING' : rawSport.includes('TRACK') || rawSport.includes('FIELD') ? 'TRACK AND FIELD' : 'BASKETBALL';
+            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
 
           return {
             team_id: t.team_id || t.id,
@@ -364,7 +364,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         scout_id: `scout_${Date.now()}`,
         athlete_id: athlete.athlete_id,
         athlete_name: athlete.full_name,
-        sport_category: athlete.sport_category === 'BASKETBALL' ? 'Basketball' : athlete.sport_category === 'SWIMMING' ? 'Swimming' : 'Track & Field',
+        sport_category: athlete.sport_category
+          ? (athlete.sport_category === 'TRACK AND FIELD' ? 'Track & Field' : athlete.sport_category.charAt(0).toUpperCase() + athlete.sport_category.slice(1).toLowerCase())
+          : 'Basketball',
         offer_status: 'PENDING',
         date_added_relative: 'Added Just Now',
         created_at: new Date().toISOString().split('T')[0],

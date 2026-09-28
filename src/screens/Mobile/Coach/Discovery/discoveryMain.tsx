@@ -13,6 +13,7 @@ import { ScoutAthlete } from './scoutAthlete';
 import { AdvancedFilterModal } from './AdvancedFilterModal';
 import { styles } from './styles/discoveryMain';
 import { DiscoveryTab, SportCategoryFilter } from './discoveryTypes';
+import { getSportsOfflineFirst } from '../../../../services/firebaseClient';
 
 const rankingIconAsset = require('../../../../assets/ranking.png');
 const recruitsIconAsset = require('../../../../assets/recruits.png');
@@ -25,7 +26,7 @@ export interface DiscoveryMainProps {
   onToggleBottomNav?: (hide: boolean) => void;
 }
 
-const SPORT_CHIPS: { label: string; value: SportCategoryFilter }[] = [
+const DEFAULT_SPORT_CHIPS: { label: string; value: SportCategoryFilter }[] = [
   { label: 'Basketball', value: 'BASKETBALL' },
   { label: 'Swimming', value: 'SWIMMING' },
   { label: 'Track and Field', value: 'TRACK AND FIELD' },
@@ -57,6 +58,33 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
 
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [subView, setSubView] = useState<'none' | 'rankings' | 'recruits' | 'viewTeam' | 'viewMatch'>('none');
+  const [sportChips, setSportChips] = useState<{ label: string; value: SportCategoryFilter }[]>(DEFAULT_SPORT_CHIPS);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: { label: string; value: SportCategoryFilter }[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').trim();
+          if (!raw) return;
+          const upper = raw.toUpperCase();
+          if (seen.has(upper)) return;
+          seen.add(upper);
+          const label = upper === 'TRACK AND FIELD' ? 'Track and Field' : (raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase());
+          mapped.push({ label, value: upper as SportCategoryFilter });
+        });
+        if (mapped.length > 0) {
+          setSportChips(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for discovery:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const isFullSubPage = subView !== 'none' || !!selectedAthlete;
 
@@ -176,7 +204,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
 
             {/* Sport Category Filter Chips */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sportChipsScroll} contentContainerStyle={styles.sportChipsContent}>
-              {SPORT_CHIPS.map((chip) => {
+              {sportChips.map((chip) => {
                 const isActive = activeSportFilter === chip.value;
                 return (
                   <TouchableOpacity

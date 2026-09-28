@@ -347,7 +347,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
               position_or_event:
                 a.position ||
                 a.position_or_event ||
-                (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : "100m"),
+                (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : sport === "TRACK AND FIELD" ? "100m" : "Player"),
               is_active_on_field: false,
               avatar_url: a.avatar_url,
               sport_type: a.sport_type || sport,
@@ -749,7 +749,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                       jersey_number: "0",
                       last_name: fallbackName.split(" ").slice(-1)[0] || fallbackName,
                       full_name: fallbackName.toUpperCase(),
-                      position_or_event: session.sport_type === "BASKETBALL" ? "Guard" : session.sport_type === "SWIMMING" ? "Freestyle" : "100m",
+                      position_or_event: session.sport_type === "BASKETBALL" ? "Guard" : session.sport_type === "SWIMMING" ? "Freestyle" : session.sport_type === "TRACK AND FIELD" ? "100m" : "Player",
                       is_active_on_field: false,
                       sport_type: session.sport_type,
                       basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },

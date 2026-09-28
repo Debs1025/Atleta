@@ -35,7 +35,7 @@ export interface OfficialMatchRecord {
   home_team_name: string;
   away_team_name: string;
   league_name: string; // e.g. "BATANG PINOY"
-  sport_type: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_type: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   match_date: string; // e.g. "OCT 24, 2023"
   match_time: string; // e.g. "19:30"
   location: string; // e.g. "Metro Sports Arena, Court 4"
@@ -129,7 +129,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           const rawSport = (m.sport_type || 'BASKETBALL').toUpperCase();
           const sportType: OfficialMatchRecord['sport_type'] =
-            rawSport.includes('SWIM') ? 'SWIMMING' : rawSport.includes('TRACK') ? 'TRACK AND FIELD' : 'BASKETBALL';
+            rawSport.includes('SWIM') ? 'SWIMMING' : rawSport.includes('TRACK') ? 'TRACK AND FIELD' : rawSport;
 
           const rawStatus = (m.audit_status || m.verification_status || '').toUpperCase();
           let auditStatus: AuditStatus = 'NOT REQUESTED';

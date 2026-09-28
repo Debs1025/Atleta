@@ -14,8 +14,15 @@ import styles from "./styles/ManageTeamPage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Team, RosterAthlete } from "../DataTypes";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
-const AVAILABLE_SPORTS = ["BASKETBALL", "TRACK AND FIELD", "SWIMMING"] as const;
+const DEFAULT_AVAILABLE_SPORTS = [
+  "BASKETBALL",
+  "VOLLEYBALL",
+  "TRACK AND FIELD",
+  "SWIMMING",
+  "PICKLEBALL",
+];
 
 const BASKETBALL_POSITIONS = [
   { code: "PG", label: "Point Guard" },
@@ -99,6 +106,30 @@ export function ManageTeamPage({
   const [editName, setEditName] = useState(team.team_name);
   const [editSport, setEditSport] = useState<Team["sport_type"]>(team.sport_type);
   const [editDivision, setEditDivision] = useState(team.division || "Elite Professional");
+  const [availableSports, setAvailableSports] = useState<string[]>(DEFAULT_AVAILABLE_SPORTS);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        if (mapped.length > 0) {
+          setAvailableSports(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for team management:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Remove Player Confirmation Overlay State
   const [playerToRemove, setPlayerToRemove] = useState<RosterAthlete | null>(null);
@@ -211,11 +242,15 @@ export function ManageTeamPage({
               <View style={styles.sportBadgeOutline}>
                 <Ionicons
                   name={
-                    team.sport_type === "BASKETBALL"
+                    (team.sport_type || "").toUpperCase().includes("BASKETBALL")
                       ? "basketball"
-                      : team.sport_type === "SWIMMING"
+                      : (team.sport_type || "").toUpperCase().includes("SWIM")
                         ? "water"
-                        : "fitness"
+                        : (team.sport_type || "").toUpperCase().includes("TRACK")
+                          ? "fitness"
+                          : (team.sport_type || "").toUpperCase().includes("TENNIS") || (team.sport_type || "").toUpperCase().includes("PICKLE")
+                            ? "tennisball"
+                            : "trophy"
                   }
                   size={14}
                   color="#00C8FF"
@@ -434,7 +469,7 @@ export function ManageTeamPage({
 
               <Text style={styles.inputLabel}>SPORT CATEGORY</Text>
               <View style={styles.sportDropdownContainer}>
-                {AVAILABLE_SPORTS.map((s) => {
+                {availableSports.map((s) => {
                   const isSelected = editSport === s;
                   return (
                     <TouchableOpacity

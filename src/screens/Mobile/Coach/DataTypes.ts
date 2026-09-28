@@ -21,7 +21,7 @@ export interface CoachProfileState {
   full_name: string;
   email: string;
   role_title: string; // e.g., "BASKETBALL COACH"
-  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   avatar_url?: string;
   current_institution?: string;
   regional_affiliation?: string;
@@ -105,7 +105,7 @@ export interface RosterAthlete {
 export interface Team {
   team_id: string;
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING";
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL" | "PICKLEBALL" | string;
   division: string; // e.g. "Elite Professional"
   season_record: {
     wins: number;
@@ -136,7 +136,7 @@ export interface AthleteItem {
 
 export interface TeamDetailsState {
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "";
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL" | "PICKLEBALL" | string;
   division: string;
   selected_roster: AthleteItem[];
 }
@@ -211,7 +211,7 @@ export interface AthletePerformanceProfile {
   location_province: string; // e.g. "Camaligan, PHI"
   team_name: string; // e.g. "Pacific Waves"
   rating_score: number; // e.g. 88
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   biometrics: {
     height_ft: string; // "6'2""
     weight_lbs: string; // "185 lbs"
@@ -268,7 +268,7 @@ export interface AthletePerformanceProfile {
 
 export interface MatchHistoryItem {
   match_id: string;
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   event_or_opponent: string; // e.g. "vs. BLUE EAGLES", "100m Freestyle", "200M DASH (REGIONAL)"
   date_formatted: string; // e.g. "OCT 24", "SEPT 29"
   date_group: string; // e.g. "OCTOBER 2026"

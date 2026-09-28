@@ -51,7 +51,7 @@ import { MatchHistory } from "../Performance/matchHistory";
 import { TrackfieldMatchResult } from "../Performance/trackfieldMatchResult";
 import { SwimmingMatchResult } from "../Performance/swimmingMatchResult";
 import { BasketballMatchResult } from "../Performance/basketballMatchResult";
-import { getMatchesOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
+import { getMatchesOfflineFirst, getAthletesOfflineFirst, getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -173,6 +173,13 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
 
   // Filters & Modals
   const [activeSportFilter, setActiveSportFilter] = useState<string>("ALL");
+  const [dynamicSports, setDynamicSports] = useState<string[]>([
+    "BASKETBALL",
+    "VOLLEYBALL",
+    "TRACK AND FIELD",
+    "SWIMMING",
+    "PICKLEBALL",
+  ]);
   const [showFabOverlay, setShowFabOverlay] = useState(false);
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -679,7 +686,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 ? "SWIMMING"
                 : rawSport.includes("TRACK")
                 ? "TRACK AND FIELD"
-                : "BASKETBALL";
+                : rawSport;
 
             const updatedCoach: UserCoach = {
               user_id: profileRes.user_id || "",
@@ -742,6 +749,21 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           } else {
             setPerfAthletes([]);
           }
+
+          const sportsRes = await getSportsOfflineFirst().catch(() => null);
+          if (isMounted && sportsRes && sportsRes.length > 0) {
+            const seen = new Set<string>();
+            const mappedSports: string[] = [];
+            sportsRes.forEach((s: any) => {
+              const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+              if (!raw || seen.has(raw)) return;
+              seen.add(raw);
+              mappedSports.push(raw);
+            });
+            if (mappedSports.length > 0) {
+              setDynamicSports(mappedSports);
+            }
+          }
         }
       } catch (err) {
         console.warn("Failed to load coach dashboard live data:", err);
@@ -779,8 +801,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   );
 
   const availableSportCategories = useMemo(() => {
-    return ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
-  }, []);
+    return ["ALL", ...dynamicSports];
+  }, [dynamicSports]);
 
   // Memoized Filtered Players for Dashboard
   const filteredDashboardPlayers = useMemo(() => {
@@ -1445,6 +1467,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     ? "Swimming"
                     : finalData.sport_type === "TRACK AND FIELD"
                     ? "Track & Field"
+                    : finalData.sport_type
+                    ? finalData.sport_type.charAt(0).toUpperCase() + finalData.sport_type.slice(1).toLowerCase()
                     : "Basketball",
                 match_type: "OCR Scanned Match",
                 match_date: new Date().toISOString(),

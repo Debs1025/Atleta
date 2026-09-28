@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ScrollView,
   Text,
@@ -10,11 +10,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TeamDetailsState } from "../DataTypes";
 import styles from "./styles/CreateTeam";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
-const SPORT_CATEGORIES: Array<TeamDetailsState["sport_type"]> = [
+const DEFAULT_SPORT_CATEGORIES = [
   "BASKETBALL",
+  "VOLLEYBALL",
   "TRACK AND FIELD",
   "SWIMMING",
+  "PICKLEBALL",
 ];
 
 export interface CreateTeamProps {
@@ -34,6 +37,26 @@ export function CreateTeam({
   const headerTopPadding = Math.max(insets.top, 12);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [sportsList, setSportsList] = useState<string[]>(DEFAULT_SPORT_CATEGORIES);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((fetched: any) => {
+        if (!isMounted || !Array.isArray(fetched) || fetched.length === 0) return;
+        const mapped = fetched
+          .map((s: any) => String(s.sport_name || s.name || s.short_identifier || '').toUpperCase().trim())
+          .filter(Boolean);
+        const unique = Array.from(new Set([...mapped, ...DEFAULT_SPORT_CATEGORIES]));
+        if (unique.length > 0) {
+          setSportsList(unique);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const isFormValid =
     teamDetails.team_name.trim().length > 0 && teamDetails.sport_type !== "";
@@ -112,7 +135,7 @@ export function CreateTeam({
           {/* DROPDOWN MENU OPTIONS */}
           {dropdownOpen && (
             <View style={styles.dropdownMenu}>
-              {SPORT_CATEGORIES.map((sport) => {
+              {sportsList.map((sport) => {
                 const isSelected = teamDetails.sport_type === sport;
                 return (
                   <TouchableOpacity

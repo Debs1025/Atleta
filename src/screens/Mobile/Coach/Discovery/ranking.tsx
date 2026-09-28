@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
   RankingSortMetric,
 } from './discoveryTypes';
 import { AdvancedFilterModal } from './AdvancedFilterModal';
+import { getSportsOfflineFirst } from '../../../../services/firebaseClient';
 
 interface RankingProps {
   onBack: () => void;
@@ -29,7 +30,7 @@ interface RankingProps {
   };
 }
 
-const SPORT_TABS: { label: string; value: SportCategoryFilter }[] = [
+const DEFAULT_SPORT_TABS: { label: string; value: SportCategoryFilter }[] = [
   { label: 'Basketball', value: 'BASKETBALL' },
   { label: 'Swimming', value: 'SWIMMING' },
   { label: 'Track & Field', value: 'TRACK AND FIELD' },
@@ -58,9 +59,36 @@ export const RankingPage: React.FC<RankingProps> = ({
   } = useDiscovery();
 
   const [selectedSport, setSelectedSport] = useState<SportCategoryFilter>(activeSportFilter || 'BASKETBALL');
+  const [sportTabs, setSportTabs] = useState<{ label: string; value: SportCategoryFilter }[]>(DEFAULT_SPORT_TABS);
   const [localSearch, setLocalSearch] = useState<string>('');
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: { label: string; value: SportCategoryFilter }[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').trim();
+          if (!raw) return;
+          const upper = raw.toUpperCase();
+          if (seen.has(upper)) return;
+          seen.add(upper);
+          const label = upper === 'TRACK AND FIELD' ? 'Track & Field' : (raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase());
+          mapped.push({ label, value: upper as SportCategoryFilter });
+        });
+        if (mapped.length > 0) {
+          setSportTabs(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for rankings:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const ITEMS_PER_PAGE = 10;
 
@@ -232,13 +260,13 @@ export const RankingPage: React.FC<RankingProps> = ({
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Sport Category Tabs */}
-        <View style={styles.tabsRow}>
-          {SPORT_TABS.map((tab) => {
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tabsRow, { flexGrow: 1 }]}>
+          {sportTabs.map((tab) => {
             const isActive = selectedSport === tab.value;
             return (
               <TouchableOpacity
                 key={tab.value}
-                style={[styles.tabButton, isActive ? styles.tabButtonActive : null]}
+                style={[styles.tabButton, { paddingHorizontal: 16 }, isActive ? styles.tabButtonActive : null]}
                 onPress={() => handleSportChange(tab.value)}
                 activeOpacity={0.8}
               >
@@ -248,7 +276,7 @@ export const RankingPage: React.FC<RankingProps> = ({
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Search & Advanced Filters Bar */}
         <View style={styles.searchFilterRow}>

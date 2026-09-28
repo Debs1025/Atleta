@@ -4,7 +4,7 @@ export interface AthleteDiscoveryItem {
   province: string; // e.g. "Albay"
   recruitment_status: 'Available' | 'Recruited' | string;
   position_tag: string; // e.g. "PG", "SWIMMING", "TRACK AND FIELD"
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
   biometrics: {
     height_ft: string; // "6'2""
     weight_lbs: string; // "185 lbs"
@@ -45,7 +45,7 @@ export interface ScoutingProposalItem {
 export interface DiscoveryTeamItem {
   team_id: string;
   team_name: string;
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
   division_tag: string;
   description: string;
   head_coach: string;
@@ -71,7 +71,7 @@ export interface DiscoveryMatchPlayerStat {
 
 export interface DiscoveryMatchItem {
   match_id: string;
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
   headline: string;
   time_venue: string;
   team1_name: string;
@@ -91,7 +91,7 @@ export interface DiscoveryEventItem {
 }
 
 export type DiscoveryTab = 'PLAYERS' | 'TEAMS' | 'EVENTS';
-export type SportCategoryFilter = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+export type SportCategoryFilter = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
 
 export type RankingSortMetric = 'PER' | 'PPG' | 'RPG' | 'AST' | 'FG_PCT' | 'EFF' | 'TIME_50M' | 'TIME_100M' | 'TIME_200M' | 'TIME_400M';
 
@@ -100,7 +100,13 @@ export interface MetricOption {
   label: string;
 }
 
-export const SPORT_METRICS: Record<SportCategoryFilter, MetricOption[]> = {
+export const DEFAULT_SPORT_METRICS: MetricOption[] = [
+  { key: 'PER', label: 'PER Score' },
+  { key: 'PPG', label: 'Points (PPG)' },
+  { key: 'EFF', label: 'Efficiency %' },
+];
+
+export const SPORT_METRICS: Record<string, MetricOption[]> = {
   BASKETBALL: [
     { key: 'PER', label: 'PER Score' },
     { key: 'PPG', label: 'Points (PPG)' },
@@ -122,6 +128,17 @@ export const SPORT_METRICS: Record<SportCategoryFilter, MetricOption[]> = {
     { key: 'TIME_100M', label: '100m Sprint' },
     { key: 'TIME_200M', label: '200m Sprint' },
     { key: 'TIME_400M', label: '400m Sprint' },
+  ],
+  VOLLEYBALL: [
+    { key: 'PER', label: 'PER Score' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PPG', label: 'Points (PPG)' },
+    { key: 'AST', label: 'Assists (AST)' },
+  ],
+  PICKLEBALL: [
+    { key: 'PER', label: 'PER Score' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PPG', label: 'Points (PPG)' },
   ],
 };
 

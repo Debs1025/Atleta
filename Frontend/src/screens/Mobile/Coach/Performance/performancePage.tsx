@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AtletaHeader } from "../Components/AtletaHeader";
 import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 interface PerformancePageProps {
   onSelectAthlete: (athlete: AthletePerformanceProfile) => void;
@@ -21,7 +22,7 @@ interface PerformancePageProps {
   athletes?: AthletePerformanceProfile[];
 }
 
-const CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
+const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
 
 export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
@@ -37,6 +38,30 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
   const [visibleCount, setVisibleCount] = useState(5);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = ["ALL"];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        if (mapped.length > 1) {
+          setCategories(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for performance:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const displayAthletes = Array.isArray(athletes) ? athletes : [];
 
@@ -98,7 +123,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           style={styles.tabsScroll}
           contentContainerStyle={styles.tabsScrollContent}
         >
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const isActive = activeTab === cat;
             return (
               <TouchableOpacity
@@ -158,6 +183,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                 ) : athlete.sport_category === "TRACK AND FIELD" && athlete.averages ? (
                   <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
                     {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "- 100M"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "- WIN"}
+                  </Text>
+                ) : athlete.averages ? (
+                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                    {athlete.averages.ppg !== undefined ? `${athlete.averages.ppg} PPG • ` : ""}{athlete.averages.per_score ? `${athlete.averages.per_score} PER` : (athlete.rating_score ? `${athlete.rating_score} RATING` : "ACTIVE")}
                   </Text>
                 ) : null}
                 <View style={[styles.progressTrack, { marginTop: 6 }]}>

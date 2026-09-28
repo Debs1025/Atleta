@@ -66,16 +66,26 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
 
   // Helper to render sport badge icon
   const renderSportIcon = (sportType: OfficialMatchRecord['sport_type']) => {
-    switch (sportType) {
-      case 'BASKETBALL':
-        return <Ionicons name="basketball-outline" size={24} color="#00C8FF" />;
-      case 'SWIMMING':
-        return <MaterialCommunityIcons name="waves" size={24} color="#00C8FF" />;
-      case 'TRACK AND FIELD':
-        return <MaterialCommunityIcons name="run" size={24} color="#00C8FF" />;
-      default:
-        return <Ionicons name="trophy-outline" size={24} color="#00C8FF" />;
+    const s = (sportType || '').toUpperCase();
+    if (s.includes('BASKETBALL')) {
+      return <Ionicons name="basketball-outline" size={24} color="#00C8FF" />;
     }
+    if (s.includes('SWIM')) {
+      return <MaterialCommunityIcons name="waves" size={24} color="#00C8FF" />;
+    }
+    if (s.includes('TRACK') || s.includes('RUN')) {
+      return <MaterialCommunityIcons name="run" size={24} color="#00C8FF" />;
+    }
+    if (s.includes('VOLLEY')) {
+      return <MaterialCommunityIcons name="volleyball" size={24} color="#00C8FF" />;
+    }
+    if (s.includes('TENNIS') || s.includes('PICKLE')) {
+      return <Ionicons name="tennisball-outline" size={24} color="#00C8FF" />;
+    }
+    if (s.includes('SOCCER') || s.includes('FOOT')) {
+      return <Ionicons name="football-outline" size={24} color="#00C8FF" />;
+    }
+    return <Ionicons name="trophy-outline" size={24} color="#00C8FF" />;
   };
 
   // Helper to render status badge

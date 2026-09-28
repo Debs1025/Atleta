@@ -101,7 +101,7 @@ export function CoachProfile({
                 ? "SWIMMING"
                 : rawSport.includes("TRACK")
                 ? "TRACK AND FIELD"
-                : "BASKETBALL";
+                : rawSport;
 
             let totalAthletesCount = 0;
             if (Array.isArray(teamsRes)) {
