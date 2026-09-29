@@ -29,6 +29,10 @@ export interface AthleteDiscoveryItem {
   };
   avatar_url?: string;
   jersey_number?: string;
+  team_id?: string;
+  team_name?: string;
+  coach_name?: string;
+  has_coach?: boolean;
 }
 
 export interface ScoutingProposalItem {
@@ -101,46 +105,60 @@ export interface MetricOption {
 }
 
 export const DEFAULT_SPORT_METRICS: MetricOption[] = [
-  { key: 'PER', label: 'PER Score' },
   { key: 'PPG', label: 'Points (PPG)' },
   { key: 'EFF', label: 'Efficiency %' },
+  { key: 'PER', label: 'PER Score' },
 ];
 
 export const SPORT_METRICS: Record<string, MetricOption[]> = {
   BASKETBALL: [
-    { key: 'PER', label: 'PER Score' },
     { key: 'PPG', label: 'Points (PPG)' },
     { key: 'RPG', label: 'Rebounds (RPG)' },
     { key: 'AST', label: 'Assists (AST)' },
     { key: 'EFF', label: 'Efficiency %' },
     { key: 'FG_PCT', label: 'Field Goal %' },
+    { key: 'PER', label: 'PER Score' },
   ],
   SWIMMING: [
-    { key: 'PER', label: 'PER Score' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'TIME_50M', label: '50m Free' },
     { key: 'TIME_100M', label: '100m Free' },
     { key: 'TIME_200M', label: '200m Free' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
   ],
   'TRACK AND FIELD': [
-    { key: 'PER', label: 'PER Score' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'TIME_100M', label: '100m Sprint' },
     { key: 'TIME_200M', label: '200m Sprint' },
     { key: 'TIME_400M', label: '400m Sprint' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
   ],
   VOLLEYBALL: [
-    { key: 'PER', label: 'PER Score' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'PPG', label: 'Points (PPG)' },
+    { key: 'EFF', label: 'Efficiency %' },
     { key: 'AST', label: 'Assists (AST)' },
+    { key: 'PER', label: 'PER Score' },
   ],
   PICKLEBALL: [
-    { key: 'PER', label: 'PER Score' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'PPG', label: 'Points (PPG)' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
   ],
 };
+
+export function getDefaultMetricForSport(sport?: string): RankingSortMetric {
+  const s = (sport || '').toUpperCase().replace(/&/g, 'AND').replace(/\s+/g, '').trim();
+  if (s.includes('SWIM')) {
+    return 'TIME_50M';
+  }
+  if (s.includes('TRACK') || s.includes('FIELD')) {
+    return 'TIME_100M';
+  }
+  if (s.includes('VOLLEY') || s.includes('PICKLE') || s.includes('BASKET')) {
+    return 'PPG';
+  }
+  return 'PPG';
+}
 
 export interface AdvancedAthleteFilters {
   position: string;
@@ -159,7 +177,7 @@ export const DEFAULT_ADVANCED_FILTERS: AdvancedAthleteFilters = {
   minEff: 0,
   heightRange: 'ALL',
   weightRange: 'ALL',
-  sortBy: 'PER',
+  sortBy: 'PPG',
 };
 
 export function matchesPosition(athletePos: string, filterPos: string): boolean {

@@ -219,6 +219,23 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
+  coachBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  coachBadgeText: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   statValueCol: {
     alignItems: 'flex-end',
   },

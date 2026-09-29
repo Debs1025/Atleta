@@ -16,6 +16,7 @@ import {
   matchesAthleteFilters,
   SPORT_METRICS,
   RankingSortMetric,
+  getDefaultMetricForSport,
 } from './discoveryTypes';
 import { AdvancedFilterModal } from './AdvancedFilterModal';
 import { getSportsOfflineFirst } from '../../../../services/firebaseClient';
@@ -49,6 +50,7 @@ export const RankingPage: React.FC<RankingProps> = ({
 
   const {
     athletes,
+    rankingAthletes,
     setSelectedAthlete,
     activeSportFilter,
     setActiveSportFilter,
@@ -57,6 +59,8 @@ export const RankingPage: React.FC<RankingProps> = ({
     resetAdvancedFilters,
     activeFilterCount,
   } = useDiscovery();
+
+  const sourceAthletes = (rankingAthletes && rankingAthletes.length > 0) ? rankingAthletes : athletes;
 
   const [selectedSport, setSelectedSport] = useState<SportCategoryFilter>(activeSportFilter || 'BASKETBALL');
   const [sportTabs, setSportTabs] = useState<{ label: string; value: SportCategoryFilter }[]>(DEFAULT_SPORT_TABS);
@@ -96,16 +100,30 @@ export const RankingPage: React.FC<RankingProps> = ({
     setSelectedSport(sport);
     setActiveSportFilter(sport);
     setCurrentPage(1);
+    const sportDefaultMetric = getDefaultMetricForSport(sport);
+    setAdvancedFilters((prev) => ({
+      ...prev,
+      sortBy: sportDefaultMetric,
+    }));
   };
 
-  // Determine active sort/ranking metric directly from user's filter selection
+  // Determine active sort/ranking metric directly from user's filter selection (defaulting to PPG or sport default, never PER)
   const effectiveMetric: RankingSortMetric = useMemo(() => {
-    if (advancedFilters.sortBy) return advancedFilters.sortBy;
+    const sportDefaultMetric = getDefaultMetricForSport(selectedSport);
+    const chosen = advancedFilters.sortBy;
+
+    if (chosen) {
+      const sportMetrics = (SPORT_METRICS[selectedSport] || SPORT_METRICS.BASKETBALL).map((m) => m.key);
+      if (sportMetrics.includes(chosen)) {
+        return chosen;
+      }
+      return sportDefaultMetric;
+    }
+
     if (advancedFilters.minPpg > 0) return 'PPG';
     if (advancedFilters.minEff > 0) return 'EFF';
-    if (advancedFilters.minPer > 0) return 'PER';
-    return 'PER';
-  }, [advancedFilters.sortBy, advancedFilters.minPpg, advancedFilters.minEff, advancedFilters.minPer]);
+    return sportDefaultMetric;
+  }, [advancedFilters.sortBy, advancedFilters.minPpg, advancedFilters.minEff, selectedSport]);
 
   // Helper to parse time string into seconds for sorting (lower time is better for races)
   const parseTimeToSeconds = (timeStr?: string): number => {
@@ -121,11 +139,11 @@ export const RankingPage: React.FC<RankingProps> = ({
 
   const normSport = (s: string) => (s || '').toUpperCase().replace(/&/g, 'AND').replace(/\s+/g, '').trim();
 
-  // Dynamic ranking and filtering logic
+  // Dynamic ranking and filtering logic across ALL athletes (including those with coaches)
   const allRankedAthletes = useMemo(() => {
     const selNorm = normSport(selectedSport);
 
-    return athletes
+    return sourceAthletes
       .filter((a) => {
         const athNorm = normSport(a.sport_category);
         let sportMatches = false;
@@ -139,23 +157,30 @@ export const RankingPage: React.FC<RankingProps> = ({
         return matchesAthleteFilters(a, advancedFilters, localSearch);
       })
       .sort((a, b) => {
-        if (effectiveMetric === 'PER') {
-          return Number(b.calculated_per || 0) - Number(a.calculated_per || 0);
-        }
         if (effectiveMetric === 'PPG') {
-          return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
-        }
-        if (effectiveMetric === 'RPG') {
-          return Number(b.stats?.rpg || 0) - Number(a.stats?.rpg || 0);
-        }
-        if (effectiveMetric === 'AST') {
-          return Number(b.stats?.ast || 0) - Number(a.stats?.ast || 0);
-        }
-        if (effectiveMetric === 'EFF') {
+          const diff = Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
+          if (diff !== 0) return diff;
           return Number(b.efficiency_pct || 0) - Number(a.efficiency_pct || 0);
         }
+        if (effectiveMetric === 'RPG') {
+          const diff = Number(b.stats?.rpg || 0) - Number(a.stats?.rpg || 0);
+          if (diff !== 0) return diff;
+          return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
+        }
+        if (effectiveMetric === 'AST') {
+          const diff = Number(b.stats?.ast || 0) - Number(a.stats?.ast || 0);
+          if (diff !== 0) return diff;
+          return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
+        }
+        if (effectiveMetric === 'EFF') {
+          const diff = Number(b.efficiency_pct || 0) - Number(a.efficiency_pct || 0);
+          if (diff !== 0) return diff;
+          return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
+        }
         if (effectiveMetric === 'FG_PCT') {
-          return Number(b.stats?.fg_pct || 0) - Number(a.stats?.fg_pct || 0);
+          const diff = Number(b.stats?.fg_pct || 0) - Number(a.stats?.fg_pct || 0);
+          if (diff !== 0) return diff;
+          return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
         }
         if (effectiveMetric === 'TIME_50M') {
           return parseTimeToSeconds(a.stats?.times_50m_free) - parseTimeToSeconds(b.stats?.times_50m_free);
@@ -169,9 +194,12 @@ export const RankingPage: React.FC<RankingProps> = ({
         if (effectiveMetric === 'TIME_400M') {
           return parseTimeToSeconds(a.stats?.times_400m) - parseTimeToSeconds(b.stats?.times_400m);
         }
-        return Number(b.calculated_per || 0) - Number(a.calculated_per || 0);
+        if (effectiveMetric === 'PER') {
+          return Number(b.calculated_per || 0) - Number(a.calculated_per || 0);
+        }
+        return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
       });
-  }, [athletes, selectedSport, advancedFilters, localSearch, effectiveMetric]);
+  }, [sourceAthletes, selectedSport, advancedFilters, localSearch, effectiveMetric]);
 
   const totalPages = Math.max(1, Math.ceil(allRankedAthletes.length / ITEMS_PER_PAGE));
   const currentPageSafe = Math.min(currentPage, totalPages);
@@ -198,50 +226,48 @@ export const RankingPage: React.FC<RankingProps> = ({
       case 'RPG':
         return {
           main: `${athlete.stats?.rpg ?? 0} RPG`,
-          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.calculated_per ?? 25} PER`,
+          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.stats?.ast ?? 0} AST`,
         };
       case 'AST':
         return {
           main: `${athlete.stats?.ast ?? 0} AST`,
-          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.calculated_per ?? 25} PER`,
+          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.stats?.rpg ?? 0} RPG`,
         };
       case 'FG_PCT':
         return {
           main: `${athlete.stats?.fg_pct ?? 0}% FG`,
-          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.calculated_per ?? 25} PER`,
+          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.efficiency_pct ?? 75}% EFF`,
         };
       case 'EFF':
         return {
           main: `${athlete.efficiency_pct ?? 75}% EFF`,
-          sub: `${athlete.calculated_per ?? 25} PER`,
+          sub: `${athlete.stats?.ppg ?? 0} PPG`,
         };
       case 'TIME_50M':
         return {
-          main: athlete.stats?.times_50m_free || 'N/A',
-          sub: `${athlete.calculated_per ?? 25} PER`,
+          main: athlete.stats?.times_50m_free || '24.8s',
+          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
         };
       case 'TIME_100M':
         return {
-          main: athlete.stats?.times_100m || 'N/A',
-          sub: `${athlete.calculated_per ?? 25} PER`,
+          main: athlete.stats?.times_100m || '10.9s',
+          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
         };
       case 'TIME_200M':
         return {
-          main: athlete.stats?.times_200m || 'N/A',
-          sub: `${athlete.calculated_per ?? 25} PER`,
+          main: athlete.stats?.times_200m || '22.4s',
+          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
         };
       case 'TIME_400M':
         return {
-          main: athlete.stats?.times_400m || 'N/A',
-          sub: `${athlete.calculated_per ?? 25} PER`,
+          main: athlete.stats?.times_400m || '49.8s',
+          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
         };
       case 'PER':
       default:
         return {
           main: `${athlete.calculated_per ?? 25} PER`,
-          sub: athlete.sport_category === 'BASKETBALL'
-            ? `${athlete.stats?.ppg ?? 0} PPG • ${athlete.efficiency_pct ?? 75}% EFF`
-            : `${athlete.efficiency_pct ?? 75}% EFF`,
+          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.efficiency_pct ?? 75}% EFF`,
         };
     }
   };
@@ -369,11 +395,21 @@ export const RankingPage: React.FC<RankingProps> = ({
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.athleteName} numberOfLines={1}>
-                        {athlete.full_name || 'Athlete'}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.athleteName} numberOfLines={1}>
+                          {athlete.full_name || 'Athlete'}
+                        </Text>
+                        {athlete.has_coach && (
+                          <View style={styles.coachBadge}>
+                            <Ionicons name="shield-checkmark" size={10} color="#10B981" />
+                            <Text style={styles.coachBadgeText}>COACHED</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.athleteLocation} numberOfLines={1}>
-                        {athlete.position_tag || 'Player'} • #{athlete.jersey_number || '0'} • {athlete.province || 'Camarines Sur'}
+                        {athlete.position_tag || 'Player'}
+                        {athlete.jersey_number ? ` • #${athlete.jersey_number}` : ''}
+                        {athlete.team_name ? ` • ${athlete.team_name}` : athlete.coach_name ? ` • Coach ${athlete.coach_name}` : ` • ${athlete.province || 'Camarines Sur'}`}
                       </Text>
                     </View>
                   </View>

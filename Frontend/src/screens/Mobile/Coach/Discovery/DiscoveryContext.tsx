@@ -10,6 +10,7 @@ import {
   AdvancedAthleteFilters,
   DEFAULT_ADVANCED_FILTERS,
   matchesAthleteFilters,
+  getDefaultMetricForSport,
 } from './discoveryTypes';
 import { requestAuthenticatedJson } from '../../Authentication/authShared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,7 @@ const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache';
 
 interface DiscoveryContextType {
   athletes: AthleteDiscoveryItem[];
+  rankingAthletes: AthleteDiscoveryItem[];
   scoutingProposals: ScoutingProposalItem[];
   teams: DiscoveryTeamItem[];
   events: DiscoveryEventItem[];
@@ -51,6 +53,7 @@ const DiscoveryContext = createContext<DiscoveryContextType | undefined>(undefin
 
 export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [athletes, setAthletes] = useState<AthleteDiscoveryItem[]>([]);
+  const [rankingAthletes, setRankingAthletes] = useState<AthleteDiscoveryItem[]>([]);
   const [scoutingProposals, setScoutingProposals] = useState<ScoutingProposalItem[]>([]);
   const [teams, setTeams] = useState<DiscoveryTeamItem[]>([]);
   const [events, setEvents] = useState<DiscoveryEventItem[]>([]);
@@ -78,9 +81,10 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (advancedFilters.minEff > 0) count++;
     if (advancedFilters.heightRange !== 'ALL') count++;
     if (advancedFilters.weightRange !== 'ALL') count++;
-    if (advancedFilters.sortBy && advancedFilters.sortBy !== 'PER') count++;
+    const defaultSort = getDefaultMetricForSport(activeSportFilter);
+    if (advancedFilters.sortBy && advancedFilters.sortBy !== defaultSort) count++;
     return count;
-  }, [advancedFilters]);
+  }, [advancedFilters, activeSportFilter]);
 
   const loadDiscoveryData = useCallback(async () => {
     try {
@@ -97,29 +101,116 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       let finalTeams: DiscoveryTeamItem[] = [];
       let finalEvents: DiscoveryEventItem[] = [];
 
-      // 1. Map Athletes directly from baseline athletes list without blocking N+1 round trips
+      // 1. Map Teams first so we have team and coach affiliations for all athletes
+      const rawTeamsList = Array.isArray(teamsRes)
+        ? teamsRes
+        : Array.isArray(teamsRes?.teams)
+          ? teamsRes.teams
+          : [];
+
+      const athleteTeamCoachMap = new Map<string, { team_id: string; team_name: string; head_coach: string }>();
+
+      if (rawTeamsList.length > 0) {
+        finalTeams = rawTeamsList.map((t: any) => {
+          const rawSport = (t.sport_type || t.sport_category || 'BASKETBALL').toUpperCase().trim();
+          const sportCategory: SportCategoryFilter =
+            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
+
+          const tId = t.team_id || t.id || '';
+          const tName = t.team_name || 'Team';
+          const hCoach = t.coach_name || t.head_coach || 'Head Coach';
+
+          const rosterMapped = Array.isArray(t.roster_list)
+            ? t.roster_list.map((r: any) => {
+              const rRawId = r.athlete_id || r.user_id || 'ath_0';
+              const rNormId = String(rRawId).replace(/^ath_/, '');
+              if (rNormId) {
+                athleteTeamCoachMap.set(rNormId, { team_id: tId, team_name: tName, head_coach: hCoach });
+              }
+
+              return {
+                athlete_id: rRawId,
+                full_name: r.full_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Athlete',
+                province: r.province || r.location || 'Camarines Sur',
+                recruitment_status: r.recruitment_status || 'Rostered',
+                position_tag: r.position || 'PG',
+                sport_category: sportCategory,
+                biometrics: {
+                  height_ft: r.height_ft || "-",
+                  weight_lbs: r.weight_lbs || "-",
+                  wingspan_ft: r.wingspan_ft || "-",
+                },
+                stats: r.stats || { ppg: 0, rpg: 0, ast: 0, fg_pct: 0 },
+                calculated_per: r.per || 25,
+                efficiency_pct: r.efficiency_pct || 75,
+                contact_info: {
+                  email: r.email || 'athlete@atleta.ph',
+                  facebook: r.facebook || '',
+                  phone: r.contact_number || '+63 900 000 0000',
+                },
+                jersey_number: String(r.jersey_number || '0'),
+                team_id: tId,
+                team_name: tName,
+                coach_name: hCoach,
+                has_coach: true,
+              };
+            })
+            : [];
+
+          return {
+            team_id: tId,
+            team_name: tName,
+            sport_category: sportCategory,
+            division_tag: t.division || 'Elite Division',
+            description: t.description || `${tName} competitive roster.`,
+            head_coach: hCoach,
+            season_record: typeof t.season_record === 'object' && t.season_record !== null
+              ? `${t.season_record.wins ?? 0} - ${t.season_record.losses ?? 0}`
+              : typeof t.season_record === 'string'
+                ? t.season_record
+                : '0 - 0',
+            logo_url: t.logo_url,
+            banner_url: t.banner_url,
+            roster: rosterMapped,
+          };
+        });
+        setTeams(finalTeams);
+      } else {
+        setTeams([]);
+      }
+
+      // 2. Map All Athletes (including players with coaches for player rankings)
       const rawAthletesList = Array.isArray(athletesRes)
         ? athletesRes
         : Array.isArray(athletesRes?.athletes)
           ? athletesRes.athletes
           : [];
 
-      if (rawAthletesList.length > 0) {
-        const seenIds = new Set<string>();
-        const mappedAthletes: AthleteDiscoveryItem[] = [];
+      const seenIds = new Set<string>();
+      const mappedAthletes: AthleteDiscoveryItem[] = [];
 
+      if (rawAthletesList.length > 0) {
         rawAthletesList.forEach((a: any) => {
           const rawId = a.athlete_id || a.user_id || a.id || '';
           const normalizedId = rawId.replace(/^ath_/, '');
           if (!rawId || seenIds.has(normalizedId)) return;
-
-          // Exclude recruited / signed / rostered athletes from Discovery (Coach #12)
-          const status = String(a.recruitment_status || '').toLowerCase().trim();
-          if (['recruited', 'signed', 'committed', 'rostered', 'joined'].includes(status)) return;
-          if (a.team_id && String(a.team_id).trim() !== '' && String(a.team_id) !== 'none') return;
-          if (a.current_affiliation && a.current_affiliation.team_id) return;
-
           seenIds.add(normalizedId);
+
+          // Check if athlete has coach / team affiliation
+          const teamCoachInfo = athleteTeamCoachMap.get(normalizedId);
+          const assignedTeamId = teamCoachInfo?.team_id || a.team_id || a.current_affiliation?.team_id;
+          const assignedTeamName = teamCoachInfo?.team_name || a.team_name || a.current_affiliation?.team_name;
+          const assignedCoachName = teamCoachInfo?.head_coach || a.coach_name || a.coach || a.current_affiliation?.coach_name;
+
+          const status = String(a.recruitment_status || '').toLowerCase().trim();
+          const isRecruitedOrRostered = ['recruited', 'signed', 'committed', 'rostered', 'joined'].includes(status);
+          const hasCoach = Boolean(
+            isRecruitedOrRostered ||
+            (assignedCoachName && String(assignedCoachName).trim() !== '' && assignedCoachName !== 'None') ||
+            (assignedTeamId && String(assignedTeamId).trim() !== '' && String(assignedTeamId) !== 'none') ||
+            (assignedTeamName && String(assignedTeamName).trim() !== '') ||
+            a.has_coach
+          );
 
           const mergedStats = a.stats || a.averages || {};
 
@@ -147,7 +238,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             athlete_id: rawId,
             full_name: fullName,
             province: a.location || a.province || 'Camarines Sur',
-            recruitment_status: a.recruitment_status || 'Available',
+            recruitment_status: hasCoach ? (a.recruitment_status || 'Rostered') : (a.recruitment_status || 'Available'),
             position_tag: positionTag,
             sport_category: sportCategory,
             biometrics: {
@@ -166,6 +257,10 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               rpg,
               ast,
               fg_pct: fgPct,
+              times_50m_free: a.stats?.times_50m_free || (sportCategory === 'SWIMMING' ? '24.8s' : undefined),
+              times_100m: a.stats?.times_100m || (sportCategory === 'TRACK AND FIELD' ? '10.9s' : sportCategory === 'SWIMMING' ? '54.2s' : undefined),
+              times_200m: a.stats?.times_200m || (sportCategory === 'TRACK AND FIELD' ? '22.4s' : sportCategory === 'SWIMMING' ? '1:58.4' : undefined),
+              times_400m: a.stats?.times_400m || (sportCategory === 'TRACK AND FIELD' ? '49.8s' : undefined),
             },
             calculated_per: per,
             efficiency_pct: eff,
@@ -175,16 +270,41 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               phone: a.contact_number || a.phone || 'N/A',
               facebook: a.facebook || a.social_link || 'N/A',
             },
+            jersey_number: String(a.jersey_number || '2'),
+            team_id: assignedTeamId,
+            team_name: assignedTeamName,
+            coach_name: assignedCoachName,
+            has_coach: hasCoach,
           });
         });
-
-        finalAthletes = mappedAthletes;
-        setAthletes(mappedAthletes);
-      } else {
-        setAthletes([]);
       }
 
-      // 2. Map Scouting Proposals
+      // Also merge any rostered athletes from teams who might not be in the standalone rawAthletesList
+      if (finalTeams.length > 0) {
+        finalTeams.forEach((t) => {
+          if (Array.isArray(t.roster)) {
+            t.roster.forEach((r) => {
+              const rNormId = r.athlete_id.replace(/^ath_/, '');
+              if (!seenIds.has(rNormId)) {
+                seenIds.add(rNormId);
+                mappedAthletes.push({
+                  ...r,
+                  team_id: t.team_id,
+                  team_name: t.team_name,
+                  coach_name: t.head_coach,
+                  has_coach: true,
+                });
+              }
+            });
+          }
+        });
+      }
+
+      finalAthletes = mappedAthletes;
+      setAthletes(mappedAthletes);
+      setRankingAthletes(mappedAthletes);
+
+      // 3. Map Scouting Proposals
       if (Array.isArray(proposalsRes)) {
         const mappedProposals: ScoutingProposalItem[] = proposalsRes.map((p: any) => ({
           scout_id: p.scout_id || p.id,
@@ -202,65 +322,6 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setScoutingProposals(mappedProposals);
       } else {
         setScoutingProposals([]);
-      }
-
-      // 3. Map Teams
-      const rawTeamsList = Array.isArray(teamsRes)
-        ? teamsRes
-        : Array.isArray(teamsRes?.teams)
-          ? teamsRes.teams
-          : [];
-
-      if (rawTeamsList.length > 0) {
-        const mappedTeams: DiscoveryTeamItem[] = rawTeamsList.map((t: any) => {
-          const rawSport = (t.sport_type || t.sport_category || 'BASKETBALL').toUpperCase().trim();
-          const sportCategory: SportCategoryFilter =
-            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
-
-          return {
-            team_id: t.team_id || t.id,
-            team_name: t.team_name || 'Team',
-            sport_category: sportCategory,
-            division_tag: t.division || 'Elite Division',
-            description: t.description || `${t.team_name || 'Team'} competitive roster.`,
-            head_coach: t.coach_name || t.head_coach || 'Head Coach',
-            season_record: typeof t.season_record === 'object' && t.season_record !== null
-              ? `${t.season_record.wins ?? 0} - ${t.season_record.losses ?? 0}`
-              : typeof t.season_record === 'string'
-                ? t.season_record
-                : '0 - 0',
-            logo_url: t.logo_url,
-            banner_url: t.banner_url,
-            roster: Array.isArray(t.roster_list)
-              ? t.roster_list.map((r: any) => ({
-                athlete_id: r.athlete_id || r.user_id || 'ath_0',
-                full_name: r.full_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Athlete',
-                province: r.province || r.location || 'Camarines Sur',
-                recruitment_status: r.recruitment_status || 'Available',
-                position_tag: r.position || 'PG',
-                sport_category: sportCategory,
-                biometrics: {
-                  height_ft: r.height_ft || "-",
-                  weight_lbs: r.weight_lbs || "-",
-                  wingspan_ft: r.wingspan_ft || "-",
-                },
-                stats: r.stats || { ppg: 0, rpg: 0, ast: 0, fg_pct: 0 },
-                calculated_per: r.per || 25,
-                efficiency_pct: r.efficiency_pct || 75,
-                contact_info: {
-                  email: r.email || 'athlete@atleta.ph',
-                  facebook: r.facebook || '',
-                  phone: r.contact_number || '+63 900 000 0000',
-                },
-                jersey_number: String(r.jersey_number || '0'),
-              }))
-              : [],
-          };
-        });
-        finalTeams = mappedTeams;
-        setTeams(mappedTeams);
-      } else {
-        setTeams([]);
       }
 
       // 4. Map Events & Matches
@@ -342,6 +403,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const cached = JSON.parse(raw);
           if (Array.isArray(cached.athletes) && cached.athletes.length > 0) {
             setAthletes(cached.athletes);
+            setRankingAthletes(cached.athletes);
           }
           if (Array.isArray(cached.proposals)) {
             setScoutingProposals(cached.proposals);
@@ -389,9 +451,15 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  // Advanced & Search filtering
+  // Advanced & Search filtering for discovery prospect feed (available uncommitted recruits)
   const filteredAthletes = useMemo(() => {
     return athletes.filter((athlete) => {
+      // Exclude athletes who already have coaches or are recruited/rostered from Discovery scouting feed
+      if (athlete.has_coach) return false;
+      const status = String(athlete.recruitment_status || '').toLowerCase().trim();
+      if (['recruited', 'signed', 'committed', 'rostered', 'joined'].includes(status)) return false;
+      if (athlete.team_id && String(athlete.team_id).trim() !== '' && String(athlete.team_id) !== 'none') return false;
+
       if (athlete.sport_category !== activeSportFilter) {
         return false;
       }
@@ -441,6 +509,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <DiscoveryContext.Provider
       value={{
         athletes,
+        rankingAthletes,
         scoutingProposals,
         teams,
         events,

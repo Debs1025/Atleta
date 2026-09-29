@@ -18,6 +18,7 @@ import {
   matchesAthleteFilters,
   SPORT_METRICS,
   RankingSortMetric,
+  getDefaultMetricForSport,
 } from './discoveryTypes';
 
 interface AdvancedFilterModalProps {
@@ -130,8 +131,12 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
   };
 
   const handleReset = () => {
-    setDraftFilters(DEFAULT_ADVANCED_FILTERS);
-    setAdvancedFilters(DEFAULT_ADVANCED_FILTERS);
+    const resetFilters: AdvancedAthleteFilters = {
+      ...DEFAULT_ADVANCED_FILTERS,
+      sortBy: getDefaultMetricForSport(activeSportFilter),
+    };
+    setDraftFilters(resetFilters);
+    setAdvancedFilters(resetFilters);
   };
 
   const positions = POSITION_OPTIONS[activeSportFilter] || POSITION_OPTIONS.BASKETBALL;
@@ -171,7 +176,8 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
               <Text style={modalStyles.sectionLabel}>SORT & RANK ATHLETES BY</Text>
               <View style={modalStyles.chipsWrap}>
                 {(SPORT_METRICS[activeSportFilter] || SPORT_METRICS.BASKETBALL).map((m) => {
-                  const isSelected = (draftFilters.sortBy || 'PER') === m.key;
+                  const defaultSort = getDefaultMetricForSport(activeSportFilter);
+                  const isSelected = (draftFilters.sortBy || defaultSort) === m.key;
                   return (
                     <TouchableOpacity
                       key={m.key}
