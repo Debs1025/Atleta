@@ -16,7 +16,7 @@ interface RecruitsProps {
 
 export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = insets.top > 0 ? insets.top + 6 : 12;
+  const headerTopPadding = Math.max(insets.top, 44) + 16;
 
   const { scoutingProposals, sortRecruits, setSortRecruits } = useDiscovery();
 
@@ -35,10 +35,12 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
     <View style={styles.container}>
       {/* Header Bar */}
       <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
-        <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>RECRUITS</Text>
-        </TouchableOpacity>
+        </View>
 
         <TouchableOpacity onPress={toggleSort} activeOpacity={0.8} style={styles.sortButton}>
           <Ionicons name="swap-vertical" size={16} color="#00C8FF" />

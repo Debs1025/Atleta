@@ -153,7 +153,7 @@ const PlayerRowItem = React.memo(
 // API Request: fetch coach dashboard & team summary (GET /api/coach/dashboard)
 export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 12) + 6;
+  const headerTopPadding = Math.max(insets.top, 44) + 18;
 
   // Local State
   const [coach, setCoach] = useState<UserCoach>({
@@ -1765,7 +1765,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingTop: headerTopPadding + 48, paddingBottom: 150 },
+              { paddingTop: headerTopPadding + 56, paddingBottom: 150 },
             ]}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"

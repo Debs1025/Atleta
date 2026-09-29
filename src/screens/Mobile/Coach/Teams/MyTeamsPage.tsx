@@ -61,7 +61,7 @@ export function MyTeamsPage({
   unreadNotificationCount = 0,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 12) + 6;
+  const headerTopPadding = Math.max(insets.top, 44) + 18;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -89,7 +89,7 @@ export function MyTeamsPage({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 48, paddingBottom: 120 },
+          { paddingTop: headerTopPadding + 56, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
       >
