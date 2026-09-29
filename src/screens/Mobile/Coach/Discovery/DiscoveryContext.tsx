@@ -12,6 +12,9 @@ import {
   matchesAthleteFilters,
 } from './discoveryTypes';
 import { requestAuthenticatedJson } from '../../Authentication/authShared';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache';
 
 interface DiscoveryContextType {
   athletes: AthleteDiscoveryItem[];
@@ -89,7 +92,12 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         requestAuthenticatedJson('/matches').catch(() => null),
       ]);
 
-      // 1. Map Athletes
+      let finalAthletes: AthleteDiscoveryItem[] = [];
+      let finalProposals: ScoutingProposalItem[] = [];
+      let finalTeams: DiscoveryTeamItem[] = [];
+      let finalEvents: DiscoveryEventItem[] = [];
+
+      // 1. Map Athletes directly from baseline athletes list without blocking N+1 round trips
       const rawAthletesList = Array.isArray(athletesRes)
         ? athletesRes
         : Array.isArray(athletesRes?.athletes)
@@ -97,32 +105,6 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           : [];
 
       if (rawAthletesList.length > 0) {
-        const uniqueIds = Array.from(
-          new Set(
-            rawAthletesList
-              .map((a: any) => String(a.athlete_id || a.user_id || a.id || '').trim())
-              .filter(Boolean)
-          )
-        );
-
-        // Fetch detailed profiles in parallel to hydrate stats (PPG, RPG, AST, FG%, PER, physicals)
-        const profileSettled = await Promise.allSettled(
-          uniqueIds.map((id) =>
-            requestAuthenticatedJson(`/athletes/${id}`).catch(() => null)
-          )
-        );
-
-        const detailedProfilesMap = new Map<string, any>();
-        profileSettled.forEach((res, idx) => {
-          if (res.status === 'fulfilled' && res.value && !(res.value as any).error) {
-            const rawId = String(uniqueIds[idx] || '');
-            const cleanId = rawId.replace(/^ath_/, '');
-            detailedProfilesMap.set(rawId, res.value);
-            detailedProfilesMap.set(cleanId, res.value);
-            detailedProfilesMap.set(`ath_${cleanId}`, res.value);
-          }
-        });
-
         const seenIds = new Set<string>();
         const mappedAthletes: AthleteDiscoveryItem[] = [];
 
@@ -139,34 +121,33 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           seenIds.add(normalizedId);
 
-          const rich = detailedProfilesMap.get(rawId) || detailedProfilesMap.get(normalizedId) || detailedProfilesMap.get(`ath_${normalizedId}`) || {};
-          const mergedStats = rich.stats || a.stats || rich.averages || a.averages || {};
+          const mergedStats = a.stats || a.averages || {};
 
-          const ppg = Number(mergedStats.ppg ?? rich.averages?.ppg ?? a.averages?.ppg ?? 0);
-          const rpg = Number(mergedStats.rpg ?? rich.averages?.rpg ?? a.averages?.rpg ?? 0);
-          const ast = Number(mergedStats.ast ?? mergedStats.apg ?? rich.averages?.apg ?? a.averages?.apg ?? 0);
-          const fgPct = Number(mergedStats.fg_pct ?? mergedStats.fg_percentage ?? rich.averages?.fg_percentage ?? a.averages?.fg_percentage ?? 0);
-          const per = Number(rich.averages?.per_score ?? a.averages?.per_score ?? rich.calculated_per ?? a.calculated_per ?? (ppg > 0 ? Math.round(ppg * 1.3) : 25));
-          const eff = Number(rich.efficiency_pct ?? a.efficiency_pct ?? (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5)) : 75));
+          const ppg = Number(mergedStats.ppg ?? a.averages?.ppg ?? a.pts ?? 0);
+          const rpg = Number(mergedStats.rpg ?? a.averages?.rpg ?? a.reb ?? 0);
+          const ast = Number(mergedStats.ast ?? mergedStats.apg ?? a.averages?.apg ?? a.ast ?? 0);
+          const fgPct = Number(mergedStats.fg_pct ?? mergedStats.fg_percentage ?? a.averages?.fg_percentage ?? 0);
+          const per = Number(a.averages?.per_score ?? a.stats?.per ?? a.calculated_per ?? (ppg > 0 ? Math.round(ppg * 1.3) : 25));
+          const eff = Number(a.efficiency_pct ?? (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5)) : 75));
 
-          const heightCm = rich.physical_attributes?.height_cm || a.physical_attributes?.height_cm || rich.height_cm || a.height_cm;
-          const weightKg = rich.physical_attributes?.weight_kg || a.physical_attributes?.weight_kg || rich.weight_kg || a.weight_kg;
-          const wingspanCm = rich.physical_attributes?.wingspan_cm || a.physical_attributes?.wingspan_cm || rich.wingspan_cm || a.wingspan_cm;
+          const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
+          const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
+          const wingspanCm = a.physical_attributes?.wingspan_cm || a.physical_profile?.wingspan_cm || a.wingspan_cm;
 
-          const fullName = rich.full_name || a.full_name || `${rich.first_name || a.first_name || ''} ${rich.last_name || a.last_name || ''}`.trim() || 'Athlete';
-          const rawSport = (rich.sport_type || a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
+          const fullName = a.full_name || `${a.first_name || ''} ${a.last_name || ''}`.trim() || 'Athlete';
+          const rawSport = (a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
           const sportCategory: SportCategoryFilter =
             rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
 
-          const rawPos = (rich.position || a.position || '').trim();
+          const rawPos = (a.position || '').trim();
           const isGenericPos = !rawPos || rawPos.toLowerCase() === 'unassigned' || rawPos.toLowerCase() === 'player' || rawPos.toLowerCase() === rawSport.toLowerCase();
           const positionTag = !isGenericPos ? rawPos : (sportCategory === 'SWIMMING' ? 'Freestyle' : sportCategory === 'TRACK AND FIELD' ? 'Sprinter' : sportCategory === 'BASKETBALL' ? 'Point Guard' : 'Player');
 
           mappedAthletes.push({
             athlete_id: rawId,
             full_name: fullName,
-            province: rich.location || rich.province || a.location || a.province || 'Camarines Sur',
-            recruitment_status: rich.recruitment_status || a.recruitment_status || 'Available',
+            province: a.location || a.province || 'Camarines Sur',
+            recruitment_status: a.recruitment_status || 'Available',
             position_tag: positionTag,
             sport_category: sportCategory,
             biometrics: {
@@ -185,23 +166,19 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               rpg,
               ast,
               fg_pct: fgPct,
-              times_100m: mergedStats.times_100m || rich.stats?.times_100m,
-              times_200m: mergedStats.times_200m || rich.stats?.times_200m,
-              times_400m: mergedStats.times_400m || rich.stats?.times_400m,
-              times_50m_free: mergedStats.times_50m_free || rich.stats?.times_50m_free,
             },
             calculated_per: per,
             efficiency_pct: eff,
+            avatar_url: a.avatar_url,
             contact_info: {
-              email: rich.email || a.email || a.contact_email || 'N/A',
-              phone: rich.contact_number || a.contact_number || a.phone || 'N/A',
-              facebook: rich.facebook || a.facebook || a.social_link || 'N/A',
+              email: a.email || a.contact_email || 'N/A',
+              phone: a.contact_number || a.phone || 'N/A',
+              facebook: a.facebook || a.social_link || 'N/A',
             },
-            jersey_number: String(rich.jersey_number || a.jersey_number || '0'),
-            avatar_url: rich.avatar_url || a.avatar_url,
           });
         });
 
+        finalAthletes = mappedAthletes;
         setAthletes(mappedAthletes);
       } else {
         setAthletes([]);
@@ -221,6 +198,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           created_at: p.created_at || new Date().toISOString().split('T')[0],
           avatar_url: p.avatar_url,
         }));
+        finalProposals = mappedProposals;
         setScoutingProposals(mappedProposals);
       } else {
         setScoutingProposals([]);
@@ -279,6 +257,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               : [],
           };
         });
+        finalTeams = mappedTeams;
         setTeams(mappedTeams);
       } else {
         setTeams([]);
@@ -332,15 +311,50 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             matches: [matchItem],
           };
         });
+        finalEvents = mappedEvents;
         setEvents(mappedEvents);
       } else {
         setEvents([]);
       }
+
+      // Persist snapshot to AsyncStorage for instant next render (<10ms)
+      AsyncStorage.setItem(
+        DISCOVERY_CACHE_KEY,
+        JSON.stringify({
+          athletes: finalAthletes,
+          proposals: finalProposals,
+          teams: finalTeams,
+          events: finalEvents,
+        })
+      ).catch(() => null);
     } catch (err) {
       console.warn('Discovery live data error:', err);
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Instant cache hydration on mount (<10ms)
+  useEffect(() => {
+    AsyncStorage.getItem(DISCOVERY_CACHE_KEY)
+      .then((raw) => {
+        if (raw) {
+          const cached = JSON.parse(raw);
+          if (Array.isArray(cached.athletes) && cached.athletes.length > 0) {
+            setAthletes(cached.athletes);
+          }
+          if (Array.isArray(cached.proposals)) {
+            setScoutingProposals(cached.proposals);
+          }
+          if (Array.isArray(cached.teams)) {
+            setTeams(cached.teams);
+          }
+          if (Array.isArray(cached.events)) {
+            setEvents(cached.events);
+          }
+        }
+      })
+      .catch(() => null);
   }, []);
 
   useEffect(() => {

@@ -58,7 +58,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 6000;
 
 // Types
 export type BannerTone = "error" | "success" | "info";
@@ -261,24 +261,61 @@ export async function getStoredAuthToken(): Promise<string | null> {
   return await SecureStore.getItemAsync(AUTH_TOKEN_KEY).catch(() => null);
 }
 
+const inFlightGetRequests = new Map<string, Promise<any>>();
+const getResponseMicroCache = new Map<string, { data: any; timestamp: number }>();
+const MICRO_CACHE_TTL_MS = 2500; // 2.5s microcache to eliminate redundant duplicate queries
+
 // Handles authenticated JSON requests with Authorization Bearer header
 export async function requestAuthenticatedJson(path: string, method: string = "GET", body?: unknown) {
-  const token = await getStoredAuthToken();
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
-  };
-  if (method.toUpperCase() !== "GET" && method.toUpperCase() !== "HEAD") {
-    headers["Idempotency-Key"] = `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const isGet = method.toUpperCase() === "GET" || method.toUpperCase() === "HEAD";
+
+  if (isGet) {
+    const cached = getResponseMicroCache.get(path);
+    if (cached && Date.now() - cached.timestamp < MICRO_CACHE_TTL_MS) {
+      return cached.data;
+    }
+    const inFlight = inFlightGetRequests.get(path);
+    if (inFlight) {
+      return inFlight;
+    }
   }
-  if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
+
+  const exec = (async () => {
+    try {
+      const token = await getStoredAuthToken();
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      };
+      if (!isGet) {
+        headers["Idempotency-Key"] = `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      }
+      if (body !== undefined) {
+        headers["Content-Type"] = "application/json";
+      }
+      const data = await fetchApi(path, {
+        method,
+        headers,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+      });
+
+      if (isGet && data) {
+        getResponseMicroCache.set(path, { data, timestamp: Date.now() });
+      }
+
+      return data;
+    } finally {
+      if (isGet) {
+        inFlightGetRequests.delete(path);
+      }
+    }
+  })();
+
+  if (isGet) {
+    inFlightGetRequests.set(path, exec);
   }
-  return fetchApi(path, {
-    method,
-    headers,
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
-  });
+
+  return exec;
 }
 
 export function requestJson(path: string, body: unknown, method: string = "POST") {

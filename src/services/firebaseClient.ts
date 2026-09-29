@@ -115,6 +115,8 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     const filtered = existingMatches.filter((m) => (m.match_id || m.id) !== matchId);
     filtered.unshift(cleanPayload);
     await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(filtered));
+    matchesMemoryCache = filtered;
+    matchesLastFetched = Date.now();
   } catch (cacheErr) {
     console.warn("Local storage cache write error:", cacheErr);
   }
@@ -191,6 +193,8 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
         }
       });
       await AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(athletesList));
+      athletesMemoryCache = athletesList;
+      athletesLastFetched = Date.now();
     }
   } catch (athErr) {
     console.warn("Athlete local stats update error:", athErr);
@@ -223,50 +227,138 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   };
 }
 
-/**
- * Fetch athletes with offline support.
- * Tries REST -> falls back to Firestore persistent local cache -> falls back to AsyncStorage cache.
- */
-export async function getAthletesOfflineFirst(sportCategory?: string): Promise<any[]> {
+// In-memory cache variables for instant sub-second responses (0-10ms)
+let sportsMemoryCache: any[] | null = null;
+let sportsLastFetched = 0;
+
+let athletesMemoryCache: any[] | null = null;
+let athletesLastFetched = 0;
+
+let matchesMemoryCache: any[] | null = null;
+let matchesLastFetched = 0;
+
+const MEMORY_CACHE_TTL_MS = 60 * 1000; // 60s cache validity before background revalidation
+
+async function quickFetchJson(url: string, headers: any, timeoutMs: number = 1800): Promise<any> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function revalidateAthletesInBackground(): Promise<void> {
   try {
     const token = await getStoredAuthToken();
-    const res = await fetch(`${API_BASE}/coaches/athletes`, {
-      headers: {
-        Accept: "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const list = Array.isArray(data.athletes) ? data.athletes : Array.isArray(data) ? data : [];
-      if (list.length > 0) {
-        await AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(list));
-        return list;
+    const data = await quickFetchJson(`${API_BASE}/coaches/athletes`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2500);
+
+    const list = Array.isArray(data?.athletes) ? data.athletes : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      athletesMemoryCache = list;
+      athletesLastFetched = Date.now();
+      await AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+    }
+  } catch (_) {}
+}
+
+async function revalidateSportsInBackground(): Promise<void> {
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/sports`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2500);
+
+    const list = Array.isArray(data?.sports) ? data.sports : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      sportsMemoryCache = list;
+      sportsLastFetched = Date.now();
+      await AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+    }
+  } catch (_) {}
+}
+
+async function revalidateMatchesInBackground(): Promise<void> {
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/matches`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2500);
+
+    const list = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      matchesMemoryCache = list;
+      matchesLastFetched = Date.now();
+      await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+    }
+  } catch (_) {}
+}
+
+/**
+ * Fetch athletes with offline support.
+ * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
+ */
+export async function getAthletesOfflineFirst(sportCategory?: string): Promise<any[]> {
+  // 1. Instant Memory Cache (0ms)
+  if (athletesMemoryCache && athletesMemoryCache.length > 0) {
+    if (Date.now() - athletesLastFetched > MEMORY_CACHE_TTL_MS) {
+      revalidateAthletesInBackground().catch(() => null);
+    }
+    return athletesMemoryCache;
+  }
+
+  // 2. Fast Local AsyncStorage Cache (<10ms)
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        athletesMemoryCache = parsed;
+        athletesLastFetched = Date.now();
+        revalidateAthletesInBackground().catch(() => null);
+        return parsed;
       }
     }
-  } catch (netErr) {
-    // WiFi off / network unavailable
-  }
+  } catch (_) {}
+
+  // 3. Fast Network Fetch with Snappy Timeout (1.8s max)
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/coaches/athletes`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 1800);
+
+    const list = Array.isArray(data?.athletes) ? data.athletes : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      athletesMemoryCache = list;
+      athletesLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+      return list;
+    }
+  } catch (_) {}
 
   // Fallback 1: Firestore persistent local cache
   try {
     const snap = await getDocs(collection(db, "Athlete_Profiles"));
     if (!snap.empty) {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      athletesMemoryCache = list;
+      athletesLastFetched = Date.now();
       return list;
     }
   } catch (fsErr) {
     console.warn("Firestore offline athletes lookup:", fsErr);
-  }
-
-  // Fallback 2: AsyncStorage cache
-  try {
-    const cached = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (storageErr) {
-    console.warn("Storage athletes fallback:", storageErr);
   }
 
   return [];
@@ -274,32 +366,51 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
 
 /**
  * Fetch dynamic sports list with offline support.
- * Tries REST API (/sports) -> falls back to Firestore persistent local cache (Sports_Configurations) -> falls back to AsyncStorage.
+ * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
 export async function getSportsOfflineFirst(): Promise<any[]> {
+  // 1. Instant Memory Cache (0ms)
+  if (sportsMemoryCache && sportsMemoryCache.length > 0) {
+    if (Date.now() - sportsLastFetched > MEMORY_CACHE_TTL_MS) {
+      revalidateSportsInBackground().catch(() => null);
+    }
+    return sportsMemoryCache;
+  }
+
+  // 2. Fast Local AsyncStorage Cache (<10ms)
   try {
-    const token = await getStoredAuthToken();
-    const res = await fetch(`${API_BASE}/sports`, {
-      headers: {
-        Accept: "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const list = Array.isArray(data?.sports)
-        ? data.sports
-        : Array.isArray(data)
-        ? data
-        : [];
-      if (list.length > 0) {
-        await AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
-        return list;
+    const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        sportsMemoryCache = parsed;
+        sportsLastFetched = Date.now();
+        revalidateSportsInBackground().catch(() => null);
+        return parsed;
       }
     }
-  } catch (netErr) {
-    // WiFi off or network timeout
-  }
+  } catch (_) {}
+
+  // 3. Fast Network Fetch with Snappy Timeout (1.8s max)
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/sports`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 1800);
+
+    const list = Array.isArray(data?.sports)
+      ? data.sports
+      : Array.isArray(data)
+      ? data
+      : [];
+    if (list.length > 0) {
+      sportsMemoryCache = list;
+      sportsLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+      return list;
+    }
+  } catch (_) {}
 
   // Fallback 1: Firestore persistent local/remote cache
   try {
@@ -309,71 +420,72 @@ export async function getSportsOfflineFirst(): Promise<any[]> {
         sport_id: d.id,
         ...d.data(),
       }));
+      sportsMemoryCache = list;
+      sportsLastFetched = Date.now();
       return list;
     }
   } catch (fsErr) {
     // ignore offline warning
   }
 
-  // Fallback 2: AsyncStorage cache
-  try {
-    const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (storageErr) {
-    //
-  }
-
   return [];
 }
 
-
 /**
  * Fetch matches with offline support.
- * Tries REST -> falls back to Firestore persistent local cache -> falls back to AsyncStorage cache.
+ * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
 export async function getMatchesOfflineFirst(): Promise<any[]> {
-  // 1. Try REST API
-  try {
-    const token = await getStoredAuthToken();
-    const res = await fetch(`${API_BASE}/matches`, {
-      headers: {
-        Accept: "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const list = Array.isArray(data.matches) ? data.matches : Array.isArray(data) ? data : [];
-      if (list.length > 0) {
-        await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list));
-        return list;
-      }
+  // 1. Instant Memory Cache (0ms)
+  if (matchesMemoryCache && matchesMemoryCache.length > 0) {
+    if (Date.now() - matchesLastFetched > MEMORY_CACHE_TTL_MS) {
+      revalidateMatchesInBackground().catch(() => null);
     }
-  } catch (netErr) {
-    // WiFi off
+    return matchesMemoryCache;
   }
 
-  // 2. Fallback to Firestore persistent local cache
+  // 2. Fast Local AsyncStorage Cache (<10ms)
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        matchesMemoryCache = parsed;
+        matchesLastFetched = Date.now();
+        revalidateMatchesInBackground().catch(() => null);
+        return parsed;
+      }
+    }
+  } catch (_) {}
+
+  // 3. Fast Network Fetch (1.8s timeout)
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/matches`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 1800);
+
+    const list = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      matchesMemoryCache = list;
+      matchesLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+      return list;
+    }
+  } catch (_) {}
+
+  // Fallback 1: Firestore persistent local cache
   try {
     const snap = await getDocs(collection(db, "Match_Logs"));
     if (!snap.empty) {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      matchesMemoryCache = list;
+      matchesLastFetched = Date.now();
       return list;
     }
   } catch (fsErr) {
     console.warn("Firestore offline matches lookup:", fsErr);
-  }
-
-  // 3. Fallback to AsyncStorage cache
-  try {
-    const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (storageErr) {
-    console.warn("Storage matches fallback:", storageErr);
   }
 
   return [];

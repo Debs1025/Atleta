@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson, getStoredAuthToken, API_BASE } from "../../Authentication/authShared";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Data Types & Mock Testing Data
 import {
@@ -90,6 +91,7 @@ type ViewState =
   | "perf_swimming_result"
   | "perf_basketball_result";
 const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
+const COACH_DASHBOARD_CACHE_KEY = "atleta_coach_dashboard_cache_v2";
 
 type CoachMainPageProps = {
   onLogout?: () => void;
@@ -414,19 +416,64 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     };
   };
 
+  // Instant cache hydration on mount (<10ms)
+  useEffect(() => {
+    AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY)
+      .then((raw) => {
+        if (raw) {
+          const cached = JSON.parse(raw);
+          if (cached.coach) setCoach(cached.coach);
+          if (cached.coachProfile) setCoachProfile(cached.coachProfile);
+          if (Array.isArray(cached.teams) && cached.teams.length > 0) {
+            setTeams(cached.teams);
+            if (!selectedTeamId && cached.teams[0]?.team_id) {
+              setSelectedTeamId(cached.teams[0].team_id);
+            }
+          }
+          if (Array.isArray(cached.athletesPool) && cached.athletesPool.length > 0) {
+            setAthletesPool(cached.athletesPool);
+          }
+          if (Array.isArray(cached.matchHistoryList) && cached.matchHistoryList.length > 0) {
+            setMatchHistoryList(cached.matchHistoryList);
+          }
+          if (Array.isArray(cached.perfAthletes) && cached.perfAthletes.length > 0) {
+            setPerfAthletes(cached.perfAthletes);
+            if (cached.perfAthletes[0]) {
+              setSelectedPerfAthlete(cached.perfAthletes[0]);
+            }
+          }
+          if (Array.isArray(cached.dynamicSports) && cached.dynamicSports.length > 0) {
+            setDynamicSports(cached.dynamicSports);
+          }
+        }
+      })
+      .catch(() => null);
+  }, []);
+
   // Live Backend Data Fetching on Mount
   useEffect(() => {
     let isMounted = true;
 
     const fetchCoachDashboardData = async () => {
       try {
-        const [profileRes, teamsRes, syncRes, matchesRes, coachAthletesRes, notifsRes]: [any, any, any, any, any, any] = await Promise.all([
+        const [
+          profileRes,
+          teamsRes,
+          syncRes,
+          matchesRes,
+          coachAthletesRes,
+          notifsRes,
+          offlineMatches,
+          sportsRes
+        ]: [any, any, any, any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson("/coaches/profile").catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
           requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
           requestAuthenticatedJson("/matches").catch(() => null),
           requestAuthenticatedJson("/coaches/athletes").catch(() => null),
           requestAuthenticatedJson("/notifications").catch(() => null),
+          getMatchesOfflineFirst().catch(() => []),
+          getSportsOfflineFirst().catch(() => []),
         ]);
 
         if (isMounted) {
@@ -445,10 +492,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             : (syncRes?.scheduled_matches && Array.isArray(syncRes.scheduled_matches))
             ? syncRes.scheduled_matches
             : [];
-          let offlineMatches: any[] = [];
-          try {
-            offlineMatches = await getMatchesOfflineFirst();
-          } catch (_) {}
 
           const rawCombined = [...(rawMatchList || [])];
           if (Array.isArray(offlineMatches)) {
@@ -676,6 +719,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const allHandledAthletes = Array.from(seenMap.values());
           setAthletesPool(allHandledAthletes);
 
+          let updatedCoachSnapshot: UserCoach | null = null;
+          let updatedProfileSnapshot: CoachProfileState | null = null;
+
           if (profileRes) {
             const firstName = profileRes.first_name || "Coach";
             const lastName = profileRes.last_name || "";
@@ -699,6 +745,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               current_institution: profileRes.current_institution || "University Athletics",
               athlete_managed: profileRes.athlete_managed || [],
             };
+            updatedCoachSnapshot = updatedCoach;
             setCoach(updatedCoach);
             setActiveSportFilter(sportFocus);
 
@@ -724,6 +771,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };
+            updatedProfileSnapshot = updatedProfileState;
             setCoachProfile(updatedProfileState);
           }
 
@@ -750,7 +798,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             setPerfAthletes([]);
           }
 
-          const sportsRes = await getSportsOfflineFirst().catch(() => null);
+          let resolvedSportsList: string[] = dynamicSports;
           if (isMounted && sportsRes && sportsRes.length > 0) {
             const seen = new Set<string>();
             const mappedSports: string[] = [];
@@ -761,9 +809,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               mappedSports.push(raw);
             });
             if (mappedSports.length > 0) {
+              resolvedSportsList = mappedSports;
               setDynamicSports(mappedSports);
             }
           }
+
+          // Persist snapshot to AsyncStorage for instant next render (<10ms)
+          AsyncStorage.setItem(
+            COACH_DASHBOARD_CACHE_KEY,
+            JSON.stringify({
+              coach: updatedCoachSnapshot || coach,
+              coachProfile: updatedProfileSnapshot || coachProfile,
+              teams: processedTeams,
+              athletesPool: allHandledAthletes,
+              matchHistoryList: liveMatches,
+              perfAthletes: mappedPerf,
+              dynamicSports: resolvedSportsList,
+            })
+          ).catch(() => null);
         }
       } catch (err) {
         console.warn("Failed to load coach dashboard live data:", err);
