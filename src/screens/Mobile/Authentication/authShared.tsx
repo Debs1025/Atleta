@@ -102,9 +102,7 @@ export const athleteSignupSchema = z.object({
     errorMap: () => ({ message: "Select a gender." })
   }),
   province: z.string().trim().min(1, "Province is required.").max(255, "Province is too long."),
-  sport_type: z.enum(["Basketball", "Swimming", "Track and Field"], {
-    errorMap: () => ({ message: "Select a sport type." })
-  }),
+  sport_type: z.string().trim().min(1, "Select a sport type.").max(100, "Sport name is too long."),
   terms_accepted: z.boolean().refine((val) => val === true, {
     message: "You must agree to the Terms of Service and Privacy Protocol."
   })

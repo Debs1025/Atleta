@@ -43,6 +43,7 @@ import {
 } from "./authShared";
 
 import { DatePickerModal } from "../Athlete/Profile/AthleteProfileModals";
+import { getSportsOfflineFirst } from "../../../services/firebaseClient";
 
 type SignupScreenProps = {
   onGoLogin: () => void;
@@ -51,7 +52,7 @@ type SignupScreenProps = {
 type ChoiceGroupProps = {
   label: string;
   placeholder?: string;
-  options: readonly string[];
+  options: readonly string[] | string[];
   value: string;
   error?: string;
   onChange: (value: string) => void;
@@ -76,7 +77,7 @@ const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 const YEARS_LIST = Array.from({ length: 57 }, (_, i) => 1970 + i);
 
 const genderOptions = ["Male", "Female"] as const;
-const sportOptions = ["Basketball", "Track and Field", "Swimming"] as const;
+const DEFAULT_SPORT_OPTIONS = ["Basketball", "Track and Field", "Swimming", "Volleyball", "Pickleball"];
 
 const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
   role: "athlete",
@@ -177,6 +178,36 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const [accountCreated, setAccountCreated] = useState(false);
 
   const [socialToken, setSocialToken] = useState<{ provider: "google" | "facebook"; idToken: string } | null>(null);
+  const [sportOptions, setSportOptions] = useState<string[]>(DEFAULT_SPORT_OPTIONS);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').trim();
+          if (!raw) return;
+          const upper = raw.toUpperCase();
+          if (seen.has(upper)) return;
+          seen.add(upper);
+          const label =
+            upper === 'TRACK AND FIELD'
+              ? 'Track and Field'
+              : raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+          mapped.push(label);
+        });
+        if (mapped.length > 0) {
+          setSportOptions(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for signup:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Calendar Birthdate Picker modal state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);

@@ -1820,6 +1820,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         <ViewAllPlayers
           athletesPool={athletesPool}
           teams={teams}
+          availableSports={availableSportCategories}
           onBack={() => setActiveView("dashboard")}
           onSelectAthlete={(player) => handleViewStats(player)}
           onLogout={onLogout}
