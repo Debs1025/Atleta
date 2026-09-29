@@ -33,7 +33,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   athletes = [],
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 12) + 6;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
@@ -90,7 +90,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
+          { paddingTop: headerTopPadding + 48, paddingBottom: 150 },
         ]}
         showsVerticalScrollIndicator={false}
       >

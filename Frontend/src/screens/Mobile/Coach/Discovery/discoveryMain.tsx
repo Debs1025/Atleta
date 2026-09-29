@@ -40,7 +40,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
   onToggleBottomNav,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 12) + 6;
 
   const {
     activeTab,
@@ -108,7 +108,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
         />
       )}
 
-      <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 55 : insets.top }}>
+      <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 46 : 0 }}>
         {subView === 'rankings' || subView === 'recruits' ? (
           <DiscoveryPlayer mode={subView} onCloseSubView={() => setSubView('none')} />
         ) : subView === 'viewTeam' ? (

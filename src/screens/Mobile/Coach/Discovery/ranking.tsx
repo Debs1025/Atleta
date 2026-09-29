@@ -43,7 +43,7 @@ export const RankingPage: React.FC<RankingProps> = ({
   meta,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top - 12, 4);
+  const headerTopPadding = insets.top > 0 ? insets.top + 6 : 12;
 
   const headlineText = meta?.headline || 'Player Rankings';
   const seasonInfoText = meta?.season_info || 'SEASON 2026 • REGION V';
@@ -277,22 +277,35 @@ export const RankingPage: React.FC<RankingProps> = ({
   return (
     <View style={styles.container}>
       {/* Header Bar */}
+      {/* Sleek, Compact Structured Header Bar */}
       <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
-        <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-          <Text style={styles.headerTitle}>PLAYER RANKINGS</Text>
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleBox}>
+            <Text style={styles.headerTitle}>PLAYER RANKINGS</Text>
+            <Text style={styles.headerSubtitle}>{seasonInfoText}</Text>
+          </View>
+        </View>
+
+        <View style={styles.headerRight}>
+          <View style={styles.headerBadgePill}>
+            <Ionicons name="podium-outline" size={12} color="#00C8FF" />
+            <Text style={styles.headerBadgePillText}>{allRankedAthletes.length} RANKED</Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Sport Category Tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tabsRow, { flexGrow: 1 }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
           {sportTabs.map((tab) => {
             const isActive = selectedSport === tab.value;
             return (
               <TouchableOpacity
                 key={tab.value}
-                style={[styles.tabButton, { paddingHorizontal: 16 }, isActive ? styles.tabButtonActive : null]}
+                style={[styles.tabButton, isActive ? styles.tabButtonActive : null]}
                 onPress={() => handleSportChange(tab.value)}
                 activeOpacity={0.8}
               >

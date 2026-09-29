@@ -19,7 +19,7 @@ interface ViewTeamProps {
 // API READY: Dedicated View Team screen ready for live backend API payload
 export const ViewTeam: React.FC<ViewTeamProps> = ({ onBack, team }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top - 12, 4);
+  const headerTopPadding = insets.top > 0 ? insets.top + 6 : 12;
 
   const { selectedTeam: contextTeam, setSelectedAthlete, athletes } = useDiscovery();
   const currentTeam = team || contextTeam;

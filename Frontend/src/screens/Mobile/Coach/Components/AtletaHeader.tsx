@@ -23,7 +23,7 @@ export function AtletaHeader({
   unreadNotificationCount = 0,
 }: AtletaHeaderProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 12) + 6;
 
   return (
     <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
@@ -35,7 +35,7 @@ export function AtletaHeader({
             onPress={onNotificationPress}
             activeOpacity={0.8}
           >
-            <Ionicons name="notifications-outline" size={18} color="#FFFFFF" />
+            <Ionicons name="notifications-outline" size={17} color="#FFFFFF" />
             {unreadNotificationCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>
@@ -49,14 +49,14 @@ export function AtletaHeader({
             onPress={onSettingsPress}
             activeOpacity={0.8}
           >
-            <Ionicons name="settings-outline" size={18} color="#FFFFFF" />
+            <Ionicons name="settings-outline" size={17} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.profileCircleButton}
             onPress={onProfilePress}
             activeOpacity={0.8}
           >
-            <Ionicons name="person" size={18} color="#070D19" />
+            <Ionicons name="person" size={17} color="#070D19" />
           </TouchableOpacity>
         </View>
       </View>
@@ -71,20 +71,21 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
     backgroundColor: "#070D19",
   },
   header: {
+    height: 38,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   brandTitle: {
     color: "#FFFFFF",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     letterSpacing: 2,
     fontFamily: fontBoldPlatform,
@@ -92,12 +93,12 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
   iconCircleButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: "#0F172A",
     borderWidth: 1,
     borderColor: "#1E293B",
@@ -105,9 +106,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   profileCircleButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: "#00C8FF",
     justifyContent: "center",
     alignItems: "center",
@@ -117,9 +118,9 @@ const styles = StyleSheet.create({
     top: -2,
     right: -2,
     backgroundColor: "#EF4444",
-    borderRadius: 9,
-    minWidth: 18,
-    height: 18,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 3,
@@ -128,8 +129,8 @@ const styles = StyleSheet.create({
   },
   notificationBadgeText: {
     color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "900",
   },
 });
 
