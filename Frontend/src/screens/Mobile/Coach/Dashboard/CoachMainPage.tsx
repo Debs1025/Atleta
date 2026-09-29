@@ -7,6 +7,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 import styles from "./styles/CoachMainPage";
 import { StatusBar } from "expo-status-bar";
@@ -32,6 +33,7 @@ import { ViewAllPlayers } from "./ViewAllPlayers";
 import { CoachSettings } from "./CoachSettings";
 import { AtletaHeader } from "../Components/AtletaHeader";
 import { AtletaNavbar } from "../Components/AtletaNavbar";
+import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 import { CoachProfile } from "../Profile/CoachProfile";
 import { CoachEditProfile } from "../Profile/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
@@ -167,6 +169,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   });
   const [teams, setTeams] = useState<Team[]>([]);
   const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>([]);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
 
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
@@ -432,6 +435,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           }
           if (Array.isArray(cached.athletesPool) && cached.athletesPool.length > 0) {
             setAthletesPool(cached.athletesPool);
+            setIsDashboardLoading(false);
           }
           if (Array.isArray(cached.matchHistoryList) && cached.matchHistoryList.length > 0) {
             setMatchHistoryList(cached.matchHistoryList);
@@ -830,6 +834,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         }
       } catch (err) {
         console.warn("Failed to load coach dashboard live data:", err);
+      } finally {
+        if (isMounted) {
+          setIsDashboardLoading(false);
+        }
       }
     };
 
@@ -1765,7 +1773,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           >
             {/* Greeting Block */}
             <View style={styles.greetingSection}>
-              <Text style={styles.greetingTitle}>Hi, {coach.first_name}!</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={styles.greetingTitle}>Hi, {coach.first_name}!</Text>
+                {isDashboardLoading && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0, 200, 255, 0.1)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.25)" }}>
+                    <ActivityIndicator size="small" color="#00C8FF" />
+                    <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "600" }}>Syncing...</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.greetingSubtitle}>
                 Empower your athletes today. Ready to manage your elite teams?
               </Text>
@@ -1806,7 +1822,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
               {/* Player Rows */}
               <View style={styles.playersList}>
-                {filteredDashboardPlayers.length === 0 ? (
+                {isDashboardLoading && filteredDashboardPlayers.length === 0 ? (
+                  <SkeletonPlayerRows count={3} />
+                ) : filteredDashboardPlayers.length === 0 ? (
                   <View style={{ paddingVertical: 28, alignItems: "center", justifyContent: "center" }}>
                     <Ionicons name="people-outline" size={36} color="#64748B" />
                     <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "700", marginTop: 8 }}>

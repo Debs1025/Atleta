@@ -10,6 +10,7 @@ import { styles } from './styles/discoveryMain';
 import { AthleteDiscoveryItem } from './discoveryTypes';
 import { RankingPage } from './ranking';
 import { RecruitsPage } from './recruits';
+import { SkeletonDiscoveryCards } from '../Components/AtletaLoadingIndicator';
 
 export const DiscoveryPlayer: React.FC<{
   mode: 'feed' | 'rankings' | 'recruits';
@@ -18,6 +19,7 @@ export const DiscoveryPlayer: React.FC<{
   const {
     filteredAthletes,
     setSelectedAthlete,
+    isLoading,
   } = useDiscovery();
 
   const handleOpenAthlete = (athlete: AthleteDiscoveryItem) => {
@@ -42,7 +44,9 @@ export const DiscoveryPlayer: React.FC<{
   return (
     <View style={{ flex: 1 }}>
       <View style={{ gap: 12 }}>
-        {filteredAthletes && filteredAthletes.length > 0 ? (
+        {isLoading && (!filteredAthletes || filteredAthletes.length === 0) ? (
+          <SkeletonDiscoveryCards count={3} />
+        ) : filteredAthletes && filteredAthletes.length > 0 ? (
           filteredAthletes.map((athlete) => {
             const athleteName = athlete.full_name || 'Athlete';
             const positionTag = athlete.position_tag || 'Player';

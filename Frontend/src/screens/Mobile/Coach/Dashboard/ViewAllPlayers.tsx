@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RosterAthlete, Team } from "../DataTypes";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 
 const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
 
@@ -194,7 +195,9 @@ export function ViewAllPlayers({
 
         {/* Players List Container */}
         <View style={styles.playersListContainer}>
-          {filteredPlayers.length === 0 ? (
+          {athletesPool.length === 0 ? (
+            <SkeletonPlayerRows count={4} />
+          ) : filteredPlayers.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="people-outline" size={36} color="#64748B" style={{ marginBottom: 8 }} />
               <Text style={styles.emptyText}>No matching players found.</Text>
