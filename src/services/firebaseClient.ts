@@ -414,7 +414,10 @@ export async function getSportsOfflineFirst(): Promise<any[]> {
 
   // Fallback 1: Firestore persistent local/remote cache
   try {
-    const snap = await getDocs(collection(db, "Sports_Configurations"));
+    let snap = await getDocs(collection(db, "Sports_Configurations"));
+    if (snap.empty) {
+      snap = await getDocs(collection(db, "sports_configurations"));
+    }
     if (!snap.empty) {
       const list = snap.docs.map((d) => ({
         sport_id: d.id,
