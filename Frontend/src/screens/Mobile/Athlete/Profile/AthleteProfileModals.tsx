@@ -208,11 +208,17 @@ export function CategoryPickerModal({
                   <View style={styles.categoryOptionLeft}>
                     <Ionicons
                       name={
-                        item === "BASKETBALL"
+                        item.includes("BASKET")
                           ? "basketball-outline"
-                          : item === "SWIMMING"
+                          : item.includes("SWIM")
                             ? "water-outline"
-                            : "fitness-outline"
+                            : item.includes("TRACK") || item.includes("FIELD")
+                              ? "walk-outline"
+                              : item.includes("VOLLEY")
+                                ? "football-outline"
+                                : item.includes("PICKLE") || item.includes("BADMINTON") || item.includes("TENNIS")
+                                  ? "tennisball-outline"
+                                  : "fitness-outline"
                       }
                       size={20}
                       color={isSelected ? "#38BDF8" : "#94A3B8"}

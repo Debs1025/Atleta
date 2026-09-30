@@ -24,13 +24,67 @@ const DEFAULT_AVAILABLE_SPORTS = [
   "PICKLEBALL",
 ];
 
-const BASKETBALL_POSITIONS = [
-  { code: "PG", label: "Point Guard" },
-  { code: "SG", label: "Shooting Guard" },
-  { code: "SF", label: "Small Forward" },
-  { code: "PF", label: "Power Forward" },
-  { code: "C", label: "Center" },
+export const SPORT_POSITIONS_MAP: Record<string, { code: string; label: string }[]> = {
+  BASKETBALL: [
+    { code: "PG", label: "Point Guard" },
+    { code: "SG", label: "Shooting Guard" },
+    { code: "SF", label: "Small Forward" },
+    { code: "PF", label: "Power Forward" },
+    { code: "C", label: "Center" },
+  ],
+  VOLLEYBALL: [
+    { code: "S", label: "Setter" },
+    { code: "OH", label: "Outside Hitter" },
+    { code: "OPP", label: "Opposite Hitter" },
+    { code: "MB", label: "Middle Blocker" },
+    { code: "L", label: "Libero" },
+    { code: "DS", label: "Defensive Specialist" },
+  ],
+  PICKLEBALL: [
+    { code: "SGL", label: "Singles Player" },
+    { code: "DBL", label: "Doubles Partner" },
+    { code: "MXD", label: "Mixed Doubles" },
+  ],
+  BADMINTON: [
+    { code: "SGL", label: "Singles" },
+    { code: "DBL", label: "Doubles" },
+    { code: "MXD", label: "Mixed Doubles" },
+  ],
+  FOOTBALL: [
+    { code: "GK", label: "Goalkeeper" },
+    { code: "DF", label: "Defender" },
+    { code: "MF", label: "Midfielder" },
+    { code: "FW", label: "Forward" },
+    { code: "ST", label: "Striker" },
+  ],
+  SOCCER: [
+    { code: "GK", label: "Goalkeeper" },
+    { code: "DF", label: "Defender" },
+    { code: "MF", label: "Midfielder" },
+    { code: "FW", label: "Forward" },
+    { code: "ST", label: "Striker" },
+  ],
+};
+
+const DEFAULT_GENERIC_POSITIONS = [
+  { code: "PLY", label: "Player" },
+  { code: "STR", label: "Starter" },
+  { code: "RES", label: "Reserve" },
+  { code: "CPT", label: "Captain" },
 ];
+
+export const getPositionsForSport = (sport?: string) => {
+  const norm = (sport || "").toUpperCase().trim();
+  if (SPORT_POSITIONS_MAP[norm]) return SPORT_POSITIONS_MAP[norm];
+  if (norm.includes("BASKET")) return SPORT_POSITIONS_MAP.BASKETBALL;
+  if (norm.includes("VOLLEY")) return SPORT_POSITIONS_MAP.VOLLEYBALL;
+  if (norm.includes("PICKLE")) return SPORT_POSITIONS_MAP.PICKLEBALL;
+  if (norm.includes("BADMINTON")) return SPORT_POSITIONS_MAP.BADMINTON;
+  if (norm.includes("FOOTBALL") || norm.includes("SOCCER")) return SPORT_POSITIONS_MAP.FOOTBALL;
+  return DEFAULT_GENERIC_POSITIONS;
+};
+
+const BASKETBALL_POSITIONS = SPORT_POSITIONS_MAP.BASKETBALL;
 
 const SWIMMING_TYPES = [
   "Freestyle",
@@ -294,7 +348,7 @@ export function ManageTeamPage({
                 </View>
 
                 {/* SPORT-DEPENDENT ROSTER COLUMNS */}
-                {team.sport_type === "BASKETBALL" && (
+                {team.sport_type !== "TRACK AND FIELD" && team.sport_type !== "SWIMMING" && (
                   <>
                     <View style={{ marginRight: 8, alignItems: "center" }}>
                       <Text style={styles.miniLabel}>POS</Text>
@@ -303,7 +357,7 @@ export function ManageTeamPage({
                         onPress={() => setPosPickerPlayer(player)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.posText}>{player.position || "SG"}</Text>
+                        <Text style={styles.posText}>{player.position || getPositionsForSport(team.sport_type)[0]?.code || "POS"}</Text>
                         <Ionicons name="chevron-down" size={12} color="#64748B" />
                       </TouchableOpacity>
                     </View>
@@ -518,7 +572,7 @@ export function ManageTeamPage({
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL 2: BASKETBALL POSITION PICKER */}
+      {/* MODAL 2: SPORT-SPECIFIC POSITION PICKER */}
       <Modal
         visible={posPickerPlayer !== null}
         transparent
@@ -531,9 +585,11 @@ export function ManageTeamPage({
           onPress={() => setPosPickerPlayer(null)}
         >
           <View style={[styles.confirmDialogCard, { paddingVertical: 20 }]}>
-            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>SELECT BASKETBALL POSITION</Text>
+            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>
+              SELECT {(team.sport_type || "ATHLETE").toUpperCase()} POSITION
+            </Text>
             <View style={{ width: "100%", gap: 8 }}>
-              {BASKETBALL_POSITIONS.map((pos) => (
+              {getPositionsForSport(team.sport_type).map((pos) => (
                 <TouchableOpacity
                   key={pos.code}
                   style={styles.pickerOptionRow}

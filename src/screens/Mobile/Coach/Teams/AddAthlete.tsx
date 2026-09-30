@@ -266,11 +266,17 @@ export function AddAthlete({
           >
             <Ionicons
               name={
-                teamDetails.sport_type === "SWIMMING"
+                (teamDetails.sport_type || "").includes("SWIM")
                   ? "water-outline"
-                  : teamDetails.sport_type === "TRACK AND FIELD"
+                  : (teamDetails.sport_type || "").includes("TRACK") || (teamDetails.sport_type || "").includes("FIELD")
                   ? "walk-outline"
-                  : "basketball-outline"
+                  : (teamDetails.sport_type || "").includes("VOLLEY")
+                  ? "football-outline"
+                  : (teamDetails.sport_type || "").includes("PICKLE") || (teamDetails.sport_type || "").includes("BADMINTON") || (teamDetails.sport_type || "").includes("TENNIS")
+                  ? "tennisball-outline"
+                  : (teamDetails.sport_type || "").includes("BASKET")
+                  ? "basketball-outline"
+                  : "trophy-outline"
               }
               size={44}
               color="#00C8FF"

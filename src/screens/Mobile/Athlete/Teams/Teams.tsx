@@ -14,6 +14,7 @@ import { TeamDetailsScreen } from "./TeamDetails";
 import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 //schemas
 export interface Coach {
@@ -29,7 +30,7 @@ export interface Coach {
 export interface TeamSchema {
   team_id: string;
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING";
+  sport_type: string;
   managed_by_coach_id: string;
   created_at: string;
   roster_athletes: string[]; // List of athlete UUIDs
@@ -76,12 +77,53 @@ interface TeamsProps {
   athleteCategory?: string;
 }
 
+const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
+  { label: "BASKETBALL", value: "BASKETBALL" },
+  { label: "VOLLEYBALL", value: "VOLLEYBALL" },
+  { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
+  { label: "SWIMMING", value: "SWIMMING" },
+  { label: "PICKLEBALL", value: "PICKLEBALL" },
+];
+
+const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
+  const norm = sportValue.toUpperCase().trim();
+  const tintColor = isSelected ? "#38BDF8" : "#94A3B8";
+  if (norm.includes("BASKET")) {
+    return <Ionicons name="basketball-outline" size={16} color={tintColor} />;
+  }
+  if (norm.includes("TRACK") || norm.includes("FIELD") || norm.includes("ATHLETIC")) {
+    return (
+      <Image
+        source={require("../../../../assets/Athleticsicon.png")}
+        style={[styles.sportChipIconImage, { tintColor }]}
+        resizeMode="contain"
+      />
+    );
+  }
+  if (norm.includes("SWIM")) {
+    return (
+      <Image
+        source={require("../../../../assets/swimmingicon.png")}
+        style={[styles.sportChipIconImage, { tintColor }]}
+        resizeMode="contain"
+      />
+    );
+  }
+  if (norm.includes("VOLLEY")) {
+    return <Ionicons name="football-outline" size={16} color={tintColor} />;
+  }
+  if (norm.includes("TENNIS") || norm.includes("PICKLE") || norm.includes("BADMINTON")) {
+    return <Ionicons name="tennisball-outline" size={16} color={tintColor} />;
+  }
+  return <Ionicons name="trophy-outline" size={16} color={tintColor} />;
+};
+
 const getInitialSport = (cat?: string) => {
-  if (!cat) return "BASKETBALL";
-  const norm = cat.toUpperCase();
+  if (!cat) return "";
+  const norm = cat.toUpperCase().trim();
   if (norm.includes("SWIM")) return "SWIMMING";
   if (norm.includes("TRACK") || norm.includes("FIELD")) return "TRACK AND FIELD";
-  return "BASKETBALL";
+  return norm;
 };
 
 export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: TeamsProps) {
@@ -92,8 +134,34 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState<string>(getInitialSport(athleteCategory));
+  const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(DEFAULT_SPORT_CHIPS);
   const [loading, setLoading] = useState(true);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: { label: string; value: string }[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || "").trim();
+          if (!raw) return;
+          const upper = raw.toUpperCase();
+          if (seen.has(upper)) return;
+          seen.add(upper);
+          mapped.push({ label: upper, value: upper });
+        });
+        if (mapped.length > 0) {
+          setSportChips(mapped);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (athleteCategory) {
@@ -154,6 +222,19 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
               },
             }));
           setTeams(mappedTeams);
+
+          setSportChips((prev) => {
+            const seen = new Set(prev.map((c) => c.value));
+            const additional: { label: string; value: string }[] = [];
+            mappedTeams.forEach((t) => {
+              const val = (t.sport_type || "").toUpperCase().trim();
+              if (val && !seen.has(val)) {
+                seen.add(val);
+                additional.push({ label: val, value: val });
+              }
+            });
+            return additional.length > 0 ? [...prev, ...additional] : prev;
+          });
 
           const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
           const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {
@@ -408,89 +489,33 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           style={styles.filterScroll}
           contentContainerStyle={styles.filterScrollContent}
         >
-          <Pressable
-            style={[
-              styles.sportChip,
-              selectedSport === "BASKETBALL" && styles.sportChipActive,
-            ]}
-            onPress={() =>
-              setSelectedSport(
-                selectedSport === "BASKETBALL" ? "" : "BASKETBALL"
-              )
-            }
-          >
-            <Ionicons
-              name="basketball-outline"
-              size={16}
-              color={selectedSport === "BASKETBALL" ? "#38BDF8" : "#94A3B8"}
-            />
-            <Text
-              style={[
-                styles.sportChipText,
-                selectedSport === "BASKETBALL" && styles.sportChipTextActive,
-              ]}
-            >
-              BASKETBALL
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.sportChip,
-              selectedSport === "TRACK AND FIELD" && styles.sportChipActive,
-            ]}
-            onPress={() =>
-              setSelectedSport(
-                selectedSport === "TRACK AND FIELD" ? "" : "TRACK AND FIELD"
-              )
-            }
-          >
-            <Image
-              source={require("../../../../assets/Athleticsicon.png")}
-              style={[
-                styles.sportChipIconImage,
-                { tintColor: selectedSport === "TRACK AND FIELD" ? "#38BDF8" : "#94A3B8" },
-              ]}
-              resizeMode="contain"
-            />
-            <Text
-              style={[
-                styles.sportChipText,
-                selectedSport === "TRACK AND FIELD" && styles.sportChipTextActive,
-              ]}
-            >
-              TRACK AND FIELD
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.sportChip,
-              selectedSport === "SWIMMING" && styles.sportChipActive,
-            ]}
-            onPress={() =>
-              setSelectedSport(
-                selectedSport === "SWIMMING" ? "" : "SWIMMING"
-              )
-            }
-          >
-            <Image
-              source={require("../../../../assets/swimmingicon.png")}
-              style={[
-                styles.sportChipIconImage,
-                { tintColor: selectedSport === "SWIMMING" ? "#38BDF8" : "#94A3B8" },
-              ]}
-              resizeMode="contain"
-            />
-            <Text
-              style={[
-                styles.sportChipText,
-                selectedSport === "SWIMMING" && styles.sportChipTextActive,
-              ]}
-            >
-              SWIMMING
-            </Text>
-          </Pressable>
+          {sportChips.map((chip) => {
+            const isSelected = selectedSport === chip.value;
+            return (
+              <Pressable
+                key={chip.value}
+                style={[
+                  styles.sportChip,
+                  isSelected && styles.sportChipActive,
+                ]}
+                onPress={() =>
+                  setSelectedSport(
+                    isSelected ? "" : chip.value
+                  )
+                }
+              >
+                {renderSportChipIcon(chip.value, isSelected)}
+                <Text
+                  style={[
+                    styles.sportChipText,
+                    isSelected && styles.sportChipTextActive,
+                  ]}
+                >
+                  {chip.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
         {/* Section Title */}

@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AthleteItem, TeamDetailsState } from "../DataTypes";
 import styles from "./styles/SetPlayer";
+import { getPositionsForSport } from "./ManageTeamPage";
 
 export interface SetPlayerProps {
   teamDetails: TeamDetailsState;
@@ -462,7 +463,7 @@ export function SetPlayer({
         </TouchableOpacity>
       </Modal>
 
-      {/* BASKETBALL POSITION PICKER MODAL */}
+      {/* SPORT-SPECIFIC POSITION PICKER MODAL */}
       <Modal
         visible={posPickerAthlete !== null}
         transparent
@@ -475,15 +476,11 @@ export function SetPlayer({
           onPress={() => setPosPickerAthlete(null)}
         >
           <View style={[styles.confirmDialogCard, { paddingVertical: 20 }]}>
-            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>SELECT BASKETBALL POSITION</Text>
+            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>
+              SELECT {(teamDetails.sport_type || "ATHLETE").toUpperCase()} POSITION
+            </Text>
             <View style={{ width: "100%", gap: 8 }}>
-              {[
-                { code: "PG", label: "Point Guard" },
-                { code: "SG", label: "Shooting Guard" },
-                { code: "SF", label: "Small Forward" },
-                { code: "PF", label: "Power Forward" },
-                { code: "C", label: "Center" },
-              ].map((pos) => (
+              {getPositionsForSport(teamDetails.sport_type).map((pos) => (
                 <TouchableOpacity
                   key={pos.code}
                   style={styles.pickerOptionRow}

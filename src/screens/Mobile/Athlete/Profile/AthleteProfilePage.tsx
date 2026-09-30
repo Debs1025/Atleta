@@ -20,6 +20,7 @@ import {
 } from "./AthleteProfileModals";
 import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
 import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 export interface DailySessionLog {
   date: string; // "YYYY-MM-DD"
@@ -44,8 +45,10 @@ export interface AthleteProfilePageProps {
 
 const DEFAULT_CATEGORIES: Array<AthleteProfile["category"]> = [
   "BASKETBALL",
-  "SWIMMING",
+  "VOLLEYBALL",
   "TRACK AND FIELD",
+  "SWIMMING",
+  "PICKLEBALL",
 ];
 
 const DEFAULT_WORKLOAD_DATA: WorkloadAnalyticsData = {
@@ -173,6 +176,42 @@ export function AthleteProfilePage({
   const [gender, setGender] = useState(profile.gender || "");
   const [province, setProvince] = useState((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
   const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>(
+    categoriesList && categoriesList.length > 0 ? categoriesList : (DEFAULT_CATEGORIES as string[])
+  );
+
+  React.useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any[]) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || "").trim();
+          if (!raw) return;
+          const upper = raw.toUpperCase();
+          if (seen.has(upper)) return;
+          seen.add(upper);
+          mapped.push(upper);
+        });
+        if (profile.category) {
+          const pNorm = profile.category.toUpperCase().trim();
+          if (!seen.has(pNorm)) {
+            seen.add(pNorm);
+            mapped.push(pNorm);
+          }
+        }
+        if (mapped.length > 0) {
+          setDynamicCategories(mapped);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [profile.category]);
+
   const [heightCm, setHeightCm] = useState(profile.height_cm);
   const [weightKg, setWeightKg] = useState(profile.weight_kg);
   const [wingspanCm, setWingspanCm] = useState(profile.wingspan_cm);
@@ -1595,7 +1634,7 @@ export function AthleteProfilePage({
       <CategoryPickerModal
         visible={showCategoryPicker}
         onClose={() => setShowCategoryPicker(false)}
-        categoriesList={categoriesList}
+        categoriesList={dynamicCategories as any}
         category={category}
         onSelectCategory={selectCategoryOption}
       />
