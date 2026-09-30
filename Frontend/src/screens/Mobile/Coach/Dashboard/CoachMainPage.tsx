@@ -857,7 +857,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           setUnreadNotifCount(unreadCount);
         }
       } catch {}
-    }, 10000);
+    }, 60000);
 
     return () => {
       isMounted = false;

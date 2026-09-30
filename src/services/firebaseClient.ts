@@ -237,7 +237,8 @@ let athletesLastFetched = 0;
 let matchesMemoryCache: any[] | null = null;
 let matchesLastFetched = 0;
 
-const MEMORY_CACHE_TTL_MS = 60 * 1000; // 60s cache validity before background revalidation
+const MEMORY_CACHE_TTL_MS = 2 * 60 * 1000; // 2m cache validity before background revalidation
+const SPORTS_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000; // 10m cache validity for sports config catalog
 
 async function quickFetchJson(url: string, headers: any, timeoutMs: number = 1800): Promise<any> {
   const controller = new AbortController();
@@ -371,7 +372,7 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
 export async function getSportsOfflineFirst(): Promise<any[]> {
   // 1. Instant Memory Cache (0ms)
   if (sportsMemoryCache && sportsMemoryCache.length > 0) {
-    if (Date.now() - sportsLastFetched > MEMORY_CACHE_TTL_MS) {
+    if (Date.now() - sportsLastFetched > SPORTS_MEMORY_CACHE_TTL_MS) {
       revalidateSportsInBackground().catch(() => null);
     }
     return sportsMemoryCache;
@@ -385,7 +386,9 @@ export async function getSportsOfflineFirst(): Promise<any[]> {
       if (Array.isArray(parsed) && parsed.length > 0) {
         sportsMemoryCache = parsed;
         sportsLastFetched = Date.now();
-        revalidateSportsInBackground().catch(() => null);
+        if (Date.now() - sportsLastFetched > SPORTS_MEMORY_CACHE_TTL_MS) {
+          revalidateSportsInBackground().catch(() => null);
+        }
         return parsed;
       }
     }
