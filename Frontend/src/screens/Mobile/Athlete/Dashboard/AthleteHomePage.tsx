@@ -316,10 +316,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
                 ...(Array.isArray(stats.recent_scores) ? stats.recent_scores : []),
               ].map(Number).filter((s) => typeof s === "number" && !isNaN(s) && s > 0);
 
-              if (allScores.length > 0) {
-                return allScores.slice(-5);
-              }
-              return [21, 14, 16, 18];
+              return allScores.length > 0 ? allScores.slice(-5) : [];
             })(),
             // Swimming
             best_time_formatted: finishTime,
