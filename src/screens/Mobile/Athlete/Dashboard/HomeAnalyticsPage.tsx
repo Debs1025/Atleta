@@ -441,6 +441,9 @@ export function HomeAnalyticsPage({
               const prefix = isSwimming ? "R" : isTrackField ? "E" : "G";
               return (
                 <View key={index} style={styles.barColumn}>
+                  <Text style={[styles.scoreBadgeText, isMostRecent && { color: "#38BDF8", fontWeight: "900" }]}>
+                    {score}
+                  </Text>
                   <View style={styles.barTrackArea}>
                     <View
                       style={[

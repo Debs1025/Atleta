@@ -229,18 +229,68 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             is_verified: Boolean(currentTeamId || (raw.current_affiliation?.is_verified ?? raw.is_verified)),
           },
           analytics: {
-            points_per_game: Number(stats.points_per_game ?? stats.ppg ?? stats.points ?? 0),
-            assists_per_game: Number(stats.assists_per_game ?? stats.apg ?? stats.assists ?? 0),
-            rebounds_per_game: Number(stats.rebounds_per_game ?? stats.rpg ?? stats.rebounds ?? 0),
-            field_goal_percentage: Number(stats.field_goal_percentage ?? stats.fg_pct ?? stats.fg_percentage ?? 0),
-            free_throw_percentage: Number(stats.free_throw_percentage ?? stats.ft_pct ?? stats.ft_percentage ?? 0),
+            points_per_game: Number(
+              homeRes?.personal_analytics?.ppg ??
+              statsRes?.career_averages?.ppg ??
+              stats.points_per_game ??
+              stats.ppg ??
+              stats.points ??
+              raw.averages?.ppg ??
+              0
+            ),
+            assists_per_game: Number(
+              homeRes?.personal_analytics?.apg ??
+              statsRes?.career_averages?.apg ??
+              stats.assists_per_game ??
+              stats.apg ??
+              stats.assists ??
+              raw.averages?.apg ??
+              0
+            ),
+            rebounds_per_game: Number(
+              homeRes?.personal_analytics?.rpg ??
+              statsRes?.career_averages?.rpg ??
+              stats.rebounds_per_game ??
+              stats.rpg ??
+              stats.rebounds ??
+              raw.averages?.rpg ??
+              0
+            ),
+            field_goal_percentage: Number(
+              homeRes?.shooting_efficiency?.fg_pct ??
+              statsRes?.shooting_accuracy_percentages?.fg_pct ??
+              raw.shooting_efficiency?.fg_pct ??
+              raw.averages?.fg_percentage ??
+              raw.averages?.fg_pct ??
+              stats.field_goal_percentage ??
+              stats.fg_pct ??
+              stats.fg_percentage ??
+              0
+            ),
+            free_throw_percentage: Number(
+              homeRes?.shooting_efficiency?.ft_pct ??
+              statsRes?.shooting_accuracy_percentages?.ft_pct ??
+              raw.shooting_efficiency?.ft_pct ??
+              raw.averages?.ft_percentage ??
+              raw.averages?.ft_pct ??
+              stats.free_throw_percentage ??
+              stats.ft_pct ??
+              stats.ft_percentage ??
+              0
+            ),
             last_5_games_scores:
-              (Array.isArray(stats.last_5_games_scores) && stats.last_5_games_scores.length > 0)
-                ? stats.last_5_games_scores
-                : (Array.isArray(homeRes?.five_game_trend) && homeRes.five_game_trend.length > 0)
-                ? homeRes.five_game_trend
+              (Array.isArray(homeRes?.last_5_games_scores) && homeRes.last_5_games_scores.filter((s: any) => Number(s) > 0).length > 0)
+                ? homeRes.last_5_games_scores.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
+                : (Array.isArray(homeRes?.five_game_trend) && homeRes.five_game_trend.filter((s: any) => Number(s) > 0).length > 0)
+                ? homeRes.five_game_trend.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
+                : (Array.isArray(statsRes?.last_5_games_scores) && statsRes.last_5_games_scores.filter((s: any) => Number(s) > 0).length > 0)
+                ? statsRes.last_5_games_scores.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
+                : (Array.isArray(raw.scoring_trends_last_10) && raw.scoring_trends_last_10.filter((s: any) => Number(s) > 0).length > 0)
+                ? raw.scoring_trends_last_10.slice(-5).map(Number)
+                : (Array.isArray(stats.last_5_games_scores) && stats.last_5_games_scores.length > 0)
+                ? stats.last_5_games_scores.map(Number)
                 : (Array.isArray(homeRes?.personal_analytics?.scoring_trend) && homeRes.personal_analytics.scoring_trend.length > 0)
-                ? homeRes.personal_analytics.scoring_trend
+                ? homeRes.personal_analytics.scoring_trend.slice(-5).map(Number)
                 : stats.last_games || stats.recent_scores || [],
             // Swimming
             best_time_formatted: finishTime,

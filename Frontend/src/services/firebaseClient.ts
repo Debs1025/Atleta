@@ -542,7 +542,58 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
     }
   } catch (_) {}
 
-  // 2. Fallback to AsyncStorage cache
+  // 2. Direct Firestore fallback
+  try {
+    const token = await getStoredAuthToken();
+    let athleteUid = "";
+    if (token) {
+      try {
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split("")
+            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join("")
+        );
+        const payload = JSON.parse(jsonPayload);
+        athleteUid = payload.uid || payload.user_id || payload.sub || "";
+      } catch (_) {}
+    }
+
+    if (athleteUid) {
+      const cleanId = athleteUid.replace(/^ath_/, "");
+      const [pDoc1, pDoc2] = await Promise.all([
+        getDoc(doc(db, "Athlete_Profiles", `ath_${cleanId}`)).catch(() => null),
+        getDoc(doc(db, "Athlete_Profiles", cleanId)).catch(() => null),
+      ]);
+      const pData = (pDoc1 && pDoc1.exists()) ? pDoc1.data() : (pDoc2 && pDoc2.exists()) ? pDoc2.data() : null;
+      if (pData) {
+        const rawStats = pData.stats || {};
+        const rawAverages = pData.averages || {};
+        const rawShooting = pData.shooting_efficiency || {};
+        const fgPct = Number(rawShooting.fg_pct ?? rawStats.fg_pct ?? rawStats.fg_percentage ?? rawAverages.fg_percentage ?? 0);
+        const ftPct = Number(rawShooting.ft_pct ?? rawStats.ft_pct ?? rawStats.ft_percentage ?? rawAverages.ft_percentage ?? 0);
+        const scores = pData.five_game_trend || pData.last_5_games_scores || pData.scoring_trends_last_10 || [];
+
+        const enriched = {
+          ...pData,
+          shooting_efficiency: {
+            fg_pct: fgPct,
+            ft_pct: ftPct,
+            three_pct: Number(rawShooting.three_pct ?? rawStats.three_pct ?? rawAverages.three_pt_percentage ?? 0),
+            efg_pct: fgPct,
+          },
+          last_5_games_scores: scores,
+          five_game_trend: scores,
+        };
+        await AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(enriched));
+        return enriched;
+      }
+    }
+  } catch (_) {}
+
+  // 3. Fallback to AsyncStorage cache
   try {
     const cached = await AsyncStorage.getItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY);
     if (cached) {

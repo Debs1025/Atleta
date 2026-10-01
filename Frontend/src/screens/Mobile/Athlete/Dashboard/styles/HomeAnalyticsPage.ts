@@ -251,6 +251,12 @@ const styles = StyleSheet.create({
     color: "#38BDF8",
     fontWeight: "900",
   },
+  scoreBadgeText: {
+    color: "#94A3B8",
+    fontSize: 10,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
   teamCardContainer: {
     backgroundColor: "#111C35",
     borderRadius: 22,
