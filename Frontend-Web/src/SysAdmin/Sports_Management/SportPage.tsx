@@ -370,7 +370,15 @@ export const SportPage: React.FC = () => {
       navigate('/dashboard-official', { replace: true });
       return;
     }
-    loadCatalog(false);
+    loadCatalog(true);
+
+    const onSportsUpdated = () => {
+      loadCatalog(true);
+    };
+    window.addEventListener('sports_updated', onSportsUpdated);
+    return () => {
+      window.removeEventListener('sports_updated', onSportsUpdated);
+    };
   }, [navigate]);
 
   // Apply a Sport Template

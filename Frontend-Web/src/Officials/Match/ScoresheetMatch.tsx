@@ -117,9 +117,12 @@ export const ScoresheetMatch: React.FC = () => {
         if (data.race_results && data.race_results.length > 0) {
           setRaceResults(data.race_results);
         }
+      } else {
+        setMatchData(null);
       }
     } catch (err) {
       console.error('Failed to load match detail:', err);
+      setMatchData(null);
     } finally {
       setLoading(false);
     }

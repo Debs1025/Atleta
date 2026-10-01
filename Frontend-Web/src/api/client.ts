@@ -1414,6 +1414,15 @@ export const getMatchAuditDetail = async (
     const pendingVal = Array.isArray(pendingRes) ? pendingRes.find((p: any) => p.match_id === matchId) : null;
     const validationId = pendingVal?.validation_id || match?.validation_id || matchId;
 
+    // If the match does not exist in the database (deleted or not found)
+    if (!detailsRes && !boxscoreRes && !pendingVal && (!details || Object.keys(details).length === 0)) {
+      invalidateCache(cacheKey);
+      try {
+        localStorage.removeItem(`atleta_match_detail_${matchId}`);
+      } catch { }
+      return null;
+    }
+
     const scoresheetTeams: string[] = (
       match.scoresheet_data?.team_scores ||
       match.parsed_tables?.team_scores ||
@@ -1727,8 +1736,9 @@ export const downloadCertifiedMatchPdf = async (matchId: string): Promise<Blob> 
 };
 
 export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
+  const cleanId = matchId.replace(/^#/, '');
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/matches/${matchId.replace(/^#/, '')}`, {
+  const res = await fetch(`${BASE_URL}/matches/${cleanId}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -1737,6 +1747,25 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
   });
   const data = await handleResponse<any>(res);
   invalidateCache();
+
+  try {
+    localStorage.removeItem(`atleta_match_detail_${cleanId}`);
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(CREATED_MATCHES_PREFIX)) {
+        try {
+          const list: string[] = JSON.parse(localStorage.getItem(k) || '[]');
+          const updated = list.filter((id) => id !== cleanId && id !== `#${cleanId}`);
+          localStorage.setItem(k, JSON.stringify(updated));
+        } catch { }
+      }
+    }
+    const certKey = 'atleta_certified_match_ids';
+    const certList: string[] = JSON.parse(localStorage.getItem(certKey) || '[]');
+    const certUpdated = certList.filter((id) => id !== cleanId && id !== `#${cleanId}`);
+    localStorage.setItem(certKey, JSON.stringify(certUpdated));
+  } catch { }
+
   return data;
 };
 
@@ -1850,9 +1879,28 @@ export const deleteSport = async (
   const data = await handleResponse<{ message: string; sport_id: string }>(res);
   invalidateCache('sports_catalog');
   invalidateCache('admin_sports_catalog');
+  invalidateCache('sports');
+
   try {
+    const cleanId = sportId.toLowerCase();
+    const catFalse = getCachedData<SportsListResponse>('sports_catalog_false');
+    if (catFalse && Array.isArray(catFalse.sports)) {
+      const updated = catFalse.sports.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
+      setCachedData('sports_catalog_false', { total_sports: updated.length, sports: updated });
+    }
+    const catTrue = getCachedData<SportsListResponse>('sports_catalog_true');
+    if (catTrue && Array.isArray(catTrue.sports)) {
+      const updated = catTrue.sports.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
+      setCachedData('sports_catalog_true', { total_sports: updated.length, sports: updated });
+    }
+    const adminCat = getCachedData<SportConfiguration[]>('admin_sports_catalog');
+    if (Array.isArray(adminCat)) {
+      const updated = adminCat.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
+      setCachedData('admin_sports_catalog', updated);
+    }
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
   } catch { }
+
   return data;
 };
 
