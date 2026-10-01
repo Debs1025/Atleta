@@ -258,7 +258,13 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           },
           avatar_url: raw.avatar_url || raw.user?.avatar_url || "",
           workload_analytics: workloadAnalyticsObj,
-          eligible_documents: raw.eligible_documents || raw.documents || [],
+          eligible_documents: (raw.eligible_documents && raw.eligible_documents.length > 0)
+            ? raw.eligible_documents
+            : (raw.documents && raw.documents.length > 0)
+              ? raw.documents
+              : (profile?.eligible_documents && profile.eligible_documents.length > 0)
+                ? profile.eligible_documents
+                : [],
           auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
         };
         setProfile(mappedProfile);
@@ -338,7 +344,6 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
   const handleUpdateProfile = (updatedProfile: AthleteProfile) => {
     setProfile(updatedProfile);
-    refreshAthleteData(false);
   };
 
   const handleUploadDocumentFromNotification = (docInfo: {

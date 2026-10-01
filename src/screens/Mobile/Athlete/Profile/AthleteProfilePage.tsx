@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -20,7 +22,8 @@ import {
 } from "./AthleteProfileModals";
 import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
 import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
-import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { getSportsOfflineFirst, db } from "../../../../services/firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
 
 export interface DailySessionLog {
   date: string; // "YYYY-MM-DD"
@@ -248,6 +251,7 @@ export function AthleteProfilePage({
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocAsset, setNewDocAsset] = useState<{ name: string; uri: string } | null>(null);
   const [addDocError, setAddDocError] = useState("");
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
 
   // Password change
   const [passwordDrawerOpen, setPasswordDrawerOpen] = useState(false);
@@ -438,12 +442,33 @@ export function AthleteProfilePage({
     }
   };
 
+  // Helper to persist documents across Firestore and parent state
+  const syncDocumentsToStorage = async (updatedDocs: EligibleDocument[]) => {
+    try {
+      const athleteUid = profile.athlete_id || (profile as any).user_id;
+      if (athleteUid) {
+        const cleanId = String(athleteUid).replace(/^ath_/, "");
+        const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+        const docPayload = {
+          eligible_documents: updatedDocs,
+          documents: updatedDocs,
+          updated_at: new Date().toISOString(),
+        };
+        await Promise.all([
+          setDoc(doc(db, "Athlete_Profiles", canonicalId), docPayload, { merge: true }).catch(() => null),
+          setDoc(doc(db, "Athlete_Profiles", cleanId), docPayload, { merge: true }).catch(() => null),
+        ]);
+      }
+    } catch (_) {}
+  };
+
   // Handler to replace/upload existing document file
   // API Request: upload document (POST /api/v1/athletes/documents/upload)
   const handlePickDocument = async (docId: string) => {
     try {
+      setUploadingDocId(docId);
       const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
+        type: ["application/pdf", "image/*", "*/*"],
         copyToCacheDirectory: true,
       });
 
@@ -459,28 +484,33 @@ export function AthleteProfilePage({
             docType = "psa_birth_certificate";
           } else if (targetDoc.title.toLowerCase().includes("residency") || targetDoc.title.toLowerCase().includes("proof")) {
             docType = "proof_of_residency";
+          } else if (targetDoc.category === "MEDICAL_CLEARANCE" || targetDoc.title.toLowerCase().includes("medical")) {
+            docType = "medical_clearance";
+          } else if (targetDoc.category === "SCHOOL_ID" || targetDoc.title.toLowerCase().includes("school") || targetDoc.title.toLowerCase().includes("id")) {
+            docType = "school_id";
           } else {
             docType = targetDoc.title.toLowerCase().replace(/[^a-z0-9]+/g, "_");
           }
         }
 
-        setDocuments((prevDocs) =>
-          prevDocs.map((doc) =>
-            doc.id === docId
-              ? {
+        const updatedDocs = (documents || []).map((doc) =>
+          doc.id === docId
+            ? {
                 ...doc,
                 fileName: asset.name,
                 fileUri: asset.uri,
-                status: "UPLOADED",
+                status: "UPLOADED" as const,
                 uploadedAt: new Date().toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
                   year: "numeric",
                 }).toUpperCase(),
               }
-              : doc
-          )
+            : doc
         );
+        setDocuments(updatedDocs);
+        onUpdateProfile({ ...profile, eligible_documents: updatedDocs });
+        await syncDocumentsToStorage(updatedDocs);
 
         if (asset.uri) {
           const formData = new FormData();
@@ -490,11 +520,20 @@ export function AthleteProfilePage({
             type: mime,
           } as any);
           formData.append("doc_type", docType);
+          formData.append("document_type", docType.toUpperCase());
           await requestMultipart("/athletes/documents", formData).catch(() => null);
         }
+
+        Alert.alert(
+          "Upload Successful",
+          `"${asset.name}" has been uploaded and attached to ${targetDoc?.title || "your eligible documents"}.`
+        );
       }
     } catch (error) {
       console.log("Error picking document:", error);
+      Alert.alert("Upload Error", "Could not complete document upload. Please try again.");
+    } finally {
+      setUploadingDocId(null);
     }
   };
 
@@ -502,7 +541,7 @@ export function AthleteProfilePage({
   const handlePickModalDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
+        type: ["application/pdf", "image/*", "*/*"],
         copyToCacheDirectory: true,
       });
 
@@ -518,7 +557,7 @@ export function AthleteProfilePage({
 
   // Handler to save new document 
   // API Request: save new document record (POST /api/v1/athletes/documents)
-  const handleSaveNewDocument = () => {
+  const handleSaveNewDocument = async () => {
     if (!newDocTitle.trim()) {
       setAddDocError("Please enter a document name.");
       return;
@@ -554,7 +593,10 @@ export function AthleteProfilePage({
         : undefined,
     };
 
-    setDocuments((prev) => [...prev, newDoc]);
+    const updated = [...documents, newDoc];
+    setDocuments(updated);
+    onUpdateProfile({ ...profile, eligible_documents: updated });
+    await syncDocumentsToStorage(updated);
 
     if (newDocAsset?.uri) {
       const formData = new FormData();
@@ -563,7 +605,9 @@ export function AthleteProfilePage({
         name: newDocAsset.name || (isPdf ? "document.pdf" : "document.jpg"),
         type: mime,
       } as any);
-      formData.append("doc_type", "psa_birth_certificate");
+      const cleanType = newDocTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      formData.append("doc_type", cleanType);
+      formData.append("document_type", cleanType.toUpperCase());
       requestMultipart("/athletes/documents", formData).catch(() => null);
     }
 
@@ -571,6 +615,11 @@ export function AthleteProfilePage({
     setNewDocAsset(null);
     setAddDocError("");
     setShowAddDocModal(false);
+
+    Alert.alert(
+      "Document Added",
+      `"${newDoc.title}" has been successfully added to your eligible documents list.`
+    );
   };
 
   const openCalendar = () => {
@@ -1279,31 +1328,29 @@ export function AthleteProfilePage({
 
           {docsDrawerOpen && (
             <View style={styles.drawerContent}>
-              {!isEditing && (
-                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0F172A", padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: "#1E293B" }}>
-                  <Ionicons name="lock-closed-outline" size={14} color="#38BDF8" style={{ marginRight: 6 }} />
-                  <Text style={{ color: "#94A3B8", fontSize: 11, flex: 1 }}>Documents are in read-only mode. Tap "Edit Athlete Profile" below to upload or edit files.</Text>
-                </View>
-              )}
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0F172A", padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: "#1E293B" }}>
+                <Ionicons name="shield-checkmark-outline" size={14} color="#38BDF8" style={{ marginRight: 6 }} />
+                <Text style={{ color: "#94A3B8", fontSize: 11, flex: 1 }}>
+                  Upload official verification documents (PSA Birth Certificate, Medical Clearance, School ID) for league eligibility.
+                </Text>
+              </View>
 
               <View style={styles.documentsHeaderRow}>
                 <Text style={styles.documentsSubtitleText}>
                   Official verification documents for league eligibility.
                 </Text>
-                {isEditing && (
-                  <Pressable
-                    style={styles.addDocButton}
-                    onPress={() => {
-                      setNewDocTitle("");
-                      setNewDocAsset(null);
-                      setAddDocError("");
-                      setShowAddDocModal(true);
-                    }}
-                  >
-                    <Ionicons name="add-circle-outline" size={14} color="#38BDF8" />
-                    <Text style={styles.addDocButtonText}>Add Document</Text>
-                  </Pressable>
-                )}
+                <Pressable
+                  style={styles.addDocButton}
+                  onPress={() => {
+                    setNewDocTitle("");
+                    setNewDocAsset(null);
+                    setAddDocError("");
+                    setShowAddDocModal(true);
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={14} color="#38BDF8" />
+                  <Text style={styles.addDocButtonText}>Add Document</Text>
+                </Pressable>
               </View>
 
               <View style={styles.documentsCardList}>
@@ -1313,10 +1360,22 @@ export function AthleteProfilePage({
                     <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 8, fontWeight: "700", letterSpacing: 0.3 }}>
                       No File Uploaded Yet
                     </Text>
+                    <Pressable
+                      style={[styles.addDocButton, { marginTop: 12 }]}
+                      onPress={() => {
+                        setNewDocTitle("");
+                        setNewDocAsset(null);
+                        setAddDocError("");
+                        setShowAddDocModal(true);
+                      }}
+                    >
+                      <Ionicons name="add-circle-outline" size={14} color="#38BDF8" />
+                      <Text style={styles.addDocButtonText}>Upload Eligible Document</Text>
+                    </Pressable>
                   </View>
                 ) : (
                   (documents || []).map((doc) => (
-                    <View key={doc.id} style={[styles.documentItemCard, !isEditing && { opacity: 0.85 }]}>
+                    <View key={doc.id} style={styles.documentItemCard}>
                       <View style={styles.docHeaderRow}>
                         <View style={styles.docTitleGroup}>
                           <Ionicons
@@ -1351,13 +1410,14 @@ export function AthleteProfilePage({
                         </View>
 
                         {/* Delete Button */}
-                        {isEditing && (documents || []).length > 1 && (
+                        {(documents || []).length > 1 && (
                           <Pressable
                             style={styles.deleteDocButton}
                             onPress={() => {
-                              setDocuments((prevDocs) =>
-                                (prevDocs || []).filter((d) => d.id !== doc.id)
-                              );
+                              const updatedDocs = (documents || []).filter((d) => d.id !== doc.id);
+                              setDocuments(updatedDocs);
+                              onUpdateProfile({ ...profile, eligible_documents: updatedDocs });
+                              syncDocumentsToStorage(updatedDocs);
                             }}
                           >
                             <Ionicons name="trash-outline" size={15} color="#FF4D4D" />
@@ -1385,25 +1445,25 @@ export function AthleteProfilePage({
 
                         {/* Upload / Replace Action Button */}
                         <Pressable
-                          style={[
-                            styles.uploadDocActionButton,
-                            !isEditing && { opacity: 0.4, borderColor: "#334155" },
-                          ]}
-                          disabled={!isEditing}
+                          style={styles.uploadDocActionButton}
+                          disabled={uploadingDocId === doc.id}
                           onPress={() => handlePickDocument(doc.id)}
                         >
-                          <Ionicons
-                            name={doc.fileName ? "refresh-outline" : "cloud-upload-outline"}
-                            size={14}
-                            color={isEditing ? "#38BDF8" : "#64748B"}
-                          />
-                          <Text
-                            style={[
-                              styles.uploadDocActionButtonText,
-                              !isEditing && { color: "#64748B" },
-                            ]}
-                          >
-                            {doc.fileName ? "Replace" : "Upload"}
+                          {uploadingDocId === doc.id ? (
+                            <ActivityIndicator size="small" color="#38BDF8" />
+                          ) : (
+                            <Ionicons
+                              name={doc.fileName ? "refresh-outline" : "cloud-upload-outline"}
+                              size={14}
+                              color="#38BDF8"
+                            />
+                          )}
+                          <Text style={styles.uploadDocActionButtonText}>
+                            {uploadingDocId === doc.id
+                              ? "Uploading..."
+                              : doc.fileName
+                                ? "Replace"
+                                : "Upload"}
                           </Text>
                         </Pressable>
                       </View>

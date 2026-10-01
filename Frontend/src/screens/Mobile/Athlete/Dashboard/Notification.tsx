@@ -362,7 +362,7 @@ export function NotificationPage({
   const handleSubmitDocument = async () => {
     if (!selectedDocNotif) return;
     if (!selectedFile) {
-      Alert.alert("No File Chosen", "Please pick a document file before submitting.");
+      handlePickDocument();
       return;
     }
 
@@ -794,13 +794,13 @@ export function NotificationPage({
                 <Pressable
                   style={[
                     styles.submitUploadButton,
-                    (!selectedFile || isUploading) && { opacity: 0.5 },
+                    isUploading && { opacity: 0.6 },
                   ]}
-                  disabled={!selectedFile || isUploading}
+                  disabled={isUploading}
                   onPress={handleSubmitDocument}
                 >
                   <Text style={styles.submitUploadText}>
-                    {isUploading ? "UPLOADING..." : "SUBMIT DOCUMENT"}
+                    {isUploading ? "UPLOADING..." : selectedFile ? "SUBMIT DOCUMENT" : "CHOOSE & UPLOAD FILE"}
                   </Text>
                 </Pressable>
               </View>
