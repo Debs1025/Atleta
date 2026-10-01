@@ -194,13 +194,14 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           if (seen.has(upper)) return;
           seen.add(upper);
           const label =
-            upper === 'TRACK AND FIELD'
+            upper === 'TRACK AND FIELD' || upper === 'TRACK & FIELD'
               ? 'Track and Field'
-              : raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+              : raw.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
           mapped.push(label);
         });
         if (mapped.length > 0) {
-          setSportOptions(mapped);
+          const merged = Array.from(new Set([...mapped, ...DEFAULT_SPORT_OPTIONS]));
+          setSportOptions(merged);
         }
       })
       .catch((err: any) => console.warn('Could not fetch dynamic sports for signup:', err));

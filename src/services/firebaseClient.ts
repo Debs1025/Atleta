@@ -281,7 +281,7 @@ async function revalidateSportsInBackground(): Promise<void> {
     const data = await quickFetchJson(`${API_BASE}/sports`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 2500);
+    }, 6000);
 
     const list = Array.isArray(data?.sports) ? data.sports : Array.isArray(data) ? data : [];
     if (list.length > 0) {
@@ -415,13 +415,13 @@ export async function getSportsOfflineFirst(): Promise<any[]> {
     }
   } catch (_) {}
 
-  // 3. Fast Network Fetch with Snappy Timeout (1.8s max)
+  // 3. Fast Network Fetch with Timeout (6.0s max to handle serverless cold-starts)
   try {
     const token = await getStoredAuthToken();
     const data = await quickFetchJson(`${API_BASE}/sports`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 1800);
+    }, 6000);
 
     const list = Array.isArray(data?.sports)
       ? data.sports
