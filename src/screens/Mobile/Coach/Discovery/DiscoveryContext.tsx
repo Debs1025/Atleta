@@ -306,18 +306,42 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 3. Map Scouting Proposals
       if (Array.isArray(proposalsRes)) {
-        const mappedProposals: ScoutingProposalItem[] = proposalsRes.map((p: any) => ({
-          scout_id: p.scout_id || p.id,
-          athlete_id: p.athlete_id,
-          athlete_name: p.athlete_details?.first_name
-            ? `${p.athlete_details.first_name} ${p.athlete_details.last_name || ''}`.trim()
-            : p.athlete_name || 'Athlete',
-          sport_category: p.athlete_details?.sport_type || p.sport_category || 'Basketball',
-          offer_status: (p.offer_status || 'PENDING').toUpperCase(),
-          date_added_relative: 'Recent',
-          created_at: p.created_at || new Date().toISOString().split('T')[0],
-          avatar_url: p.avatar_url,
-        }));
+        const mappedProposals: ScoutingProposalItem[] = proposalsRes.map((p: any) => {
+          const rawDate = p.date_initiated || p.updated_at || p.created_at;
+          let relativeDate = 'Recent';
+          if (rawDate) {
+            try {
+              const diffMs = Date.now() - new Date(rawDate).getTime();
+              const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+              if (diffDays <= 0) relativeDate = 'Today';
+              else if (diffDays === 1) relativeDate = 'Yesterday';
+              else if (diffDays < 7) relativeDate = `${diffDays}d ago`;
+              else if (diffDays < 30) relativeDate = `${Math.floor(diffDays / 7)}w ago`;
+              else relativeDate = `${Math.floor(diffDays / 30)}mo ago`;
+            } catch (e) {
+              relativeDate = 'Recent';
+            }
+          }
+          const rawStatus = String(p.offer_status || 'PENDING').toUpperCase();
+          const normalizedStatus = ['ACCEPTED', 'ACTIVE', 'SIGNED', 'COMMITTED', 'ROSTERED'].includes(rawStatus)
+            ? 'ACCEPTED'
+            : ['DECLINED', 'REJECTED'].includes(rawStatus)
+              ? 'DECLINED'
+              : 'PENDING';
+
+          return {
+            scout_id: p.scout_id || p.id,
+            athlete_id: p.athlete_id,
+            athlete_name: p.athlete_details?.first_name
+              ? `${p.athlete_details.first_name} ${p.athlete_details.last_name || ''}`.trim()
+              : p.athlete_name || 'Athlete',
+            sport_category: p.athlete_details?.sport_type || p.sport_category || 'Basketball',
+            offer_status: normalizedStatus,
+            date_added_relative: relativeDate,
+            created_at: rawDate || new Date().toISOString().split('T')[0],
+            avatar_url: p.avatar_url,
+          };
+        });
         finalProposals = mappedProposals;
         setScoutingProposals(mappedProposals);
       } else {

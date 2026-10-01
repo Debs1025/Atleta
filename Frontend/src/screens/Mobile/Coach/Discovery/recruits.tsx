@@ -64,22 +64,20 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
               </View>
 
               <View style={styles.rightGroup}>
-                {item.offer_status === 'ACCEPTED' && (
+                {(item.offer_status || '').toUpperCase() === 'ACCEPTED' ? (
                   <View style={styles.statusBadgeAccepted}>
                     <Text style={styles.statusTextAccepted}>ACCEPTED</Text>
                   </View>
-                )}
-                {item.offer_status === 'PENDING' && (
-                  <View style={styles.statusBadgePending}>
-                    <Text style={styles.statusTextPending}>PENDING</Text>
-                  </View>
-                )}
-                {item.offer_status === 'DECLINED' && (
+                ) : (item.offer_status || '').toUpperCase() === 'DECLINED' ? (
                   <View style={styles.statusBadgeDeclined}>
                     <Text style={styles.statusTextDeclined}>DECLINED</Text>
                   </View>
+                ) : (
+                  <View style={styles.statusBadgePending}>
+                    <Text style={styles.statusTextPending}>{(item.offer_status || 'PENDING').toUpperCase()}</Text>
+                  </View>
                 )}
-                <Text style={styles.relativeDateText}>{item.date_added_relative}</Text>
+                <Text style={styles.relativeDateText}>{item.date_added_relative || 'Recent'}</Text>
               </View>
             </View>
           ))}
