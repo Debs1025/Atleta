@@ -106,12 +106,26 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       ]);
 
       let homeData = homeRes;
-      if (!homeData && !profileRes && !statsRes) {
+      if (!homeData) {
         homeData = await getAthleteProfileOfflineFirst();
       }
 
       if (homeData || profileRes || statsRes || workloadRes || teamRes) {
-        const raw = { ...(homeData || {}), ...(profileRes || {}), ...(statsRes || {}) };
+        const raw = {
+          ...(profileRes || {}),
+          ...(homeData || {}),
+          ...(statsRes || {}),
+          stats: {
+            ...(homeData?.stats || {}),
+            ...(profileRes?.stats || {}),
+            ...(statsRes?.stats || {}),
+          },
+          averages: {
+            ...(homeData?.averages || {}),
+            ...(profileRes?.averages || {}),
+            ...(statsRes?.career_averages || {}),
+          },
+        };
         const stats = raw.stats || raw.analytics || raw;
         const phys = raw.physical_attributes || raw.physical_profile || raw;
 
@@ -230,6 +244,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           },
           analytics: {
             points_per_game: Number(
+              homeData?.personal_analytics?.ppg ??
               homeRes?.personal_analytics?.ppg ??
               statsRes?.career_averages?.ppg ??
               stats.points_per_game ??
@@ -239,6 +254,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               0
             ),
             assists_per_game: Number(
+              homeData?.personal_analytics?.apg ??
               homeRes?.personal_analytics?.apg ??
               statsRes?.career_averages?.apg ??
               stats.assists_per_game ??
@@ -248,6 +264,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               0
             ),
             rebounds_per_game: Number(
+              homeData?.personal_analytics?.rpg ??
               homeRes?.personal_analytics?.rpg ??
               statsRes?.career_averages?.rpg ??
               stats.rebounds_per_game ??
@@ -257,6 +274,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               0
             ),
             field_goal_percentage: Number(
+              homeData?.shooting_efficiency?.fg_pct ??
               homeRes?.shooting_efficiency?.fg_pct ??
               statsRes?.shooting_accuracy_percentages?.fg_pct ??
               raw.shooting_efficiency?.fg_pct ??
@@ -268,6 +286,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               0
             ),
             free_throw_percentage: Number(
+              homeData?.shooting_efficiency?.ft_pct ??
               homeRes?.shooting_efficiency?.ft_pct ??
               statsRes?.shooting_accuracy_percentages?.ft_pct ??
               raw.shooting_efficiency?.ft_pct ??
@@ -279,7 +298,11 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               0
             ),
             last_5_games_scores:
-              (Array.isArray(homeRes?.last_5_games_scores) && homeRes.last_5_games_scores.filter((s: any) => Number(s) > 0).length > 0)
+              (Array.isArray(homeData?.last_5_games_scores) && homeData.last_5_games_scores.filter((s: any) => Number(s) > 0).length > 0)
+                ? homeData.last_5_games_scores.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
+                : (Array.isArray(homeData?.five_game_trend) && homeData.five_game_trend.filter((s: any) => Number(s) > 0).length > 0)
+                ? homeData.five_game_trend.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
+                : (Array.isArray(homeRes?.last_5_games_scores) && homeRes.last_5_games_scores.filter((s: any) => Number(s) > 0).length > 0)
                 ? homeRes.last_5_games_scores.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
                 : (Array.isArray(homeRes?.five_game_trend) && homeRes.five_game_trend.filter((s: any) => Number(s) > 0).length > 0)
                 ? homeRes.five_game_trend.filter((s: any) => typeof s === "number" || !isNaN(Number(s))).map(Number)
@@ -289,8 +312,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
                 ? raw.scoring_trends_last_10.slice(-5).map(Number)
                 : (Array.isArray(stats.last_5_games_scores) && stats.last_5_games_scores.length > 0)
                 ? stats.last_5_games_scores.map(Number)
-                : (Array.isArray(homeRes?.personal_analytics?.scoring_trend) && homeRes.personal_analytics.scoring_trend.length > 0)
-                ? homeRes.personal_analytics.scoring_trend.slice(-5).map(Number)
+                : (Array.isArray(homeData?.personal_analytics?.scoring_trend) && homeData.personal_analytics.scoring_trend.length > 0)
+                ? homeData.personal_analytics.scoring_trend.slice(-5).map(Number)
                 : stats.last_games || stats.recent_scores || [],
             // Swimming
             best_time_formatted: finishTime,

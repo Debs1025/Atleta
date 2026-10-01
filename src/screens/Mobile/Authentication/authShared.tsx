@@ -58,7 +58,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 6000;
+const REQUEST_TIMEOUT_MS = 15000;
 
 // Types
 export type BannerTone = "error" | "success" | "info";
@@ -263,7 +263,7 @@ export async function getStoredAuthToken(): Promise<string | null> {
 
 const inFlightGetRequests = new Map<string, Promise<any>>();
 const getResponseMicroCache = new Map<string, { data: any; timestamp: number }>();
-const MICRO_CACHE_TTL_MS = 2500; // 2.5s microcache to eliminate redundant duplicate queries
+const MICRO_CACHE_TTL_MS = 15000; // 15s microcache to eliminate redundant duplicate queries across screens
 
 // Handles authenticated JSON requests with Authorization Bearer header
 export async function requestAuthenticatedJson(path: string, method: string = "GET", body?: unknown) {
@@ -301,6 +301,9 @@ export async function requestAuthenticatedJson(path: string, method: string = "G
 
       if (isGet && data) {
         getResponseMicroCache.set(path, { data, timestamp: Date.now() });
+      } else if (!isGet) {
+        // Automatically invalidate client cache on any state mutations
+        getResponseMicroCache.clear();
       }
 
       return data;

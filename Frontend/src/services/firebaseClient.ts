@@ -520,6 +520,29 @@ export async function getMatchesOfflineFirst(): Promise<any[]> {
 
 const OFFLINE_ATHLETE_PROFILE_CACHE_KEY = "atleta_offline_athlete_profile_cache";
 
+function safeBase64Decode(str: string): string {
+  if (typeof (globalThis as any).atob === "function") {
+    try {
+      return (globalThis as any).atob(str);
+    } catch (_) {}
+  }
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  let output = "";
+  const cleaned = String(str).replace(/=+$/, "");
+  let bc = 0;
+  let bs = 0;
+  for (let idx = 0; idx < cleaned.length; idx++) {
+    const char = cleaned.charAt(idx);
+    const charIndex = chars.indexOf(char);
+    if (charIndex === -1) continue;
+    bs = bc % 4 ? bs * 64 + charIndex : charIndex;
+    if (bc++ % 4) {
+      output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+    }
+  }
+  return output;
+}
+
 /**
  * Fetch individual athlete profile with Firestore + storage offline fallback.
  */
@@ -546,17 +569,12 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
   try {
     const token = await getStoredAuthToken();
     let athleteUid = "";
-    if (token) {
+    if (token && token.includes(".")) {
       try {
         const base64Url = token.split(".")[1];
         const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split("")
-            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-            .join("")
-        );
-        const payload = JSON.parse(jsonPayload);
+        const decoded = safeBase64Decode(base64);
+        const payload = JSON.parse(decoded);
         athleteUid = payload.uid || payload.user_id || payload.sub || "";
       } catch (_) {}
     }
