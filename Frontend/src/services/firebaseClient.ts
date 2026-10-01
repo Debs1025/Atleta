@@ -80,6 +80,7 @@ export const db: Firestore = dbInstance;
 const OFFLINE_MATCHES_CACHE_KEY = "atleta_offline_matches_cache";
 const OFFLINE_ATHLETES_CACHE_KEY = "atleta_offline_athletes_cache";
 const OFFLINE_SPORTS_CACHE_KEY = "atleta_offline_sports_cache";
+const OFFLINE_TEAMS_CACHE_KEY = "atleta_offline_teams_cache";
 
 /**
  * Save a match log with Firestore offline data persistence.
@@ -237,6 +238,9 @@ let athletesLastFetched = 0;
 let matchesMemoryCache: any[] | null = null;
 let matchesLastFetched = 0;
 
+let teamsMemoryCache: any[] | null = null;
+let teamsLastFetched = 0;
+
 const MEMORY_CACHE_TTL_MS = 2 * 60 * 1000; // 2m cache validity before background revalidation
 const SPORTS_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000; // 10m cache validity for sports config catalog
 
@@ -301,6 +305,23 @@ async function revalidateMatchesInBackground(): Promise<void> {
       matchesMemoryCache = list;
       matchesLastFetched = Date.now();
       await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+    }
+  } catch (_) {}
+}
+
+async function revalidateTeamsInBackground(): Promise<void> {
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/teams?all=true`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2500);
+
+    const list = Array.isArray(data?.teams) ? data.teams : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      teamsMemoryCache = list;
+      teamsLastFetched = Date.now();
+      await AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
     }
   } catch (_) {}
 }
@@ -530,6 +551,130 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
   } catch (_) {}
 
   return null;
+}
+
+/**
+ * Fetch teams with offline support.
+ * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> direct Firestore -> AsyncStorage.
+ */
+export async function getTeamsOfflineFirst(): Promise<any[]> {
+  // 1. Instant Memory Cache (0ms)
+  if (teamsMemoryCache && teamsMemoryCache.length > 0) {
+    if (Date.now() - teamsLastFetched > MEMORY_CACHE_TTL_MS) {
+      revalidateTeamsInBackground().catch(() => null);
+    }
+    return teamsMemoryCache;
+  }
+
+  // 2. Fast Local AsyncStorage Cache (<10ms)
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_TEAMS_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        teamsMemoryCache = parsed;
+        teamsLastFetched = Date.now();
+        revalidateTeamsInBackground().catch(() => null);
+        return parsed;
+      }
+    }
+  } catch (_) {}
+
+  // 3. Fast Network Fetch with Snappy Timeout (1.8s max)
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/teams?all=true`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 1800);
+
+    const list = Array.isArray(data?.teams) ? data.teams : Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      teamsMemoryCache = list;
+      teamsLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+      return list;
+    }
+  } catch (_) {}
+
+  // 4. Direct Fallback to Firestore persistent local/remote cache
+  try {
+    const snap = await getDocs(collection(db, "Teams"));
+    if (!snap.empty) {
+      const rawTeams = snap.docs.map((d) => ({ team_id: d.id, id: d.id, ...d.data() }));
+
+      // Fetch coach profiles and users to enrich coach_name if any are missing
+      const [coachesSnap, usersSnap] = await Promise.all([
+        getDocs(collection(db, "Coach_Profiles")).catch(() => null),
+        getDocs(collection(db, "Users")).catch(() => null),
+      ]);
+
+      const nameMap = new Map<string, string>();
+      if (usersSnap && !usersSnap.empty) {
+        usersSnap.docs.forEach((d) => {
+          const u = d.data();
+          const fullName = u.full_name || (u.first_name ? `${u.first_name} ${u.last_name || ""}`.trim() : "");
+          if (fullName) {
+            nameMap.set(d.id, fullName);
+            nameMap.set(`coach_${d.id}`, fullName);
+            nameMap.set(d.id.replace(/^coach_/, ""), fullName);
+          }
+        });
+      }
+      if (coachesSnap && !coachesSnap.empty) {
+        coachesSnap.docs.forEach((d) => {
+          const c = d.data();
+          const fullName = c.full_name || (c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : "");
+          if (fullName) {
+            nameMap.set(d.id, fullName);
+            nameMap.set(`coach_${d.id}`, fullName);
+            nameMap.set(d.id.replace(/^coach_/, ""), fullName);
+          }
+        });
+      }
+
+      // Manual known seed defaults for coach names
+      nameMap.set('coach_001', 'Erick Nathaniel De Belen');
+      nameMap.set('coach_usr_coach_001', 'Coach Nash Racela');
+      nameMap.set('usr_coach_001', 'Coach Nash Racela');
+      nameMap.set('v5XWfDqgsYTFPx7xEWnBsssNcH83', 'Gerard Francis Pelonio');
+      nameMap.set('coach_v5XWfDqgsYTFPx7xEWnBsssNcH83', 'Gerard Francis Pelonio');
+      nameMap.set('t358EW07qTaKPJLiFHNSClaLqXJ3', 'Coach Carter');
+      nameMap.set('coach_t358EW07qTaKPJLiFHNSClaLqXJ3', 'Coach Carter');
+
+      const enrichedList = rawTeams.map((t: any) => {
+        const cId = String(t.coach_id || "").trim();
+        const coachName =
+          t.coach_name ||
+          nameMap.get(cId) ||
+          nameMap.get(`coach_${cId}`) ||
+          nameMap.get(cId.replace(/^coach_/, "")) ||
+          (t.head_coach && t.head_coach.full_name) ||
+          "Coach";
+
+        return {
+          ...t,
+          coach_name: coachName,
+          head_coach: {
+            coach_id: cId,
+            full_name: coachName,
+            role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
+            years_experience: t.years_experience ? `${t.years_experience} Years` : "Experienced Coach",
+            quote: t.quote || "Dedicated to athletic excellence and player development.",
+          },
+        };
+      });
+
+      teamsMemoryCache = enrichedList;
+      teamsLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(enrichedList)).catch(() => null);
+      return enrichedList;
+    }
+  } catch (fsErr) {
+    console.warn("Firestore offline teams lookup:", fsErr);
+  }
+
+  return [];
 }
 
 /**

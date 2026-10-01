@@ -14,7 +14,8 @@ import { TeamDetailsScreen } from "./TeamDetails";
 import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
-import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { getSportsOfflineFirst, getTeamsOfflineFirst, db } from "../../../../services/firebaseClient";
+import { doc, getDoc } from "firebase/firestore";
 
 //schemas
 export interface Coach {
@@ -78,6 +79,7 @@ interface TeamsProps {
 }
 
 const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
+  { label: "ALL", value: "ALL" },
   { label: "BASKETBALL", value: "BASKETBALL" },
   { label: "VOLLEYBALL", value: "VOLLEYBALL" },
   { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
@@ -88,6 +90,9 @@ const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
 const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
   const norm = sportValue.toUpperCase().trim();
   const tintColor = isSelected ? "#38BDF8" : "#94A3B8";
+  if (norm === "ALL") {
+    return <Ionicons name="apps-outline" size={16} color={tintColor} />;
+  }
   if (norm.includes("BASKET")) {
     return <Ionicons name="basketball-outline" size={16} color={tintColor} />;
   }
@@ -119,8 +124,9 @@ const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
 };
 
 const getInitialSport = (cat?: string) => {
-  if (!cat) return "";
+  if (!cat) return "ALL";
   const norm = cat.toUpperCase().trim();
+  if (norm === "ALL") return "ALL";
   if (norm.includes("SWIM")) return "SWIMMING";
   if (norm.includes("TRACK") || norm.includes("FIELD")) return "TRACK AND FIELD";
   return norm;
@@ -143,8 +149,8 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
     getSportsOfflineFirst()
       .then((sports: any) => {
         if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
-        const seen = new Set<string>();
-        const mapped: { label: string; value: string }[] = [];
+        const seen = new Set<string>(["ALL"]);
+        const mapped: { label: string; value: string }[] = [{ label: "ALL", value: "ALL" }];
         sports.forEach((s: any) => {
           const raw = String(s.sport_name || s.name || s.id || "").trim();
           if (!raw) return;
@@ -153,7 +159,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           seen.add(upper);
           mapped.push({ label: upper, value: upper });
         });
-        if (mapped.length > 0) {
+        if (mapped.length > 1) {
           setSportChips(mapped);
         }
       })
@@ -183,7 +189,8 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
     const fetchDirectoryAndInquiries = async () => {
       try {
         setLoading(true);
-        const [teamsRes, inquiriesRes, myTeamRes]: [any, any, any] = await Promise.all([
+        const [offlineTeams, teamsRes, inquiriesRes, myTeamRes]: [any, any, any, any] = await Promise.all([
+          getTeamsOfflineFirst().catch(() => []),
           requestAuthenticatedJson("/teams").catch(() => null),
           requestAuthenticatedJson("/inquiries").catch(() => null),
           requestAuthenticatedJson("/athletes/team").catch(() => null),
@@ -195,7 +202,35 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           setMyCurrentTeamId(currentTeamId);
           setMyCurrentTeamName(currentTeamName);
 
-          const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+          const restTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+          const rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
+          const mergedMap = new Map<string, any>();
+          rawList.forEach((item: any) => {
+            const tid = item.team_id || item.id;
+            if (!tid) return;
+            const existing = mergedMap.get(tid);
+            if (!existing) {
+              mergedMap.set(tid, item);
+            } else {
+              const existingCoach = existing.coach_name || existing.head_coach?.full_name;
+              const itemCoach = item.coach_name || item.head_coach?.full_name;
+              const isExistingPlaceholder =
+                !existingCoach ||
+                existingCoach.trim().toLowerCase() === "coach" ||
+                existingCoach.trim().toLowerCase() === "head coach";
+              const isItemReal =
+                itemCoach &&
+                itemCoach.trim().toLowerCase() !== "coach" &&
+                itemCoach.trim().toLowerCase() !== "head coach";
+              if (isExistingPlaceholder && isItemReal) {
+                mergedMap.set(tid, { ...existing, ...item });
+              } else {
+                mergedMap.set(tid, { ...item, ...existing });
+              }
+            }
+          });
+          const rawTeams = Array.from(mergedMap.values());
+
           const mappedTeams: TeamSchema[] = rawTeams
             .filter((t: any) => {
               // Exclude the athlete's current team if they already play in a team
@@ -203,24 +238,32 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
               if (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase()) return false;
               return true;
             })
-            .map((t: any, idx: number) => ({
-              team_id: t.team_id || `team_${idx}`,
-              team_name: t.team_name || "Varsity Team",
-              sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
-              managed_by_coach_id: t.coach_id || "",
-              created_at: t.timestamp || new Date().toISOString(),
-              roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
-              program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
-              description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
-              region: t.region || "NCR",
-              head_coach: {
-                coach_id: t.coach_id || "",
-                full_name: (t.coach_name && t.coach_name.trim().toLowerCase() !== "coach" ? t.coach_name : "Head Coach").toUpperCase(),
-                role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
-                years_experience: t.years_experience ? `${t.years_experience} Years` : "Experienced Coach",
-                quote: t.quote || "Dedicated to athletic excellence and player development.",
-              },
-            }));
+            .map((t: any, idx: number) => {
+              const coachName = (
+                t.coach_name ||
+                t.head_coach?.full_name ||
+                (t.coach_first_name ? `${t.coach_first_name} ${t.coach_last_name || ""}`.trim() : "") ||
+                "Head Coach"
+              );
+              return {
+                team_id: t.team_id || `team_${idx}`,
+                team_name: t.team_name || "Varsity Team",
+                sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
+                managed_by_coach_id: t.coach_id || t.managed_by_coach_id || "",
+                created_at: t.timestamp || new Date().toISOString(),
+                roster_athletes: Array(t.athlete_count || (Array.isArray(t.roster_list) ? t.roster_list.length : 0)).fill("ath_uuid"),
+                program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
+                description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
+                region: t.region || "NCR",
+                head_coach: {
+                  coach_id: t.coach_id || t.managed_by_coach_id || "",
+                  full_name: (coachName.trim().toLowerCase() !== "coach" ? coachName : "Head Coach").toUpperCase(),
+                  role_title: t.head_coach?.role_title || `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
+                  years_experience: t.years_experience ? `${t.years_experience} Years` : (t.head_coach?.years_experience || "Experienced Coach"),
+                  quote: t.quote || t.head_coach?.quote || "Dedicated to athletic excellence and player development.",
+                },
+              };
+            });
           setTeams(mappedTeams);
 
           setSportChips((prev) => {
@@ -293,9 +336,19 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
     setCurrentScreen("TEAM_DETAILS");
 
     if (team.team_id) {
-      const detailed: any = await requestAuthenticatedJson(`/teams/${team.team_id}`).catch(() => null);
+      let detailed: any = await requestAuthenticatedJson(`/teams/${team.team_id}`).catch(() => null);
+      if (!detailed) {
+        try {
+          const snap = await getDoc(doc(db, "Teams", team.team_id));
+          if (snap && snap.exists()) {
+            detailed = snap.data();
+          }
+        } catch (_) {}
+      }
+
       if (detailed) {
         const rawCoach = detailed.coach || detailed.head_coach || {};
+        const rawCoachName = detailed.coach_name || rawCoach.full_name || rawCoach.name || team.head_coach.full_name;
         setSelectedTeam({
           ...team,
           description: detailed.description || detailed.mission_statement || team.description,
@@ -303,7 +356,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           roster_athletes: Array.isArray(detailed.roster) ? detailed.roster.map((r: any) => r.athlete_id) : team.roster_athletes,
           head_coach: {
             coach_id: rawCoach.coach_id || team.head_coach.coach_id,
-            full_name: (rawCoach.full_name || team.head_coach.full_name).toUpperCase(),
+            full_name: (rawCoachName || team.head_coach.full_name).toUpperCase(),
             role_title: (rawCoach.role_title || rawCoach.current_institution || team.head_coach.role_title).toUpperCase(),
             years_experience: rawCoach.years_of_experience ? `${rawCoach.years_of_experience} Years` : team.head_coach.years_experience,
             quote: rawCoach.quote || team.head_coach.quote,
@@ -342,12 +395,35 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
 
     setCurrentScreen("COACH_PROFILE");
 
-    const res: any = await requestAuthenticatedJson(`/coaches/${targetId}`).catch(() => null);
-    if (res) {
-      const c = res.profile || res.coach || res;
+    let res: any = await requestAuthenticatedJson(`/coaches/${targetId}`).catch(() => null);
+    let c = res ? (res.profile || res.coach || res) : null;
+    if (!c) {
+      try {
+        const cleanId = targetId.replace(/^coach_/, "");
+        const [cSnap, uSnap] = await Promise.all([
+          getDoc(doc(db, "Coach_Profiles", targetId)).catch(() => null),
+          getDoc(doc(db, "Coach_Profiles", cleanId)).catch(() => null),
+          getDoc(doc(db, "Users", cleanId)).catch(() => null),
+          getDoc(doc(db, "Users", targetId)).catch(() => null),
+        ]);
+        const cpData = (cSnap && cSnap.exists()) ? cSnap.data() : (uSnap && uSnap.exists()) ? uSnap.data() : null;
+        const uData = (uSnap && uSnap.exists()) ? uSnap.data() : null;
+        if (cpData || uData) {
+          c = {
+            ...cpData,
+            ...uData,
+            full_name: uData?.full_name || (uData?.first_name ? `${uData.first_name} ${uData.last_name || ""}`.trim() : "") || cpData?.full_name,
+            email: uData?.email || cpData?.email,
+            phone: uData?.contact_number || uData?.phone || cpData?.phone,
+          };
+        }
+      } catch (_) {}
+    }
+
+    if (c) {
       const firstName = c.first_name || "";
       const lastName = c.last_name || "";
-      const fullName = c.full_name || `${firstName} ${lastName}`.trim() || "Coach Profile";
+      const fullName = c.full_name || `${firstName} ${lastName}`.trim() || selectedTeam?.head_coach.full_name || "Coach Profile";
       const inst = c.current_institution || c.institution || (selectedTeam?.team_name) || "Athletic Program";
       const sport = (c.sport_type || selectedTeam?.sport_type || "Basketball").toUpperCase();
 
@@ -357,12 +433,12 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         institution: inst,
         role_title: c.role_title || `${sport} HEAD COACH`,
         tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
-        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
+        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : (selectedTeam?.head_coach.years_experience || "Not specified"),
         core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
         success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
         recruits_placed: c.recruits_placed || "",
-        philosophy: c.philosophy || c.bio || "Not specified",
-        quote: c.quote || "Not specified",
+        philosophy: c.philosophy || c.bio || selectedTeam?.head_coach.quote || "Not specified",
+        quote: c.quote || selectedTeam?.head_coach.quote || "Not specified",
         certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
         contact_info: {
           email: c.email || c.contact_info?.email || "Not specified",
@@ -379,12 +455,13 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
     const matchesSearch =
       team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      team.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSport = selectedSport
-      ? normSport(team.sport_type) === normSport(selectedSport) ||
+      team.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      team.head_coach.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSport = !selectedSport || selectedSport === "ALL"
+      ? true
+      : normSport(team.sport_type) === normSport(selectedSport) ||
         normSport(team.sport_type).includes(normSport(selectedSport)) ||
-        normSport(selectedSport).includes(normSport(team.sport_type))
-      : true;
+        normSport(selectedSport).includes(normSport(team.sport_type));
     return matchesSearch && matchesSport;
   });
 
@@ -490,7 +567,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           contentContainerStyle={styles.filterScrollContent}
         >
           {sportChips.map((chip) => {
-            const isSelected = selectedSport === chip.value;
+            const isSelected = selectedSport === chip.value || (chip.value === "ALL" && (!selectedSport || selectedSport === "ALL"));
             return (
               <Pressable
                 key={chip.value}
@@ -498,11 +575,13 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
                   styles.sportChip,
                   isSelected && styles.sportChipActive,
                 ]}
-                onPress={() =>
-                  setSelectedSport(
-                    isSelected ? "" : chip.value
-                  )
-                }
+                onPress={() => {
+                  if (chip.value === "ALL") {
+                    setSelectedSport("ALL");
+                  } else {
+                    setSelectedSport(selectedSport === chip.value ? "ALL" : chip.value);
+                  }
+                }}
               >
                 {renderSportChipIcon(chip.value, isSelected)}
                 <Text

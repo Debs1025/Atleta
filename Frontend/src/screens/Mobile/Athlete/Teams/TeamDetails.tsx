@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/TeamDetails";
 import { TeamSchema } from "./Teams";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../../../services/firebaseClient";
 
 interface TeamDetailsProps {
   team: TeamSchema;
@@ -28,12 +30,20 @@ export function TeamDetailsScreen({
       if (!propTeam?.team_id) return;
       try {
         setLoading(true);
-        const res: any = await requestAuthenticatedJson(`/teams/${propTeam.team_id}`).catch(() => null);
+        let res: any = await requestAuthenticatedJson(`/teams/${propTeam.team_id}`).catch(() => null);
+        if (!res) {
+          try {
+            const snap = await getDoc(doc(db, "Teams", propTeam.team_id));
+            if (snap && snap.exists()) {
+              res = snap.data();
+            }
+          } catch (_) {}
+        }
 
         if (isMounted && res) {
           const rawCoach = res.coach || res.head_coach || {};
           const rosterList = Array.isArray(res.roster) ? res.roster : Array.isArray(res.roster_list) ? res.roster_list : propTeam.roster_athletes;
-          const rawCoachName = rawCoach.full_name || rawCoach.name || propTeam.head_coach?.full_name || "";
+          const rawCoachName = res.coach_name || rawCoach.full_name || rawCoach.name || propTeam.head_coach?.full_name || "";
           const resolvedCoachName = (rawCoachName && rawCoachName.trim().toLowerCase() !== "coach") ? rawCoachName : "HEAD COACH";
           const mappedCoach = {
             coach_id: rawCoach.coach_id || propTeam.head_coach?.coach_id || "",
