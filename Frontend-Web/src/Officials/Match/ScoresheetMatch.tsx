@@ -10,12 +10,14 @@ import {
   Loader2,
   Eye,
   X,
+  Download,
 } from 'lucide-react';
 import {
   getMatchAuditDetail,
   certifyMatchValidation,
   deleteOfficialMatch,
   uploadScoresheetFile,
+  downloadCertifiedMatchPdf,
   getCachedData,
   setCachedData,
   markMatchAsCertified,
@@ -79,6 +81,7 @@ export const ScoresheetMatch: React.FC = () => {
   });
   const [scoresheetUrl, setScoresheetUrl] = useState<string | undefined>(() => cached?.scoresheet_url);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Editable rosters & race results
@@ -342,6 +345,68 @@ export const ScoresheetMatch: React.FC = () => {
       setActionError(err?.message || 'Failed to remove match record.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDownloadScoresheet = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      if (scoresheetUrl) {
+        let ext = 'pdf';
+        const lower = scoresheetUrl.toLowerCase();
+        if (lower.startsWith('data:image/png') || lower.includes('.png')) {
+          ext = 'png';
+        } else if (lower.startsWith('data:image/jpeg') || lower.startsWith('data:image/jpg') || lower.includes('.jpg') || lower.includes('.jpeg')) {
+          ext = 'jpg';
+        } else if (lower.startsWith('data:application/pdf') || lower.includes('.pdf')) {
+          ext = 'pdf';
+        }
+
+        if (scoresheetUrl.startsWith('data:')) {
+          const a = document.createElement('a');
+          a.href = scoresheetUrl;
+          a.download = `scoresheet_match_${cleanId || 'record'}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return;
+        }
+
+        try {
+          const res = await fetch(scoresheetUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `scoresheet_match_${cleanId || 'record'}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+            return;
+          }
+        } catch (fetchErr) {
+          console.warn('Direct fetch failed, falling back to PDF endpoint:', fetchErr);
+        }
+      }
+
+      // Fallback: download certified PDF from API
+      const blob = await downloadCertifiedMatchPdf(cleanId);
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `scoresheet_match_${cleanId || 'record'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error('Failed to download scoresheet:', err);
+      alert('Failed to download scoresheet: ' + (err?.message || 'File not available'));
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -961,6 +1026,23 @@ export const ScoresheetMatch: React.FC = () => {
               </button>
 
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {(matchData.is_certified || isMatchLocallyCertified(cleanId)) && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadScoresheet}
+                    disabled={isDownloading}
+                    className="hover-btn-solid"
+                    style={{ ...styles.downloadBtn, opacity: isDownloading ? 0.7 : 1 }}
+                  >
+                    {isDownloading ? (
+                      <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Download style={{ width: 15, height: 15 }} />
+                    )}
+                    DOWNLOAD SCORESHEET
+                  </button>
+                )}
+
                 {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
                   <button
                     type="button"
