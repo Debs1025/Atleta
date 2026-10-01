@@ -72,7 +72,7 @@ export const getCachedData = <T>(key: string): T | null => {
         return parsed.data as T;
       }
     }
-  } catch {}
+  } catch { }
   return null;
 };
 
@@ -81,7 +81,7 @@ export const setCachedData = (key: string, data: any): void => {
   cache.set(key, entry);
   try {
     sessionStorage.setItem(`atleta_cache_${key}`, JSON.stringify(entry));
-  } catch {}
+  } catch { }
 };
 
 export const invalidateCache = (prefix?: string): void => {
@@ -94,7 +94,7 @@ export const invalidateCache = (prefix?: string): void => {
         if (k && k.startsWith('atleta_cache_')) toRemove.push(k);
       }
       toRemove.forEach((k) => sessionStorage.removeItem(k));
-    } catch {}
+    } catch { }
   } else {
     for (const key of cache.keys()) {
       if (key.startsWith(prefix)) {
@@ -108,7 +108,7 @@ export const invalidateCache = (prefix?: string): void => {
         if (k && k.startsWith(`atleta_cache_${prefix}`)) toRemove.push(k);
       }
       toRemove.forEach((k) => sessionStorage.removeItem(k));
-    } catch {}
+    } catch { }
   }
 };
 
@@ -258,7 +258,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       if (adminRes.ok) {
         data = await handleResponse<AuthResponse>(adminRes);
       }
-    } catch {}
+    } catch { }
   }
 
   // 3. Fallback to general users login endpoint
@@ -272,7 +272,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       if (userRes.ok) {
         data = await handleResponse<AuthResponse>(userRes);
       }
-    } catch {}
+    } catch { }
   }
 
   if (data && data.token && data.user) {
@@ -960,7 +960,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
     if (res.ok) {
       data = await res.json().catch(() => null);
     }
-  } catch {}
+  } catch { }
   const rawList: any[] = Array.isArray(data)
     ? data
     : Array.isArray(data?.notifications)
@@ -1808,7 +1808,7 @@ export const createSport = async (payload: CreateSportPayload): Promise<{ messag
   invalidateCache('admin_sports_catalog');
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
-  } catch {}
+  } catch { }
   return data;
 };
 
@@ -1831,7 +1831,7 @@ export const updateSport = async (
   invalidateCache('admin_sports_catalog');
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
-  } catch {}
+  } catch { }
   return data;
 };
 
@@ -1852,7 +1852,7 @@ export const deleteSport = async (
   invalidateCache('admin_sports_catalog');
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
-  } catch {}
+  } catch { }
   return data;
 };
 

@@ -159,6 +159,97 @@ export const OfficialHomePage: React.FC = () => {
     return officialMatches.slice(0, 3);
   }, [officialMatches]);
 
+  // Compute accurate Recent Activities sorted with the latest at the very 1st
+  const recentActivities = useMemo(() => {
+    interface ActivityEntry {
+      id: string;
+      description: React.ReactNode;
+      timestamp: number;
+      dateFormatted: string;
+    }
+
+    const formatActDate = (ts: number): string => {
+      const now = Date.now();
+      const validTs = (!ts || isNaN(ts) || ts <= 0) ? now : ts;
+      const diffMs = Math.max(0, now - validTs);
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) {
+        return 'Recent';
+      }
+      if (diffDays === 1) {
+        return '1 day ago';
+      }
+      return `${diffDays} days ago`;
+    };
+
+    const list: ActivityEntry[] = [];
+    const seen = new Set<string>();
+
+    // 1. Audit / Certified Match actions
+    officialMatches.forEach((m) => {
+      const cleanId = m.match_id.replace(/^#/, '');
+      const raw = m.raw_match || {};
+      const isAudited = m.status === 'AUDITED' || isMatchLocallyCertified(cleanId) || raw.is_certified;
+
+      const certRaw = raw.certified_at || raw.updated_at || raw.created_at || raw.match_date || m.date_time;
+      const certTs = certRaw ? new Date(certRaw).getTime() : 0;
+
+      if (isAudited) {
+        const id = `cert_${cleanId}`;
+        if (!seen.has(id)) {
+          seen.add(id);
+          list.push({
+            id,
+            description: (
+              <span>Official match <strong>#{cleanId}</strong> ({m.match_class}) certified</span>
+            ),
+            timestamp: certTs ? certTs + 1000 : Date.now(),
+            dateFormatted: formatActDate(certTs || Date.now()),
+          });
+        }
+      }
+
+      // Match creation action
+      const createRaw = raw.created_at || raw.timestamp || raw.requested_at || raw.match_date || m.date_time;
+      const createTs = createRaw ? new Date(createRaw).getTime() : 0;
+      const createId = `create_${cleanId}`;
+      if (!seen.has(createId)) {
+        seen.add(createId);
+        list.push({
+          id: createId,
+          description: (
+            <span>Match <strong>#{cleanId}</strong> created ({m.match_class} • {m.sport})</span>
+          ),
+          timestamp: createTs || Date.now(),
+          dateFormatted: formatActDate(createTs || Date.now()),
+        });
+      }
+    });
+
+    // 2. Audit queue entries from dashboard
+    (dashboard?.audit_queue || []).forEach((act: any, idx: number) => {
+      const rawId = String(act.match_id || act.id || idx).replace(/^#/, '');
+      const qRaw = act.requested_at || act.created_at;
+      const qTs = qRaw ? new Date(qRaw).getTime() : 0;
+      const qId = `queue_${rawId}_${idx}`;
+      if (!seen.has(qId)) {
+        seen.add(qId);
+        list.push({
+          id: qId,
+          description: (
+            <span>Match created for Match ID <strong>#{rawId}</strong></span>
+          ),
+          timestamp: qTs || Date.now(),
+          dateFormatted: formatActDate(qTs || Date.now()),
+        });
+      }
+    });
+
+    // Sort strictly DESCENDING: latest (newest timestamp) at the very 1st
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }, [officialMatches, dashboard]);
+
   const totalMatches = officialMatches.length;
   const pendingCount = String(
     officialMatches.filter((i) => i.status === 'PENDING').length
@@ -283,23 +374,24 @@ export const OfficialHomePage: React.FC = () => {
           <div style={styles.recentActivityCard}>
             <div style={styles.activityHead}>RECENT ACTIVITY</div>
             <div style={styles.activityBody}>
-              {dashboard?.audit_queue && dashboard.audit_queue.length > 0 ? (
+              {recentActivities.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {dashboard.audit_queue.map((act, i) => (
+                  {recentActivities.slice(0, 6).map((act, i) => (
                     <div
-                      key={i}
+                      key={act.id || i}
                       style={{
                         fontSize: '12px',
                         color: '#334155',
                         display: 'flex',
                         justifyContent: 'space-between',
+                        alignItems: 'center',
                         paddingBottom: '8px',
-                        borderBottom: i < dashboard.audit_queue.length - 1 ? '1px solid #F1F5F9' : 'none',
+                        borderBottom: i < Math.min(recentActivities.length, 6) - 1 ? '1px solid #F1F5F9' : 'none',
                       }}
                     >
-                      <span>Audit requested for Match ID <strong>{act.match_id}</strong></span>
-                      <span style={{ color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: '12px' }}>
-                        {act.requested_at ? new Date(act.requested_at).toLocaleDateString() : 'Recent'}
+                      <div>{act.description}</div>
+                      <span style={{ color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: '12px', fontSize: '11px', fontWeight: 600 }}>
+                        {act.dateFormatted}
                       </span>
                     </div>
                   ))}

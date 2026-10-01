@@ -10,14 +10,12 @@ import {
   Loader2,
   Eye,
   X,
-  Download,
 } from 'lucide-react';
 import {
   getMatchAuditDetail,
   certifyMatchValidation,
   deleteOfficialMatch,
   uploadScoresheetFile,
-  downloadCertifiedMatchPdf,
   getCachedData,
   setCachedData,
   markMatchAsCertified,
@@ -35,12 +33,28 @@ export const ScoresheetMatch: React.FC = () => {
 
   const cleanId = matchId ? matchId.replace(/^#/, '') : '';
   const cached = cleanId ? (getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) || (() => {
+    try {
+      const local = localStorage.getItem(`atleta_match_detail_${cleanId}`);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (parsed) return parsed;
+      }
+    } catch {}
+
     const list = (getCachedData<any[]>('all_official_matches_master') || []).concat(getCachedData<any[]>('official_schedules') || []);
     const item = list.find((m: any) => String(m.match_id || m.id || '').replace(/^#/, '') === cleanId);
     if (!item) return null;
     const raw = item.raw_match || {};
-    const hName = (item.home_team_name || raw.home_team_name || 'HOME TEAM').toUpperCase();
-    const aName = (item.opponent_team_name || raw.opponent_team_name || 'AWAY TEAM').toUpperCase();
+    let hName = (item.home_team_name || raw.home_team_name || raw.team_id || raw.home_team || '').toUpperCase();
+    let aName = (item.opponent_team_name || raw.opponent_team_name || raw.away_team_name || raw.away_team || '').toUpperCase();
+    const gName = item.match_name || raw.match_name || item.match_class || '';
+    if ((!hName || hName === 'HOME TEAM') && gName && gName.includes(' vs ')) {
+      const parts = gName.split(' vs ');
+      if (parts[0]) hName = parts[0].replace(/\(.*\)/, '').trim().toUpperCase();
+      if (parts[1]) aName = parts[1].replace(/\(.*\)/, '').trim().toUpperCase();
+    }
+    hName = hName || 'HOME TEAM';
+    aName = aName || 'AWAY TEAM';
     const sType = item.sport || raw.sport_type || 'Basketball';
     return {
       match_id: cleanId,
@@ -77,60 +91,6 @@ export const ScoresheetMatch: React.FC = () => {
   const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | 'NO_SCORESHEET' | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState(false);
-
-  const handleDownloadScoresheet = async () => {
-    if (!scoresheetUrl && !cleanId) {
-      alert('No scoresheet available to download.');
-      return;
-    }
-    setDownloading(true);
-    try {
-      if (scoresheetUrl) {
-        let ext = 'pdf';
-        const lower = scoresheetUrl.toLowerCase();
-        if (lower.startsWith('data:image/png') || lower.includes('.png')) ext = 'png';
-        else if (lower.startsWith('data:image/jpeg') || lower.startsWith('data:image/jpg') || lower.includes('.jpg') || lower.includes('.jpeg')) ext = 'jpg';
-        else if (lower.startsWith('data:application/pdf') || lower.includes('.pdf')) ext = 'pdf';
-
-        const res = await fetch(scoresheetUrl).catch(() => null);
-        const blob = res && res.ok ? await res.blob() : null;
-
-        if (blob) {
-          if (blob.type.includes('png')) ext = 'png';
-          else if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
-          else if (blob.type.includes('pdf')) ext = 'pdf';
-
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `scoresheet_${cleanId || 'match'}.${ext}`;
-          a.click();
-          URL.revokeObjectURL(url);
-          return;
-        }
-
-        const a = document.createElement('a');
-        a.href = scoresheetUrl;
-        a.download = `scoresheet_${cleanId || 'match'}.${ext}`;
-        a.target = '_blank';
-        a.click();
-        return;
-      }
-
-      const blob = await downloadCertifiedMatchPdf(cleanId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `certified_match_${cleanId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e: any) {
-      alert(e.message || 'Download failed.');
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   const loadMatchData = async (silent = Boolean(cached || matchData)) => {
     if (!cleanId) return;
@@ -139,24 +99,7 @@ export const ScoresheetMatch: React.FC = () => {
     try {
       const data = await getMatchAuditDetail(cleanId, false);
       if (data) {
-        setMatchData((prev) => {
-          const prevHome = prev?.home_team?.roster_stats || [];
-          const prevAway = prev?.away_team?.roster_stats || [];
-          const dataHome = data.home_team?.roster_stats || [];
-          const dataAway = data.away_team?.roster_stats || [];
-
-          return {
-            ...data,
-            home_team: {
-              ...data.home_team,
-              roster_stats: dataHome.length > 0 ? dataHome : prevHome,
-            },
-            away_team: {
-              ...data.away_team,
-              roster_stats: dataAway.length > 0 ? dataAway : prevAway,
-            },
-          };
-        });
+        setMatchData(data);
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
@@ -184,6 +127,7 @@ export const ScoresheetMatch: React.FC = () => {
   }, [cleanId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (matchData?.is_certified) return;
     const file = e.target.files?.[0];
     if (!file || !cleanId) return;
 
@@ -414,8 +358,11 @@ export const ScoresheetMatch: React.FC = () => {
       : [];
   const coachDisplay = assignedList.length > 0 ? assignedList.join(', ') : null;
 
-  const homeScore = matchData?.home_team.score || homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
-  const awayScore = matchData?.away_team.score || awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
+  const homeTeamDisplayName = matchData?.home_team?.name || (matchData as any)?.team_id || (matchData as any)?.home_team_name || 'HOME TEAM';
+  const awayTeamDisplayName = matchData?.away_team?.name || (matchData as any)?.opponent_team_name || (matchData as any)?.away_team_name || 'AWAY TEAM';
+
+  const homeScore = matchData?.home_team?.score || homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
+  const awayScore = matchData?.away_team?.score || awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
 
   // Render Table for Team Basketball Stats
   const renderTeamStatsTable = (
@@ -430,11 +377,24 @@ export const ScoresheetMatch: React.FC = () => {
         {teamType === 'home' && !matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
           <button
             type="button"
-            onClick={() => setIsEditing(!isEditing)}
+            onClick={() => {
+              if (isEditing && matchData && cleanId) {
+                const updated: MatchAuditDetail = {
+                  ...matchData,
+                  home_team: { ...matchData.home_team, roster_stats: homeRoster },
+                  away_team: { ...matchData.away_team, roster_stats: awayRoster },
+                };
+                setCachedData(`match_audit_detail_${cleanId}`, updated);
+                try {
+                  localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updated));
+                } catch {}
+              }
+              setIsEditing(!isEditing);
+            }}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'LOCK EDITING' : 'EDIT RESULTS'}
+            {isEditing ? 'SAVE CHANGES' : 'EDIT RESULTS'}
           </button>
         )}
       </div>
@@ -598,11 +558,23 @@ export const ScoresheetMatch: React.FC = () => {
         {!matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
           <button
             type="button"
-            onClick={() => setIsEditing(!isEditing)}
+            onClick={() => {
+              if (isEditing && matchData && cleanId) {
+                const updated: MatchAuditDetail = {
+                  ...matchData,
+                  race_results: raceResults,
+                };
+                setCachedData(`match_audit_detail_${cleanId}`, updated);
+                try {
+                  localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updated));
+                } catch {}
+              }
+              setIsEditing(!isEditing);
+            }}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'LOCK EDITING' : 'EDIT RESULTS'}
+            {isEditing ? 'SAVE CHANGES' : 'EDIT RESULTS'}
           </button>
         )}
       </div>
@@ -735,8 +707,8 @@ export const ScoresheetMatch: React.FC = () => {
                 <span style={styles.leagueCategory}>{matchData.league_class}</span>
                 <h1 style={styles.matchupTitle}>
                   {isIndividualSport
-                    ? matchData.game_name || `${matchData.home_team.name} • ${matchData.sport_type}`
-                    : `${matchData.home_team.name} VS. ${matchData.away_team.name}`}
+                    ? matchData.game_name || `${homeTeamDisplayName} • ${matchData.sport_type}`
+                    : `${homeTeamDisplayName} VS. ${awayTeamDisplayName}`}
                 </h1>
                 <div style={styles.matchDateTime}>
                   <Calendar style={{ width: 15, height: 15, color: '#64748B' }} />
@@ -758,7 +730,7 @@ export const ScoresheetMatch: React.FC = () => {
               {!isIndividualSport ? (
                 <div style={styles.scoreboardTile}>
                   <div style={styles.scoreTeamBlock}>
-                    <span style={styles.scoreTeamLabel}>{matchData.home_team.name}</span>
+                    <span style={styles.scoreTeamLabel}>{homeTeamDisplayName}</span>
                     <span style={styles.scoreValue}>{homeScore}</span>
                     {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
                       <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
@@ -772,7 +744,7 @@ export const ScoresheetMatch: React.FC = () => {
                   </div>
                   <span style={styles.scoreDivider}>-</span>
                   <div style={styles.scoreTeamBlock}>
-                    <span style={styles.scoreTeamLabel}>{matchData.away_team.name}</span>
+                    <span style={styles.scoreTeamLabel}>{awayTeamDisplayName}</span>
                     <span style={styles.scoreValue}>{awayScore}</span>
                     {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
                       <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
@@ -803,8 +775,8 @@ export const ScoresheetMatch: React.FC = () => {
               renderIndividualRaceTable()
             ) : (
               <>
-                {renderTeamStatsTable(matchData.home_team.name, homeRoster, 'home', homeScore)}
-                {renderTeamStatsTable(matchData.away_team.name, awayRoster, 'away', awayScore)}
+                {renderTeamStatsTable(homeTeamDisplayName, homeRoster, 'home', homeScore)}
+                {renderTeamStatsTable(awayTeamDisplayName, awayRoster, 'away', awayScore)}
               </>
             )}
 
@@ -819,48 +791,148 @@ export const ScoresheetMatch: React.FC = () => {
                   style={{ display: 'none' }}
                   onChange={handleFileUpload}
                 />
-                <div style={styles.dropzone} className="hover-dropzone" onClick={() => fileInputRef.current?.click()}>
-                  {isUploading ? (
-                    <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
-                  ) : (
-                    <Upload style={{ width: 28, height: 28, color: '#0B132B' }} />
-                  )}
-                  <span style={styles.dropzoneText}>
-                    {isUploading
-                      ? 'PROCESSING SCORESHEET OCR...'
-                      : scoresheetUrl
-                        ? '[ UPLOAD REPLACEMENT SCORESHEET ]'
-                        : '[ UPLOAD SCORESHEET ]'}
-                  </span>
-                  <span style={styles.dropzoneSubtext}>
-                    MAXIMUM FILE SIZE: 25MB | FORMAT: PDF/CSV/PNG/JPG
-                  </span>
-                </div>
-
-                {uploadError && (
-                  <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>
-                    {uploadError}
+                {matchData.is_certified ? (
+                  <div
+                    className="hover-dropzone"
+                    style={{
+                      ...styles.dropzone,
+                      cursor: scoresheetUrl ? 'pointer' : 'default',
+                      backgroundColor: '#F8FAFC',
+                      borderColor: '#0B132B',
+                      borderStyle: 'solid',
+                      borderWidth: '1.5px',
+                      padding: '10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: '160px',
+                      height: '100%',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onClick={() => {
+                      if (scoresheetUrl) setActiveModal('PREVIEW');
+                    }}
+                    title={scoresheetUrl ? 'Click to enlarge full scoresheet' : undefined}
+                  >
+                    {scoresheetUrl ? (
+                      scoresheetUrl.endsWith('.pdf') ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '16px' }}>
+                          <FileText style={{ width: 44, height: 44, color: '#0B132B' }} />
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#0B132B', letterSpacing: '0.04em' }}>
+                            CERTIFIED OFFICIAL SCORESHEET (PDF)
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Eye style={{ width: 13, height: 13 }} /> CLICK TO VIEW FULL DOCUMENT
+                          </span>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '100%',
+                            height: '100%',
+                            position: 'relative',
+                          }}
+                        >
+                          <img
+                            src={scoresheetUrl}
+                            alt="Certified Official Scoresheet"
+                            style={{
+                              maxWidth: '100%',
+                              maxHeight: '175px',
+                              width: 'auto',
+                              height: 'auto',
+                              objectFit: 'contain',
+                              borderRadius: '3px',
+                              display: 'block',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                              transition: 'transform 0.2s ease',
+                            }}
+                          />
+                          <div
+                            style={{
+                              marginTop: '8px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: '#0B132B',
+                              color: '#FFFFFF',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              letterSpacing: '0.04em',
+                              padding: '4px 10px',
+                              borderRadius: '3px',
+                            }}
+                          >
+                            <Eye style={{ width: 13, height: 13 }} />
+                            <span>CLICK TO ENLARGE PREVIEW</span>
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '20px' }}>
+                        <FileText style={{ width: 32, height: 32, color: '#94A3B8' }} />
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748B' }}>
+                          NO SCORESHEET FILE ATTACHED
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                          MATCH IS FINAL & CERTIFIED
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
-
-                {scoresheetUrl && (
-                  <div style={styles.scoresheetPreview}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <FileText style={{ width: 16, height: 16, color: '#0B132B' }} />
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0B132B' }}>
-                        SCORESHEET ATTACHED
+                ) : (
+                  <>
+                    <div style={styles.dropzone} className="hover-dropzone" onClick={() => fileInputRef.current?.click()}>
+                      {isUploading ? (
+                        <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+                      ) : (
+                        <Upload style={{ width: 28, height: 28, color: '#0B132B' }} />
+                      )}
+                      <span style={styles.dropzoneText}>
+                        {isUploading
+                          ? 'PROCESSING SCORESHEET OCR...'
+                          : scoresheetUrl
+                            ? '[ UPLOAD REPLACEMENT SCORESHEET ]'
+                            : '[ UPLOAD SCORESHEET ]'}
+                      </span>
+                      <span style={styles.dropzoneSubtext}>
+                        MAXIMUM FILE SIZE: 25MB | FORMAT: PDF/CSV/PNG/JPG
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveModal('PREVIEW')}
-                      className="hover-btn-ghost"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
-                    >
-                      <Eye style={{ width: 14, height: 14 }} />
-                      <span>PREVIEW</span>
-                    </button>
-                  </div>
+
+                    {uploadError && (
+                      <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>
+                        {uploadError}
+                      </div>
+                    )}
+
+                    {scoresheetUrl && (
+                      <div style={styles.scoresheetPreview}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <FileText style={{ width: 16, height: 16, color: '#0B132B' }} />
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#0B132B' }}>
+                            SCORESHEET ATTACHED
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveModal('PREVIEW')}
+                          className="hover-btn-ghost"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
+                        >
+                          <Eye style={{ width: 14, height: 14 }} />
+                          <span>PREVIEW</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -889,24 +961,6 @@ export const ScoresheetMatch: React.FC = () => {
               </button>
 
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                {(matchData.is_certified || isMatchLocallyCertified(cleanId)) && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadScoresheet}
-                    disabled={downloading}
-                    className="hover-btn-solid"
-                    style={styles.downloadBtn}
-                    title="Download Scoresheet (PDF, PNG, JPG)"
-                  >
-                    {downloading ? (
-                      <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <Download style={{ width: 15, height: 15 }} />
-                    )}
-                    <span>DOWNLOAD SCORESHEET</span>
-                  </button>
-                )}
-
                 {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
                   <button
                     type="button"
@@ -1015,41 +1069,20 @@ export const ScoresheetMatch: React.FC = () => {
 
       {activeModal === 'PREVIEW' && scoresheetUrl && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalCard, maxWidth: '720px', maxHeight: '85vh', overflowY: 'auto', padding: '16px 20px', gap: '10px' }}>
+          <div style={{ ...styles.modalCard, maxWidth: '720px', maxHeight: '80vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ ...styles.modalTitle, fontSize: '16px' }}>SCORESHEET PREVIEW</h3>
-              <button type="button" onClick={() => setActiveModal(null)} className="hover-close-x" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center' }}>
-                <X style={{ width: 18, height: 18 }} />
+              <h3 style={styles.modalTitle}>SCORESHEET PREVIEW</h3>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-close-x" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
+                <X style={{ width: 20, height: 20 }} />
               </button>
             </div>
             {scoresheetUrl.endsWith('.pdf') ? (
-              <iframe src={scoresheetUrl} title="Scoresheet Preview" style={{ width: '100%', height: '480px', border: '1px solid #CBD5E1', display: 'block' }} />
+              <iframe src={scoresheetUrl} title="Scoresheet Preview" style={{ width: '100%', height: '500px', border: '1px solid #CBD5E1' }} />
             ) : (
-              <img src={scoresheetUrl} alt="Scoresheet" style={{ width: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain', border: '1px solid #CBD5E1', borderRadius: '3px', display: 'block' }} />
+              <img src={scoresheetUrl} alt="Scoresheet" style={{ width: '100%', height: 'auto', border: '1px solid #CBD5E1', borderRadius: '4px' }} />
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', paddingTop: '4px' }}>
-              <button
-                type="button"
-                onClick={handleDownloadScoresheet}
-                disabled={downloading}
-                className="hover-btn-solid"
-                style={{ ...styles.downloadBtn, padding: '7px 16px', fontSize: '11px', borderRadius: '3px' }}
-              >
-                {downloading ? (
-                  <Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} />
-                ) : (
-                  <Download style={{ width: 13, height: 13 }} />
-                )}
-                <span>DOWNLOAD SCORESHEET</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="hover-btn-outline"
-                style={{ ...styles.modalCancelBtn, padding: '7px 18px', fontSize: '11px', borderRadius: '3px' }}
-              >
-                CLOSE
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CLOSE</button>
             </div>
           </div>
         </div>
