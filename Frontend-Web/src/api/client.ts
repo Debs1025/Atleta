@@ -1913,14 +1913,30 @@ export const deleteSport = async (
 
 export const changeOfficialPassword = async (newPassword: string): Promise<{ message: string }> => {
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/users/password-reset`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ new_password: newPassword }),
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const body = JSON.stringify({
+    password: newPassword,
+    new_password: newPassword,
+    newPassword: newPassword,
   });
+
+  let res = await fetch(`${BASE_URL}/users/change-password`, {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  if (!res.ok) {
+    res = await fetch(`${BASE_URL}/users/password-reset`, {
+      method: 'PATCH',
+      headers,
+      body,
+    });
+  }
+
   return handleResponse<{ message: string }>(res);
 };
 
