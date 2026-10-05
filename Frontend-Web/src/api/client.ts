@@ -15,10 +15,11 @@ import type {
   CreateSportPayload,
 } from './types';
 
-const DEFAULT_DEPLOYED_API = 'https://atleta-backend.vercel.app/api/v1';
+const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const envApi = (import.meta.env.VITE_ATLETA_API || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '') as string;
-const rawBase = (envApi && envApi.trim() ? envApi.trim() : DEFAULT_DEPLOYED_API).replace(/\/+$/, '');
-const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`;
+const defaultApi = (import.meta.env.DEV || isLocalHost) ? 'http://localhost:5000/api/v1' : 'https://atleta-backend.vercel.app/api/v1';
+const rawBase = (envApi && envApi.trim() && !isLocalHost ? envApi.trim() : (isLocalHost ? (envApi.includes('localhost') || envApi.includes('127.0.0.1') ? envApi.trim() : 'http://localhost:5000/api/v1') : defaultApi)).replace(/\/+$/, '');
+export const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : rawBase ? `${rawBase}/api/v1` : '/api/v1';
 
 const TOKEN_KEY = 'atleta_official_token';
 const USER_KEY = 'atleta_official_user';
@@ -55,9 +56,10 @@ export const storeAllReadNotificationIds = (ids: string[]): void => {
   } catch { }
 };
 
-// In-Memory and Session Client Cache for instant screen-to-screen navigation
+// In-Memory and Session Client Cache for instant screen-to-screen navigation (short TTL to ensure fresh Firestore data)
 const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes cache
+const CACHE_TTL_MS = 2000; // 2 seconds cache to avoid duplicate simultaneous calls while ensuring fresh live data
+
 
 export const getCachedData = <T>(key: string): T | null => {
   const item = cache.get(key);
@@ -73,7 +75,7 @@ export const getCachedData = <T>(key: string): T | null => {
         return parsed.data as T;
       }
     }
-  } catch {}
+  } catch { }
   return null;
 };
 
@@ -82,7 +84,7 @@ export const setCachedData = (key: string, data: any): void => {
   cache.set(key, entry);
   try {
     sessionStorage.setItem(`atleta_cache_${key}`, JSON.stringify(entry));
-  } catch {}
+  } catch { }
 };
 
 export const invalidateCache = (prefix?: string): void => {
@@ -95,7 +97,7 @@ export const invalidateCache = (prefix?: string): void => {
         if (k && k.startsWith('atleta_cache_')) toRemove.push(k);
       }
       toRemove.forEach((k) => sessionStorage.removeItem(k));
-    } catch {}
+    } catch { }
   } else {
     for (const key of cache.keys()) {
       if (key.startsWith(prefix)) {
@@ -109,7 +111,7 @@ export const invalidateCache = (prefix?: string): void => {
         if (k && k.startsWith(`atleta_cache_${prefix}`)) toRemove.push(k);
       }
       toRemove.forEach((k) => sessionStorage.removeItem(k));
-    } catch {}
+    } catch { }
   }
 };
 
@@ -175,7 +177,7 @@ export const clearAuthSession = (): void => {
   invalidateCache();
 };
 
-async function handleResponse<T>(res: Response): Promise<T> {
+export async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 429) {
@@ -259,7 +261,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       if (adminRes.ok) {
         data = await handleResponse<AuthResponse>(adminRes);
       }
-    } catch {}
+    } catch { }
   }
 
   // 3. Fallback to general users login endpoint
@@ -273,7 +275,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       if (userRes.ok) {
         data = await handleResponse<AuthResponse>(userRes);
       }
-    } catch {}
+    } catch { }
   }
 
   if (data && data.token && data.user) {
@@ -374,24 +376,35 @@ export const registerOfficial = async (payload: OfficialRegisterPayload): Promis
   const firstName = nameParts[0] || 'Official';
   const lastName = nameParts.slice(1).join(' ') || 'User';
 
-  const res = await fetch(`${BASE_URL}/users/official`, {
+  const bodyData = {
+    full_legal_name: fullName,
+    organization_name: orgName,
+    email: payload.email.trim(),
+    password: payload.password,
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+    license_number: payload.license_number || 'LIC-2026-001',
+    sport_accreditation: payload.sport_accreditation || ['Basketball'],
+    organization: orgName,
+    phone_number: payload.phone_number?.trim() || 'N/A',
+    assigned_sport: payload.assigned_sport?.trim() || 'Basketball',
+  };
+
+  let res = await fetch(`${BASE_URL}/users/official`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      full_legal_name: fullName,
-      organization_name: orgName,
-      email: payload.email.trim(),
-      password: payload.password,
-      first_name: firstName,
-      last_name: lastName,
-      full_name: fullName,
-      license_number: payload.license_number || 'LIC-2026-001',
-      sport_accreditation: payload.sport_accreditation || ['Basketball'],
-      organization: orgName,
-      phone_number: payload.phone_number?.trim() || 'N/A',
-      assigned_sport: payload.assigned_sport?.trim() || 'Basketball',
-    }),
+    body: JSON.stringify(bodyData),
   });
+
+  if (!res.ok && res.status === 404) {
+    res = await fetch(`${BASE_URL}/officials/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyData),
+    });
+  }
+
   const data = await handleResponse<AuthResponse>(res);
   return data;
 };
@@ -424,7 +437,22 @@ export const getMe = async (forceRefresh = false): Promise<AuthUser> => {
     }
     const data = await handleResponse<any>(res);
     const user = data.user || data;
+    const resolvedAvatar = user.avatar_url || (user as any).profile_image || data.avatar_url || data.profile_image || null;
+    if (resolvedAvatar) {
+      user.avatar_url = resolvedAvatar;
+      user.profile_image = resolvedAvatar;
+    }
     setCachedData('user_me', user);
+    try {
+      if (localStorage.getItem('atleta_official_user')) {
+        localStorage.setItem('atleta_official_user', JSON.stringify(user));
+      } else if (sessionStorage.getItem('atleta_official_user')) {
+        sessionStorage.setItem('atleta_official_user', JSON.stringify(user));
+      }
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('atleta_user_updated', { detail: user }));
+    }
     return user;
   } catch (err) {
     const stored = getStoredUser();
@@ -672,44 +700,76 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
   return finalList;
 };
 
+const DEFAULT_OFFICIAL_SETTINGS: OfficialSettings = {
+  split_screen_defaults: true,
+  discrepancy_presets: false,
+  match_reminders: true,
+  audit_notifications: true,
+  auto_refresh: false,
+};
+
 export const getOfficialSettings = async (forceRefresh = false): Promise<OfficialSettings> => {
-  const cached = getCachedData<OfficialSettings>('official_settings') || getStoredOfficialSettings();
-  if (cached && !forceRefresh) return cached;
+  const stored = getStoredOfficialSettings() || {};
+  const cached = getCachedData<OfficialSettings>('official_settings') || stored;
+  if (cached && Object.keys(cached).length > 0 && !forceRefresh) {
+    return { ...DEFAULT_OFFICIAL_SETTINGS, ...cached };
+  }
 
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/officials/settings`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await handleResponse<OfficialSettings>(res);
-  setCachedData('official_settings', data);
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+    const res = await fetch(`${BASE_URL}/officials/settings`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await handleResponse<OfficialSettings>(res);
+      const merged: OfficialSettings = { ...DEFAULT_OFFICIAL_SETTINGS, ...stored, ...(data || {}) };
+      setCachedData('official_settings', merged);
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+      } catch { }
+      return merged;
+    }
   } catch { }
-  return data;
+
+  return { ...DEFAULT_OFFICIAL_SETTINGS, ...stored };
 };
 
 export const updateOfficialSettings = async (
   payload: Partial<OfficialSettings>
 ): Promise<OfficialSettings> => {
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/officials/settings`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-  const rawData = await handleResponse<any>(res);
-  const data: OfficialSettings = (rawData && rawData.settings) ? rawData.settings : rawData;
-  setCachedData('official_settings', data);
+  const current = getStoredOfficialSettings() || getCachedData<OfficialSettings>('official_settings') || {};
+  const updated: OfficialSettings = { ...DEFAULT_OFFICIAL_SETTINGS, ...current, ...payload };
+  setCachedData('official_settings', updated);
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   } catch { }
-  return data;
+
+  try {
+    const res = await fetch(`${BASE_URL}/officials/settings`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const rawData = await handleResponse<any>(res);
+      const serverData = (rawData && rawData.settings) ? rawData.settings : rawData;
+      const finalSettings: OfficialSettings = { ...updated, ...(serverData || {}) };
+      setCachedData('official_settings', finalSettings);
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(finalSettings));
+      } catch { }
+      return finalSettings;
+    }
+  } catch { }
+
+  return updated;
 };
 
 const CREATED_MATCHES_PREFIX = 'atleta_created_matches_';
@@ -929,7 +989,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
     if (res.ok) {
       data = await res.json().catch(() => null);
     }
-  } catch {}
+  } catch { }
   const rawList: any[] = Array.isArray(data)
     ? data
     : Array.isArray(data?.notifications)
@@ -1109,6 +1169,32 @@ export const updateOfficialProfileData = async (payload: any): Promise<any> => {
     profile_image: payload.avatar_url || payload.profile_image,
     ...payload,
   };
+
+  if (bodyData.avatar_url) {
+    try {
+      await fetch(`${BASE_URL}/users/avatar`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ avatar_url: bodyData.avatar_url }),
+      });
+    } catch { }
+  }
+
+  const storedUser = getStoredUser();
+  if (storedUser) {
+    const mergedUser = { ...storedUser, ...bodyData };
+    try {
+      if (localStorage.getItem('atleta_official_user')) {
+        localStorage.setItem('atleta_official_user', JSON.stringify(mergedUser));
+      } else {
+        sessionStorage.setItem('atleta_official_user', JSON.stringify(mergedUser));
+      }
+      setCachedData('user_me', mergedUser);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('atleta_user_updated', { detail: mergedUser }));
+      }
+    } catch { }
+  }
 
   try {
     const res = await fetch(`${BASE_URL}/officials/profile`, {
@@ -1686,6 +1772,7 @@ export const downloadCertifiedMatchPdf = async (matchId: string): Promise<Blob> 
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    signal: AbortSignal.timeout(3500),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Failed to download certified match PDF' }));
@@ -1706,316 +1793,6 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
   const data = await handleResponse<any>(res);
   invalidateCache();
   return data;
-};
-
-const DEFAULT_CLIENT_OCR_KEY = atob('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=');
-
-const getClientGeminiKey = (): string => {
-  return (
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
-    (import.meta as any).env?.VITE_GEMINI_KEY ||
-    (import.meta as any).env?.GEMINI_API_KEY ||
-    localStorage.getItem('gemini_api_key') ||
-    DEFAULT_CLIENT_OCR_KEY ||
-    ''
-  ).trim().replace(/^["']|["']$/g, '');
-};
-
-export const readFileAsDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve(typeof reader.result === 'string' ? reader.result : '');
-    };
-    reader.onerror = () => resolve('');
-    reader.readAsDataURL(file);
-  });
-};
-
-export const compressImageForOcr = (
-  file: File,
-  maxDimension = 1600,
-  quality = 0.85
-): Promise<{ base64Data: string; mimeType: string; dataUrl: string }> => {
-  return new Promise((resolve) => {
-    if (!file.type || !file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-        resolve({
-          base64Data: dataUrl.split(',')[1] || '',
-          mimeType: file.type || 'image/jpeg',
-          dataUrl,
-        });
-      };
-      reader.onerror = () => resolve({ base64Data: '', mimeType: '', dataUrl: '' });
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-          resolve({
-            base64Data: compressedDataUrl.split(',')[1] || '',
-            mimeType: 'image/jpeg',
-            dataUrl: compressedDataUrl,
-          });
-          return;
-        }
-        const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
-        resolve({
-          base64Data: rawUrl.split(',')[1] || '',
-          mimeType: file.type || 'image/jpeg',
-          dataUrl: rawUrl,
-        });
-      };
-      img.onerror = () => {
-        const rawUrl = typeof e.target?.result === 'string' ? e.target.result : '';
-        resolve({
-          base64Data: rawUrl.split(',')[1] || '',
-          mimeType: file.type || 'image/jpeg',
-          dataUrl: rawUrl,
-        });
-      };
-      img.src = typeof e.target?.result === 'string' ? e.target.result : '';
-    };
-    reader.onerror = () => resolve({ base64Data: '', mimeType: '', dataUrl: '' });
-    reader.readAsDataURL(file);
-  });
-};
-
-export const scanScoresheetClientDirect = async (
-  rawFile: File,
-  _homeTeam = 'Home Team',
-  _awayTeam = 'Away Team',
-  sport = 'Basketball'
-): Promise<any> => {
-  const { base64Data, mimeType, dataUrl } = await compressImageForOcr(rawFile);
-  const geminiKey = getClientGeminiKey();
-
-  let ocrResult: any = null;
-
-  // 1. Try dedicated Web OCR endpoint first (uses pre-optimized blob and server waterfall)
-  try {
-    const blob = dataUrl ? await fetch(dataUrl).then((r) => r.blob()).catch(() => rawFile) : rawFile;
-    const cleanName = rawFile.name.replace(/\.[^/.]+$/, '') + '.jpg';
-    const optimizedFile = new File([blob], cleanName, { type: mimeType || 'image/jpeg' });
-
-    const formData = new FormData();
-    formData.append('file', optimizedFile);
-    formData.append('scoresheet', optimizedFile);
-    const token = getStoredToken();
-    let backendRes = await fetch(`${BASE_URL}/matches/web/scan-scoresheet`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-    if (!backendRes.ok) {
-      backendRes = await fetch(`${BASE_URL}/matches/scan-scoresheet`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-    }
-    if (backendRes.ok) {
-      const data = await backendRes.json();
-      if (data && (Array.isArray(data.player_summary) || Array.isArray(data.team_scores))) {
-        return {
-          scoresheet_url: data.scoresheet_url || dataUrl,
-          ...data,
-        };
-      }
-    }
-  } catch (backendErr) {
-    console.warn('Backend web scan-scoresheet unreachable, trying direct client AI call:', backendErr);
-  }
-
-  // 2. Try direct client-side Gemini Vision OCR call with waterfall
-  if (base64Data && geminiKey) {
-    const modelsToTry = [
-      {
-        name: 'gemini-3.5-flash-lite',
-        config: { temperature: 0.1, maxOutputTokens: 8192 },
-      },
-      {
-        name: 'gemini-3.5-flash',
-        config: {
-          temperature: 0.1,
-          maxOutputTokens: 8192,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      },
-    ];
-
-    const promptText = `You are an expert sports scoresheet OCR and data extraction system.
-Carefully examine the provided document image/PDF/CSV.
-Extract the match overview, exact team names from the header/team blocks, final scores, and ALL individual athlete statistics into this strict JSON structure:
-{
-  "match_info": {
-    "sport_type": "${sport}",
-    "event_name": "League / Event Name",
-    "home_team_name": "Home Team Name",
-    "opponent_team_name": "Opponent Team Name",
-    "game_result": "WIN",
-    "final_score": "0 - 0"
-  },
-  "team_scores": [
-    {"team": "HomeTeamName", "score": 0, "is_home": true},
-    {"team": "AwayTeamName", "score": 0, "is_home": false}
-  ],
-  "player_summary": [
-    {
-      "player_name": "Full Name",
-      "jersey_number": 0,
-      "team_name": "TeamName",
-      "position": "G",
-      "points": 0,
-      "rebounds": 0,
-      "assists": 0,
-      "steals": 0,
-      "blocks": 0,
-      "turnovers": 0,
-      "fouls": 0,
-      "fg_made": 0,
-      "fg_attempted": 0,
-      "ft_made": 0,
-      "ft_attempted": 0
-    }
-  ]
-}
-
-CRITICAL RULES:
-1. You MUST transcribe EVERY player row from BOTH teams shown on the scoresheet into the "player_summary" array.
-2. For each player, include their exact jersey number, actual name, team name, and exact points and stats recorded on the sheet.
-3. Return ONLY valid JSON, nothing else.`;
-
-    for (const mObj of modelsToTry) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mObj.name}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-        const res = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: promptText },
-                { inline_data: { mime_type: mimeType, data: base64Data } }
-              ]
-            }],
-            generationConfig: mObj.config,
-          })
-        });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const json = await res.json();
-          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (text) {
-            let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-            const firstBrace = clean.indexOf('{');
-            const lastBrace = clean.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-              clean = clean.substring(firstBrace, lastBrace + 1);
-            }
-            try {
-              const parsed = JSON.parse(clean);
-              if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
-                ocrResult = parsed;
-                break;
-              }
-            } catch (pErr) {
-              console.warn('Initial JSON parse attempt failed, trying clean repair:', pErr);
-              clean = clean.replace(/,\s*([\}\]])/g, '$1');
-              try {
-                const parsed = JSON.parse(clean);
-                if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
-                  ocrResult = parsed;
-                  break;
-                }
-              } catch (_) {}
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(`Direct client-side Gemini model ${mObj.name} failed/timed out, trying next:`, err);
-      }
-    }
-  }
-
-  return {
-    scoresheet_url: dataUrl,
-    ...(ocrResult || {
-      match_info: {},
-      team_scores: [],
-      player_summary: [],
-      parsed_tables: {
-        team_scores: [],
-        player_summary: [],
-      },
-    }),
-  };
-};
-
-export const uploadScoresheetFile = async (matchId: string, rawFile: File): Promise<any> => {
-  const cleanId = matchId.replace(/^#/, '');
-  const token = getStoredToken();
-  const formData = new FormData();
-  formData.append('file', rawFile);
-  formData.append('scoresheet', rawFile);
-
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-
-  let responseData: any = null;
-
-  try {
-    const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    if (res.ok) {
-      responseData = await res.json();
-    }
-  } catch (err) {
-    console.warn('Match scoresheet upload failed:', err);
-  }
-
-  if (!responseData) {
-    responseData = await scanScoresheetClientDirect(rawFile);
-  }
-
-  return responseData;
-};
-
-export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
-  return await scanScoresheetClientDirect(rawFile);
 };
 
 export const fetchBrowseTeams = async (sport?: string): Promise<any[]> => {
@@ -2086,7 +1863,7 @@ export const createSport = async (payload: CreateSportPayload): Promise<{ messag
   invalidateCache('admin_sports_catalog');
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
-  } catch {}
+  } catch { }
   return data;
 };
 
@@ -2109,7 +1886,7 @@ export const updateSport = async (
   invalidateCache('admin_sports_catalog');
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
-  } catch {}
+  } catch { }
   return data;
 };
 
@@ -2130,42 +1907,8 @@ export const deleteSport = async (
   invalidateCache('admin_sports_catalog');
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
-  } catch {}
+  } catch { }
   return data;
-};
-
-export const scanScoresheetOCR = async (file: File): Promise<any> => {
-  const token = getStoredToken();
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('scoresheet', file);
-  formData.append('document', file);
-
-  const res = await fetch(`${BASE_URL}/matches/ocr/scan`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: formData,
-  });
-
-  return handleResponse<any>(res);
-};
-
-export const submitVerifiedMatch = async (payload: any): Promise<any> => {
-  const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/matches/submit`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-
-  return handleResponse<any>(res);
 };
 
 export const changeOfficialPassword = async (newPassword: string): Promise<{ message: string }> => {
@@ -2181,6 +1924,5 @@ export const changeOfficialPassword = async (newPassword: string): Promise<{ mes
   return handleResponse<{ message: string }>(res);
 };
 
-
-
-
+// Re-export OCR and Scoresheet Scanning API functions
+export * from './ocr';

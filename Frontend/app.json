@@ -5,11 +5,46 @@
     "owner": "gerardpelonio303511",
     "scheme": "com.anonymous.atleta",
     "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#070D19"
+    },
     "android": {
-      "package": "com.anonymous.atleta"
+      "package": "com.anonymous.atleta",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0D14"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to allow scoresheet and document uploads."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c2ca7287-61b9-4328-b58c-4db6ce73f513"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.anonymous.atleta"
+    }
   }
 }

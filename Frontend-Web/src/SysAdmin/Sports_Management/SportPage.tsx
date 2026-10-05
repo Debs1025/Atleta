@@ -196,7 +196,7 @@ const SPORT_TEMPLATES: Record<string, SportTemplate> = {
 // ─── 3 INITIAL CORE SPORTS ───────────────────────────────────────────────────
 export const INITIAL_DEFAULT_SPORTS: SportConfiguration[] = [
   {
-    sport_id: 'sport_basketball_default',
+    sport_id: 'sport_basketball',
     sport_name: 'BASKETBALL',
     short_identifier: 'BBALL',
     configurable_stats: [
@@ -219,7 +219,7 @@ export const INITIAL_DEFAULT_SPORTS: SportConfiguration[] = [
     updated_at: '2026-01-01T00:00:00.000Z',
   },
   {
-    sport_id: 'sport_swimming_default',
+    sport_id: 'sport_swimming',
     sport_name: 'SWIMMING',
     short_identifier: 'SWIM',
     configurable_stats: [
@@ -236,7 +236,7 @@ export const INITIAL_DEFAULT_SPORTS: SportConfiguration[] = [
     updated_at: '2026-01-01T00:00:00.000Z',
   },
   {
-    sport_id: 'sport_track_field_default',
+    sport_id: 'sport_track_field',
     sport_name: 'TRACK & FIELD',
     short_identifier: 'TF',
     configurable_stats: [
@@ -347,7 +347,19 @@ export const SportPage: React.FC = () => {
       if (sports.length === 0) setLoading(true);
       const res = await getSports(false, forceRefresh);
       const serverSports = Array.isArray(res?.sports) ? res.sports : [];
-      const catalog = serverSports.length > 0 ? serverSports : INITIAL_DEFAULT_SPORTS;
+      const sourceList = serverSports.length > 0 ? serverSports : INITIAL_DEFAULT_SPORTS;
+
+      const seen = new Set<string>();
+      const catalog: SportConfiguration[] = [];
+      for (const s of sourceList) {
+        const key = String(s.sport_name || '').trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        catalog.push({
+          ...s,
+          sport_id: (s.sport_id || '').replace(/_default$/, ''),
+        });
+      }
 
       setSports(catalog);
       setCachedData('admin_sports_catalog', catalog);

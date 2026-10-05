@@ -2,11 +2,12 @@ import { StyleSheet } from "react-native";
 
 const styles = StyleSheet.create({
   link: {
-    color: "#16203f",
-    fontSize: 16,
-    fontWeight: "600",
+    color: "#00C8FF",
+    fontSize: 14,
+    fontWeight: "700",
     marginVertical: 18,
-    textAlign: "center"
+    textAlign: "center",
+    letterSpacing: 0.3
   }
 });
 

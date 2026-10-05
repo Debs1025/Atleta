@@ -285,4 +285,22 @@ export const styles: Record<string, React.CSSProperties> = {
   switchThumbActive: {
     transform: 'translateX(18px)',
   },
+  itemValueBadge: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#0B132B',
+    backgroundColor: '#F1F5F9',
+    padding: '4px 10px',
+    borderRadius: '4px',
+    letterSpacing: '0.04em',
+    border: '1px solid #E2E8F0',
+    textAlign: 'right' as const,
+  },
+  itemValueText: {
+    fontSize: '12px',
+    fontWeight: 800,
+    color: '#0B132B',
+    letterSpacing: '0.04em',
+    textAlign: 'right' as const,
+  },
 };

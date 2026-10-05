@@ -167,7 +167,7 @@ export const AdminHomePage: React.FC = () => {
         <main style={styles.main}>
           {/* Header */}
           <div style={styles.titleRow}>
-            <h1 style={styles.title}>COACH AUDIT QUEUE</h1>
+            <h1 style={styles.title}>COACH ACCOUNT VERIFICATION</h1>
             <div style={styles.badgeRow}>
               <span style={styles.pendingBadge}>{pendingCount} PENDING</span>
               <span style={styles.statusText}>SYSTEM STATUS: OPERATIVE</span>
@@ -188,33 +188,12 @@ export const AdminHomePage: React.FC = () => {
                 <p style={styles.criticalText}>
                   A critical security vulnerability from ATLETA-01 database has been detected. Field empty credentials and OCR failure of credentials. Immediate action required.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFilter('NON_AUDITED');
-                    setPage(1);
-                  }}
-                  style={{
-                    marginTop: '12px',
-                    padding: '8px 16px',
-                    backgroundColor: '#0B132B',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '2px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    letterSpacing: '0.06em',
-                    cursor: 'pointer',
-                  }}
-                >
-                  VIEW AUDIT LOGS
-                </button>
               </div>
             </div>
 
             <div style={styles.healthCard}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={styles.healthLabel}>INTEGRITY AUDIT SCORE</div>
+                <div style={styles.healthLabel}>INTEGRITY VERIFICATION PERCENTAGE</div>
                 <span style={styles.liveIndicatorDot} title="All Systems Operational" />
               </div>
               <div>
@@ -244,8 +223,8 @@ export const AdminHomePage: React.FC = () => {
               {(
                 [
                   { key: 'ALL', label: `ALL (${queue.length})` },
-                  { key: 'NON_AUDITED', label: `NON-AUDITED (${nonAuditedCount})` },
-                  { key: 'AUDITED', label: `AUDITED (${auditedCount})` },
+                  { key: 'NON_AUDITED', label: `PENDING (${nonAuditedCount})` },
+                  { key: 'AUDITED', label: `VERIFIED (${auditedCount})` },
                 ] as const
               ).map((f) => (
                 <button
@@ -283,21 +262,21 @@ export const AdminHomePage: React.FC = () => {
               <thead>
                 <tr>
                   {[
-                    { label: 'COACH ID', width: '12%' },
-                    { label: 'FULL NAME', width: '22%' },
-                    { label: 'INSTITUTION', width: '22%' },
-                    { label: 'SPORT', width: '14%' },
+                    { label: 'COACH ID', width: '11%' },
+                    { label: 'FULL NAME', width: '21%' },
+                    { label: 'INSTITUTION', width: '21%' },
+                    { label: 'SPORT', width: '13%' },
                     { label: 'DATE UPLOADED', width: '14%' },
-                    { label: 'STATUS', width: '8%' },
-                    { label: 'ACTION', width: '8%', align: 'center' },
-                  ].map((col) => (
+                    { label: 'STATUS', width: '10%', align: 'center' },
+                    { label: 'ACTION', width: '10%', align: 'center' },
+                  ].map((col, idx, arr) => (
                     <th
                       key={col.label}
                       style={{
                         ...styles.th,
                         width: col.width,
                         textAlign: (col.align as any) || 'left',
-                        ...(col.align === 'center' ? { borderRight: 'none' } : {}),
+                        ...(idx === arr.length - 1 ? { borderRight: 'none' } : {}),
                       }}
                     >
                       {col.label}
@@ -328,10 +307,10 @@ export const AdminHomePage: React.FC = () => {
                       }}
                     >
                       {filter === 'NON_AUDITED'
-                        ? 'No non-audited coach applications in queue.'
+                        ? 'No pending coach verification applications in queue.'
                         : filter === 'AUDITED'
-                        ? 'No audited coaches found.'
-                        : 'No coach audit applications in queue.'}
+                        ? 'No verified coaches found.'
+                        : 'No coach verification applications in queue.'}
                     </td>
                   </tr>
                 ) : (
@@ -369,7 +348,7 @@ export const AdminHomePage: React.FC = () => {
                         <td style={styles.td}>
                           <span style={styles.dateText}>{formatDate(item.date_uploaded || item.created_at)}</span>
                         </td>
-                        <td style={styles.td}>
+                        <td style={{ ...styles.td, textAlign: 'center', padding: '10px 6px' }}>
                           <span
                             style={
                               isCoachVerified(item)
@@ -382,7 +361,7 @@ export const AdminHomePage: React.FC = () => {
                             {isCoachVerified(item) ? 'VERIFIED' : isCoachRejected(item) ? 'REJECTED' : 'PENDING'}
                           </span>
                         </td>
-                        <td style={{ ...styles.td, textAlign: 'center', borderRight: 'none', padding: '10px 8px' }}>
+                        <td style={{ ...styles.td, textAlign: 'center', borderRight: 'none', padding: '10px 6px' }}>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -391,7 +370,7 @@ export const AdminHomePage: React.FC = () => {
                             }}
                             style={styles.auditBtn}
                           >
-                            {isAudited(item) ? 'VIEW' : 'AUDIT'}
+                            {isAudited(item) ? 'VIEW' : 'VERIFY'}
                           </button>
                         </td>
                       </tr>

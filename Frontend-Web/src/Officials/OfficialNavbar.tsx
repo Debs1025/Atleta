@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FileSpreadsheet, Sliders, LogOut } from 'lucide-react';
 import { clearAuthSession, getStoredUser } from '../api/client';
 
+import { AtletaAnimatedLogo } from '../components/AtletaAnimatedLogo';
+
 export const OfficialNavbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -19,8 +21,9 @@ export const OfficialNavbar: React.FC = () => {
   return (
     <header className="w-full bg-[#060B18] border-b border-[#1E293B] px-6 md:px-12 py-3.5 flex items-center justify-between sticky top-0 z-50 shadow-md">
       <div className="flex items-center space-x-8">
-        <Link to="/ocr" className="text-xl font-black tracking-[0.2em] text-white no-underline flex items-center">
-          ATLETA<sup className="text-[9px] font-bold text-slate-400 ml-1">WEB</sup>
+        <Link to="/ocr" className="text-xl font-black tracking-[0.2em] text-white no-underline flex items-center gap-2.5">
+          <AtletaAnimatedLogo size={32} showGlow={true} pulse={true} />
+          <span>ATLETA<sup className="text-[9px] font-bold text-slate-400 ml-1">WEB</sup></span>
         </Link>
 
         <nav className="hidden sm:flex items-center space-x-2">

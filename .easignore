@@ -1,0 +1,9 @@
+# EAS Ignore
+Backend
+Frontend-Web
+dist
+web-build
+node_modules
+.env*
+coverage
+*.log

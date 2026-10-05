@@ -12,6 +12,7 @@ import { CoachProfileScreen } from "./CoachProfile";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
 import { getAthleteProfileOfflineFirst } from "../../../../services/firebaseClient";
+import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
 
 const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [];
 
@@ -507,7 +508,9 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       {/* Top Header Bar */}
       {!hideParentBars && (
         <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
-          <Text style={styles.brandLogoText}>ATLETA</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <AtletaAnimatedLogo size={30} showGlow={false} pulse={false} />
+          </View>
           <Pressable
             style={styles.notificationButton}
             onPress={() => setShowNotifications(true)}
@@ -517,7 +520,13 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               style={styles.notificationIcon}
               resizeMode="contain"
             />
-            {unreadCount > 0 && <View style={styles.notificationBadge} />}
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            )}
           </Pressable>
         </View>
       )}

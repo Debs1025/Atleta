@@ -95,12 +95,67 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         {/* Location & Sport Subline */}
         <View style={styles.sublineRow}>
           <Text style={styles.sublineText}>
-            #{currentAthlete.jersey_number || '2'} • {currentAthlete.province || 'Camarines Sur'}, Bicol
+            #{currentAthlete.jersey_number || '2'} • {currentAthlete.team_name ? `Team: ${currentAthlete.team_name}` : `${currentAthlete.province || 'Camarines Sur'}, Bicol`}
           </Text>
           <View style={styles.sportTagBadge}>
             <Text style={styles.sportTagBadgeText}>{(currentAthlete.sport_category || 'BASKETBALL').toUpperCase()}</Text>
           </View>
         </View>
+
+        {/* Current Team Affiliation Banner */}
+        {currentAthlete.team_name ? (
+          <View style={{
+            backgroundColor: '#0F172A',
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: 'rgba(0, 200, 255, 0.35)',
+            padding: 12,
+            marginBottom: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0, 200, 255, 0.12)', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="shield-checkmark" size={20} color="#00C8FF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>CURRENT TEAM</Text>
+                <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800', marginTop: 1 }} numberOfLines={1}>{currentAthlete.team_name}</Text>
+                {currentAthlete.coach_name ? (
+                  <Text style={{ color: '#64748B', fontSize: 11, marginTop: 1 }}>Coach {currentAthlete.coach_name}</Text>
+                ) : null}
+              </View>
+            </View>
+            {currentAthlete.is_scouted && (
+              <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '800' }}>SCOUTED</Text>
+              </View>
+            )}
+          </View>
+        ) : currentAthlete.is_scouted ? (
+          <View style={{
+            backgroundColor: '#0F172A',
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: 'rgba(0, 200, 255, 0.35)',
+            padding: 12,
+            marginBottom: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+            <View style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(0, 200, 255, 0.12)', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>SCOUTING STATUS</Text>
+              <Text style={{ color: '#38BDF8', fontSize: 14, fontWeight: '800', marginTop: 1 }}>
+                {currentAthlete.scout_status === 'ACCEPTED' ? 'OFFER ACCEPTED' : 'SCOUTED (PROPOSAL SENT)'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* Biometrics Card */}
         <View style={styles.biometricsCard}>

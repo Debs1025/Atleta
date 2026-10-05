@@ -24,6 +24,7 @@ export interface DiscoveryMainProps {
   onNotificationPress?: () => void;
   unreadNotificationCount?: number;
   onToggleBottomNav?: (hide: boolean) => void;
+  avatarUrl?: string | null;
 }
 
 const DEFAULT_SPORT_CHIPS: { label: string; value: SportCategoryFilter }[] = [
@@ -38,6 +39,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
   onNotificationPress,
   unreadNotificationCount = 0,
   onToggleBottomNav,
+  avatarUrl,
 }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 18;
@@ -101,6 +103,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
     <View style={styles.container}>
       {subView === 'none' && (
         <AtletaHeader
+          avatarUrl={avatarUrl}
           onSettingsPress={onSettingsPress}
           onProfilePress={onProfilePress}
           onNotificationPress={onNotificationPress}

@@ -303,38 +303,51 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       }
     });
 
-    const hasStoredStats = a.stats && Object.keys(a.stats).length > 0;
-    const hasStoredAverages = a.averages && Object.keys(a.averages).length > 0;
+    const storedGp = Number(a.averages?.games_played ?? a.stats?.games_played ?? 0);
+    const storedPpg = Number(a.averages?.ppg ?? a.stats?.ppg ?? (a.pts ? Number(a.pts) : 0));
+    const storedRpg = Number(a.averages?.rpg ?? a.stats?.rpg ?? (a.reb ? Number(a.reb) : 0));
+    const storedApg = Number(a.averages?.apg ?? a.stats?.apg ?? (a.ast ? Number(a.ast) : 0));
+    const storedPer = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? 0);
 
-    let gp = 0;
-    let ppg = 0;
-    let rpg = 0;
-    let apg = 0;
+    let gp = storedGp;
+    let ppg = storedPpg;
+    let rpg = storedRpg;
+    let apg = storedApg;
+    let per = storedPer;
 
-    if (matchCount > 0) {
-      gp = matchCount;
-      ppg = Math.round((matchPts / matchCount) * 10) / 10;
-      rpg = Math.round((matchReb / matchCount) * 10) / 10;
-      apg = Math.round((matchAst / matchCount) * 10) / 10;
-    } else if (hasStoredAverages || hasStoredStats) {
-      gp = Number(a.averages?.games_played ?? a.stats?.games_played ?? 0);
-      ppg = Number(a.averages?.ppg ?? a.stats?.ppg ?? 0);
-      rpg = Number(a.averages?.rpg ?? a.stats?.rpg ?? 0);
-      apg = Number(a.averages?.apg ?? a.stats?.apg ?? 0);
+    const isBasketball = (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() === "BASKETBALL";
+
+    if (matchCount > 0 && matchPts > 0) {
+      if (storedGp > 0) {
+        gp = storedGp + matchCount;
+        ppg = Math.round(((storedPpg * storedGp + matchPts) / gp) * 10) / 10;
+        rpg = Math.round(((storedRpg * storedGp + matchReb) / gp) * 10) / 10;
+        apg = Math.round(((storedApg * storedGp + matchAst) / gp) * 10) / 10;
+      } else {
+        gp = matchCount;
+        ppg = Math.round((matchPts / matchCount) * 10) / 10;
+        rpg = Math.round((matchReb / matchCount) * 10) / 10;
+        apg = Math.round((matchAst / matchCount) * 10) / 10;
+      }
+    } else if (storedGp > 0 || storedPpg > 0) {
+      gp = storedGp;
+      ppg = storedPpg;
+      rpg = storedRpg;
+      apg = storedApg;
     }
 
-    const wins = Number(a.averages?.wins ?? a.stats?.wins ?? (gp > 0 ? Math.round(gp * 0.7) : 0));
-    const per = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.2 + rpg * 1.0 + apg * 1.5) : 0));
+    const wins = Number(a.averages?.wins ?? a.stats?.wins ?? (gp > 0 ? Math.round(gp * 0.75) : 0));
+    if (!per && ppg > 0) {
+      per = Math.round((ppg * 1.2 + rpg * 1.0 + apg * 1.5) * 10) / 10;
+    }
 
     // Calculate dynamic rating score derived from PER / PPG / verified metrics
-    let rating = Number(a.rating_score || 0);
+    let rating = Number(a.rating_score || a.rating || 0);
     if (!rating) {
       if (per > 0) {
         rating = Math.min(99, Math.max(60, Math.round(per * 2.8)));
       } else if (ppg > 0) {
         rating = Math.min(99, Math.max(60, Math.round(ppg * 3.5)));
-      } else if (matchCount > 0 || gp > 0) {
-        rating = 70;
       } else {
         rating = 0;
       }
@@ -463,20 +476,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const [
           profileRes,
           teamsRes,
+          allTeamsRes,
           syncRes,
           matchesRes,
           coachAthletesRes,
           notifsRes,
           offlineMatches,
+          offlineAthletes,
           sportsRes
-        ]: [any, any, any, any, any, any, any, any] = await Promise.all([
+        ]: [any, any, any, any, any, any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson("/coaches/profile").catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
+          requestAuthenticatedJson("/teams?all=true").catch(() => null),
           requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
           requestAuthenticatedJson("/matches").catch(() => null),
           requestAuthenticatedJson("/coaches/athletes").catch(() => null),
           requestAuthenticatedJson("/notifications").catch(() => null),
           getMatchesOfflineFirst().catch(() => []),
+          getAthletesOfflineFirst().catch(() => []),
           getSportsOfflineFirst().catch(() => []),
         ]);
 
@@ -546,16 +563,22 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             setMatchHistoryList([]);
           }
 
-          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)
+          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes) && coachAthletesRes.athletes.length > 0
             ? coachAthletesRes.athletes
-            : Array.isArray(syncRes?.handled_athletes)
+            : Array.isArray(syncRes?.handled_athletes) && syncRes.handled_athletes.length > 0
             ? syncRes.handled_athletes
+            : Array.isArray(offlineAthletes)
+            ? offlineAthletes
             : [];
 
-          const rawTeamsList: any[] = Array.isArray(teamsRes)
+          const rawTeamsList: any[] = Array.isArray(teamsRes) && teamsRes.length > 0
             ? teamsRes
-            : Array.isArray(teamsRes?.teams)
+            : Array.isArray(teamsRes?.teams) && teamsRes.teams.length > 0
             ? teamsRes.teams
+            : Array.isArray(allTeamsRes) && allTeamsRes.length > 0
+            ? allTeamsRes
+            : Array.isArray(allTeamsRes?.teams) && allTeamsRes.teams.length > 0
+            ? allTeamsRes.teams
             : [];
 
           const normalizeId = (id?: string) => (id || '').replace(/^ath_/, '').trim();
@@ -573,6 +596,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               if (k) {
                 const prev = richCoachAthletesMap.get(k) || {};
                 richCoachAthletesMap.set(k, { ...prev, ...ca });
+              }
+            });
+          }
+          if (Array.isArray(offlineAthletes)) {
+            offlineAthletes.forEach((oa: any) => {
+              const k = normalizeId(oa.athlete_id || oa.user_id);
+              if (k) {
+                const prev = richCoachAthletesMap.get(k) || {};
+                richCoachAthletesMap.set(k, { ...prev, ...oa });
               }
             });
           }
@@ -616,6 +648,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 birthdate: athObj.birthdate || rich.birthdate,
                 province: athObj.province || rich.province,
                 location: athObj.location || rich.location,
+                rating_score: Number(athObj.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                biometrics: athObj.biometrics || rich.biometrics || undefined,
+                radar_competencies: athObj.radar_competencies || rich.radar_competencies || undefined,
                 physical_profile: athObj.physical_profile || rich.physical_profile || athObj.physical_attributes || rich.physical_attributes,
                 physical_attributes: athObj.physical_attributes || rich.physical_attributes || athObj.physical_profile || rich.physical_profile,
                 averages: athObj.averages || rich.averages || athObj.stats || rich.stats,
@@ -623,6 +658,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 scoring_trends_last_10: athObj.scoring_trends_last_10 || rich.scoring_trends_last_10,
                 eligibility_documents: athObj.eligibility_documents || rich.eligibility_documents,
                 documents: athObj.documents || rich.documents,
+                workload_analytics: athObj.workload_analytics || rich.workload_analytics || undefined,
               });
             });
 
@@ -652,6 +688,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   birthdate: ha.birthdate || rich.birthdate,
                   province: ha.province || rich.province,
                   location: ha.location || rich.location,
+                  rating_score: Number(ha.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                  biometrics: ha.biometrics || rich.biometrics || undefined,
+                  radar_competencies: ha.radar_competencies || rich.radar_competencies || undefined,
                   physical_profile: ha.physical_profile || rich.physical_profile || ha.physical_attributes || rich.physical_attributes,
                   physical_attributes: ha.physical_attributes || rich.physical_attributes || ha.physical_profile || rich.physical_profile,
                   averages: ha.averages || rich.averages || ha.stats || rich.stats,
@@ -659,6 +698,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   scoring_trends_last_10: ha.scoring_trends_last_10 || rich.scoring_trends_last_10,
                   eligibility_documents: ha.eligibility_documents || rich.eligibility_documents,
                   documents: ha.documents || rich.documents,
+                  workload_analytics: ha.workload_analytics || rich.workload_analytics || undefined,
                 });
               }
             });
@@ -701,17 +741,32 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const haKey = normalizeId(ha.athlete_id || ha.user_id);
               return !coachTeamAthletes.some((ca) => normalizeId(ca.athlete_id || ca.user_id) === haKey);
             })
-            .map((ha: any) => ({
-              ...ha,
-              athlete_id: ha.athlete_id || ha.user_id || `ath_${Date.now()}`,
-              user_id: ha.user_id || ha.athlete_id || '',
-              full_name: ha.full_name || `${ha.first_name || ''} ${ha.last_name || ''}`.trim() || 'Athlete',
-              sport_type: (ha.sport_type?.toUpperCase() || 'BASKETBALL') as Team["sport_type"],
-              position: ha.position || 'Unassigned',
-              jersey_number: ha.jersey_number !== null && ha.jersey_number !== undefined ? String(ha.jersey_number) : '0',
-              is_eligibility_verified: !!ha.is_eligibility_verified,
-              avatar_url: ha.avatar_url || undefined,
-            }));
+            .map((ha: any) => {
+              const k = normalizeId(ha.athlete_id || ha.user_id);
+              const rich = (k ? richCoachAthletesMap.get(k) : null) || {};
+              return {
+                ...ha,
+                athlete_id: ha.athlete_id || rich.athlete_id || ha.user_id || (k ? `ath_${k}` : `ath_${Date.now()}`),
+                user_id: ha.user_id || rich.user_id || ha.athlete_id || k || '',
+                full_name: ha.full_name || rich.full_name || `${ha.first_name || rich.first_name || ''} ${ha.last_name || rich.last_name || ''}`.trim() || 'Athlete',
+                sport_type: (ha.sport_type || rich.sport_type || 'BASKETBALL').toUpperCase() as Team["sport_type"],
+                position: ha.position || rich.position || 'Unassigned',
+                jersey_number: ha.jersey_number !== null && ha.jersey_number !== undefined ? String(ha.jersey_number) : (rich.jersey_number !== null && rich.jersey_number !== undefined ? String(rich.jersey_number) : '0'),
+                is_eligibility_verified: Boolean(ha.is_eligibility_verified ?? rich.is_eligibility_verified),
+                avatar_url: ha.avatar_url || rich.avatar_url || undefined,
+                rating_score: Number(ha.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                biometrics: ha.biometrics || rich.biometrics || undefined,
+                radar_competencies: ha.radar_competencies || rich.radar_competencies || undefined,
+                physical_profile: ha.physical_profile || rich.physical_profile || ha.physical_attributes || rich.physical_attributes,
+                physical_attributes: ha.physical_attributes || rich.physical_attributes || ha.physical_profile || rich.physical_profile,
+                averages: ha.averages || rich.averages || ha.stats || rich.stats,
+                stats: ha.stats || rich.stats || ha.averages || rich.averages,
+                scoring_trends_last_10: ha.scoring_trends_last_10 || rich.scoring_trends_last_10,
+                eligibility_documents: ha.eligibility_documents || rich.eligibility_documents,
+                documents: ha.documents || rich.documents,
+                workload_analytics: ha.workload_analytics || rich.workload_analytics || undefined,
+              };
+            });
 
           const seenMap = new Map<string, any>();
           for (const a of [...coachTeamAthletes, ...unassignedCoachAthletes]) {
@@ -746,8 +801,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               contact_number: profileRes.contact_number || "",
               role: "Coach",
               coach_id: profileRes.coach_id || profileRes.user_id || "",
-              current_institution: profileRes.current_institution || "University Athletics",
+              current_institution: profileRes.current_institution || "",
               athlete_managed: profileRes.athlete_managed || [],
+              avatar_url: profileRes.avatar_url || (profileRes as any).profile_image || "",
             };
             updatedCoachSnapshot = updatedCoach;
             setCoach(updatedCoach);
@@ -762,10 +818,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               email: updatedCoach.email,
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
-              avatar_url: profileRes.avatar_url,
-              regional_affiliations: profileRes.regional_affiliations || {
-                association_name: "National Sports League",
-                office_name: profileRes.current_institution || "Sports Office",
+              avatar_url: profileRes.avatar_url || (profileRes as any).profile_image || "",
+              current_institution: profileRes.current_institution || "",
+              regional_affiliation: profileRes.regional_affiliation || "",
+              national_sports_league: profileRes.national_sports_league || "",
+              regional_affiliations: {
+                association_name: profileRes.regional_affiliation || profileRes.national_sports_league || "",
+                office_name: profileRes.current_institution || "",
               },
               credentials: profileRes.credentials || profileRes.certifications || [],
               uploaded_documents: profileRes.uploaded_documents || [],
@@ -1066,7 +1125,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   const handleRespondInquiry = useCallback(async (inquiryId: string, status: "Accepted" | "Declined") => {
     try {
       await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status }).catch(() => null);
-      setNotificationsList((prev) => prev.filter((n) => (n.inquiry_id || n.scout_id || n.id || n.notification_id) !== inquiryId));
+      setNotificationsList((prev) =>
+        prev.map((n) =>
+          (n.inquiry_id || n.scout_id || n.id || n.notification_id) === inquiryId
+            ? { ...n, is_read: true, status: status.toUpperCase(), offer_status: status.toUpperCase() }
+            : n
+        )
+      );
+      setUnreadNotifCount((prev) => Math.max(0, prev - 1));
       Alert.alert(
         `Inquiry ${status}`,
         `You have successfully ${status.toLowerCase()} this recruitment proposal.`
@@ -1109,10 +1175,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             jersey_number: Number(p.jersey_number) || 0,
           })),
         });
-        if (res?.team_id) {
-          const newTeamId = String(res.team_id);
+        const createdTeam = res?.team || res;
+        const newTeamId = createdTeam?.team_id ? String(createdTeam.team_id) : res?.team_id ? String(res.team_id) : undefined;
+        if (newTeamId) {
           created.team_id = newTeamId;
-          setTeams((prev) => prev.map((t) => (t.team_id === tempId ? { ...t, team_id: newTeamId } : t)));
+          setTeams((prev) => prev.map((t) => (t.team_id === tempId ? { ...t, ...createdTeam, team_id: newTeamId } : t)));
           setSelectedTeamId(newTeamId);
         }
       } catch (err) {
@@ -1395,6 +1462,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               first_name: updated.first_name,
               last_name: updated.last_name,
               email: updated.email,
+              avatar_url: updated.avatar_url,
             }));
           }}
           onBack={() => {
@@ -1753,14 +1821,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* COACH HOME DASHBOARD */}
       {activeView === "dashboard" && (
         <>
-          {/* FIXED HEADER BAR */}
-          <AtletaHeader
-            onSettingsPress={() => setActiveView("settings")}
-            onProfilePress={() => setShowProfileModal(true)}
-            onNotificationPress={() => setShowNotificationsModal(true)}
-            unreadNotificationCount={unreadNotifCount}
-          />
-
           {/* SCROLLABLE DASHBOARD BODY */}
           <ScrollView
             contentContainerStyle={[
@@ -1809,8 +1869,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               </ScrollView>
             </View>
 
-
-
             {/* PLAYERS Section */}
             <View style={styles.playersSection}>
               <View style={styles.sectionHeader}>
@@ -1855,6 +1913,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               </View>
             </View>
           </ScrollView>
+
+          {/* FIXED HEADER BAR */}
+          <AtletaHeader
+            avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+            onSettingsPress={() => setActiveView("settings")}
+            onProfilePress={() => setShowProfileModal(true)}
+            onNotificationPress={() => setShowNotificationsModal(true)}
+            unreadNotificationCount={unreadNotifCount}
+          />
         </>
       )}
 
@@ -1864,6 +1931,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           teams={teams}
           athletesPool={athletesPool}
           coachName={`${coach.first_name || ''} ${coach.last_name || ''}`.trim() || undefined}
+          avatarUrl={coachProfile.avatar_url || coach.avatar_url}
           onSelectTeam={(team) => {
             setSelectedTeamId(team.team_id);
             setActiveView("manage_team");
@@ -1916,6 +1984,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* DISCOVERY MODULE */}
       {activeView === "discovery" && (
         <DiscoveryMain
+          avatarUrl={coachProfile.avatar_url || coach.avatar_url}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
           onNotificationPress={() => setShowNotificationsModal(true)}
@@ -1928,6 +1997,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "performance" && (
         <PerformancePage
           athletes={perfAthletes}
+          avatarUrl={coachProfile.avatar_url || coach.avatar_url}
           onSelectAthlete={(ath) => {
             setSelectedPerfAthlete(ath);
             setPreviousPortfolioView("performance");
@@ -2273,7 +2343,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     const isUnread = !notif.is_read && notif.status !== "READ";
                     const notifId = notif.notification_id || notif.id || `notif_${idx}`;
                     const inquiryId = notif.inquiry_id || notif.scout_id || notif.data?.inquiry_id || (notif.type === "RECRUITMENT_INQUIRY" ? notif.id : null);
-                    const isRecruitment = Boolean(inquiryId || notif.type === "RECRUITMENT_INQUIRY" || notif.title?.toLowerCase().includes("inquiry"));
+
+                    const titleLower = (notif.title || notif.headline || "").toLowerCase();
+                    const bodyLower = (notif.message_body || notif.message || notif.body || notif.notes || "").toLowerCase();
+
+                    const isAccepted = titleLower.includes("accepted") || bodyLower.includes("accepted") || notif.status === "ACCEPTED" || notif.offer_status === "ACCEPTED" || notif.inquiry_status === "ACCEPTED";
+                    const isDeclined = titleLower.includes("declined") || bodyLower.includes("declined") || notif.status === "DECLINED" || notif.offer_status === "DECLINED" || notif.inquiry_status === "DECLINED";
+                    const isSentByCoach = notif.is_sender === true || notif.sender_role === "Coach" || titleLower.includes("sent") || bodyLower.includes("you sent") || notif.initiated_by === coach?.coach_id || notif.initiated_by === coach?.user_id;
+
+                    const isActionableRecruitment = Boolean(inquiryId || (notif.type === "RECRUITMENT_INQUIRY" && !notif.id?.startsWith("notif_"))) && !isAccepted && !isDeclined && !isSentByCoach && notif.actionable !== false;
 
                     return (
                       <TouchableOpacity
@@ -2312,11 +2390,29 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                         <Text style={{ color: "#94A3B8", fontSize: 13, lineHeight: 18, marginBottom: 8 }}>
                           {notif.message_body || notif.message || notif.body || notif.notes || "No message content."}
                         </Text>
-                        <Text style={{ color: "#64748B", fontSize: 11 }}>
-                          {notif.relative_time || notif.created_at || "Recent"}
-                        </Text>
+                        
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
+                          <Text style={{ color: "#64748B", fontSize: 11 }}>
+                            {notif.relative_time || notif.created_at || "Recent"}
+                          </Text>
+                          {isAccepted && (
+                            <View style={{ backgroundColor: "rgba(52, 211, 153, 0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#34D399" }}>
+                              <Text style={{ color: "#34D399", fontSize: 10, fontWeight: "800" }}>ACCEPTED ✓</Text>
+                            </View>
+                          )}
+                          {isDeclined && (
+                            <View style={{ backgroundColor: "rgba(248, 113, 113, 0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#F87171" }}>
+                              <Text style={{ color: "#F87171", fontSize: 10, fontWeight: "800" }}>DECLINED</Text>
+                            </View>
+                          )}
+                          {isSentByCoach && !isAccepted && !isDeclined && (
+                            <View style={{ backgroundColor: "rgba(56, 189, 248, 0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#38BDF8" }}>
+                              <Text style={{ color: "#38BDF8", fontSize: 10, fontWeight: "800" }}>INQUIRY SENT</Text>
+                            </View>
+                          )}
+                        </View>
 
-                        {isRecruitment && (
+                        {isActionableRecruitment && (
                           <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
                             <TouchableOpacity
                               style={{

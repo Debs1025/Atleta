@@ -23,9 +23,7 @@ export const NotificationPage: React.FC = () => {
   const {
     notifications,
     loading,
-    markAllRead,
     markSingleRead,
-    clearHistory,
   } = useNotifications();
 
   useEffect(() => {
@@ -51,12 +49,18 @@ export const NotificationPage: React.FC = () => {
     }
   };
 
-  const filteredNotifications = notifications.filter((n) => {
-    const isAudit = n.type === 'AUDIT_REQUEST' || n.title.toLowerCase().includes('audit') || n.title.toLowerCase().includes('stats');
-    if (activeTab === 'AUDIT') return isAudit;
-    if (activeTab === 'SCHEDULE') return !isAudit;
-    return true;
-  });
+  const filteredNotifications = [...notifications]
+    .sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
+    })
+    .filter((n) => {
+      const isAudit = n.type === 'AUDIT_REQUEST' || n.title.toLowerCase().includes('audit') || n.title.toLowerCase().includes('stats');
+      if (activeTab === 'AUDIT') return isAudit;
+      if (activeTab === 'SCHEDULE') return !isAudit;
+      return true;
+    });
 
   return (
     <div style={styles.shell}>
@@ -129,25 +133,6 @@ export const NotificationPage: React.FC = () => {
                 SCHEDULE UPDATES
               </button>
             </div>
-
-            <div style={styles.actionBtnGroup}>
-              <button
-                type="button"
-                onClick={clearHistory}
-                className="hover-btn-outline"
-                style={styles.outlineBtn}
-              >
-                CLEAR HISTORY
-              </button>
-              <button
-                type="button"
-                onClick={markAllRead}
-                className="hover-btn-solid"
-                style={styles.solidBtn}
-              >
-                MARK ALL AS READ
-              </button>
-            </div>
           </div>
 
           {/* Chronological Feed */}
@@ -216,7 +201,7 @@ export const NotificationPage: React.FC = () => {
                         type="button"
                         onClick={() => {
                           if (!notif.is_read) markSingleRead(notif.notification_id);
-                          navigate('/dashboard-official');
+                          navigate('/dashboard');
                         }}
                         className="hover-btn-outline"
                         style={isRead ? styles.auditActionBtnRead : styles.auditActionBtn}

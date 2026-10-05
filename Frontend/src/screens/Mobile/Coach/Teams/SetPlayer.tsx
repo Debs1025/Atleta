@@ -44,6 +44,60 @@ export function SetPlayer({
 
   const SWIMMING_STROKES = ["Freestyle", "Butterfly", "Backstroke", "Breaststroke", "Individual Medley"];
 
+  const getSportDefaultPosition = (sport?: string): string => {
+    const norm = (sport || "").toUpperCase().trim();
+    if (norm.includes("BASKET") || !norm) return "Point Guard";
+    if (norm.includes("VOLLEY")) return "Setter";
+    if (norm.includes("SWIM")) return "Freestyle";
+    if (norm.includes("TRACK") || norm.includes("FIELD")) return "100m Sprint";
+    if (norm.includes("PICKLE")) return "Singles Player";
+    if (norm.includes("BADMINTON")) return "Singles";
+    if (norm.includes("FOOTBALL") || norm.includes("SOCCER")) return "Forward";
+    const posList = getPositionsForSport(sport);
+    return posList[0]?.label || "Point Guard";
+  };
+
+  const getResolvedPosition = (pos?: string, sport?: string): string => {
+    const defaultPos = getSportDefaultPosition(sport);
+    if (!pos) return defaultPos;
+    const p = pos.toLowerCase().trim();
+    const s = (sport || "").toLowerCase().trim();
+    if (
+      p === "unassigned" ||
+      p === "player" ||
+      p === "swimmer" ||
+      p === "track athlete" ||
+      p === "unset" ||
+      p === "select position" ||
+      p === s ||
+      p === `${s} player` ||
+      p === "athlete" ||
+      p === "basketball" ||
+      p === "volleyball" ||
+      p === "swimming" ||
+      p === "track and field"
+    ) {
+      return defaultPos;
+    }
+    return pos;
+  };
+
+  // Ensure unassigned/sport-named positions are cleanly defaulted to sport defaults (e.g. Point Guard)
+  React.useEffect(() => {
+    let needsUpdate = false;
+    const updated = teamDetails.selected_roster.map((item) => {
+      const resolved = getResolvedPosition(item.primary_position, teamDetails.sport_type);
+      if (item.primary_position !== resolved) {
+        needsUpdate = true;
+        return { ...item, primary_position: resolved };
+      }
+      return item;
+    });
+    if (needsUpdate) {
+      onChangeState({ selected_roster: updated });
+    }
+  }, [teamDetails.selected_roster, teamDetails.sport_type]);
+
   // Update athlete details
   const handleUpdateAthleteDetails = (
     athleteId: string,
@@ -109,9 +163,8 @@ export function SetPlayer({
         );
         return hasDistance && hasStroke;
       } else {
-        const hasPos = Boolean(
-          athlete.primary_position && athlete.primary_position.trim().length > 0
-        );
+        const pos = getResolvedPosition(athlete.primary_position, teamDetails.sport_type);
+        const hasPos = Boolean(pos && pos.trim().length > 0);
         const hasJersey = Boolean(
           athlete.jersey_number && athlete.jersey_number.trim().length > 0
         );
@@ -186,7 +239,7 @@ export function SetPlayer({
                           ? `${athlete.event_distance || ""} ${athlete.stroke_style ? `• ${athlete.stroke_style}` : ""}`.trim() || "Unset"
                           : teamDetails.sport_type === "TRACK AND FIELD"
                           ? `${athlete.event_distance || ""} ${athlete.jersey_number ? `• #${athlete.jersey_number}` : ""}`.trim() || "Unset"
-                          : `${athlete.jersey_number ? `#${athlete.jersey_number} • ` : ""}${athlete.primary_position || ""}`.trim() || "Unset"}
+                          : `${athlete.jersey_number ? `#${athlete.jersey_number} • ` : ""}${getResolvedPosition(athlete.primary_position, teamDetails.sport_type)}`.trim()}
                       </Text>
                     )}
                   </View>
@@ -298,13 +351,10 @@ export function SetPlayer({
                             activeOpacity={0.8}
                           >
                             <Text
-                              style={[
-                                styles.typePickerText,
-                                !athlete.primary_position && { color: "#64748B" },
-                              ]}
+                              style={styles.typePickerText}
                               numberOfLines={1}
                             >
-                              {athlete.primary_position || "Select Position"}
+                              {getResolvedPosition(athlete.primary_position, teamDetails.sport_type)}
                             </Text>
                             <Ionicons name="chevron-down" size={16} color="#64748B" />
                           </TouchableOpacity>

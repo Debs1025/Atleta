@@ -1,0 +1,11 @@
+# EAS Build Ignore (Ensures clean dynamic Expo Prebuild on cloud workers)
+node_modules
+.expo
+.expo-shared
+android
+ios
+dist
+web-build
+.env*
+coverage
+*.log

@@ -13,6 +13,7 @@ import { ProfilePage } from './Officials/Profile/ProfilePage';
 import { ViewAllMatch } from './Officials/Match/ViewAllMatch';
 import { ScoresheetMatch } from './Officials/Match/ScoresheetMatch';
 import { CreateMatch } from './Officials/Match/createMatch';
+import { OCRLoggingPage } from './Officials/OCR/OCRLoggingPage';
 
 function App() {
   return (
@@ -80,7 +81,7 @@ function App() {
             </OfficialRoute>
           }
         />
-        {/* Route /dashboard automatically resolves based on user's role */}
+        {/* Route automatically goes to the dashboard based on user's role */}
         <Route path="/dashboard" element={<HomeRedirect />} />
 
         {/* Tournament Officials Match & Schedules Management */}
@@ -105,6 +106,14 @@ function App() {
           element={
             <OfficialRoute>
               <CreateMatch />
+            </OfficialRoute>
+          }
+        />
+        <Route
+          path="/ocr"
+          element={
+            <OfficialRoute>
+              <OCRLoggingPage />
             </OfficialRoute>
           }
         />

@@ -622,6 +622,150 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
   return null;
 }
 
+const OFFLINE_COACH_PROFILE_CACHE_KEY = "atleta_offline_coach_profile_cache";
+
+/**
+ * Fetch individual coach profile with Firestore + storage offline fallback.
+ */
+export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promise<any | null> {
+  // 1. Try REST API with snappy timeout
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/coaches/profile`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2000);
+    if (data && (data.full_name || data.user_id || data.coach_id)) {
+      await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
+      return data;
+    }
+  } catch (_) {}
+
+  // 2. Resolve UID from token or argument
+  let uid = coachIdOrUid || "";
+  if (!uid) {
+    try {
+      const token = await getStoredAuthToken();
+      if (token && token.includes(".")) {
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const decoded = safeBase64Decode(base64);
+        const payload = JSON.parse(decoded);
+        uid = payload.uid || payload.user_id || payload.sub || "";
+      }
+    } catch (_) {}
+  }
+
+  if (!uid) {
+    try {
+      const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch (_) {}
+    return null;
+  }
+
+  const rawUid = uid.replace(/^coach_/, "");
+  const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
+
+  // 3. Direct Firestore lookups across Coach_Profiles and Users collections
+  try {
+    const [cDoc1, cDoc2, uDoc, teamsSnap, matchesSnap] = await Promise.all([
+      getDoc(doc(db, "Coach_Profiles", canonicalCoachId)).catch(() => null),
+      getDoc(doc(db, "Coach_Profiles", rawUid)).catch(() => null),
+      getDoc(doc(db, "Users", rawUid)).catch(() => null),
+      getDocs(query(collection(db, "Teams"))).catch(() => null),
+      getDocs(query(collection(db, "Match_Logs"))).catch(() => null),
+    ]);
+
+    const cData: Record<string, any> = (cDoc1 && cDoc1.exists()) ? cDoc1.data() : (cDoc2 && cDoc2.exists()) ? cDoc2.data() : {};
+    const uData: Record<string, any> = (uDoc && uDoc.exists()) ? uDoc.data() : {};
+
+    if (Object.keys(cData).length === 0 && Object.keys(uData).length === 0) {
+      const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
+      if (cached) return JSON.parse(cached);
+      return null;
+    }
+
+    const firstName = uData?.first_name || cData?.first_name || "Coach";
+    const lastName = uData?.last_name || cData?.last_name || "";
+    const fullName = uData?.full_name || cData?.full_name || `${firstName} ${lastName}`.trim();
+    const sportType = cData?.sport_type || uData?.sport_type || "Basketball";
+    const avatarUrl = uData?.avatar_url || cData?.avatar_url || null;
+    const institution = uData?.current_institution || cData?.current_institution || "";
+    const regionalAffiliation = uData?.regional_affiliation || cData?.regional_affiliation || "";
+    const nationalLeague = uData?.national_sports_league || cData?.national_sports_league || "";
+    const uploadedDocs = cData?.uploaded_documents || uData?.uploaded_documents || [];
+    const profDocs = cData?.professional_documents || uData?.professional_documents || [];
+    const creds = cData?.certifications || cData?.credentials || uData?.credentials || [];
+
+    // Calculate total unique roster athletes from Teams collection
+    let totalAthletes = Array.isArray(cData?.athletes_managed) ? cData.athletes_managed.length : Array.isArray(uData?.athletes_managed) ? uData.athletes_managed.length : 0;
+    if (teamsSnap && !teamsSnap.empty) {
+      const athleteSet = new Set<string>();
+      teamsSnap.docs.forEach((t) => {
+        const tData = t.data();
+        const cId = tData.coach_id;
+        if (cId === canonicalCoachId || cId === rawUid || cId === uid) {
+          if (Array.isArray(tData.roster_list)) {
+            tData.roster_list.forEach((r: any) => {
+              const rId = r.athlete_id || r.user_id;
+              if (rId) athleteSet.add(rId);
+            });
+          }
+        }
+      });
+      if (athleteSet.size > 0) totalAthletes = athleteSet.size;
+    }
+
+    // Calculate total matches logged by this coach from Match_Logs collection
+    let totalMatches = Number(cData?.total_matches_logged || cData?.metric_logs || 0);
+    if (matchesSnap && !matchesSnap.empty) {
+      let mCount = 0;
+      matchesSnap.docs.forEach((m) => {
+        const mData = m.data();
+        const cId = mData.coach_id;
+        if (cId === canonicalCoachId || cId === rawUid || cId === uid) {
+          mCount++;
+        }
+      });
+      if (mCount > 0) totalMatches = mCount;
+    }
+
+    const enriched = {
+      coach_id: canonicalCoachId,
+      user_id: rawUid,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName,
+      email: uData?.email || cData?.email || "",
+      contact_number: uData?.contact_number || cData?.contact_number || "",
+      sport_type: sportType,
+      sports_focus: sportType.toUpperCase(),
+      avatar_url: avatarUrl,
+      current_institution: institution,
+      regional_affiliation: regionalAffiliation,
+      national_sports_league: nationalLeague,
+      uploaded_documents: uploadedDocs,
+      professional_documents: profDocs,
+      certifications: creds,
+      credentials: creds,
+      system_statistics: {
+        total_athletes: totalAthletes,
+        metric_logs: totalMatches,
+      },
+    };
+
+    await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(enriched)).catch(() => null);
+    return enriched;
+  } catch (fsErr) {
+    console.warn("Firestore coach profile fetch error:", fsErr);
+    const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
+    if (cached) return JSON.parse(cached);
+  }
+
+  return null;
+}
+
 /**
  * Fetch teams with offline support.
  * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> direct Firestore -> AsyncStorage.

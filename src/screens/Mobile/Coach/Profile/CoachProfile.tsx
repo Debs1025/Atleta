@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+import { getCoachProfileOfflineFirst, getTeamsOfflineFirst, getMatchesOfflineFirst } from "../../../../services/firebaseClient";
 
 export interface CoachProfileProps {
   visible: boolean;
@@ -61,7 +62,7 @@ function InlineProfileSkeleton({ topPadding }: { topPadding: number }) {
   );
 }
 
-// API Request: fetch coach profile details (GET /api/coach/profile)
+// API & Firestore Data: fetch coach profile details live from Firestore
 export function CoachProfile({
   visible,
   onClose,
@@ -86,16 +87,21 @@ export function CoachProfile({
       setIsLoading(true);
       const fetchProfile = async () => {
         try {
-          const [profileRes, teamsRes]: [any, any] = await Promise.all([
+          // Fetch from Firestore-backed offline first & backend API in parallel
+          const [offlineProfileRes, profileRes, teamsRes, matchesRes]: [any, any, any, any] = await Promise.all([
+            getCoachProfileOfflineFirst(profileData?.user_id || profileData?.coach_id).catch(() => null),
             requestAuthenticatedJson("/coaches/profile").catch(() => null),
-            requestAuthenticatedJson("/teams").catch(() => null),
+            getTeamsOfflineFirst().catch(() => null),
+            getMatchesOfflineFirst().catch(() => null),
           ]);
 
-          if (isMounted && profileRes) {
-            const firstName = profileRes.first_name || profile.first_name || "Coach";
-            const lastName = profileRes.last_name || profile.last_name || "";
-            const fullName = profileRes.full_name || `${firstName} ${lastName}`.trim();
-            const rawSport = (profileRes.sport_type || profileRes.sports_focus || profile.sports_focus || "BASKETBALL").toUpperCase();
+          const combined = profileRes || offlineProfileRes;
+
+          if (isMounted && combined) {
+            const firstName = combined.first_name || offlineProfileRes?.first_name || profile.first_name || "Coach";
+            const lastName = combined.last_name || offlineProfileRes?.last_name || profile.last_name || "";
+            const fullName = combined.full_name || offlineProfileRes?.full_name || `${firstName} ${lastName}`.trim();
+            const rawSport = (combined.sport_type || combined.sports_focus || offlineProfileRes?.sport_type || profile.sports_focus || "BASKETBALL").toUpperCase();
             const sportFocus: CoachProfileState["sports_focus"] =
               rawSport.includes("SWIM")
                 ? "SWIMMING"
@@ -105,25 +111,41 @@ export function CoachProfile({
 
             let totalAthletesCount = 0;
             if (Array.isArray(teamsRes)) {
+              const athleteIds = new Set<string>();
               teamsRes.forEach((t: any) => {
-                totalAthletesCount += Array.isArray(t.roster_list) ? t.roster_list.length : 0;
+                if (Array.isArray(t.roster_list)) {
+                  t.roster_list.forEach((r: any) => {
+                    const id = r.athlete_id || r.user_id;
+                    if (id) athleteIds.add(id);
+                  });
+                }
               });
+              totalAthletesCount = athleteIds.size;
             }
 
-            const institution = profileRes.current_institution || profileRes.institution || profile.current_institution || "";
-            const regionalAffiliation = profileRes.regional_affiliation || profile.regional_affiliation || "";
-            const nationalLeague = profileRes.national_sports_league || profile.national_sports_league || "";
+            let totalMatchesCount = 0;
+            if (Array.isArray(matchesRes)) {
+              totalMatchesCount = matchesRes.length;
+            }
+
+            const institution = combined.current_institution || offlineProfileRes?.current_institution || profile.current_institution || "";
+            const regionalAffiliation = combined.regional_affiliation || offlineProfileRes?.regional_affiliation || profile.regional_affiliation || "";
+            const nationalLeague = combined.national_sports_league || offlineProfileRes?.national_sports_league || profile.national_sports_league || "";
+            const avatarUrl = combined.avatar_url || offlineProfileRes?.avatar_url || profile.avatar_url;
+
+            const creds = combined.certifications || combined.credentials || offlineProfileRes?.certifications || offlineProfileRes?.credentials || profile.credentials || [];
+            const docs = combined.uploaded_documents || offlineProfileRes?.uploaded_documents || profile.uploaded_documents || [];
 
             const updated: CoachProfileState = {
-              coach_id: profileRes.coach_id || profileRes.user_id || profile.coach_id,
-              user_id: profileRes.user_id || profile.user_id,
+              coach_id: combined.coach_id || offlineProfileRes?.coach_id || profile.coach_id,
+              user_id: combined.user_id || offlineProfileRes?.user_id || profile.user_id,
               first_name: firstName,
               last_name: lastName,
               full_name: fullName,
-              email: profileRes.email || profile.email,
+              email: combined.email || offlineProfileRes?.email || profile.email,
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
-              avatar_url: profileRes.avatar_url || profile.avatar_url,
+              avatar_url: avatarUrl,
               current_institution: institution,
               regional_affiliation: regionalAffiliation,
               national_sports_league: nationalLeague,
@@ -131,11 +153,11 @@ export function CoachProfile({
                 association_name: regionalAffiliation || nationalLeague || "",
                 office_name: institution || "",
               },
-              credentials: profileRes.certifications || profile.credentials || DEFAULT_COACH_PROFILE.credentials,
-              uploaded_documents: profileRes.uploaded_documents || profile.uploaded_documents || DEFAULT_COACH_PROFILE.uploaded_documents,
+              credentials: creds,
+              uploaded_documents: docs,
               system_statistics: {
-                total_athletes: totalAthletesCount || profileRes.system_statistics?.total_athletes || profile.system_statistics?.total_athletes || 0,
-                metric_logs: profileRes.metric_logs || profile.system_statistics?.metric_logs || 0,
+                total_athletes: totalAthletesCount || combined.system_statistics?.total_athletes || offlineProfileRes?.system_statistics?.total_athletes || 0,
+                metric_logs: totalMatchesCount || combined.system_statistics?.metric_logs || combined.metric_logs || offlineProfileRes?.system_statistics?.metric_logs || 0,
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };
@@ -292,6 +314,16 @@ export function CoachProfile({
                     })),
                 ];
 
+                if (displayCredentials.length === 0) {
+                  return (
+                    <View style={[styles.credentialItemRow, { justifyContent: "center", borderBottomWidth: 0 }]}>
+                      <Text style={[styles.credentialTitleText, { color: "#64748B", fontSize: 13 }]}>
+                        No credentials uploaded
+                      </Text>
+                    </View>
+                  );
+                }
+
                 return displayCredentials.map((item, index) => {
                   const isLast = index === displayCredentials.length - 1;
                   return (
@@ -315,14 +347,14 @@ export function CoachProfile({
             <View style={styles.statsGridContainer}>
               <View style={[styles.statColumn, styles.statBorderRight]}>
                 <Text style={styles.statNumberText}>
-                  {profile.system_statistics?.total_athletes ?? 42}
+                  {profile.system_statistics?.total_athletes ?? 0}
                 </Text>
                 <Text style={styles.statLabelText}>TOTAL ATHLETES</Text>
               </View>
 
               <View style={styles.statColumn}>
                 <Text style={styles.statNumberText}>
-                  {profile.system_statistics?.metric_logs ?? 156}
+                  {profile.system_statistics?.metric_logs ?? 0}
                 </Text>
                 <Text style={styles.statLabelText}>MATCH LOGGED</Text>
               </View>

@@ -746,8 +746,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               contact_number: profileRes.contact_number || "",
               role: "Coach",
               coach_id: profileRes.coach_id || profileRes.user_id || "",
-              current_institution: profileRes.current_institution || "University Athletics",
+              current_institution: profileRes.current_institution || "",
               athlete_managed: profileRes.athlete_managed || [],
+              avatar_url: profileRes.avatar_url || (profileRes as any).profile_image || "",
             };
             updatedCoachSnapshot = updatedCoach;
             setCoach(updatedCoach);
@@ -762,10 +763,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               email: updatedCoach.email,
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
-              avatar_url: profileRes.avatar_url,
-              regional_affiliations: profileRes.regional_affiliations || {
-                association_name: "National Sports League",
-                office_name: profileRes.current_institution || "Sports Office",
+              avatar_url: profileRes.avatar_url || (profileRes as any).profile_image || "",
+              current_institution: profileRes.current_institution || "",
+              regional_affiliation: profileRes.regional_affiliation || "",
+              national_sports_league: profileRes.national_sports_league || "",
+              regional_affiliations: {
+                association_name: profileRes.regional_affiliation || profileRes.national_sports_league || "",
+                office_name: profileRes.current_institution || "",
               },
               credentials: profileRes.credentials || profileRes.certifications || [],
               uploaded_documents: profileRes.uploaded_documents || [],

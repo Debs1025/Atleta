@@ -74,6 +74,7 @@ export interface UserCoach {
   coach_id: string;
   current_institution: string;
   athlete_managed: string[]; // List of athlete UUIDs
+  avatar_url?: string;
 }
 
 export interface RosterAthlete {
@@ -89,15 +90,19 @@ export interface RosterAthlete {
   event_distance?: string;
   stroke_style?: string;
   avatar_url?: string;
+  rating_score?: number;
   missing_documents?: string[];
   birthdate?: string;
   province?: string;
   location?: string;
   physical_profile?: any;
   physical_attributes?: any;
+  biometrics?: any;
+  radar_competencies?: any;
   averages?: any;
   stats?: any;
   scoring_trends_last_10?: any;
+  workload_analytics?: any;
   eligibility_documents?: any;
   documents?: any;
 }

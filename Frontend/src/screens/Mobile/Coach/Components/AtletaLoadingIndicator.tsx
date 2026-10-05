@@ -5,6 +5,7 @@ import {
   Animated,
   StyleSheet,
   ActivityIndicator,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -105,20 +106,83 @@ export function SkeletonDiscoveryCards({ count = 3 }: { count?: number }) {
   );
 }
 
+import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
+
+function GlowingProgressBar() {
+  const sweepAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(sweepAnim, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [sweepAnim]);
+
+  const translateX = sweepAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-90, 90],
+  });
+
+  return (
+    <View style={{ width: 120, height: 3.5, backgroundColor: "rgba(255, 255, 255, 0.08)", borderRadius: 2, overflow: "hidden", marginTop: 18 }}>
+      <Animated.View
+        style={{
+          width: 50,
+          height: "100%",
+          backgroundColor: "#00C8FF",
+          borderRadius: 2,
+          shadowColor: "#00C8FF",
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 1,
+          shadowRadius: 8,
+          elevation: 6,
+          transform: [{ translateX }],
+        }}
+      />
+    </View>
+  );
+}
+
 /**
- * Centered spinner with glowing badge for general loading screens
+ * Centered spinner with glowing animated logo for general loading screens
  */
 export function AtletaLoadingSpinner({
-  message = "Fetching athlete data...",
+  message = "Fetching data...",
 }: {
   message?: string;
 }) {
   return (
     <View style={styles.spinnerContainer}>
-      <View style={styles.spinnerGlow}>
-        <ActivityIndicator size="large" color="#00C8FF" />
-      </View>
+      <AtletaAnimatedLogo size={58} showGlow={true} pulse={true} spinRing={true} />
+      <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "900", letterSpacing: 2.5, marginTop: 14 }}>
+        ATLETA
+      </Text>
       <Text style={styles.spinnerText}>{message}</Text>
+      <GlowingProgressBar />
+    </View>
+  );
+}
+
+export function AtletaLoadingScreen({
+  message = "Loading...",
+}: {
+  message?: string;
+}) {
+  return (
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: "#070D19", justifyContent: "center", alignItems: "center", zIndex: 100 }]}>
+      <AtletaAnimatedLogo size={96} showGlow={true} pulse={true} spinRing={true} />
+      <Text style={{ color: "#FFFFFF", fontSize: 26, fontWeight: "900", letterSpacing: 3.5, marginTop: 20 }}>
+        ATLETA
+      </Text>
+      <Text style={{ color: "#94A3B8", fontSize: 13, fontWeight: "600", marginTop: 8 }}>
+        {message}
+      </Text>
+      <GlowingProgressBar />
     </View>
   );
 }

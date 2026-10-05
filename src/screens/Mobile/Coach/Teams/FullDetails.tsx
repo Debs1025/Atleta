@@ -195,7 +195,7 @@ export function FullDetails({
               <Ionicons name="checkmark-circle-sharp" size={46} color="#00C8FF" />
             </View>
 
-            <Text style={styles.successTitle}>TEAM INITIALIZED !</Text>
+            <Text style={styles.successTitle}>TEAM CREATED !</Text>
             <Text style={styles.successTeamName}>
               {teamDetails.team_name.toUpperCase() || "CAMARINES SUR PANTHERS"}
             </Text>

@@ -11,6 +11,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
@@ -124,19 +126,56 @@ export function CoachEditProfile({
     );
   };
 
-  // API Request: upload coach profile image (POST /api/coach/avatar/upload)
+  // API Request: upload coach profile image (POST /api/coach/avatar/upload or /users/avatar)
   const handlePickAvatarImage = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "image/*",
-        copyToCacheDirectory: true,
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Permission to access media library is required to select a profile picture.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const pickedAsset = result.assets[0];
-        setAvatarUri(pickedAsset.uri);
+        let finalDataUri = pickedAsset.uri;
+
+        if (pickedAsset.base64) {
+          const mime = pickedAsset.mimeType || "image/jpeg";
+          finalDataUri = `data:${mime};base64,${pickedAsset.base64}`;
+        } else {
+          try {
+            const b64 = await FileSystem.readAsStringAsync(pickedAsset.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            finalDataUri = `data:image/jpeg;base64,${b64}`;
+          } catch {}
+        }
+
+        setAvatarUri(finalDataUri);
+
+        // Instantly save to user avatar endpoint
+        try {
+          await requestAuthenticatedJson("/users/avatar", "POST", {
+            avatar_url: finalDataUri,
+          }).catch(async () => {
+            return await requestAuthenticatedJson("/coaches/avatar", "POST", {
+              avatar_url: finalDataUri,
+            });
+          });
+        } catch (syncErr) {
+          console.warn("Direct avatar upload fallback notice:", syncErr);
+        }
       }
-    } catch {
+    } catch (err) {
+      console.warn("Avatar picker error:", err);
       Alert.alert("Image Error", "Failed to select profile image.");
     }
   };

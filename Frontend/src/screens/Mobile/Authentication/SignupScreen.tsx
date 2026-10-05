@@ -463,29 +463,22 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           ...restValues
         });
       } else {
-        const body = new FormData();
-        body.append("role", "Coach");
-        body.append("first_name", values.first_name);
-        body.append("last_name", values.last_name);
-        body.append("email", values.email);
-        body.append("password", values.password);
-        if (values.contact_number) body.append("contact_number", values.contact_number);
-        if (values.certification_license_num) body.append("certification_license_num", values.certification_license_num);
-        body.append("years_of_experience", String(values.years_of_experience));
-        body.append("current_institution", values.current_institution);
-        body.append("regional_affiliation", values.regional_affiliation);
-        if (values.national_sports_league) body.append("national_sports_league", values.national_sports_league);
+        const payload = {
+          role: "Coach",
+          first_name: values.first_name,
+          last_name: values.last_name,
+          email: values.email,
+          password: values.password,
+          contact_number: values.contact_number || undefined,
+          certification_license_num: values.certification_license_num || undefined,
+          years_of_experience: Number(values.years_of_experience || 0),
+          current_institution: values.current_institution,
+          regional_affiliation: values.regional_affiliation,
+          national_sports_league: values.national_sports_league || undefined,
+          professional_documents: documentFile ? [documentFile.name || "coach_license.pdf"] : []
+        };
 
-        if (documentFile) {
-          const docIdentifier = documentFile.name || documentFile.uri || "eligible-document.png";
-          body.append("professional_documents", {
-            uri: documentFile.uri,
-            name: docIdentifier,
-            type: documentFile.mimeType ?? "application/octet-stream"
-          } as never);
-        }
-
-        await requestMultipart("/users/coach", body);
+        await requestJson("/users/coach", payload);
       }
       setAccountCreated(true);
       coachForm.reset();
@@ -712,9 +705,9 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               <FormField control={coachForm.control} name="national_sports_league" label="National Sports League" placeholder="e.g. Batang Pinoy / Palarong Pambansa (Optional)" error={coachErrors.national_sports_league?.message} />
 
               <View style={styles.documentBox}>
-                <Text style={styles.documentLabel}>Eligible Documents</Text>
-                <Button label={documentFile ? "Replace File" : "Choose File"} variant="secondary" onPress={uploadDocument} />
-                <Text style={styles.documentHint}>{documentFile ? documentFile.name : "Professional license, certification, image, or PDF. Max 25MB."}</Text>
+                <Text style={styles.documentLabel}>Credentials & Documents (Optional)</Text>
+                <Button label={documentFile ? "Replace File" : "Choose File (Optional)"} variant="secondary" onPress={uploadDocument} />
+                <Text style={styles.documentHint}>{documentFile ? documentFile.name : "Optional: Professional license, certification, image, or PDF. Max 25MB."}</Text>
                 {coachErrors.eligible_documents?.message ? <Text style={authScreenStyles.error}>{coachErrors.eligible_documents.message}</Text> : null}
               </View>
 

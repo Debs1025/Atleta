@@ -1,7 +1,10 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Image,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -37,11 +40,10 @@ const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-const DEFAULT_DEPLOYED_API = "https://atleta-backend.vercel.app";
-const rawApiBase = (
-  runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ||
-  DEFAULT_DEPLOYED_API
-).trim().replace(/\/+$/, "");
+const LOCAL_DEV_API = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+const rawApiBase = __DEV__
+  ? LOCAL_DEV_API
+  : (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "https://atleta-backend.vercel.app").trim().replace(/\/+$/, "");
 
 export const API_BASE = rawApiBase.endsWith("/api/v1")
   ? rawApiBase
@@ -128,9 +130,7 @@ export const coachSignupSchema = z.object({
       size: z.number().optional().nullable()
     })
     .nullable()
-    .refine((value) => Boolean(value), {
-      message: "Please upload an eligible document."
-    }),
+    .optional(),
   terms_accepted: z.boolean().refine((val) => val === true, {
     message: "You must agree to the Terms of Service and Privacy Protocol."
   })
@@ -234,9 +234,22 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
 }
 
 async function fetchApi(path: string, options: RequestInit) {
-  const response = await withRequestTimeout((signal) =>
-    fetch(`${API_BASE}${path}`, { ...options, signal })
-  );
+  let response: Response;
+  const primaryUrl = `${API_BASE}${path}`;
+  try {
+    response = await withRequestTimeout((signal) =>
+      fetch(primaryUrl, { ...options, signal })
+    );
+  } catch (err) {
+    if (primaryUrl.includes("10.0.2.2:5000")) {
+      const fallbackUrl = primaryUrl.replace("10.0.2.2:5000", "localhost:5000");
+      response = await withRequestTimeout((signal) =>
+        fetch(fallbackUrl, { ...options, signal })
+      );
+    } else {
+      throw err;
+    }
+  }
 
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -520,11 +533,59 @@ export function StepBadge({ step, label, active }: { step: number; label: string
   );
 }
 
-export function FullScreenOverlay({ label }: { label: string }) {
+function GlowingProgressBar() {
+  const sweepAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(sweepAnim, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [sweepAnim]);
+
+  const translateX = sweepAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-100, 100],
+  });
+
   return (
-    <View style={overlayStyles.overlay}>
-      <ActivityIndicator size="large" color="#d6def8" />
-      <Text style={overlayStyles.text}>{label}</Text>
+    <View style={{ width: 140, height: 4, backgroundColor: "rgba(255, 255, 255, 0.08)", borderRadius: 2, overflow: "hidden", marginTop: 22 }}>
+      <Animated.View
+        style={{
+          width: 60,
+          height: "100%",
+          backgroundColor: "#00C8FF",
+          borderRadius: 2,
+          shadowColor: "#00C8FF",
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 1,
+          shadowRadius: 8,
+          elevation: 6,
+          transform: [{ translateX }],
+        }}
+      />
+    </View>
+  );
+}
+
+export function FullScreenOverlay({ label }: { label?: string }) {
+  return (
+    <View style={[overlayStyles.overlay, { backgroundColor: "#070D19", justifyContent: "center", alignItems: "center" }]}>
+      <AtletaAnimatedLogo size={118} showGlow={true} pulse={true} spinRing={true} />
+      <Text style={{ color: "#FFFFFF", fontSize: 32, fontWeight: "900", letterSpacing: 6, marginTop: 24, textAlign: "center" }}>
+        ATLETA
+      </Text>
+      {label ? (
+        <Text style={[overlayStyles.text, { color: "#38BDF8", marginTop: 8, fontSize: 12, fontWeight: "600", textAlign: "center", paddingHorizontal: 32, letterSpacing: 1.2, textTransform: "uppercase" }]}>
+          {label}
+        </Text>
+      ) : null}
+      <GlowingProgressBar />
     </View>
   );
 }
@@ -556,12 +617,13 @@ export function Checkbox({ value, onValueChange, label, error }: CheckboxProps) 
   );
 }
 
+import { AtletaAnimatedLogo } from "../../../components/AtletaAnimatedLogo";
+
 export function AuthHeader() {
   return (
-    <>
-      <Text style={authScreenStyles.brand}>ATLETA</Text>
-      <View style={authScreenStyles.rule} />
-    </>
+    <View style={{ alignItems: "center", marginBottom: 24, marginTop: 8 }}>
+      <AtletaAnimatedLogo size={88} showGlow={true} pulse={true} spinRing={true} />
+    </View>
   );
 }
 

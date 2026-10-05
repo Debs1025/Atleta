@@ -315,11 +315,11 @@ export const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'background-color 0.15s ease',
   },
-  downloadPdfBtn: {
+  downloadBtn: {
     backgroundColor: '#0B132B',
     color: '#FFFFFF',
     border: 'none',
-    padding: '12px 28px',
+    padding: '12px 24px',
     fontSize: '12px',
     fontWeight: 800,
     letterSpacing: '0.06em',
@@ -329,7 +329,7 @@ export const styles: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '8px',
-    transition: 'opacity 0.15s ease',
+    transition: 'all 0.15s ease',
   },
   modalOverlay: {
     position: 'fixed',

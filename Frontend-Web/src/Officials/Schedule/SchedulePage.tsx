@@ -339,6 +339,8 @@ export const SchedulePage: React.FC = () => {
   const firstDayIndex = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Monday = 0
   const daysInMonth = new Date(year, month, 0).getDate();
   const totalCells = Math.ceil((firstDayIndex + daysInMonth) / 7) * 7;
+  const numWeeks = Math.max(1, Math.ceil(totalCells / 7));
+  const rowHeightPct = `${(100 / numWeeks).toFixed(4)}%`;
 
   const safeSchedules = (Array.isArray(schedules) ? schedules : []).filter((s) => {
     return isMatchCreatedByOfficial(s as any, user);
@@ -437,15 +439,15 @@ export const SchedulePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: Math.max(1, Math.ceil(totalCells / 7)) }).map((_, weekIndex) => (
-                  <tr key={weekIndex}>
+                {Array.from({ length: numWeeks }).map((_, weekIndex) => (
+                  <tr key={weekIndex} style={{ height: rowHeightPct }}>
                     {Array.from({ length: 7 }).map((_, dayIndex) => {
                       const cellIndex = weekIndex * 7 + dayIndex;
                       const dayNum = cellIndex - firstDayIndex + 1;
                       const isValidDay = dayNum > 0 && dayNum <= daysInMonth;
 
                       if (!isValidDay) {
-                        return <td key={dayIndex} style={styles.calTdEmpty} />;
+                        return <td key={dayIndex} style={{ ...styles.calTdEmpty, height: rowHeightPct }} />;
                       }
 
                       // Matches for this day (sorted by time)
@@ -482,6 +484,7 @@ export const SchedulePage: React.FC = () => {
                           className={`hover-calendar-cell ${isSelected ? 'selected' : ''}`}
                           style={{
                             ...styles.calTd,
+                            height: rowHeightPct,
                             backgroundColor: isSelected ? '#F0F9FF' : '#FFFFFF',
                           }}
                         >
@@ -495,7 +498,7 @@ export const SchedulePage: React.FC = () => {
                           </div>
 
                           <div style={styles.badgeWrap}>
-                            {matchesForDay.map((m, idx) => {
+                            {matchesForDay.slice(0, 2).map((m, idx) => {
                               const sport = String(m?.sport || m?.venue_logistics?.sport || 'BASKETBALL').toUpperCase();
                               const code = sport.includes('SWIM')
                                 ? 'SW'
@@ -521,6 +524,25 @@ export const SchedulePage: React.FC = () => {
                                 </div>
                               );
                             })}
+                            {matchesForDay.length > 2 && (
+                              <div
+                                style={{
+                                  ...styles.matchBadge,
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#475569',
+                                  border: '1px solid #CBD5E1',
+                                  justifyContent: 'center',
+                                  fontWeight: 900,
+                                  letterSpacing: '0.1em',
+                                  padding: '1px 5px',
+                                  fontSize: '11px',
+                                  lineHeight: 1,
+                                }}
+                                title={`${matchesForDay.length - 2} more match${matchesForDay.length - 2 > 1 ? 'es' : ''}`}
+                              >
+                                ...
+                              </div>
+                            )}
                           </div>
                         </td>
                       );
@@ -562,3 +584,5 @@ export const SchedulePage: React.FC = () => {
     </div>
   );
 };
+
+export default SchedulePage;

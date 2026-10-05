@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_ATLETA_API": "https://atleta-backend.vercel.app",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDTueY4OduMENmSef3BH6ZEmSqXLiQG5Ls",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "atleta-v1.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "atleta-v1",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "atleta-v1.appspot.com",
+        "EXPO_PUBLIC_FIRESTORE_PROJECT_ID": "atleta-v1",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1:203586668533:web:30fba3838ff5f78e9302bc",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "G-6ZF67G2PK2"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_ATLETA_API": "https://atleta-backend.vercel.app",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDTueY4OduMENmSef3BH6ZEmSqXLiQG5Ls",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "atleta-v1.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "atleta-v1",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "atleta-v1.appspot.com",
+        "EXPO_PUBLIC_FIRESTORE_PROJECT_ID": "atleta-v1",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1:203586668533:web:30fba3838ff5f78e9302bc",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "G-6ZF67G2PK2"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

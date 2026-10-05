@@ -69,11 +69,6 @@ export function useNotifications() {
     await markOfficialNotificationAsRead(id);
   };
 
-  const clearHistory = () => {
-    setNotifications([]);
-    setUnreadCount(0);
-  };
-
   return {
     notifications,
     unreadCount,
@@ -82,6 +77,5 @@ export function useNotifications() {
     refresh: () => fetchNotifications(true),
     markAllRead,
     markSingleRead,
-    clearHistory,
   };
 }

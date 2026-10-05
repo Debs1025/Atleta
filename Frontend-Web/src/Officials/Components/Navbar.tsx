@@ -1,16 +1,18 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import type { AuthUser } from '../../api/types';
+import { getStoredUser } from '../../api/client';
 import { useNotifications } from '../Notification/useNotifications';
 import { NotificationFloat } from '../Notification/NotificationFloat';
 import { styles } from './styles/Navbar';
 
 interface NavbarProps {
-  user: AuthUser | null;
+  user?: AuthUser | null;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ user }) => {
+export const Navbar: React.FC<NavbarProps> = ({ user: propUser }) => {
+  const [user, setUser] = useState<AuthUser | null>(() => propUser ?? getStoredUser());
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isBellHovered, setIsBellHovered] = useState(false);
   const [isProfileHovered, setIsProfileHovered] = useState(false);
@@ -23,6 +25,29 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     markSingleRead,
   } = useNotifications();
 
+  useEffect(() => {
+    if (propUser !== undefined) {
+      setUser(propUser);
+    } else {
+      setUser(getStoredUser());
+    }
+
+    const handleUserUpdate = (e: any) => {
+      if (e?.detail) {
+        setUser(e.detail);
+      } else {
+        setUser(getStoredUser());
+      }
+    };
+
+    window.addEventListener('atleta_user_updated', handleUserUpdate);
+    window.addEventListener('storage', handleUserUpdate);
+    return () => {
+      window.removeEventListener('atleta_user_updated', handleUserUpdate);
+      window.removeEventListener('storage', handleUserUpdate);
+    };
+  }, [propUser]);
+
   // Extract official's name from auth user record
   const rawName =
     user?.full_legal_name ||
@@ -32,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     'TOURNAMENT OFFICIAL';
 
   const displayName = rawName.toUpperCase();
-  const roleLabel = 'OFFICIAL';
+  const roleLabel = (user?.role || 'OFFICIAL').toUpperCase();
 
   return (
     <header style={styles.header}>
@@ -128,3 +153,5 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     </header>
   );
 };
+
+export { Navbar as OfficialNavbar };

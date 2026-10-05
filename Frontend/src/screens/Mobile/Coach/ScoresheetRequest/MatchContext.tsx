@@ -3,6 +3,7 @@ import { Alert, Platform, View, Text, TouchableOpacity, StyleSheet } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
+
 import { requestAuthenticatedJson, API_BASE } from '../../Authentication/authShared';
 import { getMatchesOfflineFirst, saveMatchOfflineFirst } from '../../../../services/firebaseClient';
 

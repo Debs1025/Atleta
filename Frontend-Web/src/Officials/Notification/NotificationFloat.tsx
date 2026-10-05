@@ -97,7 +97,13 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
     pointerEvents: visible ? 'auto' : 'none',
   };
 
-  const unreadNotifications = notifications.filter((item) => !item.is_read);
+  const unreadNotifications = [...notifications]
+    .sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
+    })
+    .filter((item) => !item.is_read);
   const displayCount = unreadCount > 0 ? unreadCount : unreadNotifications.length;
 
   return (
