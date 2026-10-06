@@ -88,7 +88,7 @@ export const bannerStyles = StyleSheet.create({
 
 export const fieldStyles = StyleSheet.create({
   group: {
-    marginBottom: 16
+    marginBottom: 18
   },
   label: {
     color: "#E2E8F0",
@@ -256,7 +256,7 @@ export const pillStyles = StyleSheet.create({
 
 export const titleStyles = StyleSheet.create({
   wrap: {
-    marginBottom: 22
+    marginBottom: 38
   },
   title: {
     color: "#FFFFFF",
