@@ -379,8 +379,8 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
       athletesLastFetched = Date.now();
       return list;
     }
-  } catch (fsErr) {
-    console.warn("Firestore offline athletes lookup:", fsErr);
+  } catch (_) {
+    // Client-side direct Firestore access is restricted by security rules (REST API is primary)
   }
 
   return [];
@@ -511,8 +511,8 @@ export async function getMatchesOfflineFirst(): Promise<any[]> {
       matchesLastFetched = Date.now();
       return list;
     }
-  } catch (fsErr) {
-    console.warn("Firestore offline matches lookup:", fsErr);
+  } catch (_) {
+    // Client-side direct Firestore access is restricted by security rules (REST API is primary)
   }
 
   return [];
