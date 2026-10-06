@@ -40,9 +40,19 @@ const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-const LOCAL_DEV_API = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
+const isExpoExecution = Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Constants.appOwnership === "expo";
+const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost || (Constants as any)?.manifest?.debuggerHost || "";
+const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
+
+// If testing via Expo Tunnel on a physical phone, 10.0.2.2 is unreachable, so use Vercel directly for instant sub-second responses
+const LOCAL_DEV_API = isTunnel
+  ? "https://atleta-backend.vercel.app"
+  : Platform.OS === "android"
+  ? "http://10.0.2.2:5000"
+  : "http://localhost:5000";
+
 const rawApiBase = __DEV__
-  ? LOCAL_DEV_API
+  ? (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || LOCAL_DEV_API).trim().replace(/\/+$/, "")
   : (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "https://atleta-backend.vercel.app").trim().replace(/\/+$/, "");
 
 export const API_BASE = rawApiBase.endsWith("/api/v1")
@@ -60,7 +70,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_TIMEOUT_MS = 6000;
 
 // Types
 export type BannerTone = "error" | "success" | "info";
