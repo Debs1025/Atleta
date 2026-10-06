@@ -573,13 +573,21 @@ function GlowingProgressBar() {
   );
 }
 
+const atletaLogoSource = require("../../../assets/atleta_logo.png");
+
 export function FullScreenOverlay({ label }: { label?: string }) {
   return (
     <View style={[overlayStyles.overlay, { backgroundColor: "#070D19", justifyContent: "center", alignItems: "center" }]}>
-      <AtletaAnimatedLogo size={118} showGlow={true} pulse={true} spinRing={true} />
-      <Text style={{ color: "#FFFFFF", fontSize: 32, fontWeight: "900", letterSpacing: 6, marginTop: 24, textAlign: "center" }}>
-        ATLETA
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 16 }}>
+        <Image
+          source={atletaLogoSource}
+          style={{ width: 48, height: 48 }}
+          resizeMode="contain"
+        />
+        <Text style={{ color: "#FFFFFF", fontSize: 30, fontWeight: "900", letterSpacing: 5, textAlign: "center" }}>
+          ATLETA
+        </Text>
+      </View>
       {label ? (
         <Text style={[overlayStyles.text, { color: "#38BDF8", marginTop: 8, fontSize: 12, fontWeight: "600", textAlign: "center", paddingHorizontal: 32, letterSpacing: 1.2, textTransform: "uppercase" }]}>
           {label}
@@ -617,12 +625,26 @@ export function Checkbox({ value, onValueChange, label, error }: CheckboxProps) 
   );
 }
 
-import { AtletaAnimatedLogo } from "../../../components/AtletaAnimatedLogo";
-
 export function AuthHeader() {
   return (
-    <View style={{ alignItems: "center", marginBottom: 24, marginTop: 8 }}>
-      <AtletaAnimatedLogo size={88} showGlow={true} pulse={true} spinRing={true} />
+    <View style={{ alignItems: "center", justifyContent: "center", marginBottom: 24, marginTop: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        <Image
+          source={atletaLogoSource}
+          style={{ width: 44, height: 44 }}
+          resizeMode="contain"
+        />
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontSize: 28,
+            fontWeight: "900",
+            letterSpacing: 4,
+          }}
+        >
+          ATLETA
+        </Text>
+      </View>
     </View>
   );
 }
