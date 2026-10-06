@@ -231,13 +231,15 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           control={form.control}
           name="password"
           label="Password"
-          placeholder="••••••••"
+          placeholder="Enter your password"
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
         />
 
-        <Button label="Login" loading={loading} onPress={submit} />
+        <View style={{ marginTop: 6 }}>
+          <Button label="Login" loading={loading} onPress={submit} />
+        </View>
 
         <Text style={styles.link} onPress={onGoReset}>
           Forgot Password?

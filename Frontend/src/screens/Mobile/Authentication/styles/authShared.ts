@@ -269,7 +269,7 @@ export const pillStyles = StyleSheet.create({
 
 export const titleStyles = StyleSheet.create({
   wrap: {
-    marginBottom: 30
+    marginBottom: 24
   },
   title: {
     color: "#FFFFFF",
