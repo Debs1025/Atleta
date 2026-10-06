@@ -245,7 +245,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           Forgot Password?
         </Text>
 
-        <View style={authScreenStyles.dividerRow}>
+        <View style={[authScreenStyles.dividerRow, styles.dividerRow]}>
           <View style={authScreenStyles.divider} />
           <Text style={authScreenStyles.or}>or</Text>
           <View style={authScreenStyles.divider} />
