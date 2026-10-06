@@ -636,19 +636,20 @@ export function Checkbox({ value, onValueChange, label, error }: CheckboxProps) 
 
 export function AuthHeader() {
   return (
-    <View style={{ alignItems: "center", justifyContent: "center", marginBottom: 26, marginTop: 14 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 }}>
+    <View style={{ alignItems: "center", justifyContent: "center", marginBottom: 24, marginTop: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
         <Image
           source={atletaLogoSource}
-          style={{ width: 44, height: 44 }}
+          style={{ width: 40, height: 40, marginRight: 10 }}
           resizeMode="contain"
         />
         <Text
           style={{
             color: "#FFFFFF",
-            fontSize: 28,
+            fontSize: 26,
             fontWeight: "900",
-            letterSpacing: 4,
+            letterSpacing: 3,
+            includeFontPadding: false,
           }}
         >
           ATLETA
