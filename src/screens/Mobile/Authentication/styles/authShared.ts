@@ -23,7 +23,8 @@ export const authScreenStyles = StyleSheet.create({
   dividerRow: {
     alignItems: "center",
     flexDirection: "row",
-    marginVertical: 20
+    marginTop: 32,
+    marginBottom: 20
   },
   divider: {
     backgroundColor: "rgba(255, 255, 255, 0.12)",
@@ -39,12 +40,12 @@ export const authScreenStyles = StyleSheet.create({
     letterSpacing: 1
   },
   spacer: {
-    height: 12
+    height: 14
   },
   footer: {
     color: "#94A3B8",
     fontSize: 15,
-    marginTop: 26,
+    marginTop: 32,
     textAlign: "center"
   },
   footerLink: {
