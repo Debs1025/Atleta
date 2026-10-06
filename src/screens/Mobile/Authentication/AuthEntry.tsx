@@ -34,7 +34,12 @@ export function AuthEntry() {
     let mounted = true;
 
     (async () => {
+      const startTime = Date.now();
       const [token, role] = await Promise.all([getStoredSessionToken(), getStoredAuthRole()]);
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 1200) {
+        await new Promise((resolve) => setTimeout(resolve, 1200 - elapsed));
+      }
       if (mounted) {
         if (token && role) setActiveRole(role);
         setBooting(false);
@@ -56,7 +61,7 @@ export function AuthEntry() {
   };
 
   if (booting) {
-    return <FullScreenOverlay label="Preparing your secure ATLETA session..." />;
+    return <FullScreenOverlay />;
   }
 
   if (activeRole === "athlete") return <AthleteHomePage onLogout={handleLogout} />;

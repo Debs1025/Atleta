@@ -186,6 +186,47 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           ? athletesRes.athletes
           : [];
 
+      // Pre-map scouting proposals to athlete IDs
+      const scoutedAthleteMap = new Map<string, { scout_id: string; offer_status: 'ACCEPTED' | 'PENDING' | 'DECLINED'; relativeDate: string; rawDate: string; avatar_url?: string }>();
+      if (Array.isArray(proposalsRes)) {
+        proposalsRes.forEach((p: any) => {
+          const rawAthId = String(p.athlete_id || p.id || '').trim();
+          const normAthId = rawAthId.replace(/^ath_/, '');
+          const rawStatus = String(p.offer_status || 'PENDING').toUpperCase();
+          const normalizedStatus: 'ACCEPTED' | 'PENDING' | 'DECLINED' = ['ACCEPTED', 'ACTIVE', 'SIGNED', 'COMMITTED', 'ROSTERED'].includes(rawStatus)
+            ? 'ACCEPTED'
+            : ['DECLINED', 'REJECTED'].includes(rawStatus)
+              ? 'DECLINED'
+              : 'PENDING';
+
+          const rawDate = p.date_initiated || p.updated_at || p.created_at;
+          let relativeDate = 'Recent';
+          if (rawDate) {
+            try {
+              const diffMs = Date.now() - new Date(rawDate).getTime();
+              const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+              if (diffDays <= 0) relativeDate = 'Today';
+              else if (diffDays === 1) relativeDate = 'Yesterday';
+              else if (diffDays < 7) relativeDate = `${diffDays}d ago`;
+              else if (diffDays < 30) relativeDate = `${Math.floor(diffDays / 7)}w ago`;
+              else relativeDate = `${Math.floor(diffDays / 30)}mo ago`;
+            } catch (e) {
+              relativeDate = 'Recent';
+            }
+          }
+
+          const propInfo = {
+            scout_id: p.scout_id || p.id,
+            offer_status: normalizedStatus,
+            relativeDate,
+            rawDate: rawDate || new Date().toISOString().split('T')[0],
+            avatar_url: p.avatar_url,
+          };
+          scoutedAthleteMap.set(normAthId, propInfo);
+          scoutedAthleteMap.set(rawAthId, propInfo);
+        });
+      }
+
       const seenIds = new Set<string>();
       const mappedAthletes: AthleteDiscoveryItem[] = [];
 
@@ -199,8 +240,17 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // Check if athlete has coach / team affiliation
           const teamCoachInfo = athleteTeamCoachMap.get(normalizedId);
           const assignedTeamId = teamCoachInfo?.team_id || a.team_id || a.current_affiliation?.team_id;
-          const assignedTeamName = teamCoachInfo?.team_name || a.team_name || a.current_affiliation?.team_name;
+          let assignedTeamName = teamCoachInfo?.team_name || a.team_name || a.current_affiliation?.team_name || a.team_summary?.team_name;
           const assignedCoachName = teamCoachInfo?.head_coach || a.coach_name || a.coach || a.current_affiliation?.coach_name;
+
+          const scoutInfo = scoutedAthleteMap.get(normalizedId) || scoutedAthleteMap.get(rawId);
+          const isScouted = Boolean(scoutInfo || a.is_scouted);
+          const scoutStatus = scoutInfo ? scoutInfo.offer_status : a.scout_status;
+
+          // If athlete is accepted by coach and coach has a team, associate coach's team name if none exists
+          if (!assignedTeamName && scoutStatus === 'ACCEPTED' && finalTeams.length > 0) {
+            assignedTeamName = finalTeams[0].team_name;
+          }
 
           const status = String(a.recruitment_status || '').toLowerCase().trim();
           const isRecruitedOrRostered = ['recruited', 'signed', 'committed', 'rostered', 'joined'].includes(status);
@@ -214,25 +264,75 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           const mergedStats = a.stats || a.averages || {};
 
-          const ppg = Number(mergedStats.ppg ?? a.averages?.ppg ?? a.pts ?? 0);
-          const rpg = Number(mergedStats.rpg ?? a.averages?.rpg ?? a.reb ?? 0);
-          const ast = Number(mergedStats.ast ?? mergedStats.apg ?? a.averages?.apg ?? a.ast ?? 0);
-          const fgPct = Number(mergedStats.fg_pct ?? mergedStats.fg_percentage ?? a.averages?.fg_percentage ?? 0);
-          const per = Number(a.averages?.per_score ?? a.stats?.per ?? a.calculated_per ?? (ppg > 0 ? Math.round(ppg * 1.3) : 25));
-          const eff = Number(a.efficiency_pct ?? (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5)) : 75));
+          const ppg = Number(
+            mergedStats.ppg ??
+            a.averages?.ppg ??
+            a.stats?.ppg ??
+            mergedStats.points ??
+            a.stats?.points ??
+            mergedStats.pts ??
+            a.stats?.pts ??
+            mergedStats.points_per_game ??
+            a.pts ??
+            a.points ??
+            a.ppg ??
+            0
+          );
+          const rpg = Number(
+            mergedStats.rpg ??
+            a.averages?.rpg ??
+            a.stats?.rpg ??
+            mergedStats.rebounds ??
+            a.stats?.rebounds ??
+            mergedStats.reb ??
+            a.stats?.reb ??
+            a.reb ??
+            a.rpg ??
+            0
+          );
+          const ast = Number(
+            mergedStats.ast ??
+            mergedStats.apg ??
+            a.averages?.apg ??
+            a.stats?.ast ??
+            a.stats?.apg ??
+            mergedStats.assists ??
+            a.ast ??
+            a.apg ??
+            0
+          );
+          const fgPct = Number(
+            mergedStats.fg_pct ??
+            mergedStats.fg_percentage ??
+            a.averages?.fg_percentage ??
+            a.stats?.fg_pct ??
+            a.fg_pct ??
+            0
+          );
+          const per = Number(
+            a.averages?.per_score ??
+            a.stats?.per ??
+            a.stats?.calculated_per ??
+            a.calculated_per ??
+            a.career_per ??
+            (ppg > 0 ? Math.round(ppg * 1.3 + 12) : 25)
+          );
+          const eff = Number(
+            a.efficiency_pct ??
+            a.stats?.efficiency_pct ??
+            (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5 + 20)) : 75)
+          );
+
+          const rawSport = (a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
+          const sportCategory: SportCategoryFilter =
+            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
 
           const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
           const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
           const wingspanCm = a.physical_attributes?.wingspan_cm || a.physical_profile?.wingspan_cm || a.wingspan_cm;
 
           const fullName = a.full_name || `${a.first_name || ''} ${a.last_name || ''}`.trim() || 'Athlete';
-          const rawSport = (a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
-          const sportCategory: SportCategoryFilter =
-            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
-
-          const rawPos = (a.position || '').trim();
-          const isGenericPos = !rawPos || rawPos.toLowerCase() === 'unassigned' || rawPos.toLowerCase() === 'player' || rawPos.toLowerCase() === rawSport.toLowerCase();
-          const positionTag = !isGenericPos ? rawPos : (sportCategory === 'SWIMMING' ? 'Freestyle' : sportCategory === 'TRACK AND FIELD' ? 'Sprinter' : sportCategory === 'BASKETBALL' ? 'Point Guard' : 'Player');
+          const positionTag = a.position || (a.sport_type ? a.sport_type : 'Player');
 
           mappedAthletes.push({
             athlete_id: rawId,
@@ -242,25 +342,19 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             position_tag: positionTag,
             sport_category: sportCategory,
             biometrics: {
-              height_ft: heightCm
-                ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"`
-                : (a.biometrics?.height_ft && a.biometrics.height_ft !== '-' ? a.biometrics.height_ft : (sportCategory === 'BASKETBALL' ? "6'2\"" : sportCategory === 'SWIMMING' ? "6'0\"" : "5'11\"")),
-              weight_lbs: weightKg
-                ? `${Math.round(weightKg * 2.20462)} lbs`
-                : (a.biometrics?.weight_lbs && a.biometrics.weight_lbs !== '-' ? a.biometrics.weight_lbs : (sportCategory === 'BASKETBALL' ? "180 lbs" : sportCategory === 'SWIMMING' ? "170 lbs" : "160 lbs")),
-              wingspan_ft: wingspanCm
-                ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"`
-                : (a.biometrics?.wingspan_ft && a.biometrics.wingspan_ft !== '-' ? a.biometrics.wingspan_ft : (sportCategory === 'BASKETBALL' ? "6'5\"" : sportCategory === 'SWIMMING' ? "6'2\"" : "6'0\"")),
+              height_ft: a.biometrics?.height_ft || (heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : '-'),
+              weight_lbs: a.biometrics?.weight_lbs || (weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : '-'),
+              wingspan_ft: a.biometrics?.wingspan_ft || (wingspanCm ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"` : '-'),
             },
             stats: {
               ppg,
               rpg,
               ast,
               fg_pct: fgPct,
-              times_50m_free: a.stats?.times_50m_free || (sportCategory === 'SWIMMING' ? '24.8s' : undefined),
-              times_100m: a.stats?.times_100m || (sportCategory === 'TRACK AND FIELD' ? '10.9s' : sportCategory === 'SWIMMING' ? '54.2s' : undefined),
-              times_200m: a.stats?.times_200m || (sportCategory === 'TRACK AND FIELD' ? '22.4s' : sportCategory === 'SWIMMING' ? '1:58.4' : undefined),
-              times_400m: a.stats?.times_400m || (sportCategory === 'TRACK AND FIELD' ? '49.8s' : undefined),
+              times_50m_free: a.stats?.times_50m_free,
+              times_100m: a.stats?.times_100m,
+              times_200m: a.stats?.times_200m,
+              times_400m: a.stats?.times_400m,
             },
             calculated_per: per,
             efficiency_pct: eff,
@@ -275,6 +369,8 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             team_name: assignedTeamName,
             coach_name: assignedCoachName,
             has_coach: hasCoach,
+            is_scouted: isScouted,
+            scout_status: scoutStatus,
           });
         });
       }
@@ -287,12 +383,15 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               const rNormId = r.athlete_id.replace(/^ath_/, '');
               if (!seenIds.has(rNormId)) {
                 seenIds.add(rNormId);
+                const scoutInfo = scoutedAthleteMap.get(rNormId) || scoutedAthleteMap.get(r.athlete_id);
                 mappedAthletes.push({
                   ...r,
                   team_id: t.team_id,
                   team_name: t.team_name,
                   coach_name: t.head_coach,
                   has_coach: true,
+                  is_scouted: Boolean(scoutInfo || r.is_scouted),
+                  scout_status: scoutInfo ? scoutInfo.offer_status : r.scout_status,
                 });
               }
             });
@@ -473,17 +572,26 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
       setScoutingProposals((prev) => [newProposal, ...prev]);
     }
+
+    setAthletes((prev) =>
+      prev.map((a) =>
+        a.athlete_id === athlete.athlete_id || a.athlete_id.replace(/^ath_/, '') === athlete.athlete_id.replace(/^ath_/, '')
+          ? { ...a, is_scouted: true, scout_status: 'PENDING' }
+          : a
+      )
+    );
+    setRankingAthletes((prev) =>
+      prev.map((a) =>
+        a.athlete_id === athlete.athlete_id || a.athlete_id.replace(/^ath_/, '') === athlete.athlete_id.replace(/^ath_/, '')
+          ? { ...a, is_scouted: true, scout_status: 'PENDING' }
+          : a
+      )
+    );
   };
 
-  // Advanced & Search filtering for discovery prospect feed (available uncommitted recruits)
+  // Advanced & Search filtering for discovery prospect feed
   const filteredAthletes = useMemo(() => {
     return athletes.filter((athlete) => {
-      // Exclude athletes who already have coaches or are recruited/rostered from Discovery scouting feed
-      if (athlete.has_coach) return false;
-      const status = String(athlete.recruitment_status || '').toLowerCase().trim();
-      if (['recruited', 'signed', 'committed', 'rostered', 'joined'].includes(status)) return false;
-      if (athlete.team_id && String(athlete.team_id).trim() !== '' && String(athlete.team_id) !== 'none') return false;
-
       if (athlete.sport_category !== activeSportFilter) {
         return false;
       }

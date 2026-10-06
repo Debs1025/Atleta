@@ -18,7 +18,7 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 16;
 
-  const { scoutingProposals, sortRecruits, setSortRecruits } = useDiscovery();
+  const { scoutingProposals, sortRecruits, setSortRecruits, athletes, teams } = useDiscovery();
 
   const toggleSort = () => {
     setSortRecruits(sortRecruits === 'date' ? 'status' : 'date');
@@ -50,37 +50,52 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={{ marginTop: 12 }}>
-          {sortedProposals.map((item) => (
-            <View key={item.scout_id} style={styles.recruitCard}>
-              <View style={styles.leftGroup}>
-                <View style={styles.avatarCircle}>
-                  <Ionicons name="person" size={18} color="#00C8FF" />
+          {sortedProposals.map((item) => {
+            const matchedAthlete = athletes.find(
+              (a) => a.athlete_id === item.athlete_id || a.athlete_id.replace(/^ath_/, '') === item.athlete_id.replace(/^ath_/, '')
+            );
+            const teamName = matchedAthlete?.team_name || (item.offer_status === 'ACCEPTED' && teams.length > 0 ? teams[0].team_name : null);
+
+            return (
+              <View key={item.scout_id} style={styles.recruitCard}>
+                <View style={styles.leftGroup}>
+                  <View style={styles.avatarCircle}>
+                    <Ionicons name="person" size={18} color="#00C8FF" />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recruitName}>{item.athlete_name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                      <Text style={styles.sportCategoryTag}>{item.sport_category}</Text>
+                      {teamName ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <Ionicons name="shield-checkmark" size={11} color="#38BDF8" />
+                          <Text style={{ color: '#38BDF8', fontSize: 11, fontWeight: '700' }}>{teamName}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
                 </View>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recruitName}>{item.athlete_name}</Text>
-                  <Text style={styles.sportCategoryTag}>{item.sport_category}</Text>
+                <View style={styles.rightGroup}>
+                  {(item.offer_status || '').toUpperCase() === 'ACCEPTED' ? (
+                    <View style={styles.statusBadgeAccepted}>
+                      <Text style={styles.statusTextAccepted}>ACCEPTED</Text>
+                    </View>
+                  ) : (item.offer_status || '').toUpperCase() === 'DECLINED' ? (
+                    <View style={styles.statusBadgeDeclined}>
+                      <Text style={styles.statusTextDeclined}>DECLINED</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.statusBadgePending}>
+                      <Text style={styles.statusTextPending}>{(item.offer_status || 'PENDING').toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.relativeDateText}>{item.date_added_relative || 'Recent'}</Text>
                 </View>
               </View>
-
-              <View style={styles.rightGroup}>
-                {(item.offer_status || '').toUpperCase() === 'ACCEPTED' ? (
-                  <View style={styles.statusBadgeAccepted}>
-                    <Text style={styles.statusTextAccepted}>ACCEPTED</Text>
-                  </View>
-                ) : (item.offer_status || '').toUpperCase() === 'DECLINED' ? (
-                  <View style={styles.statusBadgeDeclined}>
-                    <Text style={styles.statusTextDeclined}>DECLINED</Text>
-                  </View>
-                ) : (
-                  <View style={styles.statusBadgePending}>
-                    <Text style={styles.statusTextPending}>{(item.offer_status || 'PENDING').toUpperCase()}</Text>
-                  </View>
-                )}
-                <Text style={styles.relativeDateText}>{item.date_added_relative || 'Recent'}</Text>
-              </View>
-            </View>
-          ))}
+            );
+          })}
 
           {/* Empty State Container matching wireframe */}
           <View style={styles.emptyStateContainer}>

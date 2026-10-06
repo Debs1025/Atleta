@@ -52,6 +52,7 @@ export const DiscoveryPlayer: React.FC<{
             const positionTag = athlete.position_tag || 'Player';
             const effPct = Number(athlete.efficiency_pct ?? 75);
             const filledCount = Math.min(5, Math.max(1, Math.round((effPct / 100) * 5)));
+            const currentTeam = athlete.team_name || (athlete.has_coach && athlete.coach_name ? `Coach ${athlete.coach_name}'s Team` : null);
 
             return (
               <TouchableOpacity
@@ -60,16 +61,33 @@ export const DiscoveryPlayer: React.FC<{
                 onPress={() => handleOpenAthlete(athlete)}
                 activeOpacity={0.85}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center' }}>
-                      <Ionicons name="person" size={16} color="#00C8FF" />
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingRight: 8 }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="person" size={18} color="#00C8FF" />
                     </View>
-                    <View>
-                      <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>{athleteName}</Text>
-                      <Text style={{ color: '#94A3B8', fontSize: 12, marginTop: 2 }}>
-                        #{athlete.jersey_number || '2'} • {athlete.province || 'Camarines Sur'}, Bicol
-                      </Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>{athleteName}</Text>
+                        {athlete.is_scouted && (
+                          <View style={{ backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                            <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>SCOUTED</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {currentTeam ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                          <Ionicons name="shield-checkmark" size={12} color="#38BDF8" />
+                          <Text style={{ color: '#38BDF8', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
+                            Team: {currentTeam}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={{ color: '#94A3B8', fontSize: 12, marginTop: 2 }}>
+                          #{athlete.jersey_number || '2'} • {athlete.province || 'Camarines Sur'}, Bicol
+                        </Text>
+                      )}
                     </View>
                   </View>
 

@@ -2,10 +2,10 @@ import { StyleSheet } from "react-native";
 
 const styles = StyleSheet.create({
   stepRow: {
-    marginBottom: 12
+    marginBottom: 16
   },
   sectionLabel: {
-    color: "#141c3a",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
     marginBottom: 10
@@ -13,71 +13,71 @@ const styles = StyleSheet.create({
   roleRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 4
+    marginBottom: 8
   },
   helper: {
-    color: "#6b7280",
+    color: "#94A3B8",
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 16
   },
   navRow: {
     flexDirection: "row",
-    marginTop: 8
+    marginTop: 12
   },
   navSpacer: {
     width: 12
   },
   documentBox: {
-    marginBottom: 14
+    marginBottom: 16
   },
   documentLabel: {
-    color: "#4b5563",
-    fontSize: 15,
+    color: "#E2E8F0",
+    fontSize: 14,
     fontWeight: "700",
-    marginBottom: 6
+    marginBottom: 8
   },
   documentHint: {
-    color: "#6b7280",
+    color: "#64748B",
     fontSize: 12,
     marginTop: 8
   },
   dropdownGroup: {
-    marginBottom: 14
+    marginBottom: 16
   },
   dropdownLabel: {
-    color: "#4b5563",
-    fontSize: 15,
+    color: "#E2E8F0",
+    fontSize: 14,
     fontWeight: "700",
-    marginBottom: 6
+    marginBottom: 8
   },
   dropdownTrigger: {
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#a3a3a3",
-    borderRadius: 4,
-    borderWidth: 1,
+    backgroundColor: "#0F172A",
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 12,
+    borderWidth: 1.5,
     flexDirection: "row",
     justifyContent: "space-between",
-    minHeight: 54,
+    minHeight: 52,
     paddingHorizontal: 16
   },
   dropdownTriggerOpen: {
-    borderColor: "#141c3a"
+    borderColor: "#00C8FF"
   },
   dropdownTriggerPressed: {
-    backgroundColor: "#f8fafc"
+    backgroundColor: "#1E293B"
   },
   dropdownError: {
-    borderColor: "#ef4444"
+    borderColor: "#EF4444"
   },
   dropdownValueText: {
-    color: "#1f2937",
-    fontSize: 16,
-    fontWeight: "500"
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600"
   },
   dropdownPlaceholderText: {
-    color: "#9aa2b8"
+    color: "#64748B"
   },
   chevronWrap: {
     alignItems: "center",
@@ -87,21 +87,21 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "180deg" }]
   },
   dropdownChevron: {
-    color: "#6b7280",
+    color: "#94A3B8",
     fontSize: 12
   },
   dropdownMenu: {
-    backgroundColor: "#fff",
-    borderColor: "#e2e8f0",
-    borderRadius: 6,
-    borderWidth: 1,
+    backgroundColor: "#0F172A",
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 12,
+    borderWidth: 1.5,
     marginTop: 6,
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8
   },
   dropdownOption: {
     alignItems: "center",
@@ -112,31 +112,31 @@ const styles = StyleSheet.create({
   },
   dropdownOptionBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9"
+    borderBottomColor: "rgba(255, 255, 255, 0.08)"
   },
   dropdownOptionSelected: {
-    backgroundColor: "#f0f4ff"
+    backgroundColor: "rgba(0, 200, 255, 0.14)"
   },
   dropdownOptionPressed: {
-    backgroundColor: "#f8fafc"
+    backgroundColor: "#1E293B"
   },
   dropdownOptionText: {
-    color: "#334155",
-    fontSize: 15,
+    color: "#CBD5E1",
+    fontSize: 14,
     fontWeight: "600"
   },
   dropdownOptionTextSelected: {
-    color: "#141c3a",
+    color: "#00C8FF",
     fontWeight: "800"
   },
   dropdownCheckmark: {
-    color: "#141c3a",
+    color: "#00C8FF",
     fontSize: 15,
     fontWeight: "800"
   },
   createdScreen: {
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#070D19",
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: 28
@@ -145,14 +145,14 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   createdTitle: {
-    color: "#141c3a",
-    fontSize: 32,
+    color: "#FFFFFF",
+    fontSize: 30,
     fontWeight: "900",
     marginBottom: 10,
     textAlign: "center"
   },
   createdMessage: {
-    color: "#4b5563",
+    color: "#94A3B8",
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 24,

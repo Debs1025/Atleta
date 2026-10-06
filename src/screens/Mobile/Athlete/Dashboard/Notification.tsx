@@ -191,7 +191,17 @@ export function NotificationPage({
             processedInquiryIds.add(notifId);
 
             const fallbackInquiry = apiInquiries.length > 0 ? apiInquiries[0] : null;
-            const mappedStatus = fallbackInquiry
+            const rawTitle = (n.title || "").toLowerCase();
+            const rawMsg = (n.message || n.message_body || "").toLowerCase();
+            const isAcceptedNotif = rawTitle.includes("accepted") || rawMsg.includes("accepted") || n.status === "ACCEPTED" || n.offer_status === "ACCEPTED";
+            const isDeclinedNotif = rawTitle.includes("declined") || rawMsg.includes("declined") || n.status === "DECLINED" || n.offer_status === "DECLINED";
+            const isSender = n.is_sender === true || rawTitle.includes("sent") || rawMsg.includes("you sent");
+
+            const mappedStatus = isAcceptedNotif
+              ? "ACCEPTED"
+              : isDeclinedNotif
+              ? "DECLINED"
+              : fallbackInquiry
               ? (String(fallbackInquiry.offer_status || "Sent").toUpperCase().includes("ACCEPT") ? "ACCEPTED" : String(fallbackInquiry.offer_status || "Sent").toUpperCase().includes("DECLIN") ? "DECLINED" : "PENDING")
               : "PENDING";
 
@@ -200,7 +210,7 @@ export function NotificationPage({
               type: isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
               date_group: "TODAY",
               timestamp_relative: formatRelativeTime(n.created_at),
-              read_status: Boolean(n.is_read),
+              read_status: Boolean(n.is_read || n.read_status || isAcceptedNotif || isDeclinedNotif),
               sender: isRecruitment ? {
                 name: fallbackInquiry?.coach_name || "Head Coach",
                 role_category: "Recruitment Inquiry",
@@ -208,7 +218,7 @@ export function NotificationPage({
               title: n.title || (isRecruitment ? "Recruitment Inquiry" : "Action Required"),
               message_body: n.message || n.message_body || "",
               highlighted_text: n.action_url ? "Document Verification" : undefined,
-              action_label: isRecruitment ? "View Inquiry" : "Upload Now ->",
+              action_label: isRecruitment ? (mappedStatus === "ACCEPTED" ? "Inquiry Accepted ✓" : mappedStatus === "DECLINED" ? "Inquiry Declined" : "View Inquiry") : "Upload Now ->",
               document_details: !isRecruitment ? {
                 document_name: "Eligibility Document",
                 required_type: "ELIGIBILITY",
@@ -223,7 +233,7 @@ export function NotificationPage({
                 sport: (fallbackInquiry?.sport_type || "BASKETBALL").toUpperCase(),
                 message: fallbackInquiry?.offer_message || n.message || "A coach has sent you a formal recruitment proposal.",
                 status: mappedStatus,
-                is_sent_by_me: false,
+                is_sent_by_me: isSender,
               } : undefined,
             });
           });
@@ -705,16 +715,22 @@ export function NotificationPage({
                   </Text>
                 </View>
 
-                {selectedInquiryNotif.inquiry_details?.status === "ACCEPTED" ? (
+                {selectedInquiryNotif.inquiry_details?.status === "ACCEPTED" || selectedInquiryNotif.title?.toLowerCase().includes("accepted") || selectedInquiryNotif.message_body?.toLowerCase().includes("accepted") ? (
                   <View style={styles.statusBadgeContainer}>
                     <Text style={[styles.statusBadgeText, { color: "#34D399" }]}>
                       INQUIRY ACCEPTED ✓
                     </Text>
                   </View>
-                ) : selectedInquiryNotif.inquiry_details?.status === "DECLINED" ? (
+                ) : selectedInquiryNotif.inquiry_details?.status === "DECLINED" || selectedInquiryNotif.title?.toLowerCase().includes("declined") || selectedInquiryNotif.message_body?.toLowerCase().includes("declined") ? (
                   <View style={styles.statusBadgeContainer}>
                     <Text style={[styles.statusBadgeText, { color: "#F87171" }]}>
                       INQUIRY DECLINED
+                    </Text>
+                  </View>
+                ) : selectedInquiryNotif.inquiry_details?.is_sent_by_me || selectedInquiryNotif.title?.toLowerCase().includes("sent") ? (
+                  <View style={styles.statusBadgeContainer}>
+                    <Text style={[styles.statusBadgeText, { color: "#38BDF8" }]}>
+                      INQUIRY SENT (PENDING)
                     </Text>
                   </View>
                 ) : (

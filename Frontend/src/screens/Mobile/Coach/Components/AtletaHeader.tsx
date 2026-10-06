@@ -28,6 +28,11 @@ export function AtletaHeader({
 }: AtletaHeaderProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 18;
+  const [imageError, setImageError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageError(false);
+  }, [avatarUrl]);
 
   return (
     <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
@@ -63,11 +68,12 @@ export function AtletaHeader({
             activeOpacity={0.8}
             accessibilityLabel="Coach Profile"
           >
-            {avatarUrl ? (
+            {avatarUrl && !imageError ? (
               <Image
                 source={{ uri: avatarUrl }}
                 style={styles.profileAvatarImage}
                 resizeMode="cover"
+                onError={() => setImageError(true)}
               />
             ) : (
               <Ionicons name="person" size={18} color="#070D19" />

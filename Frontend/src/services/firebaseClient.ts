@@ -690,7 +690,7 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
     const lastName = uData?.last_name || cData?.last_name || "";
     const fullName = uData?.full_name || cData?.full_name || `${firstName} ${lastName}`.trim();
     const sportType = cData?.sport_type || uData?.sport_type || "Basketball";
-    const avatarUrl = uData?.avatar_url || cData?.avatar_url || null;
+    const avatarUrl = uData?.avatar_url || uData?.profile_image || cData?.avatar_url || cData?.profile_image || null;
     const institution = uData?.current_institution || cData?.current_institution || "";
     const regionalAffiliation = uData?.regional_affiliation || cData?.regional_affiliation || "";
     const nationalLeague = uData?.national_sports_league || cData?.national_sports_league || "";
@@ -760,6 +760,7 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
       sport_type: sportType,
       sports_focus: sportType.toUpperCase(),
       avatar_url: avatarUrl,
+      profile_image: avatarUrl,
       current_institution: institution,
       regional_affiliation: regionalAffiliation,
       national_sports_league: nationalLeague,

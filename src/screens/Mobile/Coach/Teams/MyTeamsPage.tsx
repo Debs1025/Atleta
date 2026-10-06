@@ -34,6 +34,7 @@ interface MyTeamsPageProps {
   teams: Team[];
   athletesPool: RosterAthlete[];
   coachName?: string;
+  avatarUrl?: string | null;
   onSelectTeam: (team: Team) => void;
   onCreateTeam: (newTeamData: {
     team_name: string;
@@ -52,6 +53,7 @@ export function MyTeamsPage({
   teams,
   athletesPool,
   coachName,
+  avatarUrl,
   onSelectTeam,
   onCreateTeam,
   onLogout,
@@ -79,6 +81,7 @@ export function MyTeamsPage({
     <View style={styles.container}>
       {/* TOP HEADER */}
       <AtletaHeader
+        avatarUrl={avatarUrl}
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress || onLogout}
         onNotificationPress={onNotificationPress}

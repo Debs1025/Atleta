@@ -33,6 +33,8 @@ export interface AthleteDiscoveryItem {
   team_name?: string;
   coach_name?: string;
   has_coach?: boolean;
+  is_scouted?: boolean;
+  scout_status?: 'PENDING' | 'ACCEPTED' | 'DECLINED' | string;
 }
 
 export interface ScoutingProposalItem {

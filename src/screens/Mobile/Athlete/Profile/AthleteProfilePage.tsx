@@ -12,6 +12,8 @@ import {
 import styles from "./styles/AthleteProfilePage";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { AthleteProfile, EligibleDocument } from "../Dashboard/HomeAnalyticsPage";
 import {
   WorkloadWarningModal,
@@ -405,36 +407,83 @@ export function AthleteProfilePage({
   // Handler to pick/upload avatar image
   const handlePickAvatarImage = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["image/*"],
-        copyToCacheDirectory: true,
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Permission to access media library is required to select a profile picture.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const pickedAsset = result.assets[0];
-        setAvatarUri(pickedAsset.uri);
+        let finalDataUri = pickedAsset.uri;
+
+        if (pickedAsset.base64) {
+          const mime = pickedAsset.mimeType || "image/jpeg";
+          finalDataUri = `data:${mime};base64,${pickedAsset.base64}`;
+        } else {
+          try {
+            const b64 = await FileSystem.readAsStringAsync(pickedAsset.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            finalDataUri = `data:image/jpeg;base64,${b64}`;
+          } catch {}
+        }
+
+        setAvatarUri(finalDataUri);
 
         const updated: AthleteProfile = {
           ...profile,
-          avatar_url: pickedAsset.uri,
+          avatar_url: finalDataUri,
+          profile_image: finalDataUri,
         };
         onUpdateProfile(updated);
 
-        const formData = new FormData();
-        formData.append("avatar", {
-          uri: pickedAsset.uri,
-          name: pickedAsset.name || "avatar.jpg",
-          type: pickedAsset.mimeType || "image/jpeg",
-        } as any);
-        formData.append("avatar_url", pickedAsset.uri);
-        const res: any = await requestMultipart("/athletes/profile", formData).catch(() => null);
-        if (res?.athlete?.avatar_url || res?.avatar_url) {
-          const finalUrl = res.athlete?.avatar_url || res.avatar_url;
-          setAvatarUri(finalUrl);
-          onUpdateProfile({
-            ...updated,
-            avatar_url: finalUrl,
+        // Upload to users/avatar endpoint & sync Firestore
+        try {
+          const res: any = await requestAuthenticatedJson("/users/avatar", "POST", {
+            avatar_url: finalDataUri,
+          }).catch(async () => {
+            const formData = new FormData();
+            formData.append("avatar_url", finalDataUri);
+            return await requestMultipart("/athletes/profile", formData);
           });
+
+          if (res?.avatar_url || res?.athlete?.avatar_url) {
+            const serverUrl = res?.avatar_url || res?.athlete?.avatar_url;
+            setAvatarUri(serverUrl);
+            onUpdateProfile({
+              ...updated,
+              avatar_url: serverUrl,
+              profile_image: serverUrl,
+            });
+          }
+        } catch (syncErr) {
+          console.warn("Avatar sync note:", syncErr);
+        }
+
+        // Also persist to Athlete_Profiles document in Firestore
+        const athleteUid = profile.athlete_id || (profile as any).user_id;
+        if (athleteUid) {
+          const cleanId = String(athleteUid).replace(/^ath_/, "");
+          const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+          const avatarPayload = {
+            avatar_url: finalDataUri,
+            profile_image: finalDataUri,
+            updated_at: new Date().toISOString(),
+          };
+          await Promise.all([
+            setDoc(doc(db, "Athlete_Profiles", canonicalId), avatarPayload, { merge: true }).catch(() => null),
+            setDoc(doc(db, "Athlete_Profiles", cleanId), avatarPayload, { merge: true }).catch(() => null),
+            setDoc(doc(db, "Users", cleanId), avatarPayload, { merge: true }).catch(() => null),
+          ]);
         }
       }
     } catch (error) {

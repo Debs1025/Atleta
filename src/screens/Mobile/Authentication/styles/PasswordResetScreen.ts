@@ -2,15 +2,18 @@ import { StyleSheet } from "react-native";
 
 const styles = StyleSheet.create({
   card: {
-    borderColor: "#141c3a",
-    borderWidth: 1,
-    padding: 20
+    backgroundColor: "#0F172A",
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 20
   },
   back: {
-    color: "#141c3a",
-    fontSize: 16,
+    color: "#00C8FF",
+    fontSize: 15,
     fontWeight: "800",
-    marginTop: 18,
+    marginTop: 20,
     textAlign: "center"
   }
 });

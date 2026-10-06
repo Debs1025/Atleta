@@ -86,6 +86,42 @@ export function AddAthlete({
       return raw.replace(/^ath_/, "").toLowerCase();
     };
 
+    const getDefaultSportPosition = (sport: string) => {
+      const norm = sport.toUpperCase().trim();
+      if (norm.includes("BASKET") || !norm) return "Point Guard";
+      if (norm.includes("VOLLEY")) return "Setter";
+      if (norm.includes("SWIM")) return "Freestyle";
+      if (norm.includes("TRACK") || norm.includes("FIELD")) return "100m Sprint";
+      if (norm.includes("PICKLE")) return "Singles Player";
+      if (norm.includes("BADMINTON")) return "Singles";
+      if (norm.includes("FOOTBALL") || norm.includes("SOCCER")) return "Forward";
+      return "Point Guard";
+    };
+
+    const resolvePosition = (rawPos?: string) => {
+      const defaultPos = getDefaultSportPosition(targetSport);
+      if (!rawPos) return defaultPos;
+      const p = rawPos.toLowerCase().trim();
+      const s = targetSport.toLowerCase().trim();
+      if (
+        p === "unassigned" ||
+        p === "player" ||
+        p === "swimmer" ||
+        p === "track athlete" ||
+        p === "unset" ||
+        p === s ||
+        p === `${s} player` ||
+        p === "athlete" ||
+        p === "basketball" ||
+        p === "volleyball" ||
+        p === "swimming" ||
+        p === "track and field"
+      ) {
+        return defaultPos;
+      }
+      return rawPos;
+    };
+
     // 1. Process coach's handled pool
     if (athletesPool && athletesPool.length > 0) {
       athletesPool.forEach((a) => {
@@ -99,7 +135,7 @@ export function AddAthlete({
               full_name: a.full_name || "Athlete",
               id_number: a.jersey_number ? `#${a.jersey_number}` : aId.slice(-6).toUpperCase(),
               grad_class: (a as any).status_tag || (a.is_eligibility_verified !== false ? "Verified Eligibility" : "Pending Action"),
-              primary_position: a.position || (targetSport === "SWIMMING" ? "Swimmer" : targetSport === "TRACK AND FIELD" ? "Track Athlete" : "Player"),
+              primary_position: resolvePosition(a.position),
               jersey_number: a.jersey_number ? String(a.jersey_number) : "00",
               is_verified: a.is_eligibility_verified !== false,
               missing_documents: Array.isArray(a.missing_documents) && a.missing_documents.length > 0
@@ -130,7 +166,7 @@ export function AddAthlete({
               full_name: fullName,
               id_number: a.jersey_number ? `#${a.jersey_number}` : (existing?.id_number || aId.slice(-6).toUpperCase()),
               grad_class: a.grad_class || (isVerified ? "Verified Eligibility" : "Pending Action"),
-              primary_position: a.position || a.primary_position || (targetSport === "SWIMMING" ? "Swimmer" : targetSport === "TRACK AND FIELD" ? "Track Athlete" : "Player"),
+              primary_position: resolvePosition(a.position || a.primary_position),
               jersey_number: a.jersey_number ? String(a.jersey_number) : (existing?.jersey_number || "00"),
               is_verified: isVerified,
               missing_documents: Array.isArray(a.missing_documents) && a.missing_documents.length > 0

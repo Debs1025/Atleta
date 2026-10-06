@@ -230,6 +230,12 @@ export function CoachProfile({
     }
   };
 
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [profile.avatar_url]);
+
   return (
     <Modal
       visible={visible}
@@ -252,11 +258,12 @@ export function CoachProfile({
             {/* AVATAR & HERO HEADER */}
             <View style={styles.heroSection}>
               <View style={styles.avatarCircleFrame}>
-                {profile.avatar_url ? (
+                {profile.avatar_url && !avatarError ? (
                   <Image
                     source={{ uri: profile.avatar_url }}
                     style={styles.avatarCircleImage}
                     resizeMode="cover"
+                    onError={() => setAvatarError(true)}
                   />
                 ) : (
                   <Ionicons name="person" size={44} color="#00C8FF" />
