@@ -153,7 +153,7 @@ const PlayerRowItem = React.memo(
 // API Request: fetch coach dashboard & team summary (GET /api/coach/dashboard)
 export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 18;
+  const headerTopPadding = Math.max(insets.top, 44) + 38;
 
   // Local State
   const [coach, setCoach] = useState<UserCoach>({
