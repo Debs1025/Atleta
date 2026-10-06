@@ -508,8 +508,19 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       {/* Top Header Bar */}
       {!hideParentBars && (
         <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <AtletaAnimatedLogo size={30} showGlow={false} pulse={false} />
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 20,
+                fontWeight: "900",
+                letterSpacing: 2.5,
+                includeFontPadding: false,
+              }}
+            >
+              ATLETA
+            </Text>
           </View>
           <Pressable
             style={styles.notificationButton}

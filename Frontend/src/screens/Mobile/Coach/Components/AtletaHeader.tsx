@@ -37,8 +37,9 @@ export function AtletaHeader({
   return (
     <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
       <View style={styles.header}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <AtletaAnimatedLogo size={32} showGlow={false} pulse={false} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <AtletaAnimatedLogo size={30} showGlow={false} pulse={false} />
+          <Text style={styles.brandTitle}>ATLETA</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -107,10 +108,11 @@ const styles = StyleSheet.create({
   },
   brandTitle: {
     color: "#FFFFFF",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     fontFamily: fontBoldPlatform,
+    includeFontPadding: false,
   },
   headerRight: {
     flexDirection: "row",
