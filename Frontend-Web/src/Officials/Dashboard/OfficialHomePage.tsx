@@ -186,7 +186,7 @@ export const OfficialHomePage: React.FC = () => {
     const list: ActivityEntry[] = [];
     const seen = new Set<string>();
 
-    // 1. Audit / Certified Match actions
+    // 1. Audit / Certified Match actions and Match creations for this official
     officialMatches.forEach((m) => {
       const cleanId = m.match_id.replace(/^#/, '');
       const raw = m.raw_match || {};
@@ -227,28 +227,9 @@ export const OfficialHomePage: React.FC = () => {
       }
     });
 
-    // 2. Audit queue entries from dashboard
-    (dashboard?.audit_queue || []).forEach((act: any, idx: number) => {
-      const rawId = String(act.match_id || act.id || idx).replace(/^#/, '');
-      const qRaw = act.requested_at || act.created_at;
-      const qTs = qRaw ? new Date(qRaw).getTime() : 0;
-      const qId = `queue_${rawId}_${idx}`;
-      if (!seen.has(qId)) {
-        seen.add(qId);
-        list.push({
-          id: qId,
-          description: (
-            <span>Match created for Match ID <strong>#{rawId}</strong></span>
-          ),
-          timestamp: qTs || Date.now(),
-          dateFormatted: formatActDate(qTs || Date.now()),
-        });
-      }
-    });
-
     // Sort strictly DESCENDING: latest (newest timestamp) at the very 1st
     return list.sort((a, b) => b.timestamp - a.timestamp);
-  }, [officialMatches, dashboard]);
+  }, [officialMatches]);
 
   const totalMatches = officialMatches.length;
   const pendingCount = String(

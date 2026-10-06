@@ -10,12 +10,14 @@ import {
   Loader2,
   Eye,
   X,
+  Download,
 } from 'lucide-react';
 import {
   getMatchAuditDetail,
   certifyMatchValidation,
   deleteOfficialMatch,
   uploadScoresheetFile,
+  downloadCertifiedMatchPdf,
   getCachedData,
   setCachedData,
   markMatchAsCertified,
@@ -79,6 +81,7 @@ export const ScoresheetMatch: React.FC = () => {
   });
   const [scoresheetUrl, setScoresheetUrl] = useState<string | undefined>(() => cached?.scoresheet_url);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Editable rosters & race results
@@ -114,9 +117,12 @@ export const ScoresheetMatch: React.FC = () => {
         if (data.race_results && data.race_results.length > 0) {
           setRaceResults(data.race_results);
         }
+      } else {
+        setMatchData(null);
       }
     } catch (err) {
       console.error('Failed to load match detail:', err);
+      setMatchData(null);
     } finally {
       setLoading(false);
     }
@@ -149,49 +155,6 @@ export const ScoresheetMatch: React.FC = () => {
         : Array.isArray(res?.parsed_tables?.team_scores)
         ? res.parsed_tables.team_scores
         : [];
-
-      const isIndividual = isIndividualSport || (
-        res?.match_info?.sport_type && (
-          String(res.match_info.sport_type).toLowerCase().includes('swim') ||
-          String(res.match_info.sport_type).toLowerCase().includes('track') ||
-          String(res.match_info.sport_type).toLowerCase().includes('field')
-        )
-      );
-
-      const rawRaceResults: any[] = Array.isArray(res?.race_results)
-        ? res.race_results
-        : Array.isArray(res?.parsed_tables?.race_results)
-        ? res.parsed_tables.race_results
-        : [];
-
-      if (isIndividual && (rawRaceResults.length > 0 || rawPlayers.length > 0)) {
-        const sourceEntries = rawRaceResults.length > 0 ? rawRaceResults : rawPlayers;
-        const parsedRaces: RaceResultRow[] = sourceEntries.map((item: any, idx: number) => ({
-          athlete_id: item.athlete_id || `ath_race_${idx + 1}`,
-          placement_rank: item.placement_rank || item.rank || item.place || idx + 1,
-          athlete_name: String(item.athlete_name || item.player_name || `ATHLETE #${idx + 1}`).toUpperCase(),
-          team_name: String(item.team_name || item.team || item.school || item.affiliation || 'UNAFFILIATED').toUpperCase(),
-          distance: String(item.distance || item.event || item.distance_meters || '100m'),
-          finish_time: String(item.finish_time || item.time || (item.finish_time_ms ? `${(item.finish_time_ms / 1000).toFixed(2)}s` : '00:00.00')),
-          split_times: Array.isArray(item.split_times) ? item.split_times : (item.split_times_ms || []),
-          efficiency: typeof item.efficiency === 'number' ? item.efficiency : (item.calculated_efficiency || 90),
-          is_disqualified: Boolean(item.is_disqualified || item.status === 'DQ'),
-        }));
-
-        if (parsedRaces.length > 0) {
-          setRaceResults(parsedRaces);
-          setMatchData((prev) => {
-            if (!prev) return prev;
-            const updated: MatchAuditDetail = {
-              ...prev,
-              scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
-              race_results: parsedRaces,
-            };
-            setCachedData(`match_audit_detail_${cleanId}`, updated);
-            return updated;
-          });
-        }
-      }
 
       if (rawPlayers.length > 0) {
         const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
@@ -284,13 +247,13 @@ export const ScoresheetMatch: React.FC = () => {
             scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
             home_team: {
               ...prev.home_team,
-              score: hSum > 0 ? hSum : prev.home_team.score,
+              score: hSum,
               result: hSum >= aSum ? 'WIN' : 'LOSE',
               roster_stats: hRows,
             },
             away_team: {
               ...prev.away_team,
-              score: aSum > 0 ? aSum : prev.away_team.score,
+              score: aSum,
               result: aSum > hSum ? 'WIN' : 'LOSE',
               roster_stats: aRows,
             },
@@ -385,6 +348,68 @@ export const ScoresheetMatch: React.FC = () => {
       setActionError(err?.message || 'Failed to remove match record.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDownloadScoresheet = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      if (scoresheetUrl) {
+        let ext = 'pdf';
+        const lower = scoresheetUrl.toLowerCase();
+        if (lower.startsWith('data:image/png') || lower.includes('.png')) {
+          ext = 'png';
+        } else if (lower.startsWith('data:image/jpeg') || lower.startsWith('data:image/jpg') || lower.includes('.jpg') || lower.includes('.jpeg')) {
+          ext = 'jpg';
+        } else if (lower.startsWith('data:application/pdf') || lower.includes('.pdf')) {
+          ext = 'pdf';
+        }
+
+        if (scoresheetUrl.startsWith('data:')) {
+          const a = document.createElement('a');
+          a.href = scoresheetUrl;
+          a.download = `scoresheet_match_${cleanId || 'record'}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return;
+        }
+
+        try {
+          const res = await fetch(scoresheetUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `scoresheet_match_${cleanId || 'record'}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+            return;
+          }
+        } catch (fetchErr) {
+          console.warn('Direct fetch failed, falling back to PDF endpoint:', fetchErr);
+        }
+      }
+
+      // Fallback: download certified PDF from API
+      const blob = await downloadCertifiedMatchPdf(cleanId);
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `scoresheet_match_${cleanId || 'record'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error('Failed to download scoresheet:', err);
+      alert('Failed to download scoresheet: ' + (err?.message || 'File not available'));
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -1004,6 +1029,23 @@ export const ScoresheetMatch: React.FC = () => {
               </button>
 
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {(matchData.is_certified || isMatchLocallyCertified(cleanId)) && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadScoresheet}
+                    disabled={isDownloading}
+                    className="hover-btn-solid"
+                    style={{ ...styles.downloadBtn, opacity: isDownloading ? 0.7 : 1 }}
+                  >
+                    {isDownloading ? (
+                      <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Download style={{ width: 15, height: 15 }} />
+                    )}
+                    DOWNLOAD SCORESHEET
+                  </button>
+                )}
+
                 {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
                   <button
                     type="button"

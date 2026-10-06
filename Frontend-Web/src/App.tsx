@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
 import { ForgotPassword } from './Authentication/ForgotPassword';
+import { ResetPassword } from './Authentication/ResetPassword';
 import { AdminRoute, OfficialRoute, HomeRedirect } from './Authentication/ProtectedRoute';
 import { AdminHomePage } from './SysAdmin/Dashboard/AdminHomePage';
 import { SportPage } from './SysAdmin/Sports_Management/SportPage';
@@ -24,6 +25,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* System Administrator Standalone Dashboard */}
         <Route

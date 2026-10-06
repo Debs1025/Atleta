@@ -4,6 +4,7 @@ import type {
   OfficialLoginPayload,
   OfficialRegisterPayload,
   PasswordResetPayload,
+  ConfirmPasswordResetPayload,
   OfficialSettings,
   OfficialDashboardResponse,
   OfficialScheduleItem,
@@ -15,10 +16,8 @@ import type {
   CreateSportPayload,
 } from './types';
 
-const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const envApi = (import.meta.env.VITE_ATLETA_API || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '') as string;
-const defaultApi = (import.meta.env.DEV || isLocalHost) ? 'http://localhost:5000/api/v1' : 'https://atleta-backend.vercel.app/api/v1';
-const rawBase = (envApi && envApi.trim() && !isLocalHost ? envApi.trim() : (isLocalHost ? (envApi.includes('localhost') || envApi.includes('127.0.0.1') ? envApi.trim() : 'http://localhost:5000/api/v1') : defaultApi)).replace(/\/+$/, '');
+const rawBase = (envApi && envApi.trim() ? envApi.trim() : '').replace(/\/+$/, '');
 export const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : rawBase ? `${rawBase}/api/v1` : '/api/v1';
 
 const TOKEN_KEY = 'atleta_official_token';
@@ -56,10 +55,9 @@ export const storeAllReadNotificationIds = (ids: string[]): void => {
   } catch { }
 };
 
-// In-Memory and Session Client Cache for instant screen-to-screen navigation (short TTL to ensure fresh Firestore data)
+// In-Memory and Session Client Cache for instant screen-to-screen navigation
 const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 2000; // 2 seconds cache to avoid duplicate simultaneous calls while ensuring fresh live data
-
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes cache
 
 export const getCachedData = <T>(key: string): T | null => {
   const item = cache.get(key);
@@ -376,46 +374,49 @@ export const registerOfficial = async (payload: OfficialRegisterPayload): Promis
   const firstName = nameParts[0] || 'Official';
   const lastName = nameParts.slice(1).join(' ') || 'User';
 
-  const bodyData = {
-    full_legal_name: fullName,
-    organization_name: orgName,
-    email: payload.email.trim(),
-    password: payload.password,
-    first_name: firstName,
-    last_name: lastName,
-    full_name: fullName,
-    license_number: payload.license_number || 'LIC-2026-001',
-    sport_accreditation: payload.sport_accreditation || ['Basketball'],
-    organization: orgName,
-    phone_number: payload.phone_number?.trim() || 'N/A',
-    assigned_sport: payload.assigned_sport?.trim() || 'Basketball',
-  };
-
-  let res = await fetch(`${BASE_URL}/users/official`, {
+  const res = await fetch(`${BASE_URL}/users/official`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(bodyData),
+    body: JSON.stringify({
+      full_legal_name: fullName,
+      organization_name: orgName,
+      email: payload.email.trim(),
+      password: payload.password,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName,
+      license_number: payload.license_number || 'LIC-2026-001',
+      sport_accreditation: payload.sport_accreditation || ['Basketball'],
+      organization: orgName,
+      phone_number: payload.phone_number?.trim() || 'N/A',
+      assigned_sport: payload.assigned_sport?.trim() || 'Basketball',
+    }),
   });
-
-  if (!res.ok && res.status === 404) {
-    res = await fetch(`${BASE_URL}/officials/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyData),
-    });
-  }
-
   const data = await handleResponse<AuthResponse>(res);
   return data;
 };
 
-export const requestPasswordReset = async (payload: PasswordResetPayload): Promise<{ message: string }> => {
+export const requestPasswordReset = async (payload: PasswordResetPayload): Promise<{ message: string; sent?: boolean; reset_link?: string }> => {
+  const redirect_url = payload.redirect_url || (typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined);
   const res = await fetch(`${BASE_URL}/users/password-reset`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: payload.email.trim() }),
+    body: JSON.stringify({ email: payload.email.trim(), redirect_url }),
   });
-  return handleResponse<{ message: string }>(res);
+  return handleResponse<{ message: string; sent?: boolean; reset_link?: string }>(res);
+};
+
+export const confirmPasswordReset = async (payload: ConfirmPasswordResetPayload): Promise<{ message: string; success?: boolean }> => {
+  const res = await fetch(`${BASE_URL}/users/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token: payload.token.trim(),
+      new_password: payload.new_password,
+      email: payload.email?.trim(),
+    }),
+  });
+  return handleResponse<{ message: string; success?: boolean }>(res);
 };
 
 
@@ -437,22 +438,7 @@ export const getMe = async (forceRefresh = false): Promise<AuthUser> => {
     }
     const data = await handleResponse<any>(res);
     const user = data.user || data;
-    const resolvedAvatar = user.avatar_url || (user as any).profile_image || data.avatar_url || data.profile_image || null;
-    if (resolvedAvatar) {
-      user.avatar_url = resolvedAvatar;
-      user.profile_image = resolvedAvatar;
-    }
     setCachedData('user_me', user);
-    try {
-      if (localStorage.getItem('atleta_official_user')) {
-        localStorage.setItem('atleta_official_user', JSON.stringify(user));
-      } else if (sessionStorage.getItem('atleta_official_user')) {
-        sessionStorage.setItem('atleta_official_user', JSON.stringify(user));
-      }
-    } catch {}
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('atleta_user_updated', { detail: user }));
-    }
     return user;
   } catch (err) {
     const stored = getStoredUser();
@@ -1170,32 +1156,6 @@ export const updateOfficialProfileData = async (payload: any): Promise<any> => {
     ...payload,
   };
 
-  if (bodyData.avatar_url) {
-    try {
-      await fetch(`${BASE_URL}/users/avatar`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ avatar_url: bodyData.avatar_url }),
-      });
-    } catch { }
-  }
-
-  const storedUser = getStoredUser();
-  if (storedUser) {
-    const mergedUser = { ...storedUser, ...bodyData };
-    try {
-      if (localStorage.getItem('atleta_official_user')) {
-        localStorage.setItem('atleta_official_user', JSON.stringify(mergedUser));
-      } else {
-        sessionStorage.setItem('atleta_official_user', JSON.stringify(mergedUser));
-      }
-      setCachedData('user_me', mergedUser);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('atleta_user_updated', { detail: mergedUser }));
-      }
-    } catch { }
-  }
-
   try {
     const res = await fetch(`${BASE_URL}/officials/profile`, {
       method: 'PATCH',
@@ -1468,6 +1428,15 @@ export const getMatchAuditDetail = async (
     const match = details.match || boxscore.match || details;
     const pendingVal = Array.isArray(pendingRes) ? pendingRes.find((p: any) => p.match_id === matchId) : null;
     const validationId = pendingVal?.validation_id || match?.validation_id || matchId;
+
+    // If the match does not exist in the database (deleted or not found)
+    if (!detailsRes && !boxscoreRes && !pendingVal && (!details || Object.keys(details).length === 0)) {
+      invalidateCache(cacheKey);
+      try {
+        localStorage.removeItem(`atleta_match_detail_${matchId}`);
+      } catch { }
+      return null;
+    }
 
     const scoresheetTeams: string[] = (
       match.scoresheet_data?.team_scores ||
@@ -1782,8 +1751,9 @@ export const downloadCertifiedMatchPdf = async (matchId: string): Promise<Blob> 
 };
 
 export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
+  const cleanId = matchId.replace(/^#/, '');
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/matches/${matchId.replace(/^#/, '')}`, {
+  const res = await fetch(`${BASE_URL}/matches/${cleanId}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -1792,6 +1762,25 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
   });
   const data = await handleResponse<any>(res);
   invalidateCache();
+
+  try {
+    localStorage.removeItem(`atleta_match_detail_${cleanId}`);
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(CREATED_MATCHES_PREFIX)) {
+        try {
+          const list: string[] = JSON.parse(localStorage.getItem(k) || '[]');
+          const updated = list.filter((id) => id !== cleanId && id !== `#${cleanId}`);
+          localStorage.setItem(k, JSON.stringify(updated));
+        } catch { }
+      }
+    }
+    const certKey = 'atleta_certified_match_ids';
+    const certList: string[] = JSON.parse(localStorage.getItem(certKey) || '[]');
+    const certUpdated = certList.filter((id) => id !== cleanId && id !== `#${cleanId}`);
+    localStorage.setItem(certKey, JSON.stringify(certUpdated));
+  } catch { }
+
   return data;
 };
 
@@ -1905,38 +1894,41 @@ export const deleteSport = async (
   const data = await handleResponse<{ message: string; sport_id: string }>(res);
   invalidateCache('sports_catalog');
   invalidateCache('admin_sports_catalog');
+  invalidateCache('sports');
+
   try {
+    const cleanId = sportId.toLowerCase();
+    const catFalse = getCachedData<SportsListResponse>('sports_catalog_false');
+    if (catFalse && Array.isArray(catFalse.sports)) {
+      const updated = catFalse.sports.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
+      setCachedData('sports_catalog_false', { total_sports: updated.length, sports: updated });
+    }
+    const catTrue = getCachedData<SportsListResponse>('sports_catalog_true');
+    if (catTrue && Array.isArray(catTrue.sports)) {
+      const updated = catTrue.sports.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
+      setCachedData('sports_catalog_true', { total_sports: updated.length, sports: updated });
+    }
+    const adminCat = getCachedData<SportConfiguration[]>('admin_sports_catalog');
+    if (Array.isArray(adminCat)) {
+      const updated = adminCat.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
+      setCachedData('admin_sports_catalog', updated);
+    }
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
   } catch { }
+
   return data;
 };
 
 export const changeOfficialPassword = async (newPassword: string): Promise<{ message: string }> => {
   const token = getStoredToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const body = JSON.stringify({
-    password: newPassword,
-    new_password: newPassword,
-    newPassword: newPassword,
+  const res = await fetch(`${BASE_URL}/users/password-reset`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ new_password: newPassword }),
   });
-
-  let res = await fetch(`${BASE_URL}/users/change-password`, {
-    method: 'POST',
-    headers,
-    body,
-  });
-
-  if (!res.ok) {
-    res = await fetch(`${BASE_URL}/users/password-reset`, {
-      method: 'PATCH',
-      headers,
-      body,
-    });
-  }
-
   return handleResponse<{ message: string }>(res);
 };
 

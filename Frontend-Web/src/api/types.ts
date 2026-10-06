@@ -21,6 +21,13 @@ export interface OfficialRegisterPayload {
 
 export interface PasswordResetPayload {
   email: string;
+  redirect_url?: string;
+}
+
+export interface ConfirmPasswordResetPayload {
+  token: string;
+  new_password: string;
+  email?: string;
 }
 
 export interface OfficialSettings {

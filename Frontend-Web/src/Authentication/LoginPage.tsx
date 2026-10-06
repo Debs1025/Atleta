@@ -8,7 +8,6 @@ import {
   getAdminCoachQueue,
 } from '../api/client';
 import { styles } from './styles/LoginPage';
-import { AtletaAnimatedLogo } from '../components/AtletaAnimatedLogo';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -147,9 +146,8 @@ export const LoginPage: React.FC = () => {
   return (
     <div style={styles.container}>
       <header className="resp-header" style={styles.header}>
-        <Link to="/" style={{ ...styles.logo, display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-          <AtletaAnimatedLogo size={32} showGlow={false} pulse={false} />
-          <span>ATLETA<sup style={styles.logoSup}>WEB</sup></span>
+        <Link to="/" style={styles.logo}>
+          ATLETA<sup style={styles.logoSup}>WEB</sup>
         </Link>
         <nav style={styles.nav}>
           <Link to="/login" className="nav-link" style={styles.loginLink}>LOGIN</Link>
@@ -158,10 +156,7 @@ export const LoginPage: React.FC = () => {
       </header>
 
       <main style={styles.main}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-          <AtletaAnimatedLogo size={80} showGlow={true} pulse={true} className="mb-3" />
-          <h1 style={{ ...styles.title, marginBottom: 0 }}>LOG IN YOUR ACCOUNT</h1>
-        </div>
+        <h1 style={styles.title}>LOG IN YOUR ACCOUNT</h1>
 
         <div className="resp-card" style={styles.card}>
           {err && <div style={styles.error}>{err}</div>}

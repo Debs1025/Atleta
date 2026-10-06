@@ -31,21 +31,6 @@ export const Navbar: React.FC<NavbarProps> = ({ user: propUser }) => {
     } else {
       setUser(getStoredUser());
     }
-
-    const handleUserUpdate = (e: any) => {
-      if (e?.detail) {
-        setUser(e.detail);
-      } else {
-        setUser(getStoredUser());
-      }
-    };
-
-    window.addEventListener('atleta_user_updated', handleUserUpdate);
-    window.addEventListener('storage', handleUserUpdate);
-    return () => {
-      window.removeEventListener('atleta_user_updated', handleUserUpdate);
-      window.removeEventListener('storage', handleUserUpdate);
-    };
   }, [propUser]);
 
   // Extract official's name from auth user record

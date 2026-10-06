@@ -132,9 +132,9 @@ export const ProfilePage: React.FC = () => {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    const userEmail = user?.email || profile?.email || '';
+    setIsEditModalOpen(false);
     const updatedUser: AuthUser = {
-      ...(user || { uid: profile?.official_id || 'OFFICIAL', email: userEmail, role: 'Official' }),
+      ...(user || { uid: profile?.official_id || 'OFFICIAL', email: email, role: 'Official' }),
       full_legal_name: editName.trim() || undefined,
       full_name: editName.trim() || undefined,
       organization_name: editOrg.trim() || undefined,
