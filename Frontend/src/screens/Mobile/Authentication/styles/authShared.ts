@@ -4,12 +4,14 @@ export const authScreenStyles = StyleSheet.create({
   content: {
     flexGrow: 1,
     backgroundColor: "#070D19",
-    paddingBottom: 36
+    paddingBottom: 24
   },
   shell: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 48
+    paddingTop: 56,
+    paddingBottom: 20,
+    justifyContent: "space-between"
   },
   brand: {
     color: "#FFFFFF",
@@ -24,7 +26,7 @@ export const authScreenStyles = StyleSheet.create({
   dividerRow: {
     alignItems: "center",
     flexDirection: "row",
-    marginTop: 24,
+    marginTop: 28,
     marginBottom: 20
   },
   divider: {
@@ -42,12 +44,13 @@ export const authScreenStyles = StyleSheet.create({
     includeFontPadding: false
   },
   spacer: {
-    height: 12
+    height: 14
   },
   footer: {
     color: "#94A3B8",
     fontSize: 14,
-    marginTop: 28,
+    marginTop: 36,
+    marginBottom: 12,
     textAlign: "center",
     includeFontPadding: false
   },
@@ -92,7 +95,7 @@ export const bannerStyles = StyleSheet.create({
 
 export const fieldStyles = StyleSheet.create({
   group: {
-    marginBottom: 16
+    marginBottom: 18
   },
   label: {
     color: "#E2E8F0",
@@ -105,7 +108,7 @@ export const fieldStyles = StyleSheet.create({
   input: {
     color: "#FFFFFF",
     fontSize: 15,
-    height: 52,
+    height: 54,
     paddingHorizontal: 16,
     paddingVertical: 0,
     includeFontPadding: false,
@@ -119,7 +122,7 @@ export const fieldStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     flexDirection: "row",
-    height: 52,
+    height: 54,
     overflow: "hidden"
   },
   inputWithAccessory: {
@@ -173,7 +176,7 @@ export const buttonStyles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 12,
     justifyContent: "center",
-    height: 52,
+    height: 54,
     paddingHorizontal: 20
   },
   contentRow: {
@@ -266,7 +269,7 @@ export const pillStyles = StyleSheet.create({
 
 export const titleStyles = StyleSheet.create({
   wrap: {
-    marginBottom: 26
+    marginBottom: 30
   },
   title: {
     color: "#FFFFFF",
