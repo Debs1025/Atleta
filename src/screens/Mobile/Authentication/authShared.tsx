@@ -234,19 +234,28 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
 }
 
 async function fetchApi(path: string, options: RequestInit) {
-  let response: Response;
+  let response: Response | undefined;
   const primaryUrl = `${API_BASE}${path}`;
   try {
     response = await withRequestTimeout((signal) =>
       fetch(primaryUrl, { ...options, signal })
     );
   } catch (err) {
-    if (primaryUrl.includes("10.0.2.2:5000")) {
-      const fallbackUrl = primaryUrl.replace("10.0.2.2:5000", "localhost:5000");
-      response = await withRequestTimeout((signal) =>
-        fetch(fallbackUrl, { ...options, signal })
-      );
-    } else {
+    const candidates = [
+      primaryUrl.includes("10.0.2.2:5000") ? primaryUrl.replace("10.0.2.2:5000", "localhost:5000") : null,
+      `https://atleta-backend.vercel.app/api/v1${path}`,
+    ].filter((u): u is string => Boolean(u) && u !== primaryUrl);
+
+    for (const fallbackUrl of candidates) {
+      try {
+        response = await withRequestTimeout((signal) =>
+          fetch(fallbackUrl, { ...options, signal })
+        );
+        if (response) break;
+      } catch (_) {}
+    }
+
+    if (!response) {
       throw err;
     }
   }
