@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachProfile";
-import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
 import { getCoachProfileOfflineFirst, getTeamsOfflineFirst, getMatchesOfflineFirst } from "../../../../services/firebaseClient";
 
 export interface CoachProfileProps {
@@ -97,11 +97,12 @@ export function CoachProfile({
 
           const combined = profileRes || offlineProfileRes;
 
-          if (isMounted && combined) {
-            const firstName = combined.first_name || offlineProfileRes?.first_name || profile.first_name || "Coach";
-            const lastName = combined.last_name || offlineProfileRes?.last_name || profile.last_name || "";
-            const fullName = combined.full_name || offlineProfileRes?.full_name || `${firstName} ${lastName}`.trim();
-            const rawSport = (combined.sport_type || combined.sports_focus || offlineProfileRes?.sport_type || profile.sports_focus || "BASKETBALL").toUpperCase();
+          if (isMounted && (combined || offlineProfileRes)) {
+            const data = combined || offlineProfileRes;
+            const firstName = data.first_name || offlineProfileRes?.first_name || profile.first_name || "Coach";
+            const lastName = data.last_name || offlineProfileRes?.last_name || profile.last_name || "";
+            const fullName = data.full_name || offlineProfileRes?.full_name || `${firstName} ${lastName}`.trim();
+            const rawSport = (data.sport_type || data.sports_focus || offlineProfileRes?.sport_type || profile.sports_focus || "BASKETBALL").toUpperCase();
             const sportFocus: CoachProfileState["sports_focus"] =
               rawSport.includes("SWIM")
                 ? "SWIMMING"
@@ -110,7 +111,7 @@ export function CoachProfile({
                 : rawSport;
 
             let totalAthletesCount = 0;
-            if (Array.isArray(teamsRes)) {
+            if (Array.isArray(teamsRes) && teamsRes.length > 0) {
               const athleteIds = new Set<string>();
               teamsRes.forEach((t: any) => {
                 if (Array.isArray(t.roster_list)) {
@@ -122,27 +123,65 @@ export function CoachProfile({
               });
               totalAthletesCount = athleteIds.size;
             }
-
-            let totalMatchesCount = 0;
-            if (Array.isArray(matchesRes)) {
-              totalMatchesCount = matchesRes.length;
+            if (!totalAthletesCount && Array.isArray(data.athletes_managed)) {
+              totalAthletesCount = data.athletes_managed.length;
+            }
+            if (!totalAthletesCount) {
+              totalAthletesCount = data.system_statistics?.total_athletes || offlineProfileRes?.system_statistics?.total_athletes || 0;
             }
 
-            const institution = combined.current_institution || offlineProfileRes?.current_institution || profile.current_institution || "";
-            const regionalAffiliation = combined.regional_affiliation || offlineProfileRes?.regional_affiliation || profile.regional_affiliation || "";
-            const nationalLeague = combined.national_sports_league || offlineProfileRes?.national_sports_league || profile.national_sports_league || "";
-            const avatarUrl = combined.avatar_url || offlineProfileRes?.avatar_url || profile.avatar_url;
+            let totalMatchesCount = 0;
+            if (Array.isArray(matchesRes) && matchesRes.length > 0) {
+              totalMatchesCount = matchesRes.length;
+            } else if (data.total_matches_logged || data.matches_logged || data.metric_logs) {
+              totalMatchesCount = Number(data.total_matches_logged || data.matches_logged || data.metric_logs);
+            } else {
+              totalMatchesCount = data.system_statistics?.metric_logs || offlineProfileRes?.system_statistics?.metric_logs || 0;
+            }
 
-            const creds = combined.certifications || combined.credentials || offlineProfileRes?.certifications || offlineProfileRes?.credentials || profile.credentials || [];
-            const docs = combined.uploaded_documents || offlineProfileRes?.uploaded_documents || profile.uploaded_documents || [];
+            const institution = data.current_institution || offlineProfileRes?.current_institution || profile.current_institution || "";
+            const regionalAffiliation = data.regional_affiliation || offlineProfileRes?.regional_affiliation || profile.regional_affiliation || "";
+            const nationalLeague = data.national_sports_league || offlineProfileRes?.national_sports_league || profile.national_sports_league || "";
+            const avatarUrl = data.avatar_url || data.profile_image || offlineProfileRes?.avatar_url || offlineProfileRes?.profile_image || profile.avatar_url;
+
+            const rawCreds = data.certifications || data.credentials || offlineProfileRes?.certifications || offlineProfileRes?.credentials || profile.credentials || [];
+            const rawDocs = data.uploaded_documents || data.professional_documents || offlineProfileRes?.uploaded_documents || offlineProfileRes?.professional_documents || profile.uploaded_documents || [];
+
+            const normalizedDocs: UploadedDocument[] = Array.isArray(rawDocs)
+              ? rawDocs.map((d: any, idx: number) => {
+                  if (typeof d === "string") {
+                    return {
+                      id: `doc_${idx}`,
+                      file_name: d,
+                      file_type: d.toLowerCase().endsWith(".pdf") ? "PDF" : "JPG",
+                      file_url: d,
+                    };
+                  }
+                  return d;
+                })
+              : [];
+
+            const normalizedCreds: CredentialItem[] = Array.isArray(rawCreds)
+              ? rawCreds.map((c: any, idx: number) => {
+                  if (typeof c === "string") {
+                    return {
+                      id: `cred_${idx}`,
+                      title: c,
+                      type: "certified",
+                      icon_name: "shield-check",
+                    };
+                  }
+                  return c;
+                })
+              : [];
 
             const updated: CoachProfileState = {
-              coach_id: combined.coach_id || offlineProfileRes?.coach_id || profile.coach_id,
-              user_id: combined.user_id || offlineProfileRes?.user_id || profile.user_id,
+              coach_id: data.coach_id || offlineProfileRes?.coach_id || profile.coach_id,
+              user_id: data.user_id || offlineProfileRes?.user_id || profile.user_id,
               first_name: firstName,
               last_name: lastName,
               full_name: fullName,
-              email: combined.email || offlineProfileRes?.email || profile.email,
+              email: data.email || offlineProfileRes?.email || profile.email,
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
               avatar_url: avatarUrl,
@@ -153,11 +192,11 @@ export function CoachProfile({
                 association_name: regionalAffiliation || nationalLeague || "",
                 office_name: institution || "",
               },
-              credentials: creds,
-              uploaded_documents: docs,
+              credentials: normalizedCreds,
+              uploaded_documents: normalizedDocs,
               system_statistics: {
-                total_athletes: totalAthletesCount || combined.system_statistics?.total_athletes || offlineProfileRes?.system_statistics?.total_athletes || 0,
-                metric_logs: totalMatchesCount || combined.system_statistics?.metric_logs || combined.metric_logs || offlineProfileRes?.system_statistics?.metric_logs || 0,
+                total_athletes: totalAthletesCount,
+                metric_logs: totalMatchesCount,
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };
@@ -271,17 +310,36 @@ export function CoachProfile({
               <Text style={styles.credentialsHeading}>CREDENTIALS</Text>
 
               {(() => {
-                const displayCredentials = [
-                  ...(profile.credentials || []),
-                  ...(profile.uploaded_documents || [])
-                    .filter((doc) => !profile.credentials?.some((c) => c.id === doc.id))
-                    .map((doc) => ({
-                      id: doc.id,
-                      title: doc.file_name.replace(/\.[^/.]+$/, ""),
-                      type: "certified",
+                const credsList = (profile.credentials || []).map((c: any, i: number) => {
+                  if (typeof c === "string") {
+                    return {
+                      id: `cred_${i}`,
+                      title: c.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
                       icon_name: "shield-check",
-                    })),
-                ];
+                    };
+                  }
+                  return {
+                    id: c.id || `cred_${i}`,
+                    title: (c.title || c.name || "Credential").replace(/\.[^/.]+$/, "").replace(/_/g, " "),
+                    icon_name: c.icon_name || "shield-check",
+                  };
+                });
+
+                const docsList = (profile.uploaded_documents || []).map((d: any, i: number) => {
+                  const fname = typeof d === "string" ? d : d.file_name || d.name || "Document";
+                  return {
+                    id: typeof d === "object" && d.id ? d.id : `doc_${i}`,
+                    title: fname.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
+                    icon_name: "shield-check",
+                  };
+                });
+
+                const displayCredentials = [...credsList];
+                docsList.forEach((d) => {
+                  if (!displayCredentials.some((c) => c.title.toLowerCase() === d.title.toLowerCase())) {
+                    displayCredentials.push(d);
+                  }
+                });
 
                 if (displayCredentials.length === 0) {
                   return (

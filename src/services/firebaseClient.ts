@@ -694,9 +694,19 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
     const institution = uData?.current_institution || cData?.current_institution || "";
     const regionalAffiliation = uData?.regional_affiliation || cData?.regional_affiliation || "";
     const nationalLeague = uData?.national_sports_league || cData?.national_sports_league || "";
-    const uploadedDocs = cData?.uploaded_documents || uData?.uploaded_documents || [];
+    const rawUploaded = cData?.uploaded_documents || uData?.uploaded_documents || [];
     const profDocs = cData?.professional_documents || uData?.professional_documents || [];
     const creds = cData?.certifications || cData?.credentials || uData?.credentials || [];
+
+    const mergedDocs = [...(Array.isArray(rawUploaded) ? rawUploaded : [])];
+    if (Array.isArray(profDocs)) {
+      profDocs.forEach((pd: any) => {
+        const pdName = typeof pd === "string" ? pd : pd.file_name || pd.name;
+        if (pdName && !mergedDocs.some((d: any) => (typeof d === "string" ? d : d.file_name) === pdName)) {
+          mergedDocs.push(pd);
+        }
+      });
+    }
 
     // Calculate total unique roster athletes from Teams collection
     let totalAthletes = Array.isArray(cData?.athletes_managed) ? cData.athletes_managed.length : Array.isArray(uData?.athletes_managed) ? uData.athletes_managed.length : 0;
@@ -718,13 +728,21 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
     }
 
     // Calculate total matches logged by this coach from Match_Logs collection
-    let totalMatches = Number(cData?.total_matches_logged || cData?.metric_logs || 0);
+    let totalMatches = Number(cData?.total_matches_logged || cData?.matches_logged || cData?.metric_logs || 0);
     if (matchesSnap && !matchesSnap.empty) {
       let mCount = 0;
       matchesSnap.docs.forEach((m) => {
         const mData = m.data();
         const cId = mData.coach_id;
-        if (cId === canonicalCoachId || cId === rawUid || cId === uid) {
+        const staff = Array.isArray(mData.coaching_staff) ? mData.coaching_staff : [];
+        if (
+          cId === canonicalCoachId ||
+          cId === rawUid ||
+          cId === uid ||
+          staff.includes(canonicalCoachId) ||
+          staff.includes(rawUid) ||
+          staff.includes(uid)
+        ) {
           mCount++;
         }
       });
@@ -745,7 +763,7 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
       current_institution: institution,
       regional_affiliation: regionalAffiliation,
       national_sports_league: nationalLeague,
-      uploaded_documents: uploadedDocs,
+      uploaded_documents: mergedDocs,
       professional_documents: profDocs,
       certifications: creds,
       credentials: creds,
