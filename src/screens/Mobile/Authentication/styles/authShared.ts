@@ -9,7 +9,7 @@ export const authScreenStyles = StyleSheet.create({
   shell: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 56
+    paddingTop: 72
   },
   brand: {
     color: "#FFFFFF",
