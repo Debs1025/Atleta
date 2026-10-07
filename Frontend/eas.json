@@ -9,9 +9,9 @@
       "distribution": "internal"
     },
     "preview": {
-      "image": "default",
       "distribution": "internal",
       "android": {
+        "image": "default",
         "buildType": "apk"
       },
       "env": {
@@ -26,9 +26,9 @@
       }
     },
     "production": {
-      "image": "default",
       "autoIncrement": true,
       "android": {
+        "image": "default",
         "buildType": "app-bundle"
       },
       "env": {
