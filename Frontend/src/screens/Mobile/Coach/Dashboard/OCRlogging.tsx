@@ -36,7 +36,7 @@ interface OCRloggingProps {
     onUploadSuccess?: (ocrData: RawOCRDetectedData) => void;
 }
 
-// Initial files list with sample files on mobile emulator
+// Initial files list with sample files on mobile emulator (Basketball + Volleyball)
 const INITIAL_MOCK_FILES: UploadedFileItem[] = [
     {
         upload_id: "upl_mock_1",
@@ -48,11 +48,11 @@ const INITIAL_MOCK_FILES: UploadedFileItem[] = [
     },
     {
         upload_id: "upl_mock_2",
-        file_name: "MATCH_2_HAWKS_BASKETBALL.JPG",
-        file_size_bytes: 357355,
+        file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
+        file_size_bytes: 382410,
         uploaded_at_relative: "Loaded on emulator",
         file_type: "IMAGE",
-        file_url: "file:///sdcard/Download/match2_basketball.jpg",
+        file_url: "file:///sdcard/Download/match2_volleyball.jpg",
     },
 ];
 
@@ -124,7 +124,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
 
                 setUploadedFiles((prev) => [...newFiles, ...prev]);
             } else {
-                // If picker was cancelled or empty on emulator, offer 2 sample scoresheets
+                // If picker was cancelled or empty on emulator, offer 2 sample scoresheets of different sports
                 const sampleFiles: UploadedFileItem[] = [
                     {
                         upload_id: `upl_sample_1_${Date.now()}`,
@@ -136,11 +136,11 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     },
                     {
                         upload_id: `upl_sample_2_${Date.now()}`,
-                        file_name: "MATCH_2_HAWKS_BASKETBALL.JPG",
-                        file_size_bytes: 357355,
+                        file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
+                        file_size_bytes: 382410,
                         uploaded_at_relative: "Loaded sample",
                         file_type: "IMAGE",
-                        file_url: "file:///sdcard/Download/match2_basketball.jpg",
+                        file_url: "file:///sdcard/Download/match2_volleyball.jpg",
                     },
                 ];
                 setUploadedFiles(sampleFiles);
@@ -157,11 +157,11 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 },
                 {
                     upload_id: `upl_sample_2_${Date.now()}`,
-                    file_name: "MATCH_2_HAWKS_BASKETBALL.JPG",
-                    file_size_bytes: 357355,
+                    file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
+                    file_size_bytes: 382410,
                     uploaded_at_relative: "Loaded sample",
                     file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match2_basketball.jpg",
+                    file_url: "file:///sdcard/Download/match2_volleyball.jpg",
                 },
             ];
             setUploadedFiles(sampleFiles);
@@ -199,11 +199,11 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     },
                     {
                         upload_id: `upl_sample_2_${Date.now()}`,
-                        file_name: "MATCH_2_HAWKS_BASKETBALL.JPG",
-                        file_size_bytes: 357355,
+                        file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
+                        file_size_bytes: 382410,
                         uploaded_at_relative: "Loaded sample",
                         file_type: "IMAGE",
-                        file_url: "file:///sdcard/Download/match2_basketball.jpg",
+                        file_url: "file:///sdcard/Download/match2_volleyball.jpg",
                     },
                 ];
                 setUploadedFiles(sampleFiles);
@@ -220,11 +220,11 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 },
                 {
                     upload_id: `upl_sample_2_${Date.now()}`,
-                    file_name: "MATCH_2_HAWKS_BASKETBALL.JPG",
-                    file_size_bytes: 357355,
+                    file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
+                    file_size_bytes: 382410,
                     uploaded_at_relative: "Loaded sample",
                     file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match2_basketball.jpg",
+                    file_url: "file:///sdcard/Download/match2_volleyball.jpg",
                 },
             ];
             setUploadedFiles(sampleFiles);
@@ -462,23 +462,23 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                                 ],
                             },
                             {
-                                file_name: "MATCH_2_HAWKS_BASKETBALL.JPG",
-                                sport_type: "BASKETBALL",
+                                file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
+                                sport_type: "VOLLEYBALL",
                                 match_info: {
-                                    home_team_name: "ATLANTA HAWKS",
-                                    opponent_team_name: "CHICAGO BULLS",
-                                    final_score: "115 - 110",
-                                    sport_type: "BASKETBALL",
+                                     home_team_name: "STANFORD",
+                                     opponent_team_name: "TEXAS",
+                                     final_score: "3 - 1",
+                                     sport_type: "VOLLEYBALL",
                                 },
                                 team_scores: [
-                                    { team: "ATLANTA HAWKS", score: 115, is_home: true },
-                                    { team: "CHICAGO BULLS", score: 110, is_home: false },
+                                     { team: "STANFORD", score: 3, is_home: true },
+                                     { team: "TEXAS", score: 1, is_home: false },
                                 ],
                                 player_summary: [
-                                    { athlete_id: "ath_6", player_name: "TRAE YOUNG", jersey_number: 11, position: "PG", team_name: "ATLANTA HAWKS", points: 36, rebounds: 3, assists: 12, steals: 2, blocks: 0, turnovers: 4, minutes: 39, fg_made: 11, fg_attempted: 24, three_made: 5, three_attempted: 11, ft_made: 9, ft_attempted: 10 },
-                                    { athlete_id: "ath_7", player_name: "DEJOUNTE MURRAY", jersey_number: 5, position: "SG", team_name: "ATLANTA HAWKS", points: 24, rebounds: 7, assists: 6, steals: 3, blocks: 1, turnovers: 2, minutes: 36, fg_made: 9, fg_attempted: 18, three_made: 2, three_attempted: 5, ft_made: 4, ft_attempted: 4 },
-                                    { athlete_id: "ath_8", player_name: "DEMAR DEROZAN", jersey_number: 11, position: "SF", team_name: "CHICAGO BULLS", points: 31, rebounds: 5, assists: 5, steals: 1, blocks: 1, turnovers: 2, minutes: 38, fg_made: 11, fg_attempted: 20, three_made: 1, three_attempted: 2, ft_made: 8, ft_attempted: 9 },
-                                    { athlete_id: "ath_9", player_name: "ZACH LAVINE", jersey_number: 8, position: "SG", team_name: "CHICAGO BULLS", points: 26, rebounds: 4, assists: 4, steals: 1, blocks: 0, turnovers: 3, minutes: 35, fg_made: 9, fg_attempted: 17, three_made: 4, three_attempted: 8, ft_made: 4, ft_attempted: 4 },
+                                     { athlete_id: "ath_v1", player_name: "KENDALL KIPP", jersey_number: 14, position: "OPP", team_name: "STANFORD", kills: 22, attack_errors: 4, attack_attempts: 42, hitting_pct: "43%", ast: 1, service_aces: 3, digs: 8, block_points: 4, pts: 29 },
+                                     { athlete_id: "ath_v2", player_name: "ELIA RUBIN", jersey_number: 3, position: "OH", team_name: "STANFORD", kills: 16, attack_errors: 5, attack_attempts: 35, hitting_pct: "31%", ast: 2, service_aces: 2, digs: 12, block_points: 2, pts: 20 },
+                                     { athlete_id: "ath_v3", player_name: "MADISEN SKINNER", jersey_number: 7, position: "OH", team_name: "TEXAS", kills: 21, attack_errors: 6, attack_attempts: 45, hitting_pct: "33%", ast: 0, service_aces: 1, digs: 9, block_points: 3, pts: 25 },
+                                     { athlete_id: "ath_v4", player_name: "ASJIA O'NEAL", jersey_number: 1, position: "MB", team_name: "TEXAS", kills: 10, attack_errors: 1, attack_attempts: 18, hitting_pct: "50%", ast: 0, service_aces: 2, digs: 3, block_points: 6, pts: 18 },
                                 ],
                             },
                         ],

@@ -522,7 +522,9 @@ export function OCRoutput({
                             {matchesList.map((m, idx) => {
                                 const isSelected = idx === activeMatchIndex;
                                 const mSport = (m.sport_type || "BASKETBALL").toUpperCase();
-                                const label = idx === 0 ? "Match 1: Celtics" : idx === 1 ? "Match 2: Hawks" : `Match ${idx + 1}`;
+                                const mTeam = (m.team_name || "").trim();
+                                const teamLabel = mTeam ? (mTeam.length > 10 ? `${mTeam.slice(0, 8)}..` : mTeam) : `Match ${idx + 1}`;
+                                const label = `M${idx + 1}: ${mSport.slice(0, 3)} • ${teamLabel}`;
                                 return (
                                     <TouchableOpacity
                                         key={`match_tab_${idx}`}
@@ -805,7 +807,7 @@ export function OCRoutput({
                                             activeOpacity={0.7}
                                             style={[
                                                 styles.playerTeamBadge,
-                                                (item.team_name || "").toUpperCase() === (rawOCRData.team_name || "").toUpperCase()
+                                                (item.team_name || "").toUpperCase() === (currentActiveMatch.team_name || "").toUpperCase()
                                                     ? { borderColor: "#00C8FF", backgroundColor: "rgba(0, 200, 255, 0.12)" }
                                                     : { borderColor: "#F59E0B", backgroundColor: "rgba(245, 158, 11, 0.12)" }
                                             ]}
@@ -813,7 +815,7 @@ export function OCRoutput({
                                             <Text
                                                 style={[
                                                     styles.playerTeamText,
-                                                    (item.team_name || "").toUpperCase() === (rawOCRData.team_name || "").toUpperCase()
+                                                    (item.team_name || "").toUpperCase() === (currentActiveMatch.team_name || "").toUpperCase()
                                                         ? { color: "#00C8FF" }
                                                         : { color: "#F59E0B" }
                                                 ]}
