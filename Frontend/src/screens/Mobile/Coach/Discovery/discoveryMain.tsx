@@ -123,6 +123,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
+            keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
                 refreshing={isLoading}
@@ -138,7 +139,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
                 <Ionicons name="search" size={18} color="#64748B" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search (PPG > 20)"
+                  placeholder="Search athletes, teams, metrics..."
                   placeholderTextColor="#64748B"
                   value={searchQuery}
                   onChangeText={setSearchQuery}

@@ -106,7 +106,7 @@ export const ScoresheetMatch: React.FC = () => {
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
           : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
-        setNotes((prev) => (prev ? prev : resolvedNote));
+        setNotes(resolvedNote);
         if (data.scoresheet_url) setScoresheetUrl(data.scoresheet_url);
         if (data.home_team?.roster_stats && data.home_team.roster_stats.length > 0) {
           setHomeRoster(data.home_team.roster_stats);

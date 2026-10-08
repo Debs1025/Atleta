@@ -194,10 +194,28 @@ export const RankingPage: React.FC<RankingProps> = ({
         if (effectiveMetric === 'TIME_400M') {
           return parseTimeToSeconds(a.stats?.times_400m) - parseTimeToSeconds(b.stats?.times_400m);
         }
+        if (effectiveMetric === 'SPIKE_KILLS') {
+          return Number(b.stats?.spike_kills || 0) - Number(a.stats?.spike_kills || 0);
+        }
+        if (effectiveMetric === 'BLOCK_POINTS') {
+          return Number(b.stats?.block_points || 0) - Number(a.stats?.block_points || 0);
+        }
+        if (effectiveMetric === 'SERVICE_ACES') {
+          return Number(b.stats?.service_aces || 0) - Number(a.stats?.service_aces || 0);
+        }
+        if (effectiveMetric === 'POINTS_SCORED') {
+          return Number(b.stats?.points_scored || 0) - Number(a.stats?.points_scored || 0);
+        }
+        if (effectiveMetric === 'ACES') {
+          return Number(b.stats?.aces || 0) - Number(a.stats?.aces || 0);
+        }
+        if (effectiveMetric === 'DINKS') {
+          return Number(b.stats?.dinks || 0) - Number(a.stats?.dinks || 0);
+        }
         if (effectiveMetric === 'PER') {
           return Number(b.calculated_per || 0) - Number(a.calculated_per || 0);
         }
-        return Number(b.stats?.ppg || 0) - Number(a.stats?.ppg || 0);
+        return Number(b.calculated_per || 0) - Number(a.calculated_per || 0);
       });
   }, [sourceAthletes, selectedSport, advancedFilters, localSearch, effectiveMetric]);
 
@@ -241,7 +259,37 @@ export const RankingPage: React.FC<RankingProps> = ({
       case 'EFF':
         return {
           main: `${athlete.efficiency_pct ?? 75}% EFF`,
-          sub: `${athlete.stats?.ppg ?? 0} PPG`,
+          sub: `${athlete.calculated_per ?? 25} PER`,
+        };
+      case 'SPIKE_KILLS':
+        return {
+          main: `${athlete.stats?.spike_kills ?? 0} KILLS`,
+          sub: `${athlete.stats?.block_points ?? 0} BLOCKS • ${athlete.stats?.service_aces ?? 0} ACES`,
+        };
+      case 'BLOCK_POINTS':
+        return {
+          main: `${athlete.stats?.block_points ?? 0} BLOCKS`,
+          sub: `${athlete.stats?.spike_kills ?? 0} KILLS • ${athlete.stats?.service_aces ?? 0} ACES`,
+        };
+      case 'SERVICE_ACES':
+        return {
+          main: `${athlete.stats?.service_aces ?? 0} ACES`,
+          sub: `${athlete.stats?.spike_kills ?? 0} KILLS • ${athlete.stats?.block_points ?? 0} BLOCKS`,
+        };
+      case 'POINTS_SCORED':
+        return {
+          main: `${athlete.stats?.points_scored ?? 0} PTS`,
+          sub: `${athlete.stats?.aces ?? 0} ACES • ${athlete.stats?.dinks ?? 0} DINKS`,
+        };
+      case 'ACES':
+        return {
+          main: `${athlete.stats?.aces ?? 0} ACES`,
+          sub: `${athlete.stats?.points_scored ?? 0} PTS • ${athlete.stats?.dinks ?? 0} DINKS`,
+        };
+      case 'DINKS':
+        return {
+          main: `${athlete.stats?.dinks ?? 0} DINKS`,
+          sub: `${athlete.stats?.points_scored ?? 0} PTS • ${athlete.stats?.aces ?? 0} ACES`,
         };
       case 'TIME_50M':
         return {
@@ -267,7 +315,7 @@ export const RankingPage: React.FC<RankingProps> = ({
       default:
         return {
           main: `${athlete.calculated_per ?? 25} PER`,
-          sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.efficiency_pct ?? 75}% EFF`,
+          sub: `${athlete.efficiency_pct ?? 75}% EFF`,
         };
     }
   };

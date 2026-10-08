@@ -1668,11 +1668,17 @@ export const getMatchAuditDetail = async (
         (typeof details.scoresheet_url === 'string' && details.scoresheet_url.trim()) ||
         (typeof boxscore.scoresheet_url === 'string' && boxscore.scoresheet_url.trim()) ||
         '',
-      audit_context_notes: typeof match.notes === 'string'
-        ? match.notes
-        : Array.isArray(match.notes) && match.notes.length > 0
-          ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
-          : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : ''),
+      audit_context_notes: (typeof details.context_notes === 'string' && details.context_notes.trim())
+        ? details.context_notes
+        : (typeof match.context_notes === 'string' && match.context_notes.trim())
+          ? match.context_notes
+          : (typeof match.notes === 'string' && match.notes.trim())
+            ? match.notes
+            : (Array.isArray(details.notes) && details.notes.length > 0)
+              ? details.notes.filter((n: any) => typeof n === 'string').join('\n')
+              : (Array.isArray(match.notes) && match.notes.length > 0)
+                ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
+                : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : ''),
       is_certified: Boolean(match.is_certified || match.is_locked),
       assigned_coaches: assignedCoaches,
       coach_name: coachName,

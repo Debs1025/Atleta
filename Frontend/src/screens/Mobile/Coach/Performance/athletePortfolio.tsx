@@ -424,6 +424,60 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                 </Text>
               </View>
             </>
+          ) : athlete.sport_category === "VOLLEYBALL" ? (
+            <>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>KILLS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.spike_kills ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>BLOCKS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.block_points ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>ACES</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.service_aces ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>PER</Text>
+                <Text style={styles.statValue}>
+                  {calculateDynamicPER(athlete.averages)}
+                </Text>
+              </View>
+            </>
+          ) : athlete.sport_category === "PICKLEBALL" ? (
+            <>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>POINTS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.points_scored ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>ACES</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.aces ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>DINKS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.dinks ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>PER</Text>
+                <Text style={styles.statValue}>
+                  {calculateDynamicPER(athlete.averages)}
+                </Text>
+              </View>
+            </>
           ) : (
             <>
               <View style={styles.statCard}>

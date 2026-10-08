@@ -19,6 +19,12 @@ export interface AthleteDiscoveryItem {
     times_200m?: string;
     times_400m?: string;
     times_50m_free?: string;
+    spike_kills?: number;
+    block_points?: number;
+    service_aces?: number;
+    aces?: number;
+    dinks?: number;
+    points_scored?: number;
   };
   calculated_per: number; // e.g. 32.4
   efficiency_pct: number; // e.g. 88
@@ -99,7 +105,7 @@ export interface DiscoveryEventItem {
 export type DiscoveryTab = 'PLAYERS' | 'TEAMS' | 'EVENTS';
 export type SportCategoryFilter = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
 
-export type RankingSortMetric = 'PER' | 'PPG' | 'RPG' | 'AST' | 'FG_PCT' | 'EFF' | 'TIME_50M' | 'TIME_100M' | 'TIME_200M' | 'TIME_400M';
+export type RankingSortMetric = 'PER' | 'PPG' | 'RPG' | 'AST' | 'FG_PCT' | 'EFF' | 'TIME_50M' | 'TIME_100M' | 'TIME_200M' | 'TIME_400M' | 'SPIKE_KILLS' | 'BLOCK_POINTS' | 'SERVICE_ACES' | 'POINTS_SCORED' | 'ACES' | 'DINKS';
 
 export interface MetricOption {
   key: RankingSortMetric;
@@ -107,9 +113,8 @@ export interface MetricOption {
 }
 
 export const DEFAULT_SPORT_METRICS: MetricOption[] = [
-  { key: 'PPG', label: 'Points (PPG)' },
-  { key: 'EFF', label: 'Efficiency %' },
   { key: 'PER', label: 'PER Score' },
+  { key: 'EFF', label: 'Efficiency %' },
 ];
 
 export const SPORT_METRICS: Record<string, MetricOption[]> = {
@@ -117,8 +122,8 @@ export const SPORT_METRICS: Record<string, MetricOption[]> = {
     { key: 'PPG', label: 'Points (PPG)' },
     { key: 'RPG', label: 'Rebounds (RPG)' },
     { key: 'AST', label: 'Assists (AST)' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'FG_PCT', label: 'Field Goal %' },
+    { key: 'EFF', label: 'Efficiency %' },
     { key: 'PER', label: 'PER Score' },
   ],
   SWIMMING: [
@@ -136,13 +141,16 @@ export const SPORT_METRICS: Record<string, MetricOption[]> = {
     { key: 'PER', label: 'PER Score' },
   ],
   VOLLEYBALL: [
-    { key: 'PPG', label: 'Points (PPG)' },
+    { key: 'SPIKE_KILLS', label: 'Spike Kills' },
+    { key: 'BLOCK_POINTS', label: 'Block Points' },
+    { key: 'SERVICE_ACES', label: 'Service Aces' },
     { key: 'EFF', label: 'Efficiency %' },
-    { key: 'AST', label: 'Assists (AST)' },
     { key: 'PER', label: 'PER Score' },
   ],
   PICKLEBALL: [
-    { key: 'PPG', label: 'Points (PPG)' },
+    { key: 'POINTS_SCORED', label: 'Points Scored' },
+    { key: 'ACES', label: 'Service Aces' },
+    { key: 'DINKS', label: 'Successful Dinks' },
     { key: 'EFF', label: 'Efficiency %' },
     { key: 'PER', label: 'PER Score' },
   ],
@@ -156,10 +164,16 @@ export function getDefaultMetricForSport(sport?: string): RankingSortMetric {
   if (s.includes('TRACK') || s.includes('FIELD')) {
     return 'TIME_100M';
   }
-  if (s.includes('VOLLEY') || s.includes('PICKLE') || s.includes('BASKET')) {
+  if (s.includes('VOLLEY')) {
+    return 'SPIKE_KILLS';
+  }
+  if (s.includes('PICKLE')) {
+    return 'POINTS_SCORED';
+  }
+  if (s.includes('BASKET')) {
     return 'PPG';
   }
-  return 'PPG';
+  return 'PER';
 }
 
 export interface AdvancedAthleteFilters {

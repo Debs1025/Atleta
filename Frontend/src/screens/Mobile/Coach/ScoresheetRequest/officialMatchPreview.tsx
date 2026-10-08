@@ -260,6 +260,19 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
               </ScrollView>
             </View>
 
+            {/* Audit Context Notes / Official Notes */}
+            {match.coach_notes && match.coach_notes.length > 0 && (
+              <View style={styles.coachNotesCard}>
+                <Text style={styles.coachNotesTitle}>AUDIT CONTEXT & NOTES</Text>
+                {match.coach_notes.map((note, index) => (
+                  <View key={index} style={styles.noteRow}>
+                    <Text style={styles.noteIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                    <Text style={styles.noteContentText}>{note}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Bottom Primary Action Button: DOWNLOAD PDF SCORESHEET */}
             <TouchableOpacity
               style={styles.primaryButton}

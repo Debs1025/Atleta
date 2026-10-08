@@ -62,8 +62,13 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
       {/* Header Bar */}
       <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
         <Text style={styles.headerTitle}>ATHLETE PROFILE</Text>
-        <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color="#FFFFFF" />
+        <TouchableOpacity
+          onPress={onBack}
+          activeOpacity={0.7}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+          style={[styles.closeButton, { minWidth: 40, minHeight: 40, justifyContent: 'center', alignItems: 'center' }]}
+        >
+          <Ionicons name="close" size={26} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -220,7 +225,7 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
                 <Text style={styles.analyticLabel}>PER</Text>
               </View>
             </>
-          ) : (
+          ) : currentAthlete.sport_category === 'TRACK AND FIELD' ? (
             <>
               <View style={styles.analyticBox}>
                 <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_100m || 'N/A'}</Text>
@@ -237,6 +242,59 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
               <View style={styles.analyticBox}>
                 <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
                 <Text style={styles.analyticLabel}>PER</Text>
+              </View>
+            </>
+          ) : currentAthlete.sport_category === 'VOLLEYBALL' ? (
+            <>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.spike_kills ?? 0}</Text>
+                <Text style={styles.analyticLabel}>KILLS</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.block_points ?? 0}</Text>
+                <Text style={styles.analyticLabel}>BLOCKS</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.service_aces ?? 0}</Text>
+                <Text style={styles.analyticLabel}>ACES</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
+                <Text style={styles.analyticLabel}>PER</Text>
+              </View>
+            </>
+          ) : currentAthlete.sport_category === 'PICKLEBALL' ? (
+            <>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.points_scored ?? 0}</Text>
+                <Text style={styles.analyticLabel}>POINTS</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.aces ?? 0}</Text>
+                <Text style={styles.analyticLabel}>ACES</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.dinks ?? 0}</Text>
+                <Text style={styles.analyticLabel}>DINKS</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
+                <Text style={styles.analyticLabel}>PER</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.stats?.ppg ?? 0}</Text>
+                <Text style={styles.analyticLabel}>PPG</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
+                <Text style={styles.analyticLabel}>PER</Text>
+              </View>
+              <View style={styles.analyticBox}>
+                <Text style={styles.analyticValue}>{currentAthlete.efficiency_pct ?? 75}%</Text>
+                <Text style={styles.analyticLabel}>EFF</Text>
               </View>
             </>
           )}

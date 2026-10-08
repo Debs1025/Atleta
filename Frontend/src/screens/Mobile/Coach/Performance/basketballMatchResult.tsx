@@ -59,13 +59,10 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
     }
   }
 
+  const [fetchedNotes, setFetchedNotes] = useState<string[] | null>(null);
+
   // Fetch boxscore from Firestore backend if player_stats wasn't populated in memory
   useEffect(() => {
-    if (matchItem?.player_stats && matchItem.player_stats.length > 0) {
-      setPlayerStats(matchItem.player_stats);
-      return;
-    }
-
     if (!matchItem?.match_id) return;
 
     let isMounted = true;
@@ -81,15 +78,22 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
         });
         if (res.ok) {
           const data = await res.json();
-          if (isMounted && Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
-            const mapped = data.player_metrics.map((p: any) => ({
-              name: p.player_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || "Athlete",
-              team: p.team_name || p.position || "",
-              pts: Number(p.sport_stats?.points ?? p.sport_stats?.pts ?? p.pts ?? 0),
-              ast: Number(p.sport_stats?.assists ?? p.sport_stats?.ast ?? p.ast ?? 0),
-              reb: Number(p.sport_stats?.rebounds ?? p.sport_stats?.reb ?? p.reb ?? 0),
-            }));
-            setPlayerStats(mapped);
+          if (isMounted) {
+            if (Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
+              const mapped = data.player_metrics.map((p: any) => ({
+                name: p.player_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || "Athlete",
+                team: p.team_name || p.position || "",
+                pts: Number(p.sport_stats?.points ?? p.sport_stats?.pts ?? p.pts ?? 0),
+                ast: Number(p.sport_stats?.assists ?? p.sport_stats?.ast ?? p.ast ?? 0),
+                reb: Number(p.sport_stats?.rebounds ?? p.sport_stats?.reb ?? p.reb ?? 0),
+              }));
+              setPlayerStats(mapped);
+            }
+            if (data.notes && Array.isArray(data.notes) && data.notes.length > 0) {
+              setFetchedNotes(data.notes);
+            } else if (typeof data.context_notes === 'string' && data.context_notes.trim().length > 0) {
+              setFetchedNotes([data.context_notes]);
+            }
           }
         }
       } catch (err) {
@@ -106,9 +110,11 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
   }, [matchItem]);
 
   const coachNotes =
-    matchItem?.coach_notes && matchItem.coach_notes.length > 0
-      ? matchItem.coach_notes
-      : [`OCR Scanned Match: ${homeTeam} vs ${awayTeam}`];
+    (fetchedNotes && fetchedNotes.length > 0)
+      ? fetchedNotes
+      : (matchItem?.coach_notes && matchItem.coach_notes.length > 0
+          ? matchItem.coach_notes
+          : [`OCR Scanned Match: ${homeTeam} vs ${awayTeam}`]);
 
   const handleEditPress = () => {
     if (onEditResults) onEditResults();

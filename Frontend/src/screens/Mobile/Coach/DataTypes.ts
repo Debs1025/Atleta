@@ -255,6 +255,21 @@ export interface AthletePerformanceProfile {
     flip_turn_s?: string;
     swim_index_score?: number;
     podiums_count?: number;
+    // Volleyball specific
+    spike_kills?: number;
+    block_points?: number;
+    service_aces?: number;
+    digs?: number;
+    sets_played?: number;
+    attack_percentage?: number;
+    // Pickleball specific
+    points_scored?: number;
+    aces?: number;
+    dinks?: number;
+    unforced_errors?: number;
+    win_percentage?: number;
+    third_shot_drops?: number;
+    [key: string]: any;
   };
   radar_competencies: {
     speed: number;

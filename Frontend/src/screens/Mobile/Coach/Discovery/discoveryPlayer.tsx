@@ -97,29 +97,64 @@ export const DiscoveryPlayer: React.FC<{
                 </View>
 
                 <View style={styles.statsTrioRow}>
-                  {athlete.sport_category === 'BASKETBALL' ? (
-                    <>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>PPG</Text><Text style={styles.statValue}>{athlete.stats?.ppg ?? 0}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>RPG</Text><Text style={styles.statValue}>{athlete.stats?.rpg ?? 0}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>AST</Text><Text style={styles.statValue}>{athlete.stats?.ast ?? 0}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>FG%</Text><Text style={styles.statValue}>{athlete.stats?.fg_pct ?? 0}%</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
-                    </>
-                  ) : athlete.sport_category === 'SWIMMING' ? (
-                    <>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>50M FREE</Text><Text style={styles.statValue}>{athlete.stats?.times_50m_free || 'N/A'}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>100M</Text><Text style={styles.statValue}>{athlete.stats?.times_100m || 'N/A'}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>200M</Text><Text style={styles.statValue}>{athlete.stats?.times_200m || 'N/A'}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
-                    </>
-                  ) : (
-                    <>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>100M</Text><Text style={styles.statValue}>{athlete.stats?.times_100m || 'N/A'}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>200M</Text><Text style={styles.statValue}>{athlete.stats?.times_200m || 'N/A'}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>400M</Text><Text style={styles.statValue}>{athlete.stats?.times_400m || 'N/A'}</Text></View>
-                      <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
-                    </>
-                  )}
+                  {(() => {
+                    const sc = String(athlete.sport_category || '').toUpperCase().trim();
+                    if (sc.includes('BASKETBALL')) {
+                      return (
+                        <>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PPG</Text><Text style={styles.statValue}>{athlete.stats?.ppg ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>RPG</Text><Text style={styles.statValue}>{athlete.stats?.rpg ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>AST</Text><Text style={styles.statValue}>{athlete.stats?.ast ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>FG%</Text><Text style={styles.statValue}>{athlete.stats?.fg_pct ?? 0}%</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
+                        </>
+                      );
+                    } else if (sc.includes('SWIM')) {
+                      return (
+                        <>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>50M FREE</Text><Text style={styles.statValue}>{athlete.stats?.times_50m_free || 'N/A'}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>100M</Text><Text style={styles.statValue}>{athlete.stats?.times_100m || 'N/A'}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>200M</Text><Text style={styles.statValue}>{athlete.stats?.times_200m || 'N/A'}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
+                        </>
+                      );
+                    } else if (sc.includes('TRACK') || sc.includes('FIELD')) {
+                      return (
+                        <>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>100M</Text><Text style={styles.statValue}>{athlete.stats?.times_100m || 'N/A'}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>200M</Text><Text style={styles.statValue}>{athlete.stats?.times_200m || 'N/A'}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>400M</Text><Text style={styles.statValue}>{athlete.stats?.times_400m || 'N/A'}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
+                        </>
+                      );
+                    } else if (sc.includes('VOLLEY')) {
+                      return (
+                        <>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>KILLS</Text><Text style={styles.statValue}>{athlete.stats?.spike_kills ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>BLOCKS</Text><Text style={styles.statValue}>{athlete.stats?.block_points ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>ACES</Text><Text style={styles.statValue}>{athlete.stats?.service_aces ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
+                        </>
+                      );
+                    } else if (sc.includes('PICKLE')) {
+                      return (
+                        <>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>POINTS</Text><Text style={styles.statValue}>{athlete.stats?.points_scored ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>ACES</Text><Text style={styles.statValue}>{athlete.stats?.aces ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>DINKS</Text><Text style={styles.statValue}>{athlete.stats?.dinks ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
+                        </>
+                      );
+                    } else {
+                      return (
+                        <>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PPG</Text><Text style={styles.statValue}>{athlete.stats?.ppg ?? 0}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>PER</Text><Text style={styles.statValue}>{athlete.calculated_per ?? 25}</Text></View>
+                          <View style={styles.statCol}><Text style={styles.statLabel}>EFF</Text><Text style={styles.statValue}>{athlete.efficiency_pct ?? 75}%</Text></View>
+                        </>
+                      );
+                    }
+                  })()}
                 </View>
 
                 <View style={styles.levelBarContainer}>
