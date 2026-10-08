@@ -139,8 +139,10 @@ export interface RawOCRDetectedData {
     team_scores?: TeamScoreItem[];
     teams?: string[];
     sport_type: "BASKETBALL" | "VOLLEYBALL" | "SWIMMING" | "TRACK AND FIELD" | "BADMINTON" | "PICKLEBALL" | "SOCCER" | string;
+    file_name?: string;
     athlete_overview: DetectedAthleteStat[];
     expanded_metrics: ExpandedPerformanceMetrics;
+    batch_matches?: RawOCRDetectedData[];
 }
 
 interface OCRoutputProps {
@@ -183,17 +185,45 @@ export function OCRoutput({
     const insets = useSafeAreaInsets();
     const headerTopPadding = Math.max(insets.top, 44) + 38;
 
+    // Batch Matches Support: If multiple matches exist, allow switching between them
+    const matchesList: RawOCRDetectedData[] = useMemo(() => {
+        if (Array.isArray(rawOCRData.batch_matches) && rawOCRData.batch_matches.length > 0) {
+            return rawOCRData.batch_matches;
+        }
+        return [rawOCRData];
+    }, [rawOCRData]);
+
+    const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
+    const currentActiveMatch = matchesList[activeMatchIndex] || rawOCRData;
+
     // Inline Editing Mode State
     const [isEditing, setIsEditing] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>("ALL");
 
-    // Dynamic Editable Athletes Data State
-    const [athleteStats, setAthleteStats] = useState<DetectedAthleteStat[]>(
-        rawOCRData.athlete_overview
-    );
+    // Dynamic Editable Athletes Data State (per active match)
+    const [athleteStatsMap, setAthleteStatsMap] = useState<Record<number, DetectedAthleteStat[]>>(() => {
+        const init: Record<number, DetectedAthleteStat[]> = {};
+        matchesList.forEach((m, idx) => {
+            init[idx] = m.athlete_overview || [];
+        });
+        return init;
+    });
 
-    const sportUpper = (rawOCRData.sport_type || "BASKETBALL").toUpperCase();
+    const athleteStats = athleteStatsMap[activeMatchIndex] || currentActiveMatch.athlete_overview || [];
+
+    const setAthleteStats = (updateFn: DetectedAthleteStat[] | ((prev: DetectedAthleteStat[]) => DetectedAthleteStat[])) => {
+        setAthleteStatsMap((prevMap) => {
+            const currentList = prevMap[activeMatchIndex] || currentActiveMatch.athlete_overview || [];
+            const nextList = typeof updateFn === "function" ? updateFn(currentList) : updateFn;
+            return {
+                ...prevMap,
+                [activeMatchIndex]: nextList,
+            };
+        });
+    };
+
+    const sportUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
     const isVolleyball = sportUpper.includes("VOLLEY");
     const isSwimming = sportUpper.includes("SWIM");
     const isTrack = sportUpper.includes("TRACK") || sportUpper.includes("RUN") || sportUpper.includes("FIELD") || sportUpper.includes("ATHLETIC");
@@ -206,19 +236,19 @@ export function OCRoutput({
     // List of all detected unique teams
     const teamList = useMemo(() => {
         const set = new Set<string>();
-        if (rawOCRData.teams && Array.isArray(rawOCRData.teams)) {
-            rawOCRData.teams.forEach((t) => set.add(String(t).trim()));
+        if (currentActiveMatch.teams && Array.isArray(currentActiveMatch.teams)) {
+            currentActiveMatch.teams.forEach((t) => set.add(String(t).trim()));
         }
-        if (rawOCRData.team_scores && Array.isArray(rawOCRData.team_scores)) {
-            rawOCRData.team_scores.forEach((t) => set.add(String(t.team).trim()));
+        if (currentActiveMatch.team_scores && Array.isArray(currentActiveMatch.team_scores)) {
+            currentActiveMatch.team_scores.forEach((t) => set.add(String(t.team).trim()));
         }
-        if (rawOCRData.team_name) set.add(String(rawOCRData.team_name).trim());
-        if (rawOCRData.opponent_team_name) set.add(String(rawOCRData.opponent_team_name).trim());
+        if (currentActiveMatch.team_name) set.add(String(currentActiveMatch.team_name).trim());
+        if (currentActiveMatch.opponent_team_name) set.add(String(currentActiveMatch.opponent_team_name).trim());
         athleteStats.forEach((a) => {
             if (a.team_name) set.add(String(a.team_name).trim());
         });
         return Array.from(set).filter((t) => t.length > 0);
-    }, [rawOCRData, athleteStats]);
+    }, [currentActiveMatch, athleteStats]);
 
     const sportDisplayName = isVolleyball
         ? "VOLLEYBALL"
@@ -236,8 +266,8 @@ export function OCRoutput({
         ? "BASKETBALL"
         : sportUpper;
 
-    const homeTeamDisplay = (rawOCRData.team_name || teamList[0] || "HOME TEAM").toUpperCase();
-    const awayTeamDisplay = (rawOCRData.opponent_team_name || teamList[1] || (teamList[0] && teamList[0].toUpperCase() !== homeTeamDisplay ? teamList[0] : "OPPONENT")).toUpperCase();
+    const homeTeamDisplay = (currentActiveMatch.team_name || teamList[0] || "HOME TEAM").toUpperCase();
+    const awayTeamDisplay = (currentActiveMatch.opponent_team_name || teamList[1] || (teamList[0] && teamList[0].toUpperCase() !== homeTeamDisplay ? teamList[0] : "OPPONENT")).toUpperCase();
 
     const scoreboardTitleText = isVolleyball
         ? "VOLLEYBALL MATCH SCOREBOARD"
@@ -255,7 +285,7 @@ export function OCRoutput({
 
     const getDynamicTeamScore = useCallback((teamName: string) => {
         if (!teamName) return { primary: "0 PTS", secondary: undefined };
-        const found = rawOCRData.team_scores?.find(
+        const found = currentActiveMatch.team_scores?.find(
             (t) => (t.team || "").trim().toUpperCase() === teamName.trim().toUpperCase()
         );
         const teamAthletes = athleteStats.filter(
@@ -280,8 +310,8 @@ export function OCRoutput({
             }
 
             // If final_score string has set breakdown (e.g. "3 - 1" or "3-0")
-            if (setsWon === 0 && rawOCRData.final_score) {
-                const setMatch = rawOCRData.final_score.match(/(\d+)\s*[-:]\s*(\d+)/);
+            if (setsWon === 0 && currentActiveMatch.final_score) {
+                const setMatch = currentActiveMatch.final_score.match(/(\d+)\s*[-:]\s*(\d+)/);
                 if (setMatch) {
                     const isHome = teamName.toUpperCase() === homeTeamDisplay;
                     const homeSets = parseInt(setMatch[1], 10);
@@ -292,7 +322,7 @@ export function OCRoutput({
                 }
             }
 
-            if (setsWon > 0 || (rawOCRData.final_score && rawOCRData.final_score.match(/\b[0-3]\s*[-:]\s*[0-3]\b/))) {
+            if (setsWon > 0 || (currentActiveMatch.final_score && currentActiveMatch.final_score.match(/\b[0-3]\s*[-:]\s*[0-3]\b/))) {
                 return {
                     primary: `${setsWon} SETS`,
                     secondary: totalMatchPoints > 0 ? `${totalMatchPoints} TOTAL PTS` : undefined,
@@ -348,7 +378,7 @@ export function OCRoutput({
             primary: `${pts} PTS`,
             secondary: undefined,
         };
-    }, [rawOCRData, athleteStats, isVolleyball, isSoccer, isBaseball, isRacket, homeTeamDisplay]);
+    }, [currentActiveMatch, athleteStats, isVolleyball, isSoccer, isBaseball, isRacket, homeTeamDisplay]);
 
     // Filtered athlete list based on active team filter tab
     const visibleAthletes = useMemo(() => {
@@ -427,8 +457,8 @@ export function OCRoutput({
                 const itemIdx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
                 if (itemIdx === -1) return prev;
                 const current = (updated[itemIdx].team_name || "").toUpperCase();
-                const home = (rawOCRData.team_name || "HOME").toUpperCase();
-                const away = (rawOCRData.opponent_team_name || "AWAY").toUpperCase();
+                const home = (currentActiveMatch.team_name || "HOME").toUpperCase();
+                const away = (currentActiveMatch.opponent_team_name || "AWAY").toUpperCase();
                 const nextTeam = current === home ? away : home;
                 updated[itemIdx] = {
                     ...updated[itemIdx],
@@ -437,19 +467,19 @@ export function OCRoutput({
                 return updated;
             });
         },
-        [rawOCRData]
+        [currentActiveMatch]
     );
 
     // Confirm & Save Action Handler
     const handleSave = useCallback(() => {
         if (onConfirmSave) {
             onConfirmSave({
-                ...rawOCRData,
+                ...currentActiveMatch,
                 athlete_overview: athleteStats,
             });
         }
         setShowSuccessModal(true);
-    }, [rawOCRData, athleteStats, onConfirmSave]);
+    }, [currentActiveMatch, athleteStats, onConfirmSave]);
 
     return (
         <View style={styles.container}>
@@ -477,6 +507,68 @@ export function OCRoutput({
                 ]}
                 showsVerticalScrollIndicator={false}
             >
+                {/* BATCH MATCHES SWITCHER TAB BAR (If multiple matches were uploaded) */}
+                {matchesList.length > 1 && (
+                    <View style={{ marginBottom: 16, backgroundColor: "#0E1626", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#1E293B" }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                            <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "900", letterSpacing: 1.2 }}>
+                                UPLOADED MATCHES ({matchesList.length} SEPARATED)
+                            </Text>
+                            <Text style={{ color: "#64748B", fontSize: 11, fontWeight: "700" }}>
+                                Match {activeMatchIndex + 1} of {matchesList.length}
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                            {matchesList.map((m, idx) => {
+                                const isSelected = idx === activeMatchIndex;
+                                const mSport = (m.sport_type || "BASKETBALL").toUpperCase();
+                                const label = idx === 0 ? "Match 1: Celtics" : idx === 1 ? "Match 2: Hawks" : `Match ${idx + 1}`;
+                                return (
+                                    <TouchableOpacity
+                                        key={`match_tab_${idx}`}
+                                        onPress={() => {
+                                            setActiveMatchIndex(idx);
+                                            setSelectedTeamFilter("ALL");
+                                        }}
+                                        activeOpacity={0.7}
+                                        style={{
+                                            flex: 1,
+                                            paddingVertical: 10,
+                                            paddingHorizontal: 8,
+                                            borderRadius: 8,
+                                            backgroundColor: isSelected ? "#00C8FF" : "#131E32",
+                                            borderWidth: 1.5,
+                                            borderColor: isSelected ? "#00C8FF" : "#1E293B",
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: 6,
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name={isSelected ? "checkmark-circle" : "document-text-outline"}
+                                            size={15}
+                                            color={isSelected ? "#070D19" : "#94A3B8"}
+                                        />
+                                        <Text
+                                            style={{
+                                                color: isSelected ? "#070D19" : "#FFFFFF",
+                                                fontWeight: isSelected ? "900" : "700",
+                                                fontSize: 12,
+                                                letterSpacing: 0.5,
+                                                textAlign: "center",
+                                            }}
+                                            numberOfLines={1}
+                                        >
+                                            {label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
+                )}
+
                 {/* TITLE SECTION WITH UNDERLINE */}
                 <View style={styles.topTitleSection}>
                     <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
@@ -496,7 +588,7 @@ export function OCRoutput({
                             <View style={styles.teamScoreBox}>
                                 <Text style={styles.identityLabel}>EVENT / DISCIPLINE</Text>
                                 <Text style={styles.teamScoreName} numberOfLines={1}>
-                                    {athleteStats[0]?.event || athleteStats[0]?.event_name || rawOCRData.team_name || "TIMED EVENT"}
+                                    {athleteStats[0]?.event || athleteStats[0]?.event_name || currentActiveMatch.team_name || "TIMED EVENT"}
                                 </Text>
                             </View>
                             <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
@@ -511,9 +603,9 @@ export function OCRoutput({
                     <View style={styles.scoreboardCard}>
                         <View style={styles.scoreboardHeader}>
                             <Text style={styles.scoreboardTitle}>{scoreboardTitleText}</Text>
-                            {rawOCRData.final_score ? (
+                            {currentActiveMatch.final_score ? (
                                 <Text style={{ color: "#00C8FF", fontSize: 12, fontWeight: "800" }}>
-                                    FINAL: {rawOCRData.final_score}
+                                    FINAL: {currentActiveMatch.final_score}
                                 </Text>
                             ) : null}
                         </View>
@@ -556,8 +648,8 @@ export function OCRoutput({
                             </Text>
                             <Text style={styles.identityValue}>
                                 {isIndividualSport
-                                    ? (athleteStats[0]?.event || athleteStats[0]?.event_name || rawOCRData.team_name || "TIMED EVENT")
-                                    : (rawOCRData.team_name || homeTeamDisplay)}
+                                    ? (athleteStats[0]?.event || athleteStats[0]?.event_name || currentActiveMatch.team_name || "TIMED EVENT")
+                                    : (currentActiveMatch.team_name || homeTeamDisplay)}
                             </Text>
                         </View>
                         <View style={styles.identityCol}>
@@ -567,7 +659,7 @@ export function OCRoutput({
                             <Text style={styles.identityValue}>
                                 {isIndividualSport
                                     ? `${athleteStats.length} REGISTERED ATHLETES`
-                                    : (rawOCRData.opponent_team_name || awayTeamDisplay || "N/A")}
+                                    : (currentActiveMatch.opponent_team_name || awayTeamDisplay || "N/A")}
                             </Text>
                         </View>
                     </View>

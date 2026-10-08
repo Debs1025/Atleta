@@ -249,6 +249,36 @@ export async function scanMultiScoresheetsHandler(req: AuthRequest, res: Respons
       files = [req.file];
     }
 
+    // Support JSON body with files array containing base64 strings
+    if (files.length === 0 && Array.isArray(req.body?.files) && req.body.files.length > 0) {
+      for (let i = 0; i < req.body.files.length; i++) {
+        const item = req.body.files[i];
+        const base64Str = item?.base64 || item?.image || item?.file || item?.data;
+        if (typeof base64Str === 'string' && base64Str.trim().length > 0) {
+          let cleanBase64 = base64Str.trim();
+          let mimeType = item?.mimetype || item?.mime_type || 'image/jpeg';
+          if (cleanBase64.startsWith('data:')) {
+            const match = cleanBase64.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) {
+              mimeType = match[1];
+              cleanBase64 = match[2];
+            }
+          }
+          try {
+            const buffer = Buffer.from(cleanBase64, 'base64');
+            files.push({
+              fieldname: `file_${i}`,
+              originalname: item?.filename || item?.file_name || `scoresheet_${i + 1}.jpg`,
+              encoding: '7bit',
+              mimetype: mimeType,
+              buffer,
+              size: buffer.length,
+            } as Express.Multer.File);
+          } catch {}
+        }
+      }
+    }
+
     if (files.length === 0) {
       res.status(400).json({ error: 'No scoresheet files uploaded.' });
       return;
