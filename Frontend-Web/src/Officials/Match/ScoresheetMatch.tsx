@@ -213,9 +213,18 @@ export const ScoresheetMatch: React.FC = () => {
             ast: homeRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
             stl: homeRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
             blk: homeRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
-            fg_pct: homeRoster.length > 0 ? '48.8%' : '0.0%',
-            three_p_pct: homeRoster.length > 0 ? '28.5%' : '0.0%',
-            ft_pct: homeRoster.length > 0 ? '78.0%' : '0.0%',
+            fg_pct: (() => {
+              const pcts = homeRoster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            three_p_pct: (() => {
+              const pcts = homeRoster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            ft_pct: (() => {
+              const pcts = homeRoster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
           },
         },
         away_team: {
@@ -232,9 +241,18 @@ export const ScoresheetMatch: React.FC = () => {
             ast: awayRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
             stl: awayRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
             blk: awayRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
-            fg_pct: awayRoster.length > 0 ? '48.8%' : '0.0%',
-            three_p_pct: awayRoster.length > 0 ? '28.5%' : '0.0%',
-            ft_pct: awayRoster.length > 0 ? '78.0%' : '0.0%',
+            fg_pct: (() => {
+              const pcts = awayRoster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            three_p_pct: (() => {
+              const pcts = awayRoster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            ft_pct: (() => {
+              const pcts = awayRoster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
           },
         },
         race_results: raceResults,
@@ -388,7 +406,37 @@ export const ScoresheetMatch: React.FC = () => {
           const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
           const fga = Number(p.fg_attempted || p.fga || 0);
           const fgm = Number(p.fg_made || p.fgm || 0);
-          const fgPct = p.true_shooting_pct ? `${Math.round(p.true_shooting_pct)}%` : fga > 0 ? `${Math.round((fgm / fga) * 100)}%` : '50%';
+          
+          let fgPct = '0.0%';
+          if (p.fg_pct || p.fg_percentage) {
+            const raw = String(p.fg_pct || p.fg_percentage).trim();
+            fgPct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (p.true_shooting_pct) {
+            const val = parseFloat(String(p.true_shooting_pct).replace('%', ''));
+            fgPct = !isNaN(val) ? `${Math.round(val)}%` : '0.0%';
+          } else if (fga > 0) {
+            fgPct = `${Math.round((fgm / fga) * 100)}%`;
+          }
+
+          let threePct = '0.0%';
+          const tpa = Number(p.three_p_attempted || p.three_p_attempts || p.tpa || p['3pa'] || 0);
+          const tpm = Number(p.three_p_made || p.tpm || p['3pm'] || 0);
+          if (p.three_p_pct || p.three_pct || p['3p_pct']) {
+            const raw = String(p.three_p_pct || p.three_pct || p['3p_pct']).trim();
+            threePct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (tpa > 0) {
+            threePct = `${Math.round((tpm / tpa) * 100)}%`;
+          }
+
+          let ftPct = '0.0%';
+          const fta = Number(p.ft_attempted || p.ft_attempts || p.fta || 0);
+          const ftm = Number(p.ft_made || p.ftm || 0);
+          if (p.ft_pct || p.ft_percentage) {
+            const raw = String(p.ft_pct || p.ft_percentage).trim();
+            ftPct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (fta > 0) {
+            ftPct = `${Math.round((ftm / fta) * 100)}%`;
+          }
 
           const row: BoxScoreRow = {
             jersey_no: jersey,
@@ -401,8 +449,8 @@ export const ScoresheetMatch: React.FC = () => {
             stl: Number(p.steals ?? p.stl ?? 0),
             blk: Number(p.blocks ?? p.blk ?? 0),
             fg_pct: fgPct,
-            three_p_pct: p.three_p_pct ? `${p.three_p_pct}%` : '0.0%',
-            ft_pct: p.ft_pct ? `${p.ft_pct}%` : '0.0%',
+            three_p_pct: threePct,
+            ft_pct: ftPct,
           };
 
           if (isHome) hRows.push(row);
@@ -738,9 +786,24 @@ export const ScoresheetMatch: React.FC = () => {
                 <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.ast) || 0), 0)}</td>
                 <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.stl) || 0), 0)}</td>
                 <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.blk) || 0), 0)}</td>
-                <td style={styles.statTotalsTd}>{roster.length > 0 ? '48.8%' : '0.0%'}</td>
-                <td style={styles.statTotalsTd}>{roster.length > 0 ? '28.5%' : '0.0%'}</td>
-                <td style={isEditing && !isCertified ? styles.statTotalsTd : styles.statTotalsTdLast}>{roster.length > 0 ? '78.0%' : '0.0%'}</td>
+                <td style={styles.statTotalsTd}>
+                  {(() => {
+                    const pcts = roster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+                  })()}
+                </td>
+                <td style={styles.statTotalsTd}>
+                  {(() => {
+                    const pcts = roster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+                  })()}
+                </td>
+                <td style={styles.statTotalsTd}>
+                  {(() => {
+                    const pcts = roster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+                  })()}
+                </td>
                 {isEditing && !isCertified && <td style={styles.statTotalsTdLast}></td>}
               </tr>
             </tbody>

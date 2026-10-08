@@ -19,18 +19,28 @@ export class ServiceError extends Error {
   }
 }
 
-// ─── In-Memory Cache for Team Directory and Coach Enrichment ─────────────────
+// ─── In-Memory Cache for Team Directory, Coach Enrichment, and Roster ────────
 interface CachedItem<T> {
   data: T;
   cachedAt: number;
 }
 const teamDirectoryCache = new Map<string, CachedItem<TeamSummary[]>>();
 const coachSummaryCache = new Map<string, CachedItem<{ coach_id: string; full_name: string; years_of_experience: number; current_institution: string; quote: string | null }>>();
+const rosterAthleteCache = new Map<string, CachedItem<RosterAthlete>>();
+const coachTeamsCache = new Map<string, CachedItem<TeamSummary[]>>();
+const coachManagedAthletesCache = new Map<string, CachedItem<any[]>>();
+
 const TEAM_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const ATHLETE_CACHE_TTL_MS = 120 * 1000; // 120 seconds
+const COACH_TEAMS_TTL_MS = 60 * 1000; // 60 seconds
+const COACH_ATHLETES_TTL_MS = 60 * 1000; // 60 seconds
 
 export function invalidateTeamCache() {
   teamDirectoryCache.clear();
   coachSummaryCache.clear();
+  rosterAthleteCache.clear();
+  coachTeamsCache.clear();
+  coachManagedAthletesCache.clear();
 }
 
 // ─── Helper: Enrich coach from Coach_Profiles + Users ───────────────────────
@@ -130,6 +140,15 @@ async function enrichRoster(rosterList: (string | TeamRosterMember)[]): Promise<
     const cleanId = athleteId.trim().replace(/^ath_/, '');
     const canonicalAthleteId = athleteId.startsWith('ath_') ? athleteId.trim() : `ath_${cleanId}`;
 
+    const cachedAth = rosterAthleteCache.get(canonicalAthleteId) || rosterAthleteCache.get(cleanId);
+    if (cachedAth && Date.now() - cachedAth.cachedAt < ATHLETE_CACHE_TTL_MS) {
+      return {
+        ...cachedAth.data,
+        ...(positionOverride ? { position: positionOverride } : {}),
+        ...(jerseyOverride !== undefined ? { jersey_number: jerseyOverride } : {}),
+      };
+    }
+
     const [prof1, prof2, u1, u2] = await Promise.all([
       db.collection('Athlete_Profiles').doc(canonicalAthleteId).get().catch(() => null),
       db.collection('Athlete_Profiles').doc(cleanId).get().catch(() => null),
@@ -155,7 +174,7 @@ async function enrichRoster(rosterList: (string | TeamRosterMember)[]): Promise<
         ? eligDocs.psa_verified === true
         : Array.isArray(eligDocs) && eligDocs.length > 0;
 
-    return {
+    const athResult: RosterAthlete = {
       athlete_id: canonicalAthleteId,
       user_id: profileData.user_id || cleanId,
       first_name: firstName || 'Athlete',
@@ -167,7 +186,12 @@ async function enrichRoster(rosterList: (string | TeamRosterMember)[]): Promise<
       avatar_url: profileData.avatar_url || undefined,
       eligibility_documents: eligDocs || [],
       is_eligibility_verified: isVerified,
-    } as RosterAthlete;
+    };
+
+    rosterAthleteCache.set(canonicalAthleteId, { data: athResult, cachedAt: Date.now() });
+    rosterAthleteCache.set(cleanId, { data: athResult, cachedAt: Date.now() });
+
+    return athResult;
   });
 
   const results = await Promise.all(rosterPromises);
@@ -199,7 +223,9 @@ export async function createTeam(coachId: string, payload: CreateTeamDto): Promi
   if (payload.description) newTeam.description = payload.description.trim();
   if (payload.mission_statement) newTeam.mission_statement = payload.mission_statement.trim();
 
+  // Primary write: atleta-v1
   await db.collection('Teams').doc(teamId).set(newTeam);
+  
   invalidateTeamCache();
 
   // Link team to Coach_Profiles document (handles both coach_<uid> and raw uid)
@@ -219,14 +245,13 @@ export async function createTeam(coachId: string, payload: CreateTeamDto): Promi
   const existingTeams = existingDoc?.exists ? (existingDoc.data()?.teams_managed || []) : [];
   const updatedTeams = Array.from(new Set([...existingTeams, teamId]));
 
-  await targetRef.set(
-    {
-      team_id: teamId,
-      teams_managed: updatedTeams,
-      updated_at: new Date(),
-    },
-    { merge: true },
-  );
+  const coachProfileUpdates = {
+    team_id: teamId,
+    teams_managed: updatedTeams,
+    updated_at: new Date(),
+  };
+
+  await targetRef.set(coachProfileUpdates, { merge: true });
 
   return newTeam as Team;
 }
@@ -235,19 +260,27 @@ export async function createTeam(coachId: string, payload: CreateTeamDto): Promi
  * Retrieve all teams managed by a specific coach (GET /api/v1/teams?coachId=).
  */
 export async function getCoachTeams(coachId: string): Promise<TeamSummary[]> {
-  const possibleCoachIds = [coachId, `coach_${coachId}`, coachId.replace('coach_', '')];
+  const cached = coachTeamsCache.get(coachId);
+  if (cached && Date.now() - cached.cachedAt < COACH_TEAMS_TTL_MS) {
+    return cached.data;
+  }
 
-  const snapshot = await db
-    .collection('Teams')
-    .where('coach_id', 'in', possibleCoachIds)
-    .get();
+  const cleanId = coachId.replace(/^coach_/, '');
+  const possibleCoachIds = Array.from(new Set([coachId, `coach_${cleanId}`, cleanId]));
+
+  // Primary source of truth: atleta-v1
+  const snapshotV1 = await db.collection('Teams').where('coach_id', 'in', possibleCoachIds).get().catch(() => ({ docs: [] }));
+
+  const docsMap = new Map<string, any>();
+  snapshotV1.docs.forEach((d: any) => docsMap.set(d.id, d));
 
   const teams: TeamSummary[] = [];
 
-  for (const doc of snapshot.docs) {
+  for (const doc of docsMap.values()) {
     const data = doc.data() as Team;
     const coach = await enrichCoach(data.coach_id);
     const enrichedRoster = await enrichRoster(data.roster_list || []);
+    const coachName = data.coach_name || coach.full_name || 'Coach';
 
     teams.push({
       team_id: data.team_id,
@@ -257,13 +290,14 @@ export async function getCoachTeams(coachId: string): Promise<TeamSummary[]> {
       region: data.region || undefined,
       season_record: data.season_record || { wins: 0, losses: 0 },
       athlete_count: enrichedRoster.length,
-      coach_name: coach.full_name,
+      coach_name: coachName,
       coach_id: data.coach_id,
       established_year: data.established_year,
       roster_list: enrichedRoster,
     });
   }
 
+  coachTeamsCache.set(coachId, { data: teams, cachedAt: Date.now() });
   return teams;
 }
 
@@ -287,12 +321,17 @@ export async function browseTeamDirectory(
     return cached.data;
   }
 
-  const snapshot = await db.collection('Teams').get();
+  // Primary source of truth: atleta-v1
+  const snapshotV1 = await db.collection('Teams').get().catch(() => ({ docs: [] }));
+
+  const docsMap = new Map<string, any>();
+  snapshotV1.docs.forEach((d: any) => docsMap.set(d.id, d));
+
   const teams: TeamSummary[] = [];
 
   const normSportQuery = (sport || '').toLowerCase().replace(/&/g, 'and').replace(/\s+/g, '').trim();
 
-  for (const doc of snapshot.docs) {
+  for (const doc of docsMap.values()) {
     const data = doc.data() as Team;
 
     // Filter by excluded team ID
@@ -320,16 +359,22 @@ export async function browseTeamDirectory(
       }
     }
 
-    // Search query filter
+    const coach = await enrichCoach(data.coach_id);
+    const enrichedRoster = await enrichRoster(data.roster_list || []);
+    const coachName = data.coach_name || coach.full_name || 'Coach';
+
+    // Search query filter: check team_name, sport_type, coach_name, description
     if (search && search.trim().length > 0) {
       const searchLower = search.trim().toLowerCase();
-      if (!data.team_name.toLowerCase().includes(searchLower) && !(data.sport_type || '').toLowerCase().includes(searchLower)) {
+      const matches =
+        data.team_name.toLowerCase().includes(searchLower) ||
+        (data.sport_type || '').toLowerCase().includes(searchLower) ||
+        coachName.toLowerCase().includes(searchLower) ||
+        (data.description || '').toLowerCase().includes(searchLower);
+      if (!matches) {
         continue;
       }
     }
-
-    const coach = await enrichCoach(data.coach_id);
-    const enrichedRoster = await enrichRoster(data.roster_list || []);
 
     teams.push({
       team_id: data.team_id,
@@ -339,7 +384,7 @@ export async function browseTeamDirectory(
       region: data.region || undefined,
       season_record: data.season_record || { wins: 0, losses: 0 },
       athlete_count: enrichedRoster.length,
-      coach_name: coach.full_name,
+      coach_name: coachName,
       coach_id: data.coach_id || '',
       established_year: data.established_year,
       roster_list: enrichedRoster,
@@ -357,6 +402,11 @@ export async function browseTeamDirectory(
  * Retrieve all athletes managed by a coach (both those assigned to a team and unassigned).
  */
 export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
+  const cached = coachManagedAthletesCache.get(coachId);
+  if (cached && Date.now() - cached.cachedAt < COACH_ATHLETES_TTL_MS) {
+    return cached.data;
+  }
+
   const cleanId = coachId.replace(/^coach_/, '');
   const possibleCoachIds = Array.from(new Set([coachId, `coach_${cleanId}`, cleanId]));
 
@@ -503,12 +553,24 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
         apg: Number(stats.apg ?? stats.assists_per_game ?? 0),
         fg_pct: Number(stats.fg_pct ?? stats.field_goal_percentage ?? 0),
         per: per,
+        games_played: Number(stats.games_played ?? 0),
       },
+      averages: profileData.averages || {
+        ppg: Number(stats.ppg ?? stats.points_per_game ?? 0),
+        rpg: Number(stats.rpg ?? stats.rebounds_per_game ?? 0),
+        apg: Number(stats.apg ?? stats.assists_per_game ?? 0),
+        fg_percentage: Number(stats.fg_pct ?? stats.field_goal_percentage ?? 0),
+        per_score: per,
+        games_played: Number(stats.games_played ?? 0),
+      },
+      scoring_trends_last_10: profileData.scoring_trends_last_10 || [],
+      biometrics: profileData.biometrics || undefined,
       workload_analytics: profileData.workload_analytics || profileData.workload || undefined,
     };
   });
 
   const managedAthletes = await Promise.all(profileFetchPromises);
+  coachManagedAthletesCache.set(coachId, { data: managedAthletes, cachedAt: Date.now() });
   return managedAthletes;
 }
 
@@ -525,6 +587,9 @@ export async function getTeamDetails(teamId: string): Promise<TeamDetailResponse
 
   const data = teamDoc.data() as Team;
   const coach = await enrichCoach(data.coach_id);
+  if (data.coach_name && (!coach.full_name || coach.full_name === 'No Coach Assigned')) {
+    coach.full_name = data.coach_name;
+  }
   const roster = await enrichRoster(data.roster_list || []);
 
   return {
@@ -646,14 +711,13 @@ export async function updateTeamRoster(
     );
   }
 
+  const rosterUpdates = {
+    roster_list: updatedRosterMembers,
+    timestamp: new Date().toISOString(),
+  };
+
   // Update roster_list in Firestore Teams document with full athlete details
-  await db.collection('Teams').doc(teamId).set(
-    {
-      roster_list: updatedRosterMembers,
-      timestamp: new Date().toISOString(),
-    },
-    { merge: true },
-  );
+  await db.collection('Teams').doc(teamId).set(rosterUpdates, { merge: true });
 
   invalidateTeamCache();
   return getTeamDetails(teamId);
@@ -692,6 +756,7 @@ export async function updateTeam(
   if (anyData.organization) updates.institution_or_org = anyData.organization.trim();
 
   await db.collection('Teams').doc(teamId).set(updates, { merge: true });
+
   invalidateTeamCache();
 
   if (data.roster && Array.isArray(data.roster)) {
@@ -737,22 +802,229 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
   const resultsMap = new Map<string, RosterAthlete>();
   const queryLower = (queryStr || '').trim().toLowerCase();
 
-  // Fetch collections in parallel to eliminate N+1 roundtrips
-  const [usersSnapshot, profilesSnapshot, teamsSnapshot] = await Promise.all([
+  // Fetch collections in parallel from atleta-v1
+  const [usersSnapshot, profilesSnapshot, teamsSnapshot, matchLogsSnapshot, metricsSnapshot] = await Promise.all([
     db.collection('Users').get(),
     db.collection('Athlete_Profiles').get(),
     db.collection('Teams').get(),
+    db.collection('Match_Logs').get().catch(() => ({ docs: [] } as any)),
+    db.collection('Performance_Metrics').get().catch(() => ({ docs: [] } as any)),
   ]);
 
   const profilesMap = new Map<string, any>();
   profilesSnapshot.docs.forEach((doc) => {
     profilesMap.set(doc.id, doc.data());
+    const rawId = doc.id.replace(/^ath_/, '');
+    if (!profilesMap.has(rawId)) profilesMap.set(rawId, doc.data());
+    if (!profilesMap.has(`ath_${rawId}`)) profilesMap.set(`ath_${rawId}`, doc.data());
   });
 
   const usersMap = new Map<string, any>();
   usersSnapshot.docs.forEach((doc) => {
     usersMap.set(doc.id, doc.data());
+    const rawId = doc.id.replace(/^ath_/, '');
+    if (!usersMap.has(rawId)) usersMap.set(rawId, doc.data());
+    if (!usersMap.has(`ath_${rawId}`)) usersMap.set(`ath_${rawId}`, doc.data());
   });
+
+  // Aggregate points and performance stats from Match_Logs and Performance_Metrics
+  const matchStatsByAthlete = new Map<string, {
+    totalGames: number;
+    totalPts: number;
+    totalReb: number;
+    totalAst: number;
+    totalFgm: number;
+    totalFga: number;
+    scores: number[];
+  }>();
+
+  const recordAthleteMatchStat = (
+    aId: string,
+    pts: number,
+    reb: number,
+    ast: number,
+    fgm: number,
+    fga: number
+  ) => {
+    if (!aId) return;
+    const cleanId = aId.replace(/^ath_/, '');
+    const keys = [aId, cleanId, `ath_${cleanId}`];
+    
+    let entry = matchStatsByAthlete.get(cleanId);
+    if (!entry) {
+      entry = {
+        totalGames: 0,
+        totalPts: 0,
+        totalReb: 0,
+        totalAst: 0,
+        totalFgm: 0,
+        totalFga: 0,
+        scores: [],
+      };
+      keys.forEach((k) => matchStatsByAthlete.set(k, entry!));
+    }
+
+    entry.totalGames += 1;
+    entry.totalPts += pts;
+    entry.totalReb += reb;
+    entry.totalAst += ast;
+    entry.totalFgm += fgm;
+    entry.totalFga += fga;
+    if (pts > 0) entry.scores.push(pts);
+  };
+
+  // Inspect Match_Logs player_stats
+  matchLogsSnapshot.docs.forEach((doc: any) => {
+    const m = doc.data();
+    if (Array.isArray(m.player_stats)) {
+      m.player_stats.forEach((p: any) => {
+        const aId = p.athlete_id || p.user_id || p.id;
+        if (aId) {
+          const s = p.stats || {};
+          const pts = Number(p.pts ?? p.points ?? s.points ?? s.pts ?? 0);
+          const reb = Number(p.reb ?? p.rebounds ?? s.rebounds ?? s.reb ?? 0);
+          const ast = Number(p.ast ?? p.assists ?? s.assists ?? s.ast ?? 0);
+          const fgm = Number(s.fg_made ?? 0);
+          const fga = Number(s.fg_attempted ?? 0);
+          recordAthleteMatchStat(String(aId), pts, reb, ast, fgm, fga);
+        }
+      });
+    }
+  });
+
+  // Inspect Performance_Metrics
+  metricsSnapshot.docs.forEach((doc: any) => {
+    const m = doc.data();
+    const aId = m.athlete_id || m.user_id;
+    if (aId) {
+      const s = m.sport_stats || {};
+      const pts = Number(s.points ?? m.calculated_player_efficiency ?? 0);
+      const reb = Number(s.rebounds ?? (Number(s.offensive_rebounds || 0) + Number(s.defensive_rebounds || 0)));
+      const ast = Number(s.assists ?? 0);
+      const fgm = Number(s.fg_made ?? 0);
+      const fga = Number(s.fg_attempted ?? 0);
+      recordAthleteMatchStat(String(aId), pts, reb, ast, fgm, fga);
+    }
+  });
+
+  // Helper to resolve player stats
+  const buildAthleteStats = (aId: string, p: any, u: any) => {
+    const rawStats = p?.stats || u?.stats || {};
+    const rawAverages = p?.averages || u?.averages || {};
+    const mStats = matchStatsByAthlete.get(aId) || matchStatsByAthlete.get(aId.replace(/^ath_/, ''));
+
+    const storedPpg = Number(
+      rawAverages.ppg ??
+      rawStats.ppg ??
+      rawAverages.points ??
+      rawStats.points ??
+      rawAverages.pts ??
+      rawStats.pts ??
+      rawStats.points_per_game ??
+      p?.ppg ??
+      0
+    );
+    const storedRpg = Number(
+      rawAverages.rpg ??
+      rawStats.rpg ??
+      rawAverages.rebounds ??
+      rawStats.rebounds ??
+      rawAverages.reb ??
+      rawStats.reb ??
+      0
+    );
+    const storedAst = Number(
+      rawAverages.apg ??
+      rawStats.apg ??
+      rawAverages.ast ??
+      rawStats.ast ??
+      rawAverages.assists ??
+      rawStats.assists ??
+      0
+    );
+    const storedFg = Number(
+      rawAverages.fg_percentage ??
+      rawAverages.fg_pct ??
+      rawStats.fg_pct ??
+      rawStats.fg_percentage ??
+      p?.shooting_efficiency?.fg_pct ??
+      0
+    );
+    const storedGp = Number(rawAverages.games_played ?? rawStats.games_played ?? 0);
+
+    let ppg = storedPpg;
+    let rpg = storedRpg;
+    let ast = storedAst;
+    let fgPct = storedFg;
+    let gamesPlayed = storedGp;
+
+    if (!ppg && mStats && mStats.totalGames > 0 && mStats.totalPts > 0) {
+      gamesPlayed = mStats.totalGames;
+      ppg = parseFloat((mStats.totalPts / mStats.totalGames).toFixed(1));
+      rpg = parseFloat((mStats.totalReb / mStats.totalGames).toFixed(1));
+      ast = parseFloat((mStats.totalAst / mStats.totalGames).toFixed(1));
+      if (mStats.totalFga > 0) {
+        fgPct = parseFloat(((mStats.totalFgm / mStats.totalFga) * 100).toFixed(1));
+      }
+    }
+
+    // If ppg is still 0, check scoring trends array
+    if (ppg === 0) {
+      const trends = Array.isArray(p?.scoring_trends_last_10)
+        ? p.scoring_trends_last_10
+        : Array.isArray(p?.analytics?.scoring_trend)
+        ? p.analytics.scoring_trend
+        : [];
+      const validTrends = trends.filter((t: any) => Number(t) > 0);
+      if (validTrends.length > 0) {
+        ppg = parseFloat((validTrends.reduce((a: number, b: number) => a + Number(b), 0) / validTrends.length).toFixed(1));
+      }
+    }
+
+    if (gamesPlayed === 0) {
+      gamesPlayed = Number(rawAverages.games_played ?? rawStats.games_played ?? (ppg > 0 ? 8 : 0));
+    }
+
+    const per = Number(
+      rawAverages.per_score ??
+      rawStats.per_score ??
+      rawStats.efficiency_rating ??
+      p?.calculated_per ??
+      p?.career_per ??
+      (ppg > 0 ? Math.round(ppg * 1.3 + 12) : 25)
+    );
+
+    const eff = Number(
+      p?.efficiency_pct ??
+      rawStats.efficiency_pct ??
+      (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5 + 20)) : 75)
+    );
+
+    const mergedStats = {
+      ...rawStats,
+      ppg,
+      rpg,
+      ast,
+      fg_pct: fgPct,
+      games_played: gamesPlayed,
+      times_50m_free: rawStats.times_50m_free || p?.best_times?.times_50m_free,
+      times_100m: rawStats.times_100m || p?.best_times?.times_100m,
+      times_200m: rawStats.times_200m || p?.best_times?.times_200m,
+      times_400m: rawStats.times_400m || p?.best_times?.times_400m,
+    };
+
+    const mergedAverages = {
+      ...rawAverages,
+      ppg,
+      rpg,
+      apg: ast,
+      fg_percentage: fgPct,
+      games_played: gamesPlayed,
+      per_score: per,
+    };
+
+    return { ppg, rpg, ast, fgPct, per, eff, stats: mergedStats, averages: mergedAverages };
+  };
 
   // 1. Search Users collection for all registered user accounts with role === 'Athlete' or 'Player'
   for (const userDoc of usersSnapshot.docs) {
@@ -761,46 +1033,46 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
 
     if (role.includes('athlete') || role.includes('player') || role === 'user' || !u.role) {
       const uid = userDoc.id;
-      const firstName = u.first_name || '';
-      const lastName = u.last_name || '';
-      const fullName = `${firstName} ${lastName}`.trim();
-      const athleteId = u.athlete_id || uid;
+      const rawUid = uid.replace(/^ath_/, '');
+      const canonicalAthleteId = uid.startsWith('ath_') ? uid : `ath_${uid}`;
+      const athleteId = u.athlete_id || canonicalAthleteId;
 
-      const p = profilesMap.get(uid) || profilesMap.get(athleteId) || {};
+      const p = profilesMap.get(canonicalAthleteId) || profilesMap.get(rawUid) || profilesMap.get(athleteId) || profilesMap.get(uid) || {};
+      const uData = usersMap.get(rawUid) || usersMap.get(canonicalAthleteId) || u;
+
+      const firstName = uData.first_name || p.first_name || '';
+      const lastName = uData.last_name || p.last_name || '';
+      const fullName = (p.full_name && !p.full_name.includes('undefined')) ? p.full_name : (uData.full_name && !uData.full_name.includes('undefined')) ? uData.full_name : `${firstName} ${lastName}`.trim() || 'Athlete';
 
       const docs = Array.isArray(p.eligibility_documents)
         ? p.eligibility_documents
-        : Array.isArray(u.eligibility_documents)
-          ? u.eligibility_documents
+        : Array.isArray(uData.eligibility_documents)
+          ? uData.eligibility_documents
           : [];
 
-      const phys = p.physical_profile || u.physical_profile || p.physical_attributes || u.physical_attributes || {};
-      const heightCm = phys.height_cm ?? p.height_cm ?? u.height_cm ?? null;
-      const weightKg = phys.weight_kg ?? p.weight_kg ?? u.weight_kg ?? null;
-      const wingspanCm = phys.wingspan_cm ?? p.wingspan_cm ?? u.wingspan_cm ?? null;
+      const phys = p.physical_profile || uData.physical_profile || p.physical_attributes || uData.physical_attributes || {};
+      const heightCm = phys.height_cm ?? p.height_cm ?? uData.height_cm ?? null;
+      const weightKg = phys.weight_kg ?? p.weight_kg ?? uData.weight_kg ?? null;
+      const wingspanCm = phys.wingspan_cm ?? p.wingspan_cm ?? uData.wingspan_cm ?? null;
 
-      const stats = p.stats || u.stats || p.averages || u.averages || {};
-      const averages = p.averages || u.averages || stats;
-      const ppg = Number(averages.ppg ?? stats.ppg ?? 0);
-      const per = Number(averages.per_score ?? stats.per_score ?? p.calculated_per ?? (ppg > 0 ? Math.round(ppg * 1.3) : 25));
-      const eff = Number(p.efficiency_pct ?? (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5)) : 75));
+      const { ppg, per, eff, stats, averages } = buildAthleteStats(athleteId, p, uData);
 
       const athleteObj: RosterAthlete = {
         athlete_id: athleteId,
-        user_id: uid,
+        user_id: rawUid,
         first_name: firstName || 'Athlete',
         last_name: lastName || '',
-        full_name: fullName || 'Athlete',
-        position: p.position || u.position || 'Unassigned',
-        jersey_number: p.jersey_number ?? u.jersey_number ?? null,
-        sport_type: p.sport_type || u.sport_type || '',
-        sport_category: (p.sport_type || u.sport_type || '').toUpperCase(),
-        avatar_url: p.avatar_url || u.avatar_url || undefined,
+        full_name: fullName,
+        position: p.position || uData.position || 'Unassigned',
+        jersey_number: p.jersey_number ?? uData.jersey_number ?? null,
+        sport_type: p.sport_type || uData.sport_type || '',
+        sport_category: (p.sport_type || uData.sport_type || '').toUpperCase(),
+        avatar_url: p.avatar_url || uData.avatar_url || undefined,
         eligibility_documents: docs,
         is_eligibility_verified: docs.length > 0,
-        recruitment_status: p.recruitment_status || u.recruitment_status || 'Available',
-        province: p.province || u.province || 'Camarines Sur',
-        location: p.province || u.province || 'Camarines Sur',
+        recruitment_status: p.recruitment_status || uData.recruitment_status || 'Available',
+        province: p.province || uData.province || 'Camarines Sur',
+        location: p.province || uData.province || 'Camarines Sur',
         height_cm: heightCm ? Number(heightCm) : null,
         weight_kg: weightKg ? Number(weightKg) : null,
         wingspan_cm: wingspanCm ? Number(wingspanCm) : null,
@@ -815,9 +1087,10 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
         efficiency_pct: eff,
       };
 
-      const searchHaystack = `${fullName} ${athleteObj.position} ${athleteId} ${uid} ${u.email || ''}`.toLowerCase();
+      const searchHaystack = `${fullName} ${athleteObj.position} ${athleteId} ${rawUid} ${uData.email || ''}`.toLowerCase();
       if (!queryLower || searchHaystack.includes(queryLower)) {
         resultsMap.set(athleteId, athleteObj);
+        resultsMap.set(rawUid, athleteObj);
       }
     }
   }
@@ -825,14 +1098,16 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
   // 2. Search Athlete_Profiles collection for any profiles
   for (const profileDoc of profilesSnapshot.docs) {
     const p = profileDoc.data();
-    const athleteId = p.athlete_id || profileDoc.id;
+    const rawId = profileDoc.id.replace(/^ath_/, '');
+    const canonicalAthleteId = profileDoc.id.startsWith('ath_') ? profileDoc.id : `ath_${profileDoc.id}`;
+    const athleteId = p.athlete_id || canonicalAthleteId;
 
-    if (!resultsMap.has(athleteId)) {
-      const uid = p.user_id || profileDoc.id;
-      const u = usersMap.get(uid) || {};
-      let firstName = p.first_name || u.first_name || '';
-      let lastName = p.last_name || u.last_name || '';
-      const fullName = `${firstName} ${lastName}`.trim();
+    if (!resultsMap.has(athleteId) && !resultsMap.has(rawId)) {
+      const uid = p.user_id || rawId;
+      const u = usersMap.get(uid) || usersMap.get(rawId) || usersMap.get(canonicalAthleteId) || {};
+      const firstName = p.first_name || u.first_name || '';
+      const lastName = p.last_name || u.last_name || '';
+      const fullName = (p.full_name && !p.full_name.includes('undefined')) ? p.full_name : (u.full_name && !u.full_name.includes('undefined')) ? u.full_name : `${firstName} ${lastName}`.trim() || 'Athlete';
 
       const docs = Array.isArray(p.eligibility_documents) ? p.eligibility_documents : [];
       const phys = p.physical_profile || u.physical_profile || p.physical_attributes || u.physical_attributes || {};
@@ -840,18 +1115,14 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
       const weightKg = phys.weight_kg ?? p.weight_kg ?? u.weight_kg ?? null;
       const wingspanCm = phys.wingspan_cm ?? p.wingspan_cm ?? u.wingspan_cm ?? null;
 
-      const stats = p.stats || u.stats || p.averages || u.averages || {};
-      const averages = p.averages || u.averages || stats;
-      const ppg = Number(averages.ppg ?? stats.ppg ?? 0);
-      const per = Number(averages.per_score ?? stats.per_score ?? p.calculated_per ?? (ppg > 0 ? Math.round(ppg * 1.3) : 25));
-      const eff = Number(p.efficiency_pct ?? (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5)) : 75));
+      const { per, eff, stats, averages } = buildAthleteStats(athleteId, p, u);
 
       const athleteObj: RosterAthlete = {
         athlete_id: athleteId,
         user_id: uid,
         first_name: firstName || 'Athlete',
         last_name: lastName || '',
-        full_name: fullName || 'Athlete',
+        full_name: fullName,
         position: p.position || 'Unassigned',
         jersey_number: p.jersey_number ?? null,
         sport_type: p.sport_type || u.sport_type || '',
@@ -879,6 +1150,7 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
       const searchHaystack = `${firstName} ${lastName} ${athleteObj.position} ${athleteId}`.toLowerCase();
       if (!queryLower || searchHaystack.includes(queryLower)) {
         resultsMap.set(athleteId, athleteObj);
+        resultsMap.set(rawId, athleteObj);
       }
     }
   }
@@ -886,19 +1158,31 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
   // 3. Search Teams collection roster_list array for any athletes
   for (const teamDoc of teamsSnapshot.docs) {
     const teamData = teamDoc.data() as Team;
+    const teamCoach = (teamData as any).coach_name || (teamData as any).head_coach || '';
     if (Array.isArray(teamData.roster_list)) {
       for (const item of teamData.roster_list) {
         if (typeof item === 'object' && item.athlete_id) {
           const athleteId = item.athlete_id;
-          if (!resultsMap.has(athleteId)) {
+          const cleanId = String(athleteId).replace(/^ath_/, '');
+          const existing = resultsMap.get(athleteId) || resultsMap.get(cleanId);
+          if (existing) {
+            existing.team_id = teamDoc.id;
+            existing.team_name = teamData.team_name;
+            existing.coach_name = teamCoach;
+            existing.has_coach = true;
+          } else {
             const firstName = item.first_name || 'Athlete';
             const lastName = item.last_name || '';
             const fullName = `${firstName} ${lastName}`.trim();
             const docs = Array.isArray(item.eligibility_documents) ? item.eligibility_documents : [];
 
+            const p = profilesMap.get(athleteId) || profilesMap.get(cleanId) || {};
+            const u = usersMap.get(cleanId) || usersMap.get(athleteId) || {};
+            const { per, eff, stats, averages } = buildAthleteStats(athleteId, p, u);
+
             const athleteObj: RosterAthlete = {
               athlete_id: athleteId,
-              user_id: item.user_id || athleteId,
+              user_id: item.user_id || cleanId,
               first_name: firstName,
               last_name: lastName,
               full_name: fullName || 'Athlete',
@@ -908,14 +1192,23 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
               sport_category: (teamData.sport_type || '').toUpperCase(),
               eligibility_documents: docs,
               is_eligibility_verified: item.is_eligibility_verified ?? (docs.length > 0),
-              recruitment_status: 'Available',
+              recruitment_status: 'Rostered',
               province: 'Camarines Sur',
               location: 'Camarines Sur',
+              team_id: teamDoc.id,
+              team_name: teamData.team_name,
+              coach_name: teamCoach,
+              has_coach: true,
+              stats,
+              averages,
+              calculated_per: per,
+              efficiency_pct: eff,
             };
 
             const searchHaystack = `${firstName} ${lastName} ${athleteObj.position} ${athleteId}`.toLowerCase();
             if (!queryLower || searchHaystack.includes(queryLower)) {
               resultsMap.set(athleteId, athleteObj);
+              resultsMap.set(cleanId, athleteObj);
             }
           }
         }
@@ -923,7 +1216,18 @@ export async function searchAthletes(queryStr?: string, sportType?: string) {
     }
   }
 
-  const allAthletes = Array.from(resultsMap.values());
+  // Deduplicate and filter
+  const seenCanonicalIds = new Set<string>();
+  const allAthletes: RosterAthlete[] = [];
+
+  for (const ath of resultsMap.values()) {
+    const norm = String(ath.athlete_id || ath.user_id).replace(/^ath_/, '');
+    if (!seenCanonicalIds.has(norm)) {
+      seenCanonicalIds.add(norm);
+      allAthletes.push(ath);
+    }
+  }
+
   if (!sportType || sportType.toUpperCase() === 'ALL') {
     return allAthletes;
   }

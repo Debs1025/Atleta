@@ -157,6 +157,21 @@ export interface BoxScoreRow {
   fg_pct: string;
   three_p_pct: string;
   ft_pct: string;
+  // Volleyball
+  kills?: number;
+  attack_errors?: number;
+  attack_attempts?: number;
+  hitting_pct?: string;
+  service_aces?: number;
+  digs?: number;
+  block_points?: number;
+  // Soccer
+  goals?: number;
+  shots?: number;
+  shots_on_target?: number;
+  saves?: number;
+  tackles?: number;
+  [key: string]: any;
 }
 
 export interface RaceResultRow {
@@ -350,6 +365,9 @@ export interface DetectedAthleteStat {
   player_name: string;
   team_name?: string;
   jersey_number?: number;
+  position?: string;
+
+  // Basketball
   pts?: number;
   ast?: number;
   to?: number;
@@ -358,7 +376,26 @@ export interface DetectedAthleteStat {
   blk?: number;
   min?: number;
   fg_pct?: string;
+
+  // Volleyball
+  kills?: number;
+  attack_errors?: number;
+  attack_attempts?: number;
+  hitting_pct?: string;
+  service_aces?: number;
+  digs?: number;
+  block_points?: number;
+
+  // Soccer
+  goals?: number;
+  shots?: number;
+  shots_on_target?: number;
+  saves?: number;
+  tackles?: number;
+
+  // Timed / Individual (Swimming / Track & Field)
   time?: string;
+  finish_time?: string;
   event?: string;
   stroke_count?: number;
   distance_m?: number;
@@ -366,6 +403,8 @@ export interface DetectedAthleteStat {
   split_2?: string;
   pace?: string;
   reaction_sec?: string;
+  placement_rank?: number | string;
+  [key: string]: any;
 }
 
 export interface ExpandedPerformanceMetrics {
@@ -383,6 +422,7 @@ export interface ExpandedPerformanceMetrics {
     turnovers: number;
     scv_12s: number;
   };
+  [key: string]: any;
 }
 
 export interface RawOCRDetectedData {
@@ -392,9 +432,15 @@ export interface RawOCRDetectedData {
   game_result?: string;
   team_scores?: TeamScoreItem[];
   teams?: string[];
-  sport_type: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_type?: string;
+  match_date?: string;
+  location?: string;
+  venue?: string;
+  notes?: string;
   athlete_overview: DetectedAthleteStat[];
-  expanded_metrics: ExpandedPerformanceMetrics;
+  expanded_metrics?: ExpandedPerformanceMetrics;
+  batch_matches?: RawOCRDetectedData[];
+  [key: string]: any;
 }
 
 export interface UploadedFileItem {

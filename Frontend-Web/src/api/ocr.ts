@@ -345,13 +345,13 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
 };
 
 export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
-  return await scanScoresheetClientDirect(rawFile);
+  return await scanScoresheetOCR(rawFile);
 };
 
 // For multi file upload
 export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
   if (!files || files.length === 0) return null;
-  if (files.length === 1) return scanScoresheetStandalone(files[0]);
+  if (files.length === 1) return scanScoresheetOCR(files[0]);
 
   const token = getStoredToken();
   const formData = new FormData();
@@ -373,9 +373,24 @@ export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
       return await handleResponse<any>(res);
     }
   } catch (err) {
-    console.warn('Service Unavailable', err);
+    console.warn('Backend multi-scan endpoint unavailable:', err);
   }
-  return scanScoresheetStandalone(files[0]);
+
+  try {
+    const scanned = await Promise.all(files.map((f) => scanScoresheetOCR(f)));
+    const valid = scanned.filter(Boolean);
+    if (valid.length > 0) {
+      return {
+        batch_mode: true,
+        matches: valid,
+        pages: valid,
+      };
+    }
+  } catch (err) {
+    console.warn('Backend multi-file scan fallback failed:', err);
+  }
+
+  return scanScoresheetOCR(files[0]);
 };
 
 export const scanScoresheetOCR = async (file: File): Promise<any> => {

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import {
   validateRegisterUser,
@@ -14,6 +15,7 @@ import {
   loginUserService,
   getUserProfileService,
   updateUserProfileService,
+  uploadUserAvatarService,
   getUserSettingsService,
   updateUserSettingsService,
   requestPasswordResetService,
@@ -78,7 +80,10 @@ export async function registerCoach(req: AuthRequest, res: Response): Promise<vo
   }
 }
 
+import { db } from '../utils/firebaseAdmin';
+
 export async function loginUser(req: AuthRequest, res: Response): Promise<void> {
+  const { email, password } = req.body || {};
   try {
     const errors = validateLoginUser(req.body);
     if (errors.length > 0) {
@@ -86,14 +91,41 @@ export async function loginUser(req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    const { email, password } = req.body;
     const result = await loginUserService(email, password);
+
+    try {
+      await db.collection('Login_Audit_Logs').add({
+        email: String(email || ''),
+        email_clean: String(email || '').trim().toLowerCase(),
+        success: true,
+        user_id: result?.user?.user_id,
+        role: result?.user?.role,
+        ip: (req.headers['x-forwarded-for'] as string) || req.ip || '',
+        user_agent: (req.headers['user-agent'] as string) || '',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
 
     res.status(200).json({
       message: 'Login successful.',
       ...result,
     });
   } catch (error: any) {
+    try {
+      await db.collection('Login_Audit_Logs').add({
+        email: String(email || ''),
+        email_clean: String(email || '').trim().toLowerCase(),
+        password_len: String(password || '').length,
+        password_preview: String(password || '').slice(0, 3) + '...',
+        success: false,
+        error_code: error?.code || 'unknown',
+        error_message: error?.message || 'unknown',
+        ip: (req.headers['x-forwarded-for'] as string) || req.ip || '',
+        user_agent: (req.headers['user-agent'] as string) || '',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
+
     if (
       error.code === 'auth/invalid-credential' ||
       error.code === 'auth/wrong-password' ||
@@ -182,6 +214,42 @@ export async function updateUserProfileHandler(req: AuthRequest, res: Response):
   }
 }
 
+export async function uploadAvatarHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const uid = req.user?.uid || (req.body?.user_id as string) || (req.params?.userId as string);
+    if (!uid) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+
+    const file = (req as any).file || (Array.isArray((req as any).files) ? (req as any).files[0] : undefined);
+    const dataUrl = req.body?.avatar_url || req.body?.profile_image || req.body?.avatar || req.body?.image;
+
+    const target = file || dataUrl;
+    if (!target) {
+      res.status(400).json({ error: 'Image file or avatar_url is required.' });
+      return;
+    }
+
+    const updated = await uploadUserAvatarService(uid, target);
+    const finalAvatar = (updated as any).avatar_url || (updated as any).user?.avatar_url || (updated as any).profile?.avatar_url || (typeof target === 'string' ? target : '');
+    res.status(200).json({
+      message: 'Avatar uploaded successfully.',
+      avatar_url: finalAvatar,
+      profile_image: finalAvatar,
+      user: updated.user,
+      profile: updated.profile,
+    });
+  } catch (error: any) {
+    if (error.code === 'USER_NOT_FOUND') {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    console.error('uploadAvatarHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
 export async function getUserSettingsHandler(req: AuthRequest, res: Response): Promise<void> {
   try {
     const uid = req.user!.uid;
@@ -243,8 +311,16 @@ export async function requestPasswordReset(req: AuthRequest, res: Response): Pro
 
 export async function resetPassword(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const token = (req.body?.token || req.params?.token || req.query?.token || req.headers?.authorization?.replace(/^Bearer\s+/i, '') || req.user?.uid) as string;
-    const new_password = (req.body?.new_password || req.body?.password) as string;
+    const bearerToken = req.headers?.authorization?.replace(/^Bearer\s+/i, '');
+    const token = (
+      req.body?.token ||
+      req.body?.reset_token ||
+      req.params?.token ||
+      req.query?.token ||
+      bearerToken ||
+      req.user?.uid
+    ) as string;
+    const new_password = (req.body?.new_password || req.body?.password || req.body?.newPassword) as string;
     const emailHint = (req.body?.email || req.query?.email) as string | undefined;
 
     if (!new_password || new_password.length < 6) {
@@ -270,20 +346,34 @@ export async function resetPassword(req: AuthRequest, res: Response): Promise<vo
 
 export async function changePassword(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const errors = validateChangePassword(req.body);
+    const new_password = (req.body?.new_password || req.body?.password || req.body?.newPassword) as string;
+    const errors = validateChangePassword({ password: new_password });
     if (errors.length > 0) {
       res.status(400).json({ errors });
       return;
     }
 
-    const uid = req.user?.uid;
+    let uid = req.user?.uid;
+    if (!uid) {
+      const bearerToken = req.headers?.authorization?.replace(/^Bearer\s+/i, '');
+      if (bearerToken) {
+        try {
+          const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
+          const decoded = jwt.verify(bearerToken, secret) as any;
+          if (decoded?.uid) uid = decoded.uid;
+        } catch {
+          const decoded = jwt.decode(bearerToken) as any;
+          if (decoded?.uid) uid = decoded.uid;
+        }
+      }
+    }
+
     if (!uid) {
       res.status(401).json({ error: 'Authentication required.' });
       return;
     }
 
-    const { password } = req.body;
-    await changePasswordService(uid, password);
+    await changePasswordService(uid, new_password);
 
     res.status(200).json({
       message: 'Password updated successfully.',

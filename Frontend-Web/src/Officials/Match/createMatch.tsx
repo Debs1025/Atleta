@@ -114,10 +114,17 @@ export const CreateMatch: React.FC = () => {
     venue?: string;
   } | null>(null);
 
+  const activeSportCategory = (ocrDetectedSport || sportCategory || 'Basketball').trim();
+  const normalizedSportUpper = activeSportCategory.toUpperCase();
+  const isVolleyball = normalizedSportUpper.includes('VOLLEY');
+  const isSoccer = normalizedSportUpper.includes('SOCCER') || normalizedSportUpper.includes('FOOTBALL');
   const isIndividualSport =
-    sportCategory.toLowerCase().includes('track') ||
-    sportCategory.toLowerCase().includes('swim') ||
-    sportCategory.toLowerCase().includes('field');
+    normalizedSportUpper.includes('TRACK') ||
+    normalizedSportUpper.includes('SWIM') ||
+    normalizedSportUpper.includes('FIELD') ||
+    normalizedSportUpper.includes('ATHLETIC') ||
+    normalizedSportUpper.includes('TIME');
+  const isBasketball = !isVolleyball && !isSoccer && !isIndividualSport;
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -308,27 +315,92 @@ export const CreateMatch: React.FC = () => {
             : String(idx + 1).padStart(2, '0');
 
           const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
+          
+          // Sport-specific stats extraction
+          const kills = Number(p.kills ?? p.k ?? 0);
+          const attack_errors = Number(p.attack_errors ?? p.attack_error ?? p.e ?? 0);
+          const attack_attempts = Number(p.attack_attempts ?? p.total_attacks ?? p.ta ?? p.attempts ?? 0);
+          const hitting_pct = p.hitting_pct || p.attack_pct || p.pct || (attack_attempts > 0 ? ((kills - attack_errors) / attack_attempts).toFixed(3) : '.000');
+          const service_aces = Number(p.service_aces ?? p.aces ?? p.sa ?? p.steals ?? p.stl ?? 0);
+          const digs = Number(p.digs ?? p.dig ?? p.rebounds ?? p.reb ?? 0);
+          const blk = Number(p.blocks ?? p.blk ?? p.total_blocks ?? p.tb ?? p.block_points ?? 0);
+          const ast = Number(p.assists ?? p.ast ?? p.sets ?? 0);
+
+          const goals = Number(p.goals ?? p.g ?? 0);
+          const shots = Number(p.shots ?? p.sh ?? 0);
+          const shots_on_target = Number(p.shots_on_target ?? p.sot ?? 0);
+          const saves = Number(p.saves ?? p.sv ?? 0);
+          const tackles = Number(p.tackles ?? p.tck ?? 0);
+
           const fga = Number(p.fg_attempted || p.fga || 0);
           const fgm = Number(p.fg_made || p.fgm || 0);
-          const fgPct = p.true_shooting_pct
-            ? `${Math.round(p.true_shooting_pct)}%`
-            : fga > 0
-            ? `${Math.round((fgm / fga) * 100)}%`
-            : '50%';
+          let fgPct = '0.0%';
+          if (p.fg_pct || p.fg_percentage) {
+            const raw = String(p.fg_pct || p.fg_percentage).trim();
+            fgPct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (p.true_shooting_pct) {
+            const val = parseFloat(String(p.true_shooting_pct).replace('%', ''));
+            fgPct = !isNaN(val) ? `${Math.round(val)}%` : '0.0%';
+          } else if (fga > 0) {
+            fgPct = `${Math.round((fgm / fga) * 100)}%`;
+          }
+
+          let threePct = '0.0%';
+          const tpa = Number(p.three_p_attempted || p.three_p_attempts || p.tpa || p['3pa'] || 0);
+          const tpm = Number(p.three_p_made || p.tpm || p['3pm'] || 0);
+          if (p.three_p_pct || p.three_pct || p['3p_pct']) {
+            const raw = String(p.three_p_pct || p.three_pct || p['3p_pct']).trim();
+            threePct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (tpa > 0) {
+            threePct = `${Math.round((tpm / tpa) * 100)}%`;
+          }
+
+          let ftPct = '0.0%';
+          const fta = Number(p.ft_attempted || p.ft_attempts || p.fta || 0);
+          const ftm = Number(p.ft_made || p.ftm || 0);
+          if (p.ft_pct || p.ft_percentage) {
+            const raw = String(p.ft_pct || p.ft_percentage).trim();
+            ftPct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (fta > 0) {
+            ftPct = `${Math.round((ftm / fta) * 100)}%`;
+          }
+
+          let pts = Number(p.points ?? p.pts ?? 0);
+          if (pts === 0) {
+            if (kills > 0 || service_aces > 0 || blk > 0) {
+              pts = kills + service_aces + blk;
+            } else if (goals > 0) {
+              pts = goals;
+            }
+          }
+
+          const defaultPos = isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G';
 
           const row: BoxScoreRow = {
             jersey_no: jersey,
             player_name: fullName,
-            position: p.position || 'G',
-            minutes: p.minutes ? String(p.minutes) : '0',
-            pts: Number(p.points ?? p.pts ?? 0),
-            reb: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
-            ast: Number(p.assists ?? p.ast ?? 0),
-            stl: Number(p.steals ?? p.stl ?? 0),
-            blk: Number(p.blocks ?? p.blk ?? 0),
+            position: p.position || p.pos || defaultPos,
+            minutes: p.minutes ? String(p.minutes) : p.sp ? String(p.sp) : '0',
+            pts: pts,
+            reb: digs || Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
+            ast: ast,
+            stl: service_aces || Number(p.steals ?? p.stl ?? 0),
+            blk: blk,
             fg_pct: fgPct,
-            three_p_pct: p.three_p_pct ? `${p.three_p_pct}%` : '0.0%',
-            ft_pct: p.ft_pct ? `${p.ft_pct}%` : '0.0%',
+            three_p_pct: threePct,
+            ft_pct: ftPct,
+            kills,
+            attack_errors,
+            attack_attempts,
+            hitting_pct,
+            service_aces,
+            digs,
+            block_points: blk,
+            goals,
+            shots,
+            shots_on_target,
+            saves,
+            tackles,
           };
 
           if (isHome) {
@@ -389,7 +461,7 @@ export const CreateMatch: React.FC = () => {
     const newRow: BoxScoreRow = {
       jersey_no: String(team === 'home' ? homeRoster.length + 1 : awayRoster.length + 1).padStart(2, '0'),
       player_name: 'NEW PLAYER',
-      position: 'G',
+      position: isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G',
       minutes: '0',
       pts: 0,
       reb: 0,
@@ -399,6 +471,18 @@ export const CreateMatch: React.FC = () => {
       fg_pct: '0.0%',
       three_p_pct: '0.0%',
       ft_pct: '0.0%',
+      kills: 0,
+      attack_errors: 0,
+      attack_attempts: 0,
+      hitting_pct: '.000',
+      service_aces: 0,
+      digs: 0,
+      block_points: 0,
+      goals: 0,
+      shots: 0,
+      shots_on_target: 0,
+      saves: 0,
+      tackles: 0,
     };
     if (team === 'home') setHomeRoster([...homeRoster, newRow]);
     else setAwayRoster([...awayRoster, newRow]);
@@ -545,8 +629,12 @@ export const CreateMatch: React.FC = () => {
 
       const venueLocation = venue.trim() || 'Tournament Sports Complex';
       const playerStatsPayload: any[] = [];
-      const hSum = homeRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
-      const aSum = awayRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
+      const hSum = isSoccer
+        ? homeRoster.reduce((a, b) => a + (Number(b.goals ?? b.pts) || 0), 0)
+        : homeRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
+      const aSum = isSoccer
+        ? awayRoster.reduce((a, b) => a + (Number(b.goals ?? b.pts) || 0), 0)
+        : awayRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
 
       // Map live edited stats into payload
       homeRoster.forEach((p, idx) => {
@@ -555,7 +643,26 @@ export const CreateMatch: React.FC = () => {
           player_name: p.player_name,
           team_name: finalHome,
           jersey_number: Number(p.jersey_no) || idx + 1,
-          position: p.position || 'G',
+          position: p.position || (isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G'),
+          pts: Number(p.pts || 0),
+          ast: Number(p.ast || 0),
+          reb: Number(p.reb || 0),
+          stl: Number(p.stl || 0),
+          blk: Number(p.blk || 0),
+          min: Number(p.minutes || 0),
+          fg_pct: p.fg_pct,
+          kills: Number(p.kills || 0),
+          attack_errors: Number(p.attack_errors || 0),
+          attack_attempts: Number(p.attack_attempts || 0),
+          hitting_pct: p.hitting_pct,
+          service_aces: Number(p.service_aces || 0),
+          digs: Number(p.digs || 0),
+          block_points: Number(p.block_points || p.blk || 0),
+          goals: Number(p.goals || 0),
+          shots: Number(p.shots || 0),
+          shots_on_target: Number(p.shots_on_target || 0),
+          saves: Number(p.saves || 0),
+          tackles: Number(p.tackles || 0),
           stats: {
             points: Number(p.pts || 0),
             rebounds: Number(p.reb || 0),
@@ -565,6 +672,18 @@ export const CreateMatch: React.FC = () => {
             fg_pct: p.fg_pct,
             three_p_pct: p.three_p_pct,
             ft_pct: p.ft_pct,
+            kills: Number(p.kills || 0),
+            attack_errors: Number(p.attack_errors || 0),
+            attack_attempts: Number(p.attack_attempts || 0),
+            hitting_pct: p.hitting_pct,
+            service_aces: Number(p.service_aces || 0),
+            digs: Number(p.digs || 0),
+            block_points: Number(p.block_points || p.blk || 0),
+            goals: Number(p.goals || 0),
+            shots: Number(p.shots || 0),
+            shots_on_target: Number(p.shots_on_target || 0),
+            saves: Number(p.saves || 0),
+            tackles: Number(p.tackles || 0),
           },
         });
       });
@@ -575,7 +694,26 @@ export const CreateMatch: React.FC = () => {
           player_name: p.player_name,
           team_name: finalAway,
           jersey_number: Number(p.jersey_no) || idx + 1,
-          position: p.position || 'G',
+          position: p.position || (isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G'),
+          pts: Number(p.pts || 0),
+          ast: Number(p.ast || 0),
+          reb: Number(p.reb || 0),
+          stl: Number(p.stl || 0),
+          blk: Number(p.blk || 0),
+          min: Number(p.minutes || 0),
+          fg_pct: p.fg_pct,
+          kills: Number(p.kills || 0),
+          attack_errors: Number(p.attack_errors || 0),
+          attack_attempts: Number(p.attack_attempts || 0),
+          hitting_pct: p.hitting_pct,
+          service_aces: Number(p.service_aces || 0),
+          digs: Number(p.digs || 0),
+          block_points: Number(p.block_points || p.blk || 0),
+          goals: Number(p.goals || 0),
+          shots: Number(p.shots || 0),
+          shots_on_target: Number(p.shots_on_target || 0),
+          saves: Number(p.saves || 0),
+          tackles: Number(p.tackles || 0),
           stats: {
             points: Number(p.pts || 0),
             rebounds: Number(p.reb || 0),
@@ -585,6 +723,18 @@ export const CreateMatch: React.FC = () => {
             fg_pct: p.fg_pct,
             three_p_pct: p.three_p_pct,
             ft_pct: p.ft_pct,
+            kills: Number(p.kills || 0),
+            attack_errors: Number(p.attack_errors || 0),
+            attack_attempts: Number(p.attack_attempts || 0),
+            hitting_pct: p.hitting_pct,
+            service_aces: Number(p.service_aces || 0),
+            digs: Number(p.digs || 0),
+            block_points: Number(p.block_points || p.blk || 0),
+            goals: Number(p.goals || 0),
+            shots: Number(p.shots || 0),
+            shots_on_target: Number(p.shots_on_target || 0),
+            saves: Number(p.saves || 0),
+            tackles: Number(p.tackles || 0),
           },
         });
       });
@@ -619,6 +769,20 @@ export const CreateMatch: React.FC = () => {
         ? new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
         : '';
 
+      const homeValidFg = homeRoster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+      const homeFgPct = homeValidFg.length > 0 ? `${(homeValidFg.reduce((a, b) => a + b, 0) / homeValidFg.length).toFixed(1)}%` : '0.0%';
+      const homeValid3p = homeRoster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+      const home3pPct = homeValid3p.length > 0 ? `${(homeValid3p.reduce((a, b) => a + b, 0) / homeValid3p.length).toFixed(1)}%` : '0.0%';
+      const homeValidFt = homeRoster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+      const homeFtPct = homeValidFt.length > 0 ? `${(homeValidFt.reduce((a, b) => a + b, 0) / homeValidFt.length).toFixed(1)}%` : '0.0%';
+
+      const awayValidFg = awayRoster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+      const awayFgPct = awayValidFg.length > 0 ? `${(awayValidFg.reduce((a, b) => a + b, 0) / awayValidFg.length).toFixed(1)}%` : '0.0%';
+      const awayValid3p = awayRoster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+      const away3pPct = awayValid3p.length > 0 ? `${(awayValid3p.reduce((a, b) => a + b, 0) / awayValid3p.length).toFixed(1)}%` : '0.0%';
+      const awayValidFt = awayRoster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+      const awayFtPct = awayValidFt.length > 0 ? `${(awayValidFt.reduce((a, b) => a + b, 0) / awayValidFt.length).toFixed(1)}%` : '0.0%';
+
       if (cleanMatchId) {
         const cachedDetail: MatchAuditDetail = {
           match_id: cleanMatchId,
@@ -641,9 +805,20 @@ export const CreateMatch: React.FC = () => {
               ast: homeRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
               stl: homeRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
               blk: homeRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
-              fg_pct: '48.8%',
-              three_p_pct: '28.5%',
-              ft_pct: '78.0%',
+              kills: homeRoster.reduce((a, b) => a + (Number(b.kills) || 0), 0),
+              attack_errors: homeRoster.reduce((a, b) => a + (Number(b.attack_errors) || 0), 0),
+              attack_attempts: homeRoster.reduce((a, b) => a + (Number(b.attack_attempts) || 0), 0),
+              service_aces: homeRoster.reduce((a, b) => a + (Number(b.service_aces) || 0), 0),
+              digs: homeRoster.reduce((a, b) => a + (Number(b.digs) || 0), 0),
+              block_points: homeRoster.reduce((a, b) => a + (Number(b.blk || b.block_points) || 0), 0),
+              goals: homeRoster.reduce((a, b) => a + (Number(b.goals) || 0), 0),
+              shots: homeRoster.reduce((a, b) => a + (Number(b.shots) || 0), 0),
+              shots_on_target: homeRoster.reduce((a, b) => a + (Number(b.shots_on_target) || 0), 0),
+              saves: homeRoster.reduce((a, b) => a + (Number(b.saves) || 0), 0),
+              tackles: homeRoster.reduce((a, b) => a + (Number(b.tackles) || 0), 0),
+              fg_pct: homeFgPct,
+              three_p_pct: home3pPct,
+              ft_pct: homeFtPct,
             },
           },
           away_team: {
@@ -660,9 +835,20 @@ export const CreateMatch: React.FC = () => {
               ast: awayRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
               stl: awayRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
               blk: awayRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
-              fg_pct: '48.8%',
-              three_p_pct: '28.5%',
-              ft_pct: '78.0%',
+              kills: awayRoster.reduce((a, b) => a + (Number(b.kills) || 0), 0),
+              attack_errors: awayRoster.reduce((a, b) => a + (Number(b.attack_errors) || 0), 0),
+              attack_attempts: awayRoster.reduce((a, b) => a + (Number(b.attack_attempts) || 0), 0),
+              service_aces: awayRoster.reduce((a, b) => a + (Number(b.service_aces) || 0), 0),
+              digs: awayRoster.reduce((a, b) => a + (Number(b.digs) || 0), 0),
+              block_points: awayRoster.reduce((a, b) => a + (Number(b.blk || b.block_points) || 0), 0),
+              goals: awayRoster.reduce((a, b) => a + (Number(b.goals) || 0), 0),
+              shots: awayRoster.reduce((a, b) => a + (Number(b.shots) || 0), 0),
+              shots_on_target: awayRoster.reduce((a, b) => a + (Number(b.shots_on_target) || 0), 0),
+              saves: awayRoster.reduce((a, b) => a + (Number(b.saves) || 0), 0),
+              tackles: awayRoster.reduce((a, b) => a + (Number(b.tackles) || 0), 0),
+              fg_pct: awayFgPct,
+              three_p_pct: away3pPct,
+              ft_pct: awayFtPct,
             },
           },
           race_results: raceResults,
@@ -696,11 +882,37 @@ export const CreateMatch: React.FC = () => {
 
   // Render Box Score Table for Team Ball Sports
   const renderTeamBoxScoreTable = (teamType: 'home' | 'away', teamName: string, roster: BoxScoreRow[]) => {
+    // Basketball totals
     const totalPts = roster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
     const totalReb = roster.reduce((a, b) => a + (Number(b.reb) || 0), 0);
     const totalAst = roster.reduce((a, b) => a + (Number(b.ast) || 0), 0);
     const totalStl = roster.reduce((a, b) => a + (Number(b.stl) || 0), 0);
     const totalBlk = roster.reduce((a, b) => a + (Number(b.blk) || 0), 0);
+
+    const validFgPcts = roster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+    const totalFgPct = validFgPcts.length > 0 ? `${(validFgPcts.reduce((a, b) => a + b, 0) / validFgPcts.length).toFixed(1)}%` : '0.0%';
+
+    const validThreePcts = roster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+    const totalThreePct = validThreePcts.length > 0 ? `${(validThreePcts.reduce((a, b) => a + b, 0) / validThreePcts.length).toFixed(1)}%` : '0.0%';
+
+    const validFtPcts = roster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+    const totalFtPct = validFtPcts.length > 0 ? `${(validFtPcts.reduce((a, b) => a + b, 0) / validFtPcts.length).toFixed(1)}%` : '0.0%';
+
+    // Volleyball totals
+    const totalKills = roster.reduce((a, b) => a + (Number(b.kills) || 0), 0);
+    const totalAtkErr = roster.reduce((a, b) => a + (Number(b.attack_errors) || 0), 0);
+    const totalAttempts = roster.reduce((a, b) => a + (Number(b.attack_attempts) || 0), 0);
+    const teamHitPct = totalAttempts > 0 ? ((totalKills - totalAtkErr) / totalAttempts).toFixed(3) : '.000';
+    const totalAces = roster.reduce((a, b) => a + (Number(b.service_aces) || 0), 0);
+    const totalDigs = roster.reduce((a, b) => a + (Number(b.digs) || 0), 0);
+    const totalVolleyPts = roster.reduce((a, b) => a + (Number(b.pts || (b.kills || 0) + (b.service_aces || 0) + (b.blk || 0)) || 0), 0);
+
+    // Soccer totals
+    const totalGoals = roster.reduce((a, b) => a + (Number(b.goals ?? b.pts) || 0), 0);
+    const totalShots = roster.reduce((a, b) => a + (Number(b.shots) || 0), 0);
+    const totalSot = roster.reduce((a, b) => a + (Number(b.shots_on_target) || 0), 0);
+    const totalSaves = roster.reduce((a, b) => a + (Number(b.saves) || 0), 0);
+    const totalTackles = roster.reduce((a, b) => a + (Number(b.tackles) || 0), 0);
 
     return (
       <div style={styles.tableSection}>
@@ -709,27 +921,68 @@ export const CreateMatch: React.FC = () => {
             {teamName ? teamName.toUpperCase() : teamType === 'home' ? 'TEAM 1 (HOME)' : 'TEAM 2 (AWAY)'} ROSTER STATS ({roster.length} PLAYERS)
           </div>
           <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B' }}>
-            SCORE: <strong style={{ color: '#0B132B', fontSize: '13px' }}>{totalPts} PTS</strong>
+            SCORE: <strong style={{ color: '#0B132B', fontSize: '13px' }}>
+              {isSoccer ? `${totalGoals} GOALS` : isVolleyball ? `${totalVolleyPts} PTS` : `${totalPts} PTS`}
+            </strong>
           </span>
         </div>
 
         <div style={styles.statsTableFrame}>
           <table style={styles.statsTable}>
             <thead>
-              <tr>
-                <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
-                <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
-                <th style={{ ...styles.statTh, width: '55px' }}>[ MIN ]</th>
-                <th style={{ ...styles.statTh, width: '55px' }}>[ PTS ]</th>
-                <th style={{ ...styles.statTh, width: '55px' }}>[ REB ]</th>
-                <th style={{ ...styles.statTh, width: '55px' }}>[ AST ]</th>
-                <th style={{ ...styles.statTh, width: '55px' }}>[ STL ]</th>
-                <th style={{ ...styles.statTh, width: '55px' }}>[ BLK ]</th>
-                <th style={{ ...styles.statTh, width: '65px' }}>[ FG% ]</th>
-                <th style={{ ...styles.statTh, width: '65px' }}>[ 3P% ]</th>
-                <th style={{ ...styles.statTh, width: '65px' }}>[ FT% ]</th>
-                <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
-              </tr>
+              {/* Volleyball Headers */}
+              {isVolleyball && (
+                <tr>
+                  <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
+                  <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ POS ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ KILLS ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ ATK ERR ]</th>
+                  <th style={{ ...styles.statTh, width: '65px' }}>[ ATTEMPTS ]</th>
+                  <th style={{ ...styles.statTh, width: '65px' }}>[ HIT % ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ AST ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ ACES ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ DIGS ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ BLK ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ PTS ]</th>
+                  <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
+                </tr>
+              )}
+
+              {/* Soccer Headers */}
+              {isSoccer && (
+                <tr>
+                  <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
+                  <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ POS ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ MIN ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ GOALS ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ AST ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ SHOTS ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ SOT ]</th>
+                  <th style={{ ...styles.statTh, width: '50px' }}>[ SAVES ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ TACKLES ]</th>
+                  <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
+                </tr>
+              )}
+
+              {/* Basketball / Default Headers */}
+              {isBasketball && (
+                <tr>
+                  <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
+                  <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ MIN ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ PTS ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ REB ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ AST ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ STL ]</th>
+                  <th style={{ ...styles.statTh, width: '55px' }}>[ BLK ]</th>
+                  <th style={{ ...styles.statTh, width: '65px' }}>[ FG% ]</th>
+                  <th style={{ ...styles.statTh, width: '65px' }}>[ 3P% ]</th>
+                  <th style={{ ...styles.statTh, width: '65px' }}>[ FT% ]</th>
+                  <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
+                </tr>
+              )}
             </thead>
             <tbody>
               {roster.length > 0 ? (
@@ -751,78 +1004,241 @@ export const CreateMatch: React.FC = () => {
                         style={styles.statInputName}
                       />
                     </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="text"
-                        value={row.minutes}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="number"
-                        value={row.pts}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="number"
-                        value={row.reb}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'reb', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="number"
-                        value={row.ast}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="number"
-                        value={row.stl}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'stl', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="number"
-                        value={row.blk}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="text"
-                        value={row.fg_pct}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'fg_pct', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="text"
-                        value={row.three_p_pct}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'three_p_pct', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    </td>
-                    <td style={styles.statTd}>
-                      <input
-                        type="text"
-                        value={row.ft_pct}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'ft_pct', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    </td>
+
+                    {/* Volleyball Data Cells */}
+                    {isVolleyball && (
+                      <>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.position || 'OH'}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'position', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.kills ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'kills', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.attack_errors ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'attack_errors', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.attack_attempts ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'attack_attempts', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.hitting_pct || '.000'}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'hitting_pct', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.ast ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.service_aces ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'service_aces', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.digs ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'digs', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.blk ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.pts ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                      </>
+                    )}
+
+                    {/* Soccer Data Cells */}
+                    {isSoccer && (
+                      <>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.position || 'FWD'}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'position', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.minutes ?? '0'}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.goals ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'goals', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.ast ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.shots ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'shots', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.shots_on_target ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'shots_on_target', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.saves ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'saves', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.tackles ?? 0}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'tackles', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                      </>
+                    )}
+
+                    {/* Basketball Data Cells */}
+                    {isBasketball && (
+                      <>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.minutes}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.pts}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.reb}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'reb', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.ast}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.stl}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'stl', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="number"
+                            value={row.blk}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.fg_pct}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'fg_pct', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.three_p_pct}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'three_p_pct', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                        <td style={styles.statTd}>
+                          <input
+                            type="text"
+                            value={row.ft_pct}
+                            onChange={(e) => updateBasketballStat(teamType, idx, 'ft_pct', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        </td>
+                      </>
+                    )}
+
                     <td style={{ ...styles.statTd, borderRight: 'none', textAlign: 'center' }}>
                       <button
                         type="button"
@@ -837,24 +1253,59 @@ export const CreateMatch: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={12} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
+                  <td colSpan={13} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
                     No player roster rows extracted. Click below to add players manually.
                   </td>
                 </tr>
               )}
 
+              {/* Totals Row */}
               <tr style={styles.statTotalsTr}>
                 <td style={styles.statTotalsTd}></td>
                 <td style={{ ...styles.statTotalsTd, textAlign: 'left', paddingLeft: '12px' }}>TEAM TOTALS</td>
-                <td style={styles.statTotalsTd}>-</td>
-                <td style={styles.statTotalsTd}>{totalPts}</td>
-                <td style={styles.statTotalsTd}>{totalReb}</td>
-                <td style={styles.statTotalsTd}>{totalAst}</td>
-                <td style={styles.statTotalsTd}>{totalStl}</td>
-                <td style={styles.statTotalsTd}>{totalBlk}</td>
-                <td style={styles.statTotalsTd}>{roster.length > 0 ? '48.8%' : '0.0%'}</td>
-                <td style={styles.statTotalsTd}>{roster.length > 0 ? '28.5%' : '0.0%'}</td>
-                <td style={styles.statTotalsTd}>{roster.length > 0 ? '78.0%' : '0.0%'}</td>
+
+                {isVolleyball && (
+                  <>
+                    <td style={styles.statTotalsTd}>-</td>
+                    <td style={styles.statTotalsTd}>{totalKills}</td>
+                    <td style={styles.statTotalsTd}>{totalAtkErr}</td>
+                    <td style={styles.statTotalsTd}>{totalAttempts}</td>
+                    <td style={styles.statTotalsTd}>{teamHitPct}</td>
+                    <td style={styles.statTotalsTd}>{totalAst}</td>
+                    <td style={styles.statTotalsTd}>{totalAces}</td>
+                    <td style={styles.statTotalsTd}>{totalDigs}</td>
+                    <td style={styles.statTotalsTd}>{totalBlk}</td>
+                    <td style={styles.statTotalsTd}>{totalVolleyPts}</td>
+                  </>
+                )}
+
+                {isSoccer && (
+                  <>
+                    <td style={styles.statTotalsTd}>-</td>
+                    <td style={styles.statTotalsTd}>-</td>
+                    <td style={styles.statTotalsTd}>{totalGoals}</td>
+                    <td style={styles.statTotalsTd}>{totalAst}</td>
+                    <td style={styles.statTotalsTd}>{totalShots}</td>
+                    <td style={styles.statTotalsTd}>{totalSot}</td>
+                    <td style={styles.statTotalsTd}>{totalSaves}</td>
+                    <td style={styles.statTotalsTd}>{totalTackles}</td>
+                  </>
+                )}
+
+                {isBasketball && (
+                  <>
+                    <td style={styles.statTotalsTd}>-</td>
+                    <td style={styles.statTotalsTd}>{totalPts}</td>
+                    <td style={styles.statTotalsTd}>{totalReb}</td>
+                    <td style={styles.statTotalsTd}>{totalAst}</td>
+                    <td style={styles.statTotalsTd}>{totalStl}</td>
+                    <td style={styles.statTotalsTd}>{totalBlk}</td>
+                    <td style={styles.statTotalsTd}>{totalFgPct}</td>
+                    <td style={styles.statTotalsTd}>{totalThreePct}</td>
+                    <td style={styles.statTotalsTd}>{totalFtPct}</td>
+                  </>
+                )}
+
                 <td style={{ ...styles.statTotalsTd, borderRight: 'none' }}></td>
               </tr>
             </tbody>
