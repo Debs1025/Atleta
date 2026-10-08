@@ -316,6 +316,43 @@ export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
   return await scanScoresheetClientDirect(rawFile);
 };
 
+export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
+  if (!files || files.length === 0) {
+    throw new Error('No files provided for multi-scoresheet scan.');
+  }
+  if (files.length === 1) {
+    return await scanScoresheetStandalone(files[0]);
+  }
+
+  const formData = new FormData();
+  files.forEach((f) => {
+    formData.append('files', f);
+    formData.append('scoresheets', f);
+  });
+
+  const token = getStoredToken();
+  let res = await fetch(`${BASE_URL}/matches/web/multi/scan-scoresheet`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  }).catch(() => null);
+
+  if (!res || !res.ok) {
+    res = await fetch(`${BASE_URL}/matches/multi/scan-scoresheet`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    }).catch(() => null);
+  }
+
+  if (res && res.ok) {
+    return await res.json();
+  }
+
+  const errData = res ? await res.json().catch(() => ({ error: 'Multi-file OCR scan failed' })) : { error: 'Network error during multi-file scan' };
+  throw new Error(errData.error || errData.message || 'Failed to process multiple scoresheets');
+};
+
 export const scanScoresheetOCR = async (file: File): Promise<any> => {
   const token = getStoredToken();
   const formData = new FormData();

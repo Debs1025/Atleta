@@ -72,45 +72,48 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
     const [previewFile, setPreviewFile] = useState<UploadedFileItem | null>(null);
     const [modalMessage, setModalMessage] = useState<string | null>(null);
 
-    // Document Picker Handler
+    // Document Picker Handler (Supports Multiple Selection)
     const handleBrowseFiles = useCallback(async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
                 type: "*/*",
+                multiple: true,
                 copyToCacheDirectory: true,
             });
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
-                const asset = result.assets[0];
-                let fileType: UploadedFileItem["file_type"] = "CSV";
-                if (asset.name.toLowerCase().endsWith(".pdf") || asset.mimeType?.includes("pdf")) fileType = "PDF";
-                else if (asset.name.toLowerCase().endsWith(".json") || asset.mimeType?.includes("json")) fileType = "JSON";
-                else if (
-                    asset.mimeType?.startsWith("image/") ||
-                    asset.name.toLowerCase().endsWith(".jpg") ||
-                    asset.name.toLowerCase().endsWith(".jpeg") ||
-                    asset.name.toLowerCase().endsWith(".png")
-                ) {
-                    fileType = "IMAGE";
-                }
+                const newFiles: UploadedFileItem[] = result.assets.map((asset, idx) => {
+                    let fileType: UploadedFileItem["file_type"] = "CSV";
+                    if (asset.name.toLowerCase().endsWith(".pdf") || asset.mimeType?.includes("pdf")) fileType = "PDF";
+                    else if (asset.name.toLowerCase().endsWith(".json") || asset.mimeType?.includes("json")) fileType = "JSON";
+                    else if (
+                        asset.mimeType?.startsWith("image/") ||
+                        asset.name.toLowerCase().endsWith(".jpg") ||
+                        asset.name.toLowerCase().endsWith(".jpeg") ||
+                        asset.name.toLowerCase().endsWith(".png") ||
+                        asset.name.toLowerCase().endsWith(".webp")
+                    ) {
+                        fileType = "IMAGE";
+                    }
 
-                const newFile: UploadedFileItem = {
-                    upload_id: `upl_${Date.now()}`,
-                    file_name: asset.name.toUpperCase(),
-                    file_size_bytes: asset.size || 1024 * 500,
-                    uploaded_at_relative: "Uploaded just now",
-                    file_type: fileType,
-                    file_url: asset.uri,
-                };
+                    return {
+                        upload_id: `upl_${Date.now()}_${idx}`,
+                        file_name: asset.name.toUpperCase(),
+                        file_size_bytes: asset.size || 1024 * 500,
+                        uploaded_at_relative: "Uploaded just now",
+                        file_type: fileType,
+                        file_url: asset.uri,
+                    };
+                });
 
-                setUploadedFiles((prev) => [newFile, ...prev]);
+                setUploadedFiles((prev) => [...newFiles, ...prev]);
             }
         } catch {
-            setModalMessage("Could not pick document file.");
+            setModalMessage("Could not pick document file(s).");
         }
     }, []);
 
-    // Camera / Photo Capture Action Handler
+    // Camera / Photo Capture Action Handler (Supports Multiple Gallery Selection)
     const handleTakePhoto = useCallback(async () => {
         try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -118,21 +121,19 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 // If camera permission not granted or camera missing (e.g. simulator), open image library
                 const galleryResult = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    allowsEditing: true,
+                    allowsMultipleSelection: true,
                     quality: 0.8,
                 });
                 if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
-                    const asset = galleryResult.assets[0];
-                    const fileName = asset.fileName || `SCORESHEET_PHOTO_${Date.now()}.JPG`;
-                    const newFile: UploadedFileItem = {
-                        upload_id: `upl_${Date.now()}`,
-                        file_name: fileName.toUpperCase(),
+                    const newFiles: UploadedFileItem[] = galleryResult.assets.map((asset, idx) => ({
+                        upload_id: `upl_${Date.now()}_${idx}`,
+                        file_name: (asset.fileName || `SCORESHEET_PHOTO_${Date.now()}_${idx + 1}.JPG`).toUpperCase(),
                         file_size_bytes: asset.fileSize || 1024 * 600,
                         uploaded_at_relative: "Selected just now",
                         file_type: "IMAGE",
                         file_url: asset.uri,
-                    };
-                    setUploadedFiles((prev) => [newFile, ...prev]);
+                    }));
+                    setUploadedFiles((prev) => [...newFiles, ...prev]);
                 }
                 return;
             }
@@ -160,21 +161,19 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
             try {
                 const galleryResult = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    allowsEditing: true,
+                    allowsMultipleSelection: true,
                     quality: 0.8,
                 });
                 if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
-                    const asset = galleryResult.assets[0];
-                    const fileName = asset.fileName || `SCORESHEET_PHOTO_${Date.now()}.JPG`;
-                    const newFile: UploadedFileItem = {
-                        upload_id: `upl_${Date.now()}`,
-                        file_name: fileName.toUpperCase(),
+                    const newFiles: UploadedFileItem[] = galleryResult.assets.map((asset, idx) => ({
+                        upload_id: `upl_${Date.now()}_${idx}`,
+                        file_name: (asset.fileName || `SCORESHEET_PHOTO_${Date.now()}_${idx + 1}.JPG`).toUpperCase(),
                         file_size_bytes: asset.fileSize || 1024 * 600,
                         uploaded_at_relative: "Selected just now",
                         file_type: "IMAGE",
                         file_url: asset.uri,
-                    };
-                    setUploadedFiles((prev) => [newFile, ...prev]);
+                    }));
+                    setUploadedFiles((prev) => [...newFiles, ...prev]);
                 }
             } catch {
                 setModalMessage("Could not open camera or photo picker.");
@@ -200,118 +199,146 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
         }
 
         setIsProcessingOCR(true);
-        const file = uploadedFiles[0];
-
         try {
             const token = await getStoredAuthToken();
-            const fileExt = file.file_name.split(".").pop()?.toLowerCase() || "jpg";
-            const isImage =
-                file.file_type === "IMAGE" ||
-                fileExt === "jpg" ||
-                fileExt === "jpeg" ||
-                fileExt === "png" ||
-                fileExt === "webp";
-
-            // Optimize image if needed to stay well below payload limit
-            const finalUri = isImage ? await optimizeScoresheetImage(file.file_url) : file.file_url;
-
-            const mimeType =
-                file.file_type === "PDF"
-                    ? "application/pdf"
-                    : file.file_type === "CSV"
-                    ? "text/csv"
-                    : "image/jpeg";
-
-            const canonicalEndpoint = `${API_BASE}/matches/ocr/scan`;
             let responseData: any = null;
 
-            // 1. Primary on Native: Native FileSystem.uploadAsync (streams file directly via native OS HTTP client, 100% immune to JS FormData bridge errors)
-            if (Platform.OS !== "web" && typeof FileSystem.uploadAsync === "function") {
-                try {
-                    const uploadRes = await FileSystem.uploadAsync(canonicalEndpoint, finalUri, {
-                        httpMethod: "POST",
-                        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-                        fieldName: "file",
-                        mimeType: mimeType,
-                        headers: {
-                            Accept: "application/json",
-                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                        },
-                    });
+            if (uploadedFiles.length === 1) {
+                // Single-file flow (Untouched canonical endpoint)
+                const file = uploadedFiles[0];
+                const fileExt = file.file_name.split(".").pop()?.toLowerCase() || "jpg";
+                const isImage =
+                    file.file_type === "IMAGE" ||
+                    fileExt === "jpg" ||
+                    fileExt === "jpeg" ||
+                    fileExt === "png" ||
+                    fileExt === "webp";
 
-                    if (uploadRes.status >= 200 && uploadRes.status < 300) {
-                        responseData = JSON.parse(uploadRes.body);
-                    } else {
-                        console.warn(`uploadAsync returned status ${uploadRes.status}:`, uploadRes.body);
+                const finalUri = isImage ? await optimizeScoresheetImage(file.file_url) : file.file_url;
+                const mimeType =
+                    file.file_type === "PDF"
+                        ? "application/pdf"
+                        : file.file_type === "CSV"
+                        ? "text/csv"
+                        : "image/jpeg";
+
+                const canonicalEndpoint = `${API_BASE}/matches/ocr/scan`;
+
+                if (Platform.OS !== "web" && typeof FileSystem.uploadAsync === "function") {
+                    try {
+                        const uploadRes = await FileSystem.uploadAsync(canonicalEndpoint, finalUri, {
+                            httpMethod: "POST",
+                            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                            fieldName: "file",
+                            mimeType: mimeType,
+                            headers: {
+                                Accept: "application/json",
+                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                            },
+                        });
+
+                        if (uploadRes.status >= 200 && uploadRes.status < 300) {
+                            responseData = JSON.parse(uploadRes.body);
+                        }
+                    } catch (uploadErr) {
+                        console.warn("FileSystem.uploadAsync attempt failed, falling back:", uploadErr);
                     }
-                } catch (uploadErr) {
-                    console.warn("FileSystem.uploadAsync attempt failed, falling back:", uploadErr);
-                }
-            }
-
-            // 2. Secondary: Read as Base64 and send JSON
-            if (!responseData) {
-                let base64Data: string | null = null;
-                try {
-                    base64Data = await FileSystem.readAsStringAsync(finalUri, {
-                        encoding: FileSystem.EncodingType.Base64,
-                    });
-                } catch (readErr) {
-                    console.warn("Could not read file as Base64 directly:", readErr);
                 }
 
-                if (base64Data) {
+                if (!responseData) {
+                    let base64Data: string | null = null;
+                    try {
+                        base64Data = await FileSystem.readAsStringAsync(finalUri, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                    } catch (readErr) {
+                        console.warn("Could not read file as Base64 directly:", readErr);
+                    }
+
+                    if (base64Data) {
+                        const res = await fetch(canonicalEndpoint, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                Accept: "application/json",
+                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                            },
+                            body: JSON.stringify({
+                                base64: base64Data,
+                                filename: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
+                                mimetype: mimeType,
+                            }),
+                        });
+
+                        if (res.ok) {
+                            responseData = await res.json();
+                        }
+                    }
+                }
+
+                if (!responseData) {
+                    const formData = new FormData();
+                    const sanitizedUri = Platform.OS === "android" ? finalUri : finalUri.replace("file://", "");
+                    const filePayload = {
+                        uri: sanitizedUri,
+                        name: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
+                        type: mimeType,
+                    };
+
+                    formData.append("file", filePayload as any);
+
                     const res = await fetch(canonicalEndpoint, {
                         method: "POST",
                         headers: {
-                            "Content-Type": "application/json",
                             Accept: "application/json",
                             ...(token ? { Authorization: `Bearer ${token}` } : {}),
                         },
-                        body: JSON.stringify({
-                            base64: base64Data,
-                            filename: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
-                            mimetype: mimeType,
-                        }),
+                        body: formData,
                     });
 
                     if (res.ok) {
                         responseData = await res.json();
                     }
                 }
-            }
-
-            // 3. Fallback: Safe single-part FormData (for web or environments without uploadAsync)
-            if (!responseData) {
+            } else {
+                // Multi-file flow (Dedicated Multi-Scoresheet AI OCR Compression & Stitching Engine)
+                const multiEndpoint = `${API_BASE}/matches/mobile/multi/scan-scoresheet`;
                 const formData = new FormData();
-                const sanitizedUri = Platform.OS === "android" ? finalUri : finalUri.replace("file://", "");
-                const filePayload = {
-                    uri: sanitizedUri,
-                    name: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
-                    type: mimeType,
-                };
 
-                formData.append("file", filePayload as any);
+                for (let i = 0; i < uploadedFiles.length; i++) {
+                    const f = uploadedFiles[i];
+                    const fExt = f.file_name.split(".").pop()?.toLowerCase() || "jpg";
+                    const isImg = f.file_type === "IMAGE" || ["jpg", "jpeg", "png", "webp"].includes(fExt);
+                    const procUri = isImg ? await optimizeScoresheetImage(f.file_url) : f.file_url;
+                    const sanitized = Platform.OS === "android" ? procUri : procUri.replace("file://", "");
+                    const mime = f.file_type === "PDF" ? "application/pdf" : isImg ? "image/jpeg" : "text/csv";
 
-                const res = await fetch(canonicalEndpoint, {
+                    formData.append("files", {
+                        uri: sanitized,
+                        name: isImg ? `${f.file_name.replace(/\.[^/.]+$/, "")}.jpg` : f.file_name,
+                        type: mime,
+                    } as any);
+                }
+
+                const res = await fetch(multiEndpoint, {
                     method: "POST",
                     headers: {
                         Accept: "application/json",
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     body: formData,
-                });
+                }).catch(() => null);
 
-                if (res.ok) {
+                if (res && res.ok) {
                     responseData = await res.json();
-                } else {
-                    const errBody = await res.text();
-                    throw new Error(`Server returned status ${res.status}: ${errBody}`);
+                } else if (res) {
+                    const errTxt = await res.text();
+                    console.warn(`Multi-scoresheet endpoint returned ${res.status}:`, errTxt);
                 }
             }
 
             if (!responseData) {
-                throw new Error("Could not process scoresheet with OCR server.");
+                throw new Error("Could not process scoresheet(s) with OCR server.");
             }
 
             // Map real AI-extracted player statistics into RawOCRDetectedData

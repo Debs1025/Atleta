@@ -19,6 +19,7 @@ import {
   createOfficialMatch,
   fetchBrowseTeams,
   scanScoresheetStandalone,
+  scanMultipleScoresheets,
   setCachedData,
   getCachedData,
   getSports,
@@ -78,6 +79,7 @@ export const CreateMatch: React.FC = () => {
 
   // Scoresheet file & OCR background state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrCompleted, setOcrCompleted] = useState(false);
@@ -128,19 +130,22 @@ export const CreateMatch: React.FC = () => {
     }).catch(() => {});
   }, [navigate]);
 
-  // Automatic Background OCR on File Upload
+  // Automatic Background OCR on File Upload (Supports Single & Multi-File OCR)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    if (file.size > 25 * 1024 * 1024) {
-      setErrorMessage('File size exceeds maximum limit of 25MB.');
-      return;
+    for (const f of files) {
+      if (f.size > 25 * 1024 * 1024) {
+        setErrorMessage(`File ${f.name} exceeds maximum limit of 25MB.`);
+        return;
+      }
     }
 
-    setSelectedFile(file);
+    setSelectedFile(files[0]);
+    setSelectedFiles(files);
     try {
-      setLocalPreviewUrl(URL.createObjectURL(file));
+      setLocalPreviewUrl(URL.createObjectURL(files[0]));
     } catch {}
     setErrorMessage(null);
     setOcrLoading(true);
@@ -148,7 +153,14 @@ export const CreateMatch: React.FC = () => {
     setUnavailableSportName(null);
 
     try {
-      const ocrRes = await scanScoresheetStandalone(file);
+      let ocrRes: any;
+      if (files.length === 1) {
+        // Uses existing untouched single-file scanner
+        ocrRes = await scanScoresheetStandalone(files[0]);
+      } else {
+        // Uses new dedicated multi-file scanner
+        ocrRes = await scanMultipleScoresheets(files);
+      }
       if (ocrRes?.scoresheet_url) {
         setScoresheetUrl(ocrRes.scoresheet_url);
       }
@@ -1148,6 +1160,7 @@ export const CreateMatch: React.FC = () => {
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".png,.jpg,.jpeg,.pdf,.csv"
                 style={{ display: 'none' }}
                 onChange={handleFileChange}
@@ -1164,8 +1177,16 @@ export const CreateMatch: React.FC = () => {
                 {ocrLoading ? (
                   <>
                     <Loader2 style={{ width: 34, height: 34, color: '#0B132B', animation: 'spin 1s linear infinite' }} />
-                    <span style={styles.dropzoneTitle}>SCANNING SCORESHEET WITH OCR...</span>
-                    <span style={styles.dropzoneHelper}>EXTRACTING ROSTER & STATISTICS AUTOMATICALLY</span>
+                    <span style={styles.dropzoneTitle}>
+                      {selectedFiles.length > 1
+                        ? `STITCHING & SCANNING ${selectedFiles.length} SCORESHEET PAGES WITH OCR...`
+                        : 'SCANNING SCORESHEET WITH OCR...'}
+                    </span>
+                    <span style={styles.dropzoneHelper}>
+                      {selectedFiles.length > 1
+                        ? 'COMPRESSING, RECONCILING & EXTRACTING MULTI-PAGE STATISTICS AUTOMATICALLY'
+                        : 'EXTRACTING ROSTER & STATISTICS AUTOMATICALLY'}
+                    </span>
                   </>
                 ) : selectedFile ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
@@ -1183,17 +1204,22 @@ export const CreateMatch: React.FC = () => {
                       />
                     )}
                     <span style={{ ...styles.dropzoneTitle, color: '#0B132B', margin: '4px 0 2px' }}>
-                      {selectedFile.name}
+                      {selectedFiles.length > 1 ? `${selectedFiles.length} SCORESHEET PAGES ATTACHED` : selectedFile.name}
                     </span>
+                    {selectedFiles.length > 1 && (
+                      <span style={{ fontSize: '11px', color: '#0B132B', fontWeight: 700, marginBottom: '4px' }}>
+                        {selectedFiles.map(f => f.name).join(' • ')}
+                      </span>
+                    )}
                     <span style={{ ...styles.dropzoneHelper, color: '#64748B', fontWeight: 600 }}>
-                      CLICK TO REPLACE SCORESHEET
+                      CLICK TO REPLACE SCORESHEET(S)
                     </span>
                   </div>
                 ) : (
                   <>
                     <Camera style={{ width: 32, height: 32, color: '#0B132B' }} />
                     <span style={styles.dropzoneTitle}>DRAG FILES HERE OR CLICK TO BROWSE</span>
-                    <span style={styles.dropzoneHelper}>ACCEPTED FORMATS: PNG, JPG, PDF (MAX 25MB)</span>
+                    <span style={styles.dropzoneHelper}>ACCEPTED FORMATS: MULTIPLE PNG, JPG, PDF (MAX 25MB EACH)</span>
                   </>
                 )}
               </div>

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Navbar } from '../Components/Navbar';
 import { OCROutputView } from './OCROutputView';
-import { scanScoresheetOCR } from '../../api/client';
+import { scanScoresheetOCR, scanMultipleScoresheets } from '../../api/client';
 import type { UploadedFileItem, RawOCRDetectedData, DetectedAthleteStat } from '../../api/types';
 import { styles } from './styles/OCRLoggingPage';
 
@@ -72,9 +72,9 @@ export const OCRLoggingPage: React.FC = () => {
       return;
     }
 
-    const target = uploadedFiles[0];
-    if (!target.raw_file) {
-      setErrorMessage('Invalid file handle. Please re-select the file.');
+    const validFiles = uploadedFiles.map((item) => item.raw_file).filter((f): f is File => Boolean(f));
+    if (validFiles.length === 0) {
+      setErrorMessage('Invalid file handle. Please re-select the file(s).');
       return;
     }
 
@@ -82,8 +82,13 @@ export const OCRLoggingPage: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      // Call deployed backend OCR scanner endpoint
-      const responseData = await scanScoresheetOCR(target.raw_file);
+      // Call deployed backend OCR scanner endpoint (Single or Multi-file)
+      let responseData: any;
+      if (validFiles.length === 1) {
+        responseData = await scanScoresheetOCR(validFiles[0]);
+      } else {
+        responseData = await scanMultipleScoresheets(validFiles);
+      }
 
       const rawPlayers = Array.isArray(responseData.player_summary)
         ? responseData.player_summary
