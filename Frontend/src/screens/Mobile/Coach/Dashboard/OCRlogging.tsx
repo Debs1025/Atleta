@@ -82,8 +82,8 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 44) + 38;
 
-    // Uploaded Files State
-    const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>(INITIAL_MOCK_FILES);
+    // Uploaded Files State (starts empty, populated dynamically from user pick or camera)
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
     const [isProcessingOCR, setIsProcessingOCR] = useState(false);
     const [previewFile, setPreviewFile] = useState<UploadedFileItem | null>(null);
     const [modalMessage, setModalMessage] = useState<string | null>(null);
