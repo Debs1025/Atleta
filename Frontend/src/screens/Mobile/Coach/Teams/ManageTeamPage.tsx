@@ -149,7 +149,7 @@ export function ManageTeamPage({
   onAddPlayers,
 }: ManageTeamPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   // Add Players Modal State
   const [showAddModal, setShowAddModal] = useState(false);

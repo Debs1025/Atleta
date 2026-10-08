@@ -822,7 +822,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
   }, [dbAthletes, session.active_roster, searchQuery]);
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 28) + 44 }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 10 }]}>
       {/* Header Bar */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>

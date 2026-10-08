@@ -70,7 +70,7 @@ export function CoachProfile({
   profileData,
 }: CoachProfileProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [profile, setProfile] = useState<CoachProfileState>(profileData || DEFAULT_COACH_PROFILE);
   const [isLoading, setIsLoading] = useState(true);

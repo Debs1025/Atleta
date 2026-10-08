@@ -25,7 +25,7 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
   onEditResults,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 60) + 48;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [playerStats, setPlayerStats] = useState<any[]>(matchItem?.player_stats || []);
   const [loading, setLoading] = useState(false);

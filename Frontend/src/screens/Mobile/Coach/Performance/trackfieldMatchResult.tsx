@@ -25,7 +25,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
   onEditResults,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 60) + 48;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [leaderboardData, setLeaderboardData] = useState<any[]>(matchItem?.leaderboard_entries || []);
   const [loading, setLoading] = useState(false);

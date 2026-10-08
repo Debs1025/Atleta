@@ -20,7 +20,7 @@ export function CoachProfileScreen({
   onBack,
 }: CoachProfileProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [coachData, setCoachData] = useState<CoachProfileData | null>(propCoachData || null);
   const [loading, setLoading] = useState<boolean>(!propCoachData);
 

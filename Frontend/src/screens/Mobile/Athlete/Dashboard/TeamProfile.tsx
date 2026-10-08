@@ -41,7 +41,7 @@ export function TeamProfileScreen({
   onViewAllPlayers,
 }: TeamProfileProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [showAllPlayers, setShowAllPlayers] = useState(false);
   const [teamData, setTeamData] = useState<TeamProfileData | null>(propTeamData || null);
   const [loading, setLoading] = useState<boolean>(!propTeamData);

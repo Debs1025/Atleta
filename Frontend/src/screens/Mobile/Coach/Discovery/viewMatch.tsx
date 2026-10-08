@@ -19,7 +19,7 @@ interface ViewMatchProps {
 // API READY: Dedicated View Match screen ready for live backend API payload
 export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 16;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const { selectedMatch: contextMatch, setSelectedAthlete, athletes } = useDiscovery();
   const currentMatch = match || contextMatch;

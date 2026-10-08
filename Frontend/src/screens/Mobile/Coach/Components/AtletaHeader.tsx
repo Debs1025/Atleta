@@ -27,7 +27,7 @@ export function AtletaHeader({
   avatarUrl,
 }: AtletaHeaderProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [imageError, setImageError] = React.useState(false);
 
   React.useEffect(() => {

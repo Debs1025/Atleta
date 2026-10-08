@@ -22,7 +22,7 @@ interface ScoutAthleteProps {
 
 export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 36) + 48;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const { selectedAthlete: contextAthlete, scoutAthlete } = useDiscovery();
   const currentAthlete = athlete || contextAthlete;

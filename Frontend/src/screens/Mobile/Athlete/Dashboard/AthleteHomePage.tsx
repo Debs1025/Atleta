@@ -482,7 +482,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   };
 
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const unreadCount = notifications.filter((n) => !n.read_status).length;
 

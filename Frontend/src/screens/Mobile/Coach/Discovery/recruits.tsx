@@ -16,7 +16,7 @@ interface RecruitsProps {
 
 export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 16;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const { scoutingProposals, sortRecruits, setSortRecruits, athletes, teams } = useDiscovery();
 

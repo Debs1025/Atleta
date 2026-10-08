@@ -39,7 +39,7 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
   onViewMatchHistory,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 20;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const calculateDynamicPER = (avg: any): string => {
     if (typeof avg?.per_score === "number" && avg.per_score > 0) {

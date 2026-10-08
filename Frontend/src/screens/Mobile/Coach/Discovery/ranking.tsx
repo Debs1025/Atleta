@@ -43,7 +43,7 @@ export const RankingPage: React.FC<RankingProps> = ({
   meta,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 16;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const headlineText = meta?.headline || 'Player Rankings';
   const seasonInfoText = meta?.season_info || 'SEASON 2026 • REGION V';

@@ -183,7 +183,7 @@ export function OCRoutput({
     onConfirmSave,
 }: OCRoutputProps) {
     const insets = useSafeAreaInsets();
-    const headerTopPadding = Math.max(insets.top, 44) + 38;
+    const headerTopPadding = Math.max(insets.top, 16) + 10;
 
     // Batch Matches Support: If multiple matches exist, allow switching between them
     const matchesList: RawOCRDetectedData[] = useMemo(() => {

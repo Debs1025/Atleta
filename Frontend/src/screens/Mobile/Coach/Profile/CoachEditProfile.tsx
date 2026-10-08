@@ -353,7 +353,7 @@ export function CoachEditProfile({
     }
   };
 
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   return (
     <View style={styles.container}>

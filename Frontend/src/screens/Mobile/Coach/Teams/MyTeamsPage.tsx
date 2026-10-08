@@ -63,7 +63,7 @@ export function MyTeamsPage({
   unreadNotificationCount = 0,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 18;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateTeam, setShowCreateTeam] = useState(false);

@@ -20,7 +20,7 @@ export function TeamDetailsScreen({
   onViewCoach,
 }: TeamDetailsProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [team, setTeam] = useState<TeamSchema>(propTeam);
   const [loading, setLoading] = useState(false);
 

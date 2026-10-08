@@ -42,7 +42,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
   avatarUrl,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 18;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const {
     activeTab,
