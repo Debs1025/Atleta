@@ -472,8 +472,44 @@ export const ScoresheetMatch: React.FC = () => {
     setActionError(null);
     try {
       const finalNotes = typeof notes === 'string' ? notes : Array.isArray(notes) ? (notes as any[]).join('\n') : '';
+
+      // Sync latest notes and match details directly to Match_Logs
+      await createOfficialMatch({
+        match_id: cleanId,
+        team_id: homeTeamDisplayName,
+        home_team_name: homeTeamDisplayName,
+        opponent_team_name: awayTeamDisplayName,
+        sport_type: matchData.sport_type || 'Basketball',
+        match_date: (matchData as any).match_date || (matchData as any).match_date_formatted || new Date().toISOString(),
+        location: (matchData as any).location || (matchData as any).venue || 'Tournament Sports Complex',
+        scoresheet_url: scoresheetUrl?.startsWith('data:') ? undefined : scoresheetUrl,
+        player_stats: isIndividualSport ? raceResults : [
+          ...homeRoster.map((p, idx) => ({
+            athlete_id: `ath_home_${idx + 1}`,
+            player_name: p.player_name,
+            team_name: homeTeamDisplayName,
+            jersey_number: Number(p.jersey_no) || idx + 1,
+            position: p.position || 'G',
+            stats: { points: Number(p.pts || 0), rebounds: Number(p.reb || 0), assists: Number(p.ast || 0), steals: Number(p.stl || 0), blocks: Number(p.blk || 0), fg_pct: p.fg_pct, three_p_pct: p.three_p_pct, ft_pct: p.ft_pct },
+          })),
+          ...awayRoster.map((p, idx) => ({
+            athlete_id: `ath_away_${idx + 1}`,
+            player_name: p.player_name,
+            team_name: awayTeamDisplayName,
+            jersey_number: Number(p.jersey_no) || idx + 1,
+            position: p.position || 'G',
+            stats: { points: Number(p.pts || 0), rebounds: Number(p.reb || 0), assists: Number(p.ast || 0), steals: Number(p.stl || 0), blocks: Number(p.blk || 0), fg_pct: p.fg_pct, three_p_pct: p.three_p_pct, ft_pct: p.ft_pct },
+          })),
+        ],
+        home_score: homeScore,
+        away_score: awayScore,
+        game_result: homeScore >= awayScore ? 'WIN' : 'LOSE',
+        notes: finalNotes,
+      } as any).catch(() => {});
+
       await certifyMatchValidation(matchData.validation_id || matchData.match_id, {
         context_notes: finalNotes,
+        notes: finalNotes,
         scoresheet_url: scoresheetUrl,
       });
       const currentUser = getStoredUser();

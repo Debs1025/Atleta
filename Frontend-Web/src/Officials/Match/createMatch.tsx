@@ -14,6 +14,7 @@ import {
   Sparkles,
   Upload,
   X,
+  FileText,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -79,6 +80,7 @@ export const CreateMatch: React.FC = () => {
   const [awayTeam, setAwayTeam] = useState('');
   const [teams, setTeams] = useState<string[]>(['', '']);
   const [coaches, setCoaches] = useState<string[]>(['', '']);
+  const [notes, setNotes] = useState('');
 
   // Scoresheet file & OCR background state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -602,6 +604,7 @@ export const CreateMatch: React.FC = () => {
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
         scoresheet_url: scoresheetUrl,
         player_stats: playerStatsPayload,
+        notes: notes.trim(),
         home_score: hSum > 0 ? hSum : undefined,
         away_score: aSum > 0 ? aSum : undefined,
         game_result: hSum > 0 || aSum > 0 ? (hSum >= aSum ? 'WIN' : 'LOSS') : undefined,
@@ -664,7 +667,7 @@ export const CreateMatch: React.FC = () => {
           },
           race_results: raceResults,
           scoresheet_url: scoresheetUrl,
-          audit_context_notes: '',
+          audit_context_notes: notes.trim(),
           is_certified: false,
           assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
           coach_name: coaches[0]?.trim() || undefined,
@@ -1378,13 +1381,13 @@ export const CreateMatch: React.FC = () => {
               </div>
             </div>
 
-            {/* Section 04: EXTRACTED SCORESHEET PREVIEW & LIVE EDITING */}
+            {/* Extracted Scoresheet Preview & Live Editing */}
             {(ocrCompleted || homeRoster.length > 0 || raceResults.length > 0 || ocrLoading) && (
               <div style={styles.sectionCard}>
                 <div style={styles.sectionHeaderRow}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Sparkles style={{ width: 18, height: 18, color: '#0B132B' }} />
-                    <h3 style={styles.sectionHeading}>04. EXTRACTED SCORESHEET PREVIEW & STATS</h3>
+                    <h3 style={styles.sectionHeading}>EXTRACTED SCORESHEET PREVIEW & STATS</h3>
                   </div>
                   <span style={{ fontSize: '10px', fontWeight: 800, padding: '4px 8px', backgroundColor: '#0B132B', color: '#FFFFFF', letterSpacing: '0.04em' }}>
                     LIVE EDITABLE
@@ -1408,6 +1411,32 @@ export const CreateMatch: React.FC = () => {
                 )}
               </div>
             )}
+
+            {/* Section 04: NOTES */}
+            <div style={styles.sectionCard}>
+              <div style={styles.sectionHeaderRow}>
+                <h3 style={styles.sectionHeading}>04. NOTES</h3>
+                <FileText style={styles.headerIcon} />
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <label style={styles.fieldLabel}>ADDITIONAL MATCH NOTES & OBSERVATIONS (OPTIONAL)</label>
+                <textarea
+                  rows={4}
+                  placeholder="Enter any official observations, referee notes, weather/facility conditions, or match incident logs..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="hover-input"
+                  style={{
+                    ...styles.input,
+                    minHeight: '85px',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    lineHeight: 1.5,
+                  }}
+                />
+              </div>
+            </div>
 
             {/* Footer Actions */}
             <div style={styles.footerActionsRow}>

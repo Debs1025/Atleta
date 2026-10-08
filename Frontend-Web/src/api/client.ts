@@ -1819,16 +1819,21 @@ export const prefetchMatchAuditDetail = (rawMatchId: string): void => {
 
 export const certifyMatchValidation = async (
   rawValidationId: string,
-  payload: { context_notes?: string; scoresheet_url?: string }
+  payload: { context_notes?: string; notes?: string; scoresheet_url?: string }
 ): Promise<any> => {
   let validationId = rawValidationId ? String(rawValidationId).replace(/^#/, '') : '';
   const token = getStoredToken();
-  const cleanPayload: Record<string, string> = {
-    context_notes: typeof payload.context_notes === 'string'
+  const noteStr = typeof payload.notes === 'string'
+    ? payload.notes
+    : typeof payload.context_notes === 'string'
       ? payload.context_notes
       : Array.isArray(payload.context_notes)
         ? (payload.context_notes as any[]).join('\n')
-        : String(payload.context_notes ?? ''),
+        : String(payload.context_notes ?? '');
+
+  const cleanPayload: Record<string, string> = {
+    context_notes: noteStr,
+    notes: noteStr,
   };
 
   if (typeof payload.scoresheet_url === 'string' && payload.scoresheet_url.trim().length > 0) {

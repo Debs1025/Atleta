@@ -138,6 +138,8 @@ export interface CreateMatchPayload {
   participating_teams?: string[];
   game_name?: string;
   coaches?: string[];
+  notes?: string;
+  [key: string]: any;
 }
 
 export type AuditStatus = 'PENDING' | 'AUDITED' | 'REJECTED';
