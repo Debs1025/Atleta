@@ -1563,9 +1563,45 @@ export async function scanMultipleScoresheetsStandalone(
   // Find the first successful match to provide as the primary top-level fallback
   const primaryMatch = parsedMatches.find((m) => m.status === 'success') || parsedMatches[0];
 
-  // Aggregate all players across all matches for holistic overview if needed
   const allPlayers = parsedMatches.flatMap((m) => m.player_summary || []);
   const allTeamScores = parsedMatches.flatMap((m) => m.team_scores || []);
+
+  // Check if scoresheets are parts/halves of the same match and merge stats cleanly
+  const mergedPlayerMap = new Map<string, any>();
+  for (const p of allPlayers) {
+    const key = `${(p.team_name || '').trim().toLowerCase()}_${(p.player_name || '').trim().toLowerCase()}`;
+    if (!mergedPlayerMap.has(key)) {
+      mergedPlayerMap.set(key, { ...p });
+    } else {
+      const existing = mergedPlayerMap.get(key);
+      // If second half provides cumulative final stats or second-half additions, ensure maximums or summed numerical metrics
+      for (const [statKey, statVal] of Object.entries(p)) {
+        if (typeof statVal === 'number') {
+          // If the stat appears cumulative in 2nd half, take the highest value or add if discrete
+          existing[statKey] = Math.max(existing[statKey] || 0, statVal);
+        } else if (statVal && !existing[statKey]) {
+          existing[statKey] = statVal;
+        }
+      }
+      mergedPlayerMap.set(key, existing);
+    }
+  }
+
+  const mergedPlayers = Array.from(mergedPlayerMap.values());
+
+  // Aggregate final team scores by keeping max score per team
+  const mergedTeamScoresMap = new Map<string, any>();
+  for (const t of allTeamScores) {
+    const key = (t.team || t.team_name || '').trim().toLowerCase();
+    if (!mergedTeamScoresMap.has(key)) {
+      mergedTeamScoresMap.set(key, { ...t });
+    } else {
+      const existing = mergedTeamScoresMap.get(key);
+      existing.score = Math.max(Number(existing.score) || 0, Number(t.score) || 0);
+      mergedTeamScoresMap.set(key, existing);
+    }
+  }
+  const mergedTeamScores = Array.from(mergedTeamScoresMap.values());
 
   return {
     batch_mode: true,
@@ -1577,11 +1613,11 @@ export async function scanMultipleScoresheetsStandalone(
     scoresheet_url: primaryMatch?.scoresheet_url || '',
     parsed_at: new Date().toISOString(),
     match_info: primaryMatch?.match_info || {},
-    team_scores: allTeamScores.length > 0 ? allTeamScores : primaryMatch?.team_scores || [],
-    player_summary: allPlayers.length > 0 ? allPlayers : primaryMatch?.player_summary || [],
+    team_scores: mergedTeamScores.length > 0 ? mergedTeamScores : primaryMatch?.team_scores || [],
+    player_summary: mergedPlayers.length > 0 ? mergedPlayers : primaryMatch?.player_summary || [],
     parsed_tables: {
-      team_scores: allTeamScores,
-      player_summary: allPlayers,
+      team_scores: mergedTeamScores,
+      player_summary: mergedPlayers,
     },
   };
 }
