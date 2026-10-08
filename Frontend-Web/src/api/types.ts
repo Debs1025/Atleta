@@ -1,0 +1,407 @@
+export interface OfficialLoginPayload {
+  email: string;
+  password: string;
+  savePassword?: boolean;
+}
+
+export interface OfficialRegisterPayload {
+  email: string;
+  password: string;
+  full_legal_name: string;
+  organization_name: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  license_number?: string;
+  sport_accreditation?: string[];
+  organization?: string;
+  phone_number?: string;
+  assigned_sport?: string;
+}
+
+export interface PasswordResetPayload {
+  email: string;
+  redirect_url?: string;
+}
+
+export interface ConfirmPasswordResetPayload {
+  token: string;
+  new_password: string;
+  email?: string;
+}
+
+export interface OfficialSettings {
+  setting_id?: string;
+  official_id?: string;
+  split_screen_defaults: boolean;
+  discrepancy_presets: boolean;
+  match_reminders: boolean;
+  audit_notifications?: boolean;
+  auto_refresh?: boolean;
+  updated_at?: string;
+  [key: string]: any;
+}
+
+export interface AuthUser {
+  uid: string;
+  user_id?: string;
+  role: string;
+  full_legal_name?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  organization_name?: string;
+  organization?: string;
+  phone_number?: string;
+  license_number?: string;
+  official_license_number?: string;
+  sport_accreditation?: string[];
+  avatar_url?: string;
+  profile_image?: string;
+  photo_url?: string;
+  profile?: Record<string, unknown>;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+  message?: string;
+}
+
+export interface AuditQueueItem {
+  audit_id: string;
+  match_id: string;
+  requested_by?: string;
+  status: string;
+  requested_at?: string;
+  match_details?: {
+    match_id?: string;
+    sport_type?: string;
+    home_team_name?: string;
+    away_team_name?: string;
+    match_date?: string;
+    coach_name?: string;
+    status?: string;
+    division?: string;
+    [key: string]: any;
+  } | null;
+}
+
+export interface OfficialDashboardResponse {
+  total_matches: number;
+  pending_count: number;
+  audited_count: number;
+  audit_queue: AuditQueueItem[];
+}
+
+export interface OfficialScheduleItem {
+  schedule_id: string;
+  match_id: string;
+  official_id: string;
+  venue?: string;
+  court_number?: string | number;
+  scheduled_time: string;
+  month?: number;
+  year?: number;
+  assigned_officials?: string[];
+  venue_logistics?: {
+    location?: string;
+    sport?: string;
+    court?: string | number;
+    home_team?: string;
+    away_team?: string;
+    time?: string;
+    [key: string]: any;
+  } | null;
+  sport?: string;
+  match_class?: string;
+  home_team?: string;
+  away_team?: string;
+  assigned_coaches?: string[];
+  coaches?: string;
+  coach_name?: string;
+  requested_by?: string;
+  created_by?: string;
+  raw_match?: any;
+}
+
+export interface CreateMatchPayload {
+  team_id?: string;
+  sport_type: string;
+  match_date: string;
+  location?: string;
+  venue?: string;
+  court_number?: string | number;
+  opponent_team_name: string;
+  home_team_name?: string;
+  participating_teams?: string[];
+  game_name?: string;
+  coaches?: string[];
+}
+
+export type AuditStatus = 'PENDING' | 'AUDITED' | 'REJECTED';
+
+export interface BoxScoreRow {
+  jersey_no: string;
+  player_name: string;
+  position?: string;
+  minutes: string;
+  pts: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  fg_pct: string;
+  three_p_pct: string;
+  ft_pct: string;
+}
+
+export interface RaceResultRow {
+  athlete_id?: string;
+  placement_rank: number | string;
+  athlete_name: string;
+  team_name?: string;
+  distance: string;
+  finish_time: string;
+  split_times?: string[] | number[];
+  efficiency?: number;
+  is_disqualified?: boolean;
+}
+
+export interface MatchAuditDetail {
+  match_id: string;
+  validation_id: string;
+  game_name: string;
+  sport_type: string;
+  league_class: string;
+  match_date_formatted: string;
+  home_team: {
+    name: string;
+    score: number;
+    result: 'WIN' | 'LOSE';
+    roster_stats: BoxScoreRow[];
+    team_totals: BoxScoreRow;
+  };
+  away_team: {
+    name: string;
+    score: number;
+    result: 'WIN' | 'LOSE';
+    roster_stats: BoxScoreRow[];
+    team_totals: BoxScoreRow;
+  };
+  race_results?: RaceResultRow[];
+  scoresheet_url?: string;
+  audit_context_notes?: string;
+  is_certified?: boolean;
+  is_locked?: boolean;
+  assigned_coaches?: string[];
+  coach_name?: string;
+}
+
+export interface MatchSummaryItem {
+  match_id: string;
+  validation_id?: string;
+  match_class: string;
+  sport: string;
+  coaches: string;
+  date_time: string;
+  status: AuditStatus;
+  raw_match?: any;
+}
+
+export type OfficialNotificationType = 'AUDIT_REQUEST' | 'SCHEDULE_UPDATE' | 'SCHEDULE_UPDATES' | string;
+
+export interface OfficialNotificationItem {
+  notification_id: string;
+  official_id: string;
+  type: OfficialNotificationType;
+  title: string;
+  message: string;
+  reference_id?: string | null;
+  is_read: boolean;
+  created_at: string;
+  requested_by_coach?: string;
+  match_context?: string;
+  sport_discipline?: string;
+  [key: string]: any;
+}
+
+export interface AdminLoginPayload {
+  email: string;
+  password: string;
+  savePassword?: boolean;
+}
+
+export interface AdminProfile {
+  admin_id: string;
+  user_id: string;
+  institution?: string;
+  department_code: string;
+  clearance_level: number;
+  is_active: boolean;
+  is_elevated?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SystemAuditLog {
+  log_id: string;
+  user_id: string;
+  action: string;
+  endpoint: string;
+  ip_address: string;
+  timestamp: string;
+  status?: string;
+  details?: Record<string, unknown> | string;
+}
+
+export interface AdminCoachQueueItem {
+  coach_id: string;
+  user_id: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  sport_type?: string;
+  years_of_experience?: number;
+  current_institution?: string;
+  institutional_affiliation?: string;
+  professional_documents?: string[];
+  account_status: string;
+  status?: string;
+  created_at: string;
+  date_uploaded?: string;
+}
+
+export interface AdminCoachQueueResponse {
+  message?: string;
+  total_pending: number;
+  queue: AdminCoachQueueItem[];
+}
+
+export type MeasurementCategory =
+  | 'CUMULATIVE TOTAL'
+  | 'PERCENTAGE'
+  | 'TIME (MS)'
+  | 'DISTANCE (M)'
+  | 'COUNT';
+
+export interface DynamicStatRow {
+  id: string; // client-side unique id for key mapping
+  stat_name_key: string; // e.g. "TOTAL_POINTS", "FIELD_GOAL_ACCURACY"
+  measurement_category: MeasurementCategory;
+  formula?: string; // e.g. "(FG_MADE / FG_ATTEMPTED) * 100" or "SPLIT_1 + SPLIT_2"
+}
+
+export interface SportConfigurationForm {
+  sport_name: string; // e.g. "BASKETBALL_PRO"
+  short_identifier: string; // e.g. "BKT_01"
+  configurable_stats: DynamicStatRow[];
+  scoring_rules?: Record<string, unknown>;
+  positions?: string[];
+}
+
+export interface BackendConfigurableStat {
+  stat_name_key: string;
+  measurement_category: 'Cumulative Total' | 'Percentage' | 'Time (ms)' | 'Distance (m)' | 'Count';
+  label?: string;
+  description?: string;
+  formula?: string;
+}
+
+export interface SportConfiguration {
+  sport_id: string;
+  sport_name: string;
+  short_identifier: string;
+  configurable_stats: BackendConfigurableStat[];
+  stat_schema?: Record<string, { measurement_category: string; display_label?: string; formula?: string }>;
+  positions?: string[];
+  scoring_rules?: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SportsListResponse {
+  message?: string;
+  total_sports: number;
+  sports: SportConfiguration[];
+}
+
+export interface CreateSportPayload {
+  sport_name: string;
+  short_identifier: string;
+  configurable_stats: BackendConfigurableStat[];
+  stat_schema?: Record<string, { measurement_category: string; display_label?: string }>;
+  positions?: string[];
+  scoring_rules?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+export interface TeamScoreItem {
+  team: string;
+  score: number;
+}
+
+export interface DetectedAthleteStat {
+  athlete_id: string;
+  player_name: string;
+  team_name?: string;
+  jersey_number?: number;
+  pts?: number;
+  ast?: number;
+  to?: number;
+  reb?: number;
+  stl?: number;
+  blk?: number;
+  min?: number;
+  fg_pct?: string;
+  time?: string;
+  event?: string;
+  stroke_count?: number;
+  distance_m?: number;
+  split?: string;
+  split_2?: string;
+  pace?: string;
+  reaction_sec?: string;
+}
+
+export interface ExpandedPerformanceMetrics {
+  shooting_efficiency?: {
+    ft_made: number;
+    ft_attempts: number;
+    pt2_made: number;
+    pt2_attempts: number;
+    pt3_made: number;
+    pt3_attempts: number;
+  };
+  possession_errors?: {
+    key_drives: number;
+    assists: number;
+    turnovers: number;
+    scv_12s: number;
+  };
+}
+
+export interface RawOCRDetectedData {
+  team_name: string;
+  opponent_team_name?: string;
+  final_score?: string;
+  game_result?: string;
+  team_scores?: TeamScoreItem[];
+  teams?: string[];
+  sport_type: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  athlete_overview: DetectedAthleteStat[];
+  expanded_metrics: ExpandedPerformanceMetrics;
+}
+
+export interface UploadedFileItem {
+  upload_id: string;
+  file_name: string;
+  file_size_bytes: number;
+  uploaded_at_relative: string;
+  file_type: 'PDF' | 'CSV' | 'JSON' | 'IMAGE';
+  file_url: string;
+  raw_file?: File;
+}
+

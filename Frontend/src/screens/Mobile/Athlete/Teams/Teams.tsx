@@ -1,0 +1,549 @@
+import React, { useEffect, useState } from "react";
+import {
+  Animated,
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import styles from "./styles/Teams";
+import { Ionicons } from "@expo/vector-icons";
+import { TeamDetailsScreen } from "./TeamDetails";
+import { InquireCoachScreen } from "./InquireCoach";
+import { InquiriesScreen } from "./Inquiries";
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
+
+//schemas
+export interface Coach {
+  coach_id: string;
+  full_name: string;
+  role_title: string;
+  years_experience: string;
+  quote: string;
+  avatar_url?: string;
+  is_verified?: boolean;
+}
+
+export interface TeamSchema {
+  team_id: string;
+  team_name: string;
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING";
+  managed_by_coach_id: string;
+  created_at: string;
+  roster_athletes: string[]; // List of athlete UUIDs
+  program_type_tag?: string; // e.g. "ELITE VARSITY PROGRAM"
+  description: string;
+  region: string; // e.g. "Bicol"
+  head_coach: Coach;
+}
+
+export interface CoachProfileSchema {
+  coach_id: string;
+  full_name: string;
+  institution: string;
+  role_title: string;
+  tags: string[]; // ["VARSITY", "RECRUITER", "ACTIVE SCOUTING"]
+  years_experience: string; // "15+"
+  core_specialties: string[];
+  success_rate: string; // "94%"
+  recruits_placed: string; // "80+ Recruits Placed"
+  philosophy: string;
+  quote: string;
+  certificates: string[];
+  contact_info: {
+    email: string;
+    facebook: string;
+    phone: string;
+  };
+}
+
+export interface InquirySchema {
+  inquiry_id: string;
+  coach_name: string;
+  institution_sport: string;
+  status: "ACCEPTED" | "PENDING" | "DECLINED";
+  updated_at_relative: string;
+  sub_note?: string; // e.g. "Roster Full"
+}
+
+type ScreenState = "DIRECTORY" | "TEAM_DETAILS" | "COACH_PROFILE" | "INQUIRIES";
+
+interface TeamsProps {
+  onNavigateTab?: (tabName: "HOME" | "COACHES" | "PROFILE") => void;
+  onScreenStateChange?: (isSubScreen: boolean) => void;
+  athleteCategory?: string;
+}
+
+const getInitialSport = (cat?: string) => {
+  if (!cat) return "BASKETBALL";
+  const norm = cat.toUpperCase();
+  if (norm.includes("SWIM")) return "SWIMMING";
+  if (norm.includes("TRACK") || norm.includes("FIELD")) return "TRACK AND FIELD";
+  return "BASKETBALL";
+};
+
+export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: TeamsProps) {
+  const [currentScreen, setCurrentScreen] = useState<ScreenState>("DIRECTORY");
+  const [teams, setTeams] = useState<TeamSchema[]>([]);
+  const [inquiries, setInquiries] = useState<InquirySchema[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
+  const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSport, setSelectedSport] = useState<string>(getInitialSport(athleteCategory));
+  const [loading, setLoading] = useState(true);
+  const pulseAnim = useState(new Animated.Value(0.3))[0];
+
+  useEffect(() => {
+    if (athleteCategory) {
+      setSelectedSport(getInitialSport(athleteCategory));
+    }
+  }, [athleteCategory]);
+
+  useEffect(() => {
+    if (onScreenStateChange) {
+      onScreenStateChange(currentScreen !== "DIRECTORY");
+    }
+  }, [currentScreen, onScreenStateChange]);
+
+  const [myCurrentTeamId, setMyCurrentTeamId] = useState<string>("");
+  const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>("");
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDirectoryAndInquiries = async () => {
+      try {
+        setLoading(true);
+        const [teamsRes, inquiriesRes, myTeamRes]: [any, any, any] = await Promise.all([
+          requestAuthenticatedJson("/teams").catch(() => null),
+          requestAuthenticatedJson("/inquiries").catch(() => null),
+          requestAuthenticatedJson("/athletes/team").catch(() => null),
+        ]);
+
+        if (isMounted) {
+          const currentTeamId = myTeamRes?.team?.team_id || myTeamRes?.team_id || "";
+          const currentTeamName = myTeamRes?.team?.team_name || myTeamRes?.team_name || "";
+          setMyCurrentTeamId(currentTeamId);
+          setMyCurrentTeamName(currentTeamName);
+
+          const rawTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
+          const mappedTeams: TeamSchema[] = rawTeams
+            .filter((t: any) => {
+              // Exclude the athlete's current team if they already play in a team
+              if (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) return false;
+              if (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase()) return false;
+              return true;
+            })
+            .map((t: any, idx: number) => ({
+              team_id: t.team_id || `team_${idx}`,
+              team_name: t.team_name || "Varsity Team",
+              sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
+              managed_by_coach_id: t.coach_id || "",
+              created_at: t.timestamp || new Date().toISOString(),
+              roster_athletes: Array(t.athlete_count || 0).fill("ath_uuid"),
+              program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
+              description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
+              region: t.region || "NCR",
+              head_coach: {
+                coach_id: t.coach_id || "",
+                full_name: (t.coach_name && t.coach_name.trim().toLowerCase() !== "coach" ? t.coach_name : "Head Coach").toUpperCase(),
+                role_title: `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
+                years_experience: t.years_experience ? `${t.years_experience} Years` : "Experienced Coach",
+                quote: t.quote || "Dedicated to athletic excellence and player development.",
+              },
+            }));
+          setTeams(mappedTeams);
+
+          const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
+          const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {
+            const rawStatus = (inq.offer_status || "PENDING").toUpperCase();
+            const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
+            return {
+              inquiry_id: inq.scout_id || `inq_${idx}`,
+              coach_name: inq.coach_name || "Coach",
+              institution_sport: `${inq.current_institution || "Varsity"} • ${inq.sport_type || "Basketball"}`,
+              status: mappedStatus as any,
+              updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
+              sub_note: inq.decline_reason || undefined,
+            };
+          });
+          setInquiries(mappedInquiries);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setTeams([]);
+          setInquiries([]);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchDirectoryAndInquiries();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.8,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.3,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+  }, [loading, pulseAnim]);
+
+  const handleOpenTeam = async (team: TeamSchema) => {
+    setSelectedTeam(team);
+    setCurrentScreen("TEAM_DETAILS");
+
+    if (team.team_id) {
+      const detailed: any = await requestAuthenticatedJson(`/teams/${team.team_id}`).catch(() => null);
+      if (detailed) {
+        const rawCoach = detailed.coach || detailed.head_coach || {};
+        setSelectedTeam({
+          ...team,
+          description: detailed.description || detailed.mission_statement || team.description,
+          region: detailed.region || team.region,
+          roster_athletes: Array.isArray(detailed.roster) ? detailed.roster.map((r: any) => r.athlete_id) : team.roster_athletes,
+          head_coach: {
+            coach_id: rawCoach.coach_id || team.head_coach.coach_id,
+            full_name: (rawCoach.full_name || team.head_coach.full_name).toUpperCase(),
+            role_title: (rawCoach.role_title || rawCoach.current_institution || team.head_coach.role_title).toUpperCase(),
+            years_experience: rawCoach.years_of_experience ? `${rawCoach.years_of_experience} Years` : team.head_coach.years_experience,
+            quote: rawCoach.quote || team.head_coach.quote,
+          },
+        });
+      }
+    }
+  };
+
+  const handleOpenCoach = async (coachId?: string) => {
+    const targetId = coachId || selectedTeam?.head_coach.coach_id;
+    if (!targetId) return;
+
+    // Use available head coach info as initial state to prevent any empty flicker
+    if (selectedTeam && selectedTeam.head_coach && (selectedTeam.head_coach.coach_id === targetId || !selectedCoach)) {
+      setSelectedCoach({
+        coach_id: targetId,
+        full_name: selectedTeam.head_coach.full_name || "Coach",
+        institution: selectedTeam.team_name || "Athletic Program",
+        role_title: selectedTeam.head_coach.role_title || "Head Coach",
+        tags: [selectedTeam.sport_type, "VERIFIED COACH"],
+        years_experience: selectedTeam.head_coach.years_experience || "Not specified",
+        core_specialties: [],
+        success_rate: "Not specified",
+        recruits_placed: "",
+        philosophy: selectedTeam.head_coach.quote || "Not specified",
+        quote: selectedTeam.head_coach.quote || "Not specified",
+        certificates: [],
+        contact_info: {
+          email: "Not specified",
+          facebook: "Not specified",
+          phone: "Not specified",
+        },
+      });
+    }
+
+    setCurrentScreen("COACH_PROFILE");
+
+    const res: any = await requestAuthenticatedJson(`/coaches/${targetId}`).catch(() => null);
+    if (res) {
+      const c = res.profile || res.coach || res;
+      const firstName = c.first_name || "";
+      const lastName = c.last_name || "";
+      const fullName = c.full_name || `${firstName} ${lastName}`.trim() || "Coach Profile";
+      const inst = c.current_institution || c.institution || (selectedTeam?.team_name) || "Athletic Program";
+      const sport = (c.sport_type || selectedTeam?.sport_type || "Basketball").toUpperCase();
+
+      setSelectedCoach({
+        coach_id: c.coach_id || targetId,
+        full_name: fullName.toUpperCase(),
+        institution: inst,
+        role_title: c.role_title || `${sport} HEAD COACH`,
+        tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
+        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
+        core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
+        success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
+        recruits_placed: c.recruits_placed || "",
+        philosophy: c.philosophy || c.bio || "Not specified",
+        quote: c.quote || "Not specified",
+        certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
+        contact_info: {
+          email: c.email || c.contact_info?.email || "Not specified",
+          facebook: c.facebook || c.contact_info?.facebook || "Not specified",
+          phone: c.contact_number || c.phone || c.contact_info?.phone || "Not specified",
+        },
+      });
+    }
+  };
+
+  const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+
+  const filteredTeams = teams.filter((team) => {
+    const matchesSearch =
+      team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      team.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSport = selectedSport
+      ? normSport(team.sport_type) === normSport(selectedSport) ||
+        normSport(team.sport_type).includes(normSport(selectedSport)) ||
+        normSport(selectedSport).includes(normSport(team.sport_type))
+      : true;
+    return matchesSearch && matchesSport;
+  });
+
+  // SCREEN ROUTING RENDER
+  if (currentScreen === "TEAM_DETAILS" && selectedTeam) {
+    return (
+      <TeamDetailsScreen
+        team={selectedTeam}
+        onBack={() => setCurrentScreen("DIRECTORY")}
+        onViewCoach={(coachId) => handleOpenCoach(coachId)}
+      />
+    );
+  }
+
+  if (currentScreen === "COACH_PROFILE") {
+    const coachToDisplay = selectedCoach || (selectedTeam ? {
+      coach_id: selectedTeam.head_coach.coach_id,
+      full_name: (selectedTeam.head_coach.full_name && selectedTeam.head_coach.full_name.toLowerCase() !== "coach") ? selectedTeam.head_coach.full_name : "Head Coach",
+      institution: selectedTeam.team_name || "Athletic Program",
+      role_title: selectedTeam.head_coach.role_title || "Head Coach",
+      tags: [selectedTeam.sport_type, "VERIFIED COACH"],
+      years_experience: selectedTeam.head_coach.years_experience || "Not specified",
+      core_specialties: [],
+      success_rate: "Not specified",
+      recruits_placed: "",
+      philosophy: selectedTeam.head_coach.quote || "Not specified",
+      quote: selectedTeam.head_coach.quote || "Not specified",
+      certificates: [],
+      contact_info: {
+        email: "Not specified",
+        facebook: "Not specified",
+        phone: "Not specified",
+      },
+    } : null);
+
+    if (coachToDisplay) {
+      const isAlreadyInquired = inquiries.some((inq) => {
+        const inqName = (inq.coach_name || "").toLowerCase().replace(/^coach\s+/, "").trim();
+        const selName = (coachToDisplay.full_name || "").toLowerCase().replace(/^coach\s+/, "").trim();
+        return inqName && selName && (inqName.includes(selName) || selName.includes(inqName));
+      });
+
+      return (
+        <InquireCoachScreen
+          coach={coachToDisplay}
+          isAlreadyInquired={isAlreadyInquired}
+          onBack={() => setCurrentScreen(selectedTeam ? "TEAM_DETAILS" : "DIRECTORY")}
+          onGoHome={() => setCurrentScreen("DIRECTORY")}
+          onGoInquiries={() => setCurrentScreen("INQUIRIES")}
+        />
+      );
+    }
+  }
+
+  if (currentScreen === "INQUIRIES") {
+    return (
+      <InquiriesScreen
+        inquiries={inquiries}
+        onBack={() => setCurrentScreen("DIRECTORY")}
+      />
+    );
+  }
+
+  // SCREEN 1: TEAMS DIRECTORY PAGE
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Search Row */}
+        <View style={styles.searchRow}>
+          <View style={[styles.searchInputContainer, { marginRight: 0 }]}>
+            <Ionicons
+              name="search-outline"
+              size={18}
+              color="#38BDF8"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search teams, coaches, sports..."
+              placeholderTextColor="#64748B"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color="#64748B" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* Sport Filter Chips Horizontal Scroll */}
+        <ScrollView
+          horizontal
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterScrollContent}
+        >
+          <Pressable
+            style={[
+              styles.sportChip,
+              selectedSport === "BASKETBALL" && styles.sportChipActive,
+            ]}
+            onPress={() =>
+              setSelectedSport(
+                selectedSport === "BASKETBALL" ? "" : "BASKETBALL"
+              )
+            }
+          >
+            <Ionicons
+              name="basketball-outline"
+              size={16}
+              color={selectedSport === "BASKETBALL" ? "#38BDF8" : "#94A3B8"}
+            />
+            <Text
+              style={[
+                styles.sportChipText,
+                selectedSport === "BASKETBALL" && styles.sportChipTextActive,
+              ]}
+            >
+              BASKETBALL
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.sportChip,
+              selectedSport === "TRACK AND FIELD" && styles.sportChipActive,
+            ]}
+            onPress={() =>
+              setSelectedSport(
+                selectedSport === "TRACK AND FIELD" ? "" : "TRACK AND FIELD"
+              )
+            }
+          >
+            <Image
+              source={require("../../../../assets/Athleticsicon.png")}
+              style={[
+                styles.sportChipIconImage,
+                { tintColor: selectedSport === "TRACK AND FIELD" ? "#38BDF8" : "#94A3B8" },
+              ]}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.sportChipText,
+                selectedSport === "TRACK AND FIELD" && styles.sportChipTextActive,
+              ]}
+            >
+              TRACK AND FIELD
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.sportChip,
+              selectedSport === "SWIMMING" && styles.sportChipActive,
+            ]}
+            onPress={() =>
+              setSelectedSport(
+                selectedSport === "SWIMMING" ? "" : "SWIMMING"
+              )
+            }
+          >
+            <Image
+              source={require("../../../../assets/swimmingicon.png")}
+              style={[
+                styles.sportChipIconImage,
+                { tintColor: selectedSport === "SWIMMING" ? "#38BDF8" : "#94A3B8" },
+              ]}
+              resizeMode="contain"
+            />
+            <Text
+              style={[
+                styles.sportChipText,
+                selectedSport === "SWIMMING" && styles.sportChipTextActive,
+              ]}
+            >
+              SWIMMING
+            </Text>
+          </Pressable>
+        </ScrollView>
+
+        {/* Section Title */}
+        <Text style={styles.sectionTitle}>Teams</Text>
+
+        {/* Skeleton Loaders or Team Cards List */}
+        {loading ? (
+          <View style={styles.skeletonContainer}>
+            {[1, 2, 3].map((key) => (
+              <Animated.View
+                key={key}
+                style={[styles.skeletonCard, { opacity: pulseAnim }]}
+              />
+            ))}
+          </View>
+        ) : filteredTeams.length === 0 ? (
+          <View style={{ paddingVertical: 40, alignItems: "center" }}>
+            <Ionicons name="shield-outline" size={48} color="#64748B" />
+            <Text style={{ color: "#F8FAFC", fontSize: 16, fontWeight: "700", marginTop: 12 }}>No Sports Teams Found</Text>
+            <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No teams match the current filter.</Text>
+          </View>
+        ) : (
+          filteredTeams.map((team) => (
+            <View key={team.team_id} style={styles.teamCard}>
+              <Text style={styles.teamName}>{team.team_name}</Text>
+              <Text style={styles.sportTag}>{team.sport_type}</Text>
+              <Text style={styles.teamDescription} numberOfLines={2}>
+                {team.description}
+              </Text>
+
+              {/* Card Footer Row */}
+              <View style={styles.cardFooter}>
+                <View>
+                  <Text style={styles.headCoachLabel}>HEAD COACH</Text>
+                  <Text style={styles.headCoachName}>
+                    {team.head_coach.full_name}
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={styles.viewTeamButton}
+                  onPress={() => handleOpenTeam(team)}
+                >
+                  <Text style={styles.viewTeamText}>VIEW TEAM</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+
+
