@@ -238,6 +238,21 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     return awayPlayers.length;
   }, [athleteStats, awayTeamName, isBasketball, isVolleyball, isSoccer, currentMatch]);
 
+  const dynamicResult = useMemo(() => {
+    if (homeScore > awayScore) {
+      return { homeBadge: 'WIN', awayBadge: 'LOSS', summary: `${homeTeamName} WINS`, finalScore: `${homeScore} - ${awayScore}` };
+    }
+    if (awayScore > homeScore) {
+      return { homeBadge: 'LOSS', awayBadge: 'WIN', summary: `${awayTeamName} WINS`, finalScore: `${homeScore} - ${awayScore}` };
+    }
+    if (homeScore > 0 || awayScore > 0) {
+      return { homeBadge: 'DRAW', awayBadge: 'DRAW', summary: 'TIED MATCH', finalScore: `${homeScore} - ${awayScore}` };
+    }
+    return { homeBadge: 'PENDING', awayBadge: 'PENDING', summary: 'Awaiting match data', finalScore: '0 - 0' };
+  }, [homeScore, awayScore, homeTeamName, awayTeamName]);
+
+  const scoreUnit = isVolleyball ? 'SETS' : isSoccer ? 'GOALS' : 'PTS';
+
   // Save current active match
   const handleSaveMatch = async () => {
     setFeedback(null);
@@ -251,7 +266,8 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         match_date: currentMatch.match_date || new Date().toISOString(),
         location: currentMatch.location || 'Tournament Arena',
         opponent_team_name: awayTeamName,
-        game_result: homeScore >= awayScore ? 'WIN' : 'LOSS',
+        game_result: dynamicResult.homeBadge,
+        final_score: currentMatch.final_score || dynamicResult.finalScore,
         home_score: homeScore,
         away_score: awayScore,
         notes: `Official OCR Logged Match (${sportType} - ${homeTeamName}: ${homeScore} vs ${awayTeamName}: ${awayScore})`,
@@ -453,13 +469,69 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         </div>
       )}
 
-      {/* Score Banner */}
+      {/* Dynamic Match Scoreboard Banner (Aligned with Mobile) */}
       <div style={styles.scoreBanner}>
+        {/* Banner Top Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 20px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+          backgroundColor: 'rgba(0, 0, 0, 0.25)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Trophy style={{ width: 16, height: 16, color: '#00C8FF' }} />
+            <span style={{ fontSize: '12px', fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#FFFFFF' }}>
+              MATCH SCOREBOARD • {sportType}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              backgroundColor: '#00C8FF',
+              color: '#0B132B',
+              fontSize: '11px',
+              fontWeight: 900,
+              padding: '3px 10px',
+              letterSpacing: '0.05em',
+              borderRadius: '2px',
+            }}>
+              FINAL: {currentMatch.final_score || dynamicResult.finalScore}
+            </span>
+            <span style={{
+              backgroundColor: dynamicResult.homeBadge === 'DRAW' ? '#F59E0B' : dynamicResult.homeBadge === 'PENDING' ? '#475569' : '#10B981',
+              color: '#FFFFFF',
+              fontSize: '11px',
+              fontWeight: 900,
+              padding: '3px 10px',
+              letterSpacing: '0.05em',
+              borderRadius: '2px',
+            }}>
+              {dynamicResult.summary}
+            </span>
+          </div>
+        </div>
+
         <div style={styles.scoreBannerInner}>
           <div style={styles.teamCol}>
-            <span style={styles.teamTag}>HOME TEAM</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={styles.teamTag}>HOME TEAM</span>
+              <span style={{
+                fontSize: '9.5px',
+                fontWeight: 900,
+                padding: '1px 6px',
+                backgroundColor: dynamicResult.homeBadge === 'WIN' ? '#10B981' : dynamicResult.homeBadge === 'DRAW' ? '#F59E0B' : dynamicResult.homeBadge === 'PENDING' ? '#334155' : '#EF4444',
+                color: '#FFFFFF',
+                borderRadius: '2px',
+              }}>
+                {dynamicResult.homeBadge}
+              </span>
+            </div>
             <h2 style={styles.teamName}>{homeTeamName}</h2>
-            <div style={styles.teamScore}>{homeScore}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+              <span style={styles.teamScore}>{homeScore}</span>
+              <span style={{ fontSize: '14px', fontWeight: 800, color: '#94A3B8' }}>{scoreUnit}</span>
+            </div>
           </div>
 
           <div style={styles.vsCenter}>
@@ -471,9 +543,24 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
           </div>
 
           <div style={styles.teamColRight}>
-            <span style={styles.teamTag}>AWAY TEAM</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', justifyContent: 'flex-end' }}>
+              <span style={{
+                fontSize: '9.5px',
+                fontWeight: 900,
+                padding: '1px 6px',
+                backgroundColor: dynamicResult.awayBadge === 'WIN' ? '#10B981' : dynamicResult.awayBadge === 'DRAW' ? '#F59E0B' : dynamicResult.awayBadge === 'PENDING' ? '#334155' : '#EF4444',
+                color: '#FFFFFF',
+                borderRadius: '2px',
+              }}>
+                {dynamicResult.awayBadge}
+              </span>
+              <span style={styles.teamTag}>AWAY TEAM</span>
+            </div>
             <h2 style={styles.teamName}>{awayTeamName}</h2>
-            <div style={styles.teamScore}>{awayScore}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', justifyContent: 'flex-end' }}>
+              <span style={styles.teamScore}>{awayScore}</span>
+              <span style={{ fontSize: '14px', fontWeight: 800, color: '#94A3B8' }}>{scoreUnit}</span>
+            </div>
           </div>
         </div>
       </div>

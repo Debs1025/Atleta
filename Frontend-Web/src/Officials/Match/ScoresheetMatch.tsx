@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
   Download,
+  Trophy,
 } from 'lucide-react';
 import {
   getMatchAuditDetail,
@@ -86,18 +87,54 @@ export const ScoresheetMatch: React.FC = () => {
   // Strictly check if match is certified (read-only locking)
   const isCertified = Boolean(matchData?.is_certified || isMatchLocallyCertified(cleanId));
 
+  const isVolleyball = useMemo(() => (matchData?.sport_type || '').toLowerCase().includes('volley'), [matchData?.sport_type]);
+  const isSoccer = useMemo(() => {
+    const s = (matchData?.sport_type || '').toLowerCase();
+    return s.includes('soccer') || s.includes('football');
+  }, [matchData?.sport_type]);
+
   // Dynamic live score calculation from player roster points
-  const homeScore = useMemo(
-    () => (homeRoster.length > 0 ? homeRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0) : Number(matchData?.home_team?.score || 0)),
-    [homeRoster, matchData?.home_team?.score]
-  );
-  const awayScore = useMemo(
-    () => (awayRoster.length > 0 ? awayRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0) : Number(matchData?.away_team?.score || 0)),
-    [awayRoster, matchData?.away_team?.score]
-  );
+  const homeScore = useMemo(() => {
+    if (homeRoster.length > 0) {
+      if (isVolleyball) {
+        return homeRoster.reduce((sum, r) => sum + (Number(r.pts) || (Number(r.kills || 0) + Number(r.service_aces || 0) + Number(r.blk || 0))), 0);
+      }
+      if (isSoccer) {
+        return homeRoster.reduce((sum, r) => sum + (Number(r.goals ?? r.pts) || 0), 0);
+      }
+      return homeRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0);
+    }
+    return Number(matchData?.home_team?.score || 0);
+  }, [homeRoster, matchData?.home_team?.score, isVolleyball, isSoccer]);
+
+  const awayScore = useMemo(() => {
+    if (awayRoster.length > 0) {
+      if (isVolleyball) {
+        return awayRoster.reduce((sum, r) => sum + (Number(r.pts) || (Number(r.kills || 0) + Number(r.service_aces || 0) + Number(r.blk || 0))), 0);
+      }
+      if (isSoccer) {
+        return awayRoster.reduce((sum, r) => sum + (Number(r.goals ?? r.pts) || 0), 0);
+      }
+      return awayRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0);
+    }
+    return Number(matchData?.away_team?.score || 0);
+  }, [awayRoster, matchData?.away_team?.score, isVolleyball, isSoccer]);
 
   const homeTeamDisplayName = matchData?.home_team?.name || (matchData as any)?.home_team_name || (matchData as any)?.team_id || 'HOME TEAM';
   const awayTeamDisplayName = matchData?.away_team?.name || (matchData as any)?.opponent_team_name || (matchData as any)?.away_team_name || 'AWAY TEAM';
+
+  const dynamicMatchResult = useMemo(() => {
+    if (homeScore > awayScore) {
+      return { homeResult: 'WIN', awayResult: 'LOSE', finalScore: `${homeScore} - ${awayScore}`, summary: `${homeTeamDisplayName} WINS` };
+    }
+    if (awayScore > homeScore) {
+      return { homeResult: 'LOSE', awayResult: 'WIN', finalScore: `${homeScore} - ${awayScore}`, summary: `${awayTeamDisplayName} WINS` };
+    }
+    if (homeScore > 0 || awayScore > 0) {
+      return { homeResult: 'DRAW', awayResult: 'DRAW', finalScore: `${homeScore} - ${awayScore}`, summary: 'TIED MATCH' };
+    }
+    return { homeResult: 'UNPLAYED', awayResult: 'UNPLAYED', finalScore: '0 - 0', summary: 'UNPLAYED' };
+  }, [homeScore, awayScore, homeTeamDisplayName, awayTeamDisplayName]);
 
   const isIndividualSport = useMemo(() => {
     const s = (matchData?.sport_type || '').toLowerCase();
@@ -570,7 +607,7 @@ export const ScoresheetMatch: React.FC = () => {
         ],
         home_score: homeScore,
         away_score: awayScore,
-        game_result: homeScore >= awayScore ? 'WIN' : 'LOSE',
+        game_result: dynamicMatchResult.homeResult,
         notes: finalNotes,
       } as any).catch(() => {});
 
@@ -1039,29 +1076,43 @@ export const ScoresheetMatch: React.FC = () => {
 
               {/* Scoreboard Box with dynamic sums */}
               {!isIndividualSport ? (
-                <div style={styles.scoreboardTile}>
-                  <div style={styles.scoreTeamBlock}>
-                    <span style={styles.scoreTeamLabel}>{homeTeamDisplayName}</span>
-                    <span style={styles.scoreValue}>{homeScore}</span>
-                    {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
-                      <span style={homeScore >= awayScore ? styles.badgeWin : styles.badgeLose}>
-                        {homeScore >= awayScore ? 'WIN' : 'LOSE'}
-                      </span>
-                    ) : (
-                      <span style={styles.unplayedBadge}>UNPLAYED</span>
-                    )}
+                <div style={{ ...styles.scoreboardTile, flexDirection: 'column', padding: '10px 20px', gap: '8px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 800, color: '#0B132B' }}>
+                    <Trophy style={{ width: 11, height: 11, color: '#F59E0B' }} />
+                    <span>{dynamicMatchResult.summary}</span>
+                    <span style={{ color: '#94A3B8' }}>•</span>
+                    <span style={{ color: '#0B132B' }}>FINAL: {dynamicMatchResult.finalScore}</span>
                   </div>
-                  <span style={styles.scoreDivider}>-</span>
-                  <div style={styles.scoreTeamBlock}>
-                    <span style={styles.scoreTeamLabel}>{awayTeamDisplayName}</span>
-                    <span style={styles.scoreValue}>{awayScore}</span>
-                    {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
-                      <span style={awayScore > homeScore ? styles.badgeWin : styles.badgeLose}>
-                        {awayScore > homeScore ? 'WIN' : 'LOSE'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div style={styles.scoreTeamBlock}>
+                      <span style={styles.scoreTeamLabel}>{homeTeamDisplayName}</span>
+                      <span style={styles.scoreValue}>{homeScore}</span>
+                      <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', marginTop: '-4px', marginBottom: '4px' }}>
+                        {isVolleyball ? 'PTS' : isSoccer ? 'GOALS' : 'PTS'}
                       </span>
-                    ) : (
-                      <span style={styles.unplayedBadge}>UNPLAYED</span>
-                    )}
+                      {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
+                        <span style={dynamicMatchResult.homeResult === 'WIN' ? styles.badgeWin : dynamicMatchResult.homeResult === 'DRAW' ? styles.badgeDraw : styles.badgeLose}>
+                          {dynamicMatchResult.homeResult}
+                        </span>
+                      ) : (
+                        <span style={styles.unplayedBadge}>UNPLAYED</span>
+                      )}
+                    </div>
+                    <span style={styles.scoreDivider}>-</span>
+                    <div style={styles.scoreTeamBlock}>
+                      <span style={styles.scoreTeamLabel}>{awayTeamDisplayName}</span>
+                      <span style={styles.scoreValue}>{awayScore}</span>
+                      <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', marginTop: '-4px', marginBottom: '4px' }}>
+                        {isVolleyball ? 'PTS' : isSoccer ? 'GOALS' : 'PTS'}
+                      </span>
+                      {homeScore > 0 || awayScore > 0 || homeRoster.length > 0 || awayRoster.length > 0 ? (
+                        <span style={dynamicMatchResult.awayResult === 'WIN' ? styles.badgeWin : dynamicMatchResult.awayResult === 'DRAW' ? styles.badgeDraw : styles.badgeLose}>
+                          {dynamicMatchResult.awayResult}
+                        </span>
+                      ) : (
+                        <span style={styles.unplayedBadge}>UNPLAYED</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (

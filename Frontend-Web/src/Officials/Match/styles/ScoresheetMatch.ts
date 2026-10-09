@@ -145,6 +145,16 @@ export const styles: Record<string, React.CSSProperties> = {
     borderRadius: '3px',
     textTransform: 'uppercase',
   },
+  badgeDraw: {
+    backgroundColor: '#F59E0B',
+    color: '#FFFFFF',
+    fontSize: '10px',
+    fontWeight: 800,
+    letterSpacing: '0.05em',
+    padding: '3px 10px',
+    borderRadius: '3px',
+    textTransform: 'uppercase',
+  },
   unplayedBadge: {
     backgroundColor: '#E2E8F0',
     color: '#64748B',
