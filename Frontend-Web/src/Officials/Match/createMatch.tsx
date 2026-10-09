@@ -16,6 +16,7 @@ import {
   X,
   FileText,
   Trophy,
+  Layers,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -62,6 +63,335 @@ const buildCreateSportsList = (rawSports?: any[]): string[] => {
   return sports.length > 0 ? sports : ['Basketball', 'Track & Field', 'Swimming'];
 };
 
+export interface ParsedMatchItem {
+  index: number;
+  fileName: string;
+  sport: string;
+  homeTeam: string;
+  awayTeam: string;
+  gameName: string;
+  homeRoster: BoxScoreRow[];
+  awayRoster: BoxScoreRow[];
+  raceResults: RaceResultRow[];
+  scoresheetUrl?: string;
+  ocrDetectedTeamScores: Array<{ team: string; score: number }>;
+  ocrFinalScoreStr: string;
+  isSaved?: boolean;
+}
+
+const isContinuationScoresheets = (matches: any[]): boolean => {
+  if (!matches || matches.length <= 1) return true;
+
+  const getSport = (m: any) =>
+    String(m.match_info?.sport_type || m.match_info?.sport || m.sport_type || '').trim().toLowerCase();
+  const getHome = (m: any) =>
+    String(m.match_info?.home_team_name || m.match_info?.home_team || m.team_name || m.team_scores?.[0]?.team || '').trim().toLowerCase();
+  const getAway = (m: any) =>
+    String(m.match_info?.opponent_team_name || m.match_info?.away_team || m.opponent_team_name || m.team_scores?.[1]?.team || '').trim().toLowerCase();
+
+  const firstSport = getSport(matches[0]);
+  const firstHome = getHome(matches[0]);
+  const firstAway = getAway(matches[0]);
+
+  return matches.slice(1).every((m) => {
+    const fileName = String(m.file_name || m.name || '').toLowerCase();
+    const isExplicit = fileName.includes('part2') || fileName.includes('half2') || fileName.includes('2nd_half') || fileName.includes('continuation') || fileName.includes('page2') || fileName.includes('set2') || fileName.includes('set3');
+    if (isExplicit) return true;
+
+    const mSport = getSport(m);
+    if (firstSport && mSport && firstSport !== mSport) return false;
+
+    const mHome = getHome(m);
+    const mAway = getAway(m);
+
+    const isGeneric = (name: string) => !name || name.startsWith('team') || name.startsWith('delegation');
+    if (!isGeneric(firstHome) && !isGeneric(mHome)) {
+      const matchHome = firstHome === mHome || firstHome.includes(mHome) || mHome.includes(firstHome);
+      const matchAway = !firstAway || !mAway || firstAway === mAway || firstAway.includes(mAway) || mAway.includes(firstAway);
+      return matchHome || matchAway;
+    }
+
+    if ((fileName.includes('match') || fileName.includes('game')) && !fileName.includes('part') && !fileName.includes('half')) {
+      return false;
+    }
+
+    return false;
+  });
+};
+
+const extractMatchDetails = (
+  matchData: any,
+  fallbackIndex: number,
+  fallbackFileName: string,
+  sportsCatalog: string[],
+  initialHomeName?: string,
+  initialAwayName?: string
+): ParsedMatchItem => {
+  const matchInfo = matchData?.match_info || matchData || {};
+  let rawSport = String(
+    matchInfo.sport_type ||
+    matchInfo.sport ||
+    matchData?.sport_type ||
+    matchData?.sport ||
+    ''
+  ).toUpperCase();
+
+  const fn = fallbackFileName.toLowerCase();
+  if (fn.includes('volley')) rawSport = 'VOLLEYBALL';
+  else if (fn.includes('swim')) rawSport = 'SWIMMING';
+  else if (fn.includes('track') || fn.includes('field') || fn.includes('run')) rawSport = 'TRACK AND FIELD';
+  else if (fn.includes('pickle')) rawSport = 'PICKLEBALL';
+  else if (fn.includes('bball') || fn.includes('basket')) rawSport = 'BASKETBALL';
+
+  let resolvedSport = rawSport || 'BASKETBALL';
+  if (rawSport) {
+    const norm = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const detectedNorm = norm(rawSport);
+    const matched = sportsCatalog.find((s) => {
+      const sNorm = norm(s);
+      return sNorm === detectedNorm || detectedNorm.includes(sNorm) || sNorm.includes(detectedNorm);
+    });
+    if (matched) resolvedSport = matched;
+  }
+
+  const isInd =
+    resolvedSport.toLowerCase().includes('track') ||
+    resolvedSport.toLowerCase().includes('swim') ||
+    resolvedSport.toLowerCase().includes('field');
+
+  const rawPlayers: any[] = Array.isArray(matchData?.player_summary)
+    ? matchData.player_summary
+    : Array.isArray(matchData?.parsed_tables?.player_summary)
+    ? matchData.parsed_tables.player_summary
+    : [];
+
+  const teamScoresArr: any[] = Array.isArray(matchData?.team_scores)
+    ? matchData.team_scores
+    : Array.isArray(matchData?.parsed_tables?.team_scores)
+    ? matchData.parsed_tables.team_scores
+    : [];
+
+  const ocrDetectedTeamScores = teamScoresArr.map((t: any) => ({
+    team: String(t.team || t.team_name || '').trim().toUpperCase(),
+    score: Number(t.score || 0),
+  }));
+
+  const ocrFinalScoreStr = String(matchInfo.final_score || matchData.final_score || '').trim();
+
+  const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
+  const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
+
+  const firstPlayerTeam = rawPlayers.find((p: any) => p.team_name || p.team)?.team_name || rawPlayers[0]?.team;
+  const secondPlayerTeam = rawPlayers.find((p: any) => {
+    const t = p.team_name || p.team;
+    return t && String(t).toUpperCase() !== String(firstPlayerTeam).toUpperCase();
+  })?.team_name;
+
+  const detectedHome = String(
+    matchInfo.home_team_name ||
+    matchInfo.home_team ||
+    homeScoreItem?.team ||
+    teamScoresArr[0]?.team ||
+    firstPlayerTeam ||
+    ''
+  ).trim().toUpperCase();
+
+  const detectedAway = String(
+    matchInfo.opponent_team_name ||
+    matchInfo.away_team ||
+    awayScoreItem?.team ||
+    teamScoresArr[1]?.team ||
+    secondPlayerTeam ||
+    ''
+  ).trim().toUpperCase();
+
+  const finalHomeTeam = detectedHome && detectedHome !== 'HOME TEAM' ? detectedHome : (initialHomeName && initialHomeName !== 'ASD' ? initialHomeName : `TEAM ${(fallbackIndex * 2) + 1}`);
+  const finalAwayTeam = detectedAway && detectedAway !== 'AWAY TEAM' && detectedAway !== finalHomeTeam
+    ? detectedAway
+    : (initialAwayName && initialAwayName !== 'ASD' && initialAwayName !== finalHomeTeam ? initialAwayName : `TEAM ${(fallbackIndex * 2) + 2}`);
+
+  let raceResults: RaceResultRow[] = [];
+  let hRows: BoxScoreRow[] = [];
+  let aRows: BoxScoreRow[] = [];
+
+  const isVolleyball = resolvedSport.toLowerCase().includes('volley');
+  const isSoccer = resolvedSport.toLowerCase().includes('soccer') || resolvedSport.toLowerCase().includes('football');
+
+  if (isInd) {
+    const rawRaces: any[] = Array.isArray(matchData?.race_results)
+      ? matchData.race_results
+      : Array.isArray(matchData?.parsed_tables?.race_results)
+      ? matchData.parsed_tables.race_results
+      : [];
+
+    if (rawRaces.length > 0) {
+      raceResults = rawRaces.map((r: any, idx: number) => ({
+        placement_rank: String(r.rank || r.placement_rank || idx + 1),
+        athlete_name: String(r.athlete_name || r.name || `Athlete ${idx + 1}`).toUpperCase(),
+        team_name: r.team_name || r.team || `Delegation ${(idx % 2) + 1}`,
+        distance: r.distance || r.event || '100m',
+        finish_time: r.finish_time || r.time || '00:58.21',
+        split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || '28.12 / 30.30')],
+        efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
+        is_disqualified: Boolean(r.is_disqualified),
+      }));
+    } else if (rawPlayers.length > 0) {
+      raceResults = rawPlayers.map((p: any, idx: number) => ({
+        placement_rank: String(idx + 1),
+        athlete_name: String(p.player_name || `Athlete ${idx + 1}`).toUpperCase(),
+        team_name: p.team_name || p.team || `Delegation ${(idx % 2) + 1}`,
+        distance: p.event || 'Event 1',
+        finish_time: p.finish_time || p.time || '00:59.00',
+        split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || 'N/A')],
+        efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || 100)) || 100,
+        is_disqualified: false,
+      }));
+    }
+  } else {
+    const totalPlayers = rawPlayers.length;
+    const halfCount = Math.ceil(totalPlayers / 2);
+
+    rawPlayers.forEach((p: any, idx: number) => {
+      const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
+      let isHome = false;
+      if (rawTeam) {
+        if (rawTeam === finalHomeTeam || rawTeam.includes(finalHomeTeam) || finalHomeTeam.includes(rawTeam)) {
+          isHome = true;
+        } else if (rawTeam === finalAwayTeam || rawTeam.includes(finalAwayTeam) || finalAwayTeam.includes(rawTeam)) {
+          isHome = false;
+        } else {
+          isHome = idx < halfCount;
+        }
+      } else {
+        isHome = idx < halfCount;
+      }
+
+      const jersey = p.jersey_number !== undefined && p.jersey_number !== null
+        ? String(p.jersey_number).padStart(2, '0')
+        : String(idx + 1).padStart(2, '0');
+
+      const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
+
+      const kills = Number(p.kills ?? p.k ?? 0);
+      const attack_errors = Number(p.attack_errors ?? p.attack_error ?? p.e ?? 0);
+      const attack_attempts = Number(p.attack_attempts ?? p.total_attacks ?? p.ta ?? p.attempts ?? 0);
+      const hitting_pct = p.hitting_pct || p.attack_pct || p.pct || (attack_attempts > 0 ? ((kills - attack_errors) / attack_attempts).toFixed(3) : '.000');
+      const service_aces = Number(p.service_aces ?? p.aces ?? p.sa ?? p.steals ?? p.stl ?? 0);
+      const digs = Number(p.digs ?? p.dig ?? p.rebounds ?? p.reb ?? 0);
+      const blk = Number(p.blocks ?? p.blk ?? p.total_blocks ?? p.tb ?? p.block_points ?? 0);
+      const ast = Number(p.assists ?? p.ast ?? p.sets ?? 0);
+
+      const goals = Number(p.goals ?? p.g ?? 0);
+      const shots = Number(p.shots ?? p.sh ?? 0);
+      const shots_on_target = Number(p.shots_on_target ?? p.sot ?? 0);
+      const saves = Number(p.saves ?? p.sv ?? 0);
+      const tackles = Number(p.tackles ?? p.tck ?? 0);
+
+      const fga = Number(p.fg_attempted || p.fga || 0);
+      const fgm = Number(p.fg_made || p.fgm || 0);
+      let fgPct = '0.0%';
+      if (p.fg_pct || p.fg_percentage) {
+        const raw = String(p.fg_pct || p.fg_percentage).trim();
+        fgPct = raw.endsWith('%') ? raw : `${raw}%`;
+      } else if (p.true_shooting_pct) {
+        const val = parseFloat(String(p.true_shooting_pct).replace('%', ''));
+        fgPct = !isNaN(val) ? `${Math.round(val)}%` : '0.0%';
+      } else if (fga > 0) {
+        fgPct = `${Math.round((fgm / fga) * 100)}%`;
+      }
+
+      let threePct = '0.0%';
+      const tpa = Number(p.three_attempted || p.three_p_attempted || p.three_p_attempts || p.tpa || p['3pa'] || 0);
+      const tpm = Number(p.three_made || p.three_p_made || p.tpm || p['3pm'] || 0);
+      if (p.three_p_pct || p.three_pct || p['3p_pct']) {
+        const raw = String(p.three_p_pct || p.three_pct || p['3p_pct']).trim();
+        threePct = raw.endsWith('%') ? raw : `${raw}%`;
+      } else if (tpa > 0) {
+        threePct = `${Math.round((tpm / tpa) * 100)}%`;
+      }
+
+      let ftPct = '0.0%';
+      const fta = Number(p.ft_attempted || p.ft_attempts || p.fta || 0);
+      const ftm = Number(p.ft_made || p.ftm || 0);
+      if (p.ft_pct || p.ft_percentage) {
+        const raw = String(p.ft_pct || p.ft_percentage).trim();
+        ftPct = raw.endsWith('%') ? raw : `${raw}%`;
+      } else if (fta > 0) {
+        ftPct = `${Math.round((ftm / fta) * 100)}%`;
+      }
+
+      let pts = Number(p.points ?? p.pts ?? 0);
+      if (pts === 0) {
+        if (kills > 0 || service_aces > 0 || blk > 0) {
+          pts = kills + service_aces + blk;
+        } else if (goals > 0) {
+          pts = goals;
+        } else if (fgm > 0 || ftm > 0) {
+          pts = (fgm * 2) + ftm + tpm;
+        }
+      }
+
+      const defaultPos = isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G';
+
+      const row: BoxScoreRow = {
+        jersey_no: jersey,
+        player_name: fullName,
+        position: p.position || defaultPos,
+        minutes: String(p.minutes || p.min || '0'),
+        pts,
+        reb: Number(p.rebounds ?? p.reb ?? 0),
+        ast,
+        stl: Number(p.steals ?? p.stl ?? 0),
+        blk,
+        fg_pct: fgPct,
+        three_p_pct: threePct,
+        ft_pct: ftPct,
+        kills,
+        attack_errors,
+        attack_attempts,
+        hitting_pct,
+        service_aces,
+        digs,
+        goals,
+        shots,
+        shots_on_target,
+        saves,
+        tackles,
+      };
+
+      if (isHome) {
+        hRows.push(row);
+      } else {
+        aRows.push(row);
+      }
+    });
+
+    if (hRows.length === 0 && aRows.length >= 2) {
+      const half = Math.ceil(aRows.length / 2);
+      hRows.push(...aRows.splice(0, half));
+    } else if (aRows.length === 0 && hRows.length >= 2) {
+      const half = Math.ceil(hRows.length / 2);
+      aRows.push(...hRows.splice(half));
+    }
+  }
+
+  return {
+    index: fallbackIndex,
+    fileName: fallbackFileName,
+    sport: resolvedSport,
+    homeTeam: finalHomeTeam,
+    awayTeam: finalAwayTeam,
+    gameName: `${finalHomeTeam} vs ${finalAwayTeam}`,
+    homeRoster: hRows,
+    awayRoster: aRows,
+    raceResults,
+    scoresheetUrl: matchData?.scoresheet_url,
+    ocrDetectedTeamScores,
+    ocrFinalScoreStr,
+    isSaved: false,
+  };
+};
+
 export const CreateMatch: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +432,10 @@ export const CreateMatch: React.FC = () => {
   const [homeRoster, setHomeRoster] = useState<BoxScoreRow[]>([]);
   const [awayRoster, setAwayRoster] = useState<BoxScoreRow[]>([]);
   const [raceResults, setRaceResults] = useState<RaceResultRow[]>([]);
+
+  // Batch Matches State (When multiple scoresheets uploaded are separate matches, aligned with mobile)
+  const [parsedMatches, setParsedMatches] = useState<ParsedMatchItem[]>([]);
+  const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
 
   // Status & Modal Interruption State
   const [submitting, setSubmitting] = useState(false);
@@ -280,9 +614,77 @@ export const CreateMatch: React.FC = () => {
     }).catch(() => {});
   }, [navigate]);
 
+  const loadMatchIntoState = useCallback((target: ParsedMatchItem) => {
+    setSportCategory(target.sport);
+    setHomeTeam(target.homeTeam);
+    setAwayTeam(target.awayTeam);
+    setTeams([target.homeTeam, target.awayTeam]);
+    setGameName(target.gameName);
+    setHomeRoster(target.homeRoster);
+    setAwayRoster(target.awayRoster);
+    setRaceResults(target.raceResults);
+    setOcrDetectedTeamScores(target.ocrDetectedTeamScores);
+    setOcrFinalScoreStr(target.ocrFinalScoreStr || null);
+    if (target.scoresheetUrl) {
+      setScoresheetUrl(target.scoresheetUrl);
+    }
+  }, []);
+
+  const handleSwitchMatch = useCallback((newIdx: number) => {
+    if (newIdx === activeMatchIndex || newIdx < 0 || newIdx >= parsedMatches.length) return;
+    setParsedMatches((prev) => {
+      const next = [...prev];
+      if (next[activeMatchIndex]) {
+        next[activeMatchIndex] = {
+          ...next[activeMatchIndex],
+          sport: sportCategory,
+          homeTeam,
+          awayTeam,
+          gameName,
+          homeRoster,
+          awayRoster,
+          raceResults,
+          ocrDetectedTeamScores,
+          ocrFinalScoreStr: ocrFinalScoreStr || '',
+          scoresheetUrl,
+        };
+      }
+      return next;
+    });
+
+    const target = parsedMatches[newIdx];
+    if (target) {
+      loadMatchIntoState(target);
+      setActiveMatchIndex(newIdx);
+      if (selectedFiles[target.index]) {
+        setSelectedFile(selectedFiles[target.index]);
+        try {
+          setLocalPreviewUrl(URL.createObjectURL(selectedFiles[target.index]));
+        } catch {}
+      }
+    }
+  }, [
+    activeMatchIndex,
+    parsedMatches,
+    sportCategory,
+    homeTeam,
+    awayTeam,
+    gameName,
+    homeRoster,
+    awayRoster,
+    raceResults,
+    ocrDetectedTeamScores,
+    ocrFinalScoreStr,
+    scoresheetUrl,
+    selectedFiles,
+    loadMatchIntoState,
+  ]);
+
   // Scan for 1 or more file OCR
   const processFiles = async (inputFiles: File[]) => {
     if (inputFiles.length === 0) {
+      setParsedMatches([]);
+      setActiveMatchIndex(0);
       setSelectedFile(null);
       setSelectedFiles([]);
       setLocalPreviewUrl(null);
@@ -319,6 +721,38 @@ export const CreateMatch: React.FC = () => {
       if (ocrRes?.scoresheet_url) {
         setScoresheetUrl(ocrRes.scoresheet_url);
       }
+
+      const subMatches = Array.isArray(ocrRes?.matches)
+        ? ocrRes.matches
+        : (Array.isArray(ocrRes?.pages) ? ocrRes.pages : []);
+
+      const isContinuation = ocrRes?.is_continuation !== undefined
+        ? Boolean(ocrRes.is_continuation)
+        : isContinuationScoresheets(subMatches);
+
+      if (subMatches.length > 1 && !isContinuation) {
+        // Distinct separate matches: separate them into tabs just like in mobile!
+        const separated: ParsedMatchItem[] = subMatches.map((m: any, idx: number) =>
+          extractMatchDetails(
+            m,
+            idx,
+            inputFiles[idx]?.name || m.file_name || `Scoresheet ${idx + 1}`,
+            sportsList,
+            homeTeam,
+            awayTeam
+          )
+        );
+        setParsedMatches(separated);
+        setActiveMatchIndex(0);
+        if (separated[0]) {
+          loadMatchIntoState(separated[0]);
+        }
+        setOcrCompleted(true);
+        return;
+      }
+
+      setParsedMatches([]);
+      setActiveMatchIndex(0);
 
       // Check detected sport against available database sports catalog
       let rawSport = String(
@@ -702,6 +1136,8 @@ export const CreateMatch: React.FC = () => {
   };
 
   const handleRemoveAllFiles = () => {
+    setParsedMatches([]);
+    setActiveMatchIndex(0);
     setOcrDetectedTeamScores([]);
     setOcrFinalScoreStr(null);
     processFiles([]);
@@ -1121,6 +1557,16 @@ export const CreateMatch: React.FC = () => {
         try {
           localStorage.setItem(`atleta_match_detail_${cleanMatchId}`, JSON.stringify(cachedDetail));
         } catch {}
+      }
+
+      if (parsedMatches.length > 1) {
+        setParsedMatches((prev) => {
+          const next = [...prev];
+          if (next[activeMatchIndex]) {
+            next[activeMatchIndex] = { ...next[activeMatchIndex], isSaved: true };
+          }
+          return next;
+        });
       }
 
       setCreatedMatchInfo({
@@ -2110,7 +2556,96 @@ export const CreateMatch: React.FC = () => {
                       Extracting statistics from uploaded scoresheet...
                     </p>
                   </div>
-                ) : isIndividualSport ? (
+                ) : (
+                  <>
+                    {/* BATCH MATCHES SWITCHER TAB BAR (If multiple matches were uploaded) */}
+                    {parsedMatches.length > 1 && (
+                      <div
+                        style={{
+                          marginBottom: '18px',
+                          backgroundColor: '#0E1626',
+                          borderRadius: '8px',
+                          padding: '12px 16px',
+                          border: '1.5px solid #1E293B',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '10px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Layers style={{ width: 15, height: 15, color: '#00C8FF' }} />
+                            <span
+                              style={{
+                                color: '#00C8FF',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                letterSpacing: '1.2px',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              UPLOADED MATCHES ({parsedMatches.length} SEPARATED)
+                            </span>
+                          </div>
+                          <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 700 }}>
+                            Match {activeMatchIndex + 1} of {parsedMatches.length}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {parsedMatches.map((m, idx) => {
+                            const isSelected = idx === activeMatchIndex;
+                            const mSport = (m.sport || 'MATCH').toUpperCase();
+                            const mHome = (m.homeTeam || 'TEAM 1').trim();
+                            const mAway = (m.awayTeam || 'TEAM 2').trim();
+                            const homeLabel = mHome.length > 12 ? `${mHome.slice(0, 10)}..` : mHome;
+                            const awayLabel = mAway.length > 12 ? `${mAway.slice(0, 10)}..` : mAway;
+                            const label = `M${idx + 1}: ${mSport.slice(0, 3)} • ${homeLabel} vs ${awayLabel}`;
+
+                            return (
+                              <button
+                                key={`match_tab_${idx}`}
+                                type="button"
+                                onClick={() => handleSwitchMatch(idx)}
+                                style={{
+                                  flex: '1 1 200px',
+                                  maxWidth: '360px',
+                                  padding: '10px 14px',
+                                  borderRadius: '6px',
+                                  backgroundColor: isSelected ? '#00C8FF' : '#131E32',
+                                  border: `1.5px solid ${isSelected ? '#00C8FF' : '#1E293B'}`,
+                                  color: isSelected ? '#070D19' : '#FFFFFF',
+                                  fontWeight: isSelected ? 800 : 700,
+                                  fontSize: '12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                {m.isSaved ? (
+                                  <CheckCircle2 style={{ width: 14, height: 14, color: isSelected ? '#070D19' : '#10B981' }} />
+                                ) : isSelected ? (
+                                  <CheckCircle2 style={{ width: 14, height: 14, color: '#070D19' }} />
+                                ) : (
+                                  <FileText style={{ width: 14, height: 14, color: '#94A3B8' }} />
+                                )}
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {label}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {isIndividualSport ? (
                   <>
                     {/* Dynamic Timed Event Header */}
                     <div
@@ -2345,6 +2880,8 @@ export const CreateMatch: React.FC = () => {
                     {renderTeamBoxScoreTable('away', awayTeam, awayRoster)}
                   </>
                 )}
+                  </>
+                )}
               </div>
             )}
 
@@ -2501,6 +3038,46 @@ export const CreateMatch: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {parsedMatches.length > 1 && parsedMatches.some((m) => !m.isSaved) && (
+              <div style={{ marginBottom: '16px', width: '100%' }}>
+                {(() => {
+                  const nextUnsavedIdx = parsedMatches.findIndex((m, i) => !m.isSaved && i !== activeMatchIndex);
+                  const targetIdx = nextUnsavedIdx !== -1 ? nextUnsavedIdx : parsedMatches.findIndex((m) => !m.isSaved);
+                  if (targetIdx === -1) return null;
+                  const targetMatch = parsedMatches[targetIdx];
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreatedMatchInfo(null);
+                        handleSwitchMatch(targetIdx);
+                      }}
+                      className="hover-btn-solid"
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#00C8FF',
+                        color: '#070D19',
+                        padding: '12px 16px',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        letterSpacing: '0.04em',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <Layers style={{ width: 15, height: 15 }} />
+                      <span>CONTINUE TO MATCH {targetIdx + 1}: {(targetMatch.sport || 'SPORT').toUpperCase()} • {targetMatch.homeTeam} VS {targetMatch.awayTeam}</span>
+                      <span>→</span>
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
 
             <div style={styles.modalActions}>
               <button
