@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
     View,
     Text,
@@ -154,6 +154,8 @@ interface OCRoutputProps {
 const DEFAULT_RAW_BASKETBALL_OCR: RawOCRDetectedData = {
     team_name: "",
     opponent_team_name: "",
+    final_score: "",
+    game_result: "",
     sport_type: "BASKETBALL",
     teams: [],
     team_scores: [],
@@ -185,9 +187,21 @@ export function OCRoutput({
     const insets = useSafeAreaInsets();
     const headerTopPadding = Math.max(insets.top, 16) + 10;
 
-    // Batch Matches Support: If multiple matches exist, allow switching between them
+    // Batch Matches Support: Only separate if different distinct sports/matches were intentionally provided
     const matchesList: RawOCRDetectedData[] = useMemo(() => {
-        if (Array.isArray(rawOCRData.batch_matches) && rawOCRData.batch_matches.length > 0) {
+        if (Array.isArray(rawOCRData.batch_matches) && rawOCRData.batch_matches.length > 1) {
+            // If all batch matches belong to the same sport & same teams (e.g. 1st half & 2nd half parts), consolidate into single match
+            const firstSport = (rawOCRData.batch_matches[0].sport_type || "").toUpperCase();
+            const firstHome = (rawOCRData.batch_matches[0].team_name || "").toUpperCase();
+            const allSameMatch = rawOCRData.batch_matches.every(
+                (m) =>
+                    (m.sport_type || "").toUpperCase() === firstSport &&
+                    (m.team_name || "").toUpperCase() === firstHome
+            );
+
+            if (allSameMatch) {
+                return [rawOCRData];
+            }
             return rawOCRData.batch_matches;
         }
         return [rawOCRData];
@@ -209,6 +223,14 @@ export function OCRoutput({
         });
         return init;
     });
+
+    useEffect(() => {
+        const updated: Record<number, DetectedAthleteStat[]> = {};
+        matchesList.forEach((m, idx) => {
+            updated[idx] = m.athlete_overview || [];
+        });
+        setAthleteStatsMap(updated);
+    }, [matchesList]);
 
     const athleteStats = athleteStatsMap[activeMatchIndex] || currentActiveMatch.athlete_overview || [];
 
@@ -370,9 +392,10 @@ export function OCRoutput({
         }
 
         // Basketball & Other Sports
-        let pts = teamAthletes.reduce((s, p) => s + Number(p.pts || 0), 0);
+        const athleteSum = teamAthletes.reduce((s, p) => s + Number(p.pts || 0), 0);
+        let pts = athleteSum;
         if (found && found.score !== undefined && found.score !== null && !isNaN(Number(found.score))) {
-            pts = Number(found.score);
+            pts = Math.max(Number(found.score), athleteSum);
         }
         return {
             primary: `${pts} PTS`,
@@ -605,11 +628,9 @@ export function OCRoutput({
                     <View style={styles.scoreboardCard}>
                         <View style={styles.scoreboardHeader}>
                             <Text style={styles.scoreboardTitle}>{scoreboardTitleText}</Text>
-                            {currentActiveMatch.final_score ? (
-                                <Text style={{ color: "#00C8FF", fontSize: 12, fontWeight: "800" }}>
-                                    FINAL: {currentActiveMatch.final_score}
-                                </Text>
-                            ) : null}
+                            <Text style={{ color: "#00C8FF", fontSize: 12, fontWeight: "800" }}>
+                                FINAL: {currentActiveMatch.final_score || `${getDynamicTeamScore(homeTeamDisplay).primary.replace(/[^0-9]/g, '') || '0'} - ${getDynamicTeamScore(awayTeamDisplay).primary.replace(/[^0-9]/g, '') || '0'}`}
+                            </Text>
                         </View>
                         <View style={styles.scoreboardMatchScore}>
                             <View style={styles.teamScoreBox}>

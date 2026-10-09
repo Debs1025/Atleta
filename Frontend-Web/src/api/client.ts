@@ -16,9 +16,13 @@ import type {
   CreateSportPayload,
 } from './types';
 
+export const DEPLOYED_BACKEND_URL = 'https://atleta-backend.vercel.app/api/v1';
+
 const envApi = (import.meta.env.VITE_ATLETA_API || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '') as string;
 const rawBase = (envApi && envApi.trim() ? envApi.trim() : '').replace(/\/+$/, '');
-export const BASE_URL = rawBase.endsWith('/api/v1') ? rawBase : rawBase ? `${rawBase}/api/v1` : '/api/v1';
+export const BASE_URL = rawBase
+  ? (rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`)
+  : DEPLOYED_BACKEND_URL;
 
 const TOKEN_KEY = 'atleta_official_token';
 const USER_KEY = 'atleta_official_user';
@@ -554,7 +558,7 @@ export const getCoachNameById = async (coachIdOrName: string): Promise<string> =
 export const getOfficialSchedules = async (month?: number, year?: number, forceRefresh = false): Promise<OfficialScheduleItem[]> => {
   const cacheKey = `official_schedules_${month ?? 'all'}_${year ?? 'all'}`;
   const cached = getCachedData<OfficialScheduleItem[]>(cacheKey);
-  if (cached && Array.isArray(cached) && !forceRefresh) return cached;
+  if (cached && Array.isArray(cached) && cached.length > 0 && !forceRefresh) return cached;
 
   const token = getStoredToken();
   const params = new URLSearchParams();
@@ -619,15 +623,41 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
     const isMine = isMatchCreatedByOfficial(m, userMe);
     if (!isMine) continue;
 
-    const dateStr = raw.match_date || (m as any).match_date || (m as any).scheduled_time || raw.timestamp || new Date().toISOString();
-    const d = new Date(dateStr);
-    const mMonth = !isNaN(d.getTime()) ? d.getMonth() + 1 : undefined;
-    const mYear = !isNaN(d.getTime()) ? d.getFullYear() : undefined;
-    const uMonth = !isNaN(d.getTime()) ? d.getUTCMonth() + 1 : undefined;
-    const uYear = !isNaN(d.getTime()) ? d.getUTCFullYear() : undefined;
+    let dateStr = raw.match_date || raw.timestamp || raw.requested_at || (m as any).match_date || (m as any).scheduled_time || (m as any).date_time || '';
+    let d = new Date(dateStr);
+    if (isNaN(d.getTime()) && typeof dateStr === 'string' && dateStr) {
+      d = new Date(dateStr.replace(/\s*\/\s*/g, ' ').trim());
+    }
 
-    const monthMatches = month === undefined || mMonth === month || uMonth === month || (typeof dateStr === 'string' && dateStr.includes(`-${String(month).padStart(2, '0')}-`));
-    const yearMatches = year === undefined || mYear === year || uYear === year || (typeof dateStr === 'string' && dateStr.includes(String(year)));
+    const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    let mMonth = !isNaN(d.getTime()) ? d.getMonth() + 1 : undefined;
+    let mYear = !isNaN(d.getTime()) ? d.getFullYear() : undefined;
+    let uMonth = !isNaN(d.getTime()) ? d.getUTCMonth() + 1 : undefined;
+    let uYear = !isNaN(d.getTime()) ? d.getUTCFullYear() : undefined;
+
+    if (mMonth === undefined && typeof dateStr === 'string') {
+      const upper = dateStr.toUpperCase();
+      MONTH_NAMES.forEach((mName, idx) => {
+        if (upper.includes(mName)) mMonth = idx + 1;
+      });
+      const yearMatch = upper.match(/\b(20\d\d)\b/);
+      if (yearMatch) mYear = Number(yearMatch[1]);
+    }
+
+    const targetMonthName = month !== undefined && month >= 1 && month <= 12 ? MONTH_NAMES[month - 1] : '';
+    const monthMatches = month === undefined ||
+      mMonth === month ||
+      uMonth === month ||
+      (typeof dateStr === 'string' && (
+        dateStr.includes(`-${String(month).padStart(2, '0')}-`) ||
+        (Boolean(targetMonthName) && dateStr.toUpperCase().includes(targetMonthName))
+      ));
+
+    const yearMatches = year === undefined ||
+      mYear === undefined ||
+      mYear === year ||
+      uYear === year ||
+      (typeof dateStr === 'string' && dateStr.includes(String(year)));
 
     if (!monthMatches || !yearMatches) continue;
 
@@ -646,6 +676,7 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
           : [];
 
     const resolvedOffId = raw.official_id || raw.requested_by || (isMine ? (userMe?.uid || '') : '');
+    const cleanScheduledTime = !isNaN(d.getTime()) ? d.toISOString() : dateStr;
 
     list.push({
       schedule_id: `sched_${rawId}`,
@@ -655,9 +686,9 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
       created_by: raw.created_by || (isMine ? (userMe?.uid || '') : ''),
       venue: venue,
       court_number: court,
-      scheduled_time: dateStr,
-      month: mMonth || uMonth,
-      year: mYear || uYear,
+      scheduled_time: cleanScheduledTime,
+      month: mMonth || uMonth || month,
+      year: mYear || uYear || year,
       sport: sport,
       home_team: home,
       away_team: away,
@@ -670,17 +701,15 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
         sport: sport,
         home_team: home,
         away_team: away,
-        time: dateStr,
+        time: cleanScheduledTime,
         coaches: resolvedCoaches.join(', '),
       },
-      raw_match: { ...raw, ...m, match_id: rawId, official_id: resolvedOffId, match_date: dateStr },
+      raw_match: { ...raw, ...m, match_id: rawId, official_id: resolvedOffId, match_date: cleanScheduledTime },
     });
     existingIds.add(rawId);
   }
 
-  const finalList = list.filter((s) => {
-    return isMatchCreatedByOfficial(s as any, userMe);
-  });
+  const finalList = list;
 
   setCachedData(cacheKey, finalList);
   return finalList;
@@ -811,16 +840,57 @@ export const isMatchLocallyCertified = (rawMatchId: string): boolean => {
   }
 };
 
+export const isMatchDeleted = (rawId: string): boolean => {
+  if (!rawId) return false;
+  try {
+    const cleanId = String(rawId).replace(/^#/, '');
+    const list: string[] = JSON.parse(localStorage.getItem('atleta_deleted_matches') || '[]');
+    return list.includes(cleanId);
+  } catch {
+    return false;
+  }
+};
+
+export const recordDeletedMatch = (rawId: string): void => {
+  if (!rawId) return;
+  try {
+    const cleanId = String(rawId).replace(/^#/, '');
+    const list: string[] = JSON.parse(localStorage.getItem('atleta_deleted_matches') || '[]');
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
+      localStorage.setItem('atleta_deleted_matches', JSON.stringify(list));
+    }
+    //Shows in recent activity the match was deleted
+  } catch { }
+};
+
 export const isMatchCreatedByOfficial = (
   item: import('./types').MatchSummaryItem,
   user: import('./types').AuthUser | null
 ): boolean => {
-  if (!user) return true;
-  const raw = item.raw_match || {};
-  const cleanId = String(item.match_id || raw.match_id || '').replace(/^#/, '');
+  const currentUser = user || getStoredUser();
+  if (!currentUser) return false;
 
-  // 1. Check locally tracked created & certified matches
-  const myUid = user.uid || (user as any).user_id;
+  const raw = item?.raw_match || {};
+  const cleanId = String(item?.match_id || raw.match_id || (item as any)?.id || '').replace(/^#/, '');
+  if (isMatchDeleted(cleanId)) return false;
+
+  const myUid = currentUser.uid || (currentUser as any).user_id || '';
+  const clean = (s: any) => String(s || '').trim().toLowerCase().replace(/^off_/, '');
+
+  // Reject coach-logged matches unless explicitly owned by official
+  const coachOwner = raw.logged_by_coach_id || raw.coach_id || (item as any)?.logged_by_coach_id;
+
+  const userIds = new Set([
+    currentUser.uid,
+    currentUser.user_id,
+    (currentUser as any).official_id,
+    currentUser.uid ? `off_${currentUser.uid.replace(/^off_/, '')}` : null,
+    currentUser.uid ? currentUser.uid.replace(/^off_/, '') : null,
+    currentUser.email,
+  ].filter(Boolean).map(clean) as string[]);
+
+  // 1. Check locally tracked matches created or certified by this official
   const createdIds = getOfficialCreatedMatchIds(myUid);
   const candidateIds = [
     cleanId,
@@ -828,7 +898,7 @@ export const isMatchCreatedByOfficial = (
     raw.validation_id ? String(raw.validation_id).replace(/^#/, '') : null,
     raw.audit_id ? String(raw.audit_id).replace(/^#/, '') : null,
     raw.reference_id ? String(raw.reference_id).replace(/^#/, '') : null,
-    (item as any).id ? String((item as any).id).replace(/^#/, '') : null,
+    (item as any)?.id ? String((item as any).id).replace(/^#/, '') : null,
   ].filter(Boolean) as string[];
 
   for (const cid of candidateIds) {
@@ -837,45 +907,44 @@ export const isMatchCreatedByOfficial = (
     }
   }
 
-  const clean = (s: any) => String(s || '').trim().toLowerCase().replace(/^off_/, '');
-
-  // 2. Check IDs for this official user (case-insensitive)
-  const userIds = [
-    user.uid,
-    user.user_id,
-    (user as any).official_id,
-    user.uid ? `off_${user.uid.replace(/^off_/, '')}` : null,
-    user.uid ? user.uid.replace(/^off_/, '') : null,
-    user.email,
-  ].filter(Boolean).map(clean) as string[];
-
-  // Candidate creator/official fields on the match record
-  const matchOwners = [
+  // 2. Check official_id directly on the match
+  const officialOwners = [
     raw.official_id,
-    raw.requested_by,
-    raw.created_by,
+    (item as any)?.official_id,
     raw.certified_by,
     raw.validated_by,
-    (item as any).official_id,
-    (item as any).requested_by,
-    (item as any).created_by,
+  ].filter(Boolean).map(clean) as string[];
+
+  for (const owner of officialOwners) {
+    if (owner && userIds.has(owner)) return true;
+  }
+
+  // If coach-logged and official_id did not match, exclude
+  if (coachOwner) return false;
+
+  // 3. Check requested_by / created_by ONLY if matching this official
+  const matchOwners = [
+    raw.requested_by,
+    raw.created_by,
+    (item as any)?.requested_by,
+    (item as any)?.created_by,
   ].filter(Boolean).map(clean) as string[];
 
   for (const owner of matchOwners) {
-    if (owner && userIds.includes(owner)) return true;
+    if (owner && userIds.has(owner)) return true;
   }
 
-  // 3. Check assigned_officials array if present
+  // 4. Check assigned officials array if present
   const assigned = (
     Array.isArray(raw.assigned_officials)
       ? raw.assigned_officials
-      : Array.isArray((item as any).assigned_officials)
+      : Array.isArray((item as any)?.assigned_officials)
         ? (item as any).assigned_officials
         : []
   ).map(clean) as string[];
 
   for (const off of assigned) {
-    if (off && userIds.includes(off)) return true;
+    if (off && userIds.has(off)) return true;
   }
 
   return false;
@@ -932,7 +1001,7 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         away_score: (payload as any).away_score,
         game_result: (payload as any).game_result,
         scoresheet_data: (payload as any).scoresheet_data,
-        notes: (payload as any).notes || `Official Match: ${home} vs ${away}`,
+        notes: (payload as any).notes || '',
       }),
     });
     if (!res.ok) {
@@ -1339,7 +1408,7 @@ export const getAuditMatches = async (
     pendingValidations.forEach((v) => parseMatchItem(v));
     allMatchesList.forEach((m) => parseMatchItem(m));
 
-    let items = Array.from(combinedMap.values());
+    let items = Array.from(combinedMap.values()).filter((item) => isMatchCreatedByOfficial(item, userMe));
 
     // Sort items chronologically by date/time
     items.sort((a, b) => {
@@ -1388,7 +1457,7 @@ export const getAllOfficialMatchesMaster = async (
   forceRefresh = false
 ): Promise<import('./types').MatchSummaryItem[]> => {
   const cached = getCachedData<import('./types').MatchSummaryItem[]>('all_official_matches_master');
-  if (cached && !forceRefresh) return cached;
+  if (cached && Array.isArray(cached) && cached.length > 0 && !forceRefresh) return cached;
   return getAuditMatches('ALL', 'ALL', forceRefresh);
 };
 
@@ -1399,6 +1468,43 @@ export const prefetchAllOfficialAuditMatches = async (): Promise<void> => {
   } catch (err) {
     console.warn('Background match prefetch failed:', err);
   }
+};
+
+// Load the data for official user
+export const warmOfficialAppCache = async (): Promise<void> => {
+  const token = getStoredToken();
+  if (!token) return;
+
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+
+  Promise.allSettled([
+    getMe(),
+    getOfficialDashboard(),
+    getAllOfficialMatchesMaster(),
+    getOfficialSchedules(currentMonth, currentYear),
+    getOfficialSchedules(nextMonth, nextYear),
+    getOfficialProfileData(),
+    getOfficialSettings(),
+    getOfficialNotifications(),
+    getSports(false, true),
+    prefetchAllOfficialAuditMatches(),
+  ]).catch(() => { });
+};
+
+// Load the data for admin user
+export const warmAdminAppCache = async (): Promise<void> => {
+  const token = getStoredToken();
+  if (!token) return;
+
+  Promise.allSettled([
+    getAdminProfile(),
+    getAdminCoachQueue(),
+    getSports(false, true),
+  ]).catch(() => { });
 };
 
 export const getMatchAuditDetail = async (
@@ -1426,8 +1532,27 @@ export const getMatchAuditDetail = async (
     const details = detailsRes || {};
     const boxscore = boxscoreRes || {};
     const match = details.match || boxscore.match || details;
-    const pendingVal = Array.isArray(pendingRes) ? pendingRes.find((p: any) => p.match_id === matchId) : null;
-    const validationId = pendingVal?.validation_id || match?.validation_id || matchId;
+    const pendingList: any[] = Array.isArray(pendingRes)
+      ? pendingRes
+      : Array.isArray(pendingRes?.validations)
+        ? pendingRes.validations
+        : Array.isArray(pendingRes?.data)
+          ? pendingRes.data
+          : [];
+    const pendingVal = pendingList.find((p: any) =>
+      String(p.match_id || '').replace(/^#/, '') === matchId ||
+      String(p.validation_id || '').replace(/^#/, '') === matchId
+    );
+
+    let localValId: string | undefined;
+    let localNotes: string | undefined;
+    try {
+      const local = JSON.parse(localStorage.getItem(`atleta_match_detail_${matchId}`) || '{}');
+      if (local?.validation_id) localValId = local.validation_id;
+      if (typeof local?.audit_context_notes === 'string') localNotes = local.audit_context_notes;
+    } catch { }
+
+    const validationId = pendingVal?.validation_id || match?.validation_id || localValId || matchId;
 
     // If the match does not exist in the database (deleted or not found)
     if (!detailsRes && !boxscoreRes && !pendingVal && (!details || Object.keys(details).length === 0)) {
@@ -1668,17 +1793,15 @@ export const getMatchAuditDetail = async (
         (typeof details.scoresheet_url === 'string' && details.scoresheet_url.trim()) ||
         (typeof boxscore.scoresheet_url === 'string' && boxscore.scoresheet_url.trim()) ||
         '',
-      audit_context_notes: (typeof details.context_notes === 'string' && details.context_notes.trim())
-        ? details.context_notes
-        : (typeof match.context_notes === 'string' && match.context_notes.trim())
-          ? match.context_notes
-          : (typeof match.notes === 'string' && match.notes.trim())
+      audit_context_notes: (typeof localNotes === 'string' && localNotes.trim())
+        ? localNotes
+        : (typeof pendingVal?.context_notes === 'string' && pendingVal.context_notes.trim()
+          ? pendingVal.context_notes
+          : (typeof match.notes === 'string'
             ? match.notes
-            : (Array.isArray(details.notes) && details.notes.length > 0)
-              ? details.notes.filter((n: any) => typeof n === 'string').join('\n')
-              : (Array.isArray(match.notes) && match.notes.length > 0)
-                ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
-                : (typeof pendingVal?.context_notes === 'string' ? pendingVal.context_notes : ''),
+            : (Array.isArray(match.notes) && match.notes.length > 0
+              ? match.notes.filter((n: any) => typeof n === 'string').join('\n')
+              : ''))),
       is_certified: Boolean(match.is_certified || match.is_locked),
       assigned_coaches: assignedCoaches,
       coach_name: coachName,
@@ -1699,23 +1822,51 @@ export const prefetchMatchAuditDetail = (rawMatchId: string): void => {
 };
 
 export const certifyMatchValidation = async (
-  validationId: string,
-  payload: { context_notes?: string; scoresheet_url?: string }
+  rawValidationId: string,
+  payload: { context_notes?: string; notes?: string; scoresheet_url?: string }
 ): Promise<any> => {
+  let validationId = rawValidationId ? String(rawValidationId).replace(/^#/, '') : '';
   const token = getStoredToken();
-  const cleanPayload: Record<string, string> = {
-    context_notes: typeof payload.context_notes === 'string'
+  const noteStr = typeof payload.notes === 'string'
+    ? payload.notes
+    : typeof payload.context_notes === 'string'
       ? payload.context_notes
       : Array.isArray(payload.context_notes)
         ? (payload.context_notes as any[]).join('\n')
-        : String(payload.context_notes ?? ''),
+        : String(payload.context_notes ?? '');
+
+  const cleanPayload: Record<string, string> = {
+    context_notes: noteStr,
+    notes: noteStr,
   };
 
   if (typeof payload.scoresheet_url === 'string' && payload.scoresheet_url.trim().length > 0) {
     cleanPayload.scoresheet_url = payload.scoresheet_url.trim();
   }
 
-  const res = await fetch(`${BASE_URL}/validations/${validationId}/certify`, {
+  // If validationId looks like a match ID, attempt to resolve linked VAL-xxx from cache/storage/pending
+  if (validationId.startsWith('MATCH-') || !validationId.startsWith('VAL-')) {
+    try {
+      const local = JSON.parse(localStorage.getItem(`atleta_match_detail_${validationId}`) || '{}');
+      if (local?.validation_id && String(local.validation_id).startsWith('VAL-')) {
+        validationId = String(local.validation_id).trim();
+      } else {
+        const pendingRes = await fetch(`${BASE_URL}/validations/pending`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+        const list: any[] = Array.isArray(pendingRes) ? pendingRes : Array.isArray(pendingRes?.validations) ? pendingRes.validations : [];
+        const matchItem = list.find((p: any) => String(p.match_id || '').replace(/^#/, '') === validationId);
+        if (matchItem?.validation_id) {
+          validationId = matchItem.validation_id;
+        }
+      }
+    } catch { }
+  }
+
+  let res = await fetch(`${BASE_URL}/validations/${validationId}/certify`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1723,6 +1874,31 @@ export const certifyMatchValidation = async (
     },
     body: JSON.stringify(cleanPayload),
   });
+
+  // If 404 fallback: try looking up pending list once more in case validationId was not resolved
+  if (res.status === 404 && (validationId.startsWith('MATCH-') || !validationId.startsWith('VAL-'))) {
+    try {
+      const pendingRes = await fetch(`${BASE_URL}/validations/pending`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+      const list: any[] = Array.isArray(pendingRes) ? pendingRes : Array.isArray(pendingRes?.validations) ? pendingRes.validations : [];
+      const matchItem = list.find((p: any) => String(p.match_id || '').replace(/^#/, '') === validationId);
+      if (matchItem?.validation_id && matchItem.validation_id !== validationId) {
+        res = await fetch(`${BASE_URL}/validations/${matchItem.validation_id}/certify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(cleanPayload),
+        });
+      }
+    } catch { }
+  }
+
   const data = await handleResponse<any>(res);
   const user = getStoredUser();
   const actualMatchId = data?.match?.match_id || data?.validation?.match_id || data?.match_id;
@@ -1759,18 +1935,32 @@ export const downloadCertifiedMatchPdf = async (matchId: string): Promise<Blob> 
 export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
   const cleanId = matchId.replace(/^#/, '');
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/matches/${cleanId}`, {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  const data = await handleResponse<any>(res);
-  invalidateCache();
+
+  // Remove match from all caches and track deletion
+  recordDeletedMatch(cleanId);
+
+  const cachedMaster = getCachedData<any[]>('all_official_matches_master');
+  if (cachedMaster) {
+    setCachedData('all_official_matches_master', cachedMaster.filter((m) => String(m.match_id || m.id || '').replace(/^#/, '') !== cleanId));
+  }
+  const cachedSched = getCachedData<any[]>('official_schedules');
+  if (cachedSched) {
+    setCachedData('official_schedules', cachedSched.filter((m) => String(m.match_id || m.id || '').replace(/^#/, '') !== cleanId));
+  }
+  const cachedDash = getCachedData<OfficialDashboardResponse>('official_dashboard');
+  if (cachedDash) {
+    setCachedData('official_dashboard', {
+      ...cachedDash,
+      total_matches: Math.max(0, (cachedDash.total_matches || 1) - 1),
+      pending_count: Math.max(0, (cachedDash.pending_count || 1) - 1),
+      audit_queue: (cachedDash.audit_queue || []).filter((m: any) => String(m.match_id || m.id || m.validation_id || '').replace(/^#/, '') !== cleanId),
+    });
+  }
+  invalidateCache('official_dashboard');
 
   try {
     localStorage.removeItem(`atleta_match_detail_${cleanId}`);
+    localStorage.removeItem(`atleta_draft_note_${cleanId}`);
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith(CREATED_MATCHES_PREFIX)) {
@@ -1787,7 +1977,14 @@ export const deleteOfficialMatch = async (matchId: string): Promise<any> => {
     localStorage.setItem(certKey, JSON.stringify(certUpdated));
   } catch { }
 
-  return data;
+  const res = await fetch(`${BASE_URL}/matches/${cleanId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  return handleResponse<any>(res);
 };
 
 export const fetchBrowseTeams = async (sport?: string): Promise<any[]> => {

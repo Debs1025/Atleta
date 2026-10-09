@@ -13,6 +13,8 @@ import {
   prefetchMatchAuditDetail,
   isMatchCreatedByOfficial,
   isMatchLocallyCertified,
+  isMatchDeleted,
+  warmOfficialAppCache,
   getSports,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse, MatchSummaryItem } from '../../api/types';
@@ -52,20 +54,32 @@ export const OfficialHomePage: React.FC = () => {
       return;
     }
 
-    Promise.all([
-      getMe().then((res) => {
+    // 1. Load Matches progressively
+    getOfficialDashboard().then((res) => {
+      if (res) setDashboard(res);
+    }).catch(() => { });
+
+    getAllOfficialMatchesMaster().then((res) => {
+      if (res) setMasterMatches(res);
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+
+    getMe().then((res) => {
+      if (res) {
         setUser(res);
-        const meRole = String(res?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
+        const meRole = String(res.role || '').toLowerCase().replace(/[\s_-]+/g, '');
         if (meRole.includes('admin')) {
           navigate('/dashboard-admin', { replace: true });
         }
-      }).catch(() => { }),
-      getOfficialDashboard().then((res) => setDashboard(res)).catch(() => { }),
-      getAllOfficialMatchesMaster().then((res) => setMasterMatches(res || [])).catch(() => { }),
-      getOfficialSettings().catch(() => { }),
-      getSports(false, true).catch(() => { }),
-      prefetchAllOfficialAuditMatches().catch(() => { }),
-    ]).finally(() => setLoading(false));
+      }
+    }).catch(() => { });
+
+    getOfficialSettings().catch(() => { });
+    getSports(false, true).catch(() => { });
+    prefetchAllOfficialAuditMatches().catch(() => { });
+    warmOfficialAppCache().catch(() => { });
   }, [navigate]);
 
   useEffect(() => {
@@ -88,13 +102,16 @@ export const OfficialHomePage: React.FC = () => {
   ), [user]);
 
   const officialMatches = useMemo(() => {
-    const list: MatchSummaryItem[] = masterMatches.filter((m) => isMatchCreatedByOfficial(m, user));
+    const list: MatchSummaryItem[] = masterMatches.filter(
+      (m) => !isMatchDeleted(m.match_id) && isMatchCreatedByOfficial(m, user)
+    );
     const existingIds = new Set(list.map((m) => m.match_id.replace(/^#/, '')));
 
-    // Also include any items from dashboard.audit_queue if they belong to this official
     (dashboard?.audit_queue || []).forEach((item: any, idx: number) => {
       const match = item.match_details || {};
       const rawId = String(match.match_id || item.match_id || `queue_${idx}`).replace(/^#/, '');
+      if (isMatchDeleted(rawId)) return;
+
       const fakeSummary: MatchSummaryItem = {
         match_id: `#${rawId}`,
         validation_id: item.audit_id || rawId,
@@ -106,10 +123,7 @@ export const OfficialHomePage: React.FC = () => {
         raw_match: { ...match, ...item },
       };
 
-      const belongsToMe = isMatchCreatedByOfficial(fakeSummary, user) || (
-        (item.requested_by && currentOfficialIds.has(item.requested_by)) ||
-        (item.official_id && currentOfficialIds.has(item.official_id))
-      );
+      const belongsToMe = isMatchCreatedByOfficial(fakeSummary, user);
 
       if (belongsToMe && !existingIds.has(rawId)) {
         const isAudited = item.status === 'Approved' || item.status === 'Audited' || match.is_certified === true || isMatchLocallyCertified(rawId);
@@ -227,7 +241,7 @@ export const OfficialHomePage: React.FC = () => {
       }
     });
 
-    // Sort strictly DESCENDING: latest (newest timestamp) at the very 1st
+    // Sort strictly DESCENDING: latest at the very first
     return list.sort((a, b) => b.timestamp - a.timestamp);
   }, [officialMatches]);
 
@@ -309,7 +323,7 @@ export const OfficialHomePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {loading && newMatchesList.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ ...styles.td, textAlign: 'center', padding: '32px' }}>
                       <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#0B132B' }} />

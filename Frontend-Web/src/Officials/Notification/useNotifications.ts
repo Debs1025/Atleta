@@ -28,12 +28,13 @@ export function useNotifications() {
     }
     return cached?.unread_count ?? 0;
   });
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(() => !getCachedData('official_notifications'));
   const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async (forceRefresh = false) => {
     try {
-      setLoading(true);
+      const cached = getCachedData('official_notifications');
+      if (!cached) setLoading(true);
       setError(null);
       const res = await getOfficialNotifications(forceRefresh);
       const notifs = res.notifications || [];

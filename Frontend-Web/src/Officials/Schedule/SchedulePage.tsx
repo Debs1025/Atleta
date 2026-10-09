@@ -224,9 +224,10 @@ export const SchedulePage: React.FC = () => {
     () => getCachedData<AuthUser>('user_me') || getStoredUser()
   );
 
-  const [schedules, setSchedules] = useState<OfficialScheduleItem[]>(
-    () => getCachedData<OfficialScheduleItem[]>(`official_schedules_${month}_${year}`) || []
-  );
+  const [schedules, setSchedules] = useState<OfficialScheduleItem[]>(() => {
+    const key = `official_schedules_${month}_${year}`;
+    return getCachedData<OfficialScheduleItem[]>(key) || getCachedData<OfficialScheduleItem[]>('official_schedules') || [];
+  });
 
   // Selected date initialized to current date of the device
   const now = new Date();
@@ -256,10 +257,8 @@ export const SchedulePage: React.FC = () => {
 
     // Synchronously load cache for the newly selected month/year immediately to prevent glitching data
     const cached = getCachedData<OfficialScheduleItem[]>(`official_schedules_${month}_${year}`);
-    if (cached && Array.isArray(cached)) {
+    if (cached && Array.isArray(cached) && cached.length > 0) {
       setSchedules(cached);
-    } else {
-      setSchedules([]);
     }
 
     getMe().then((res) => {

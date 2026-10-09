@@ -122,7 +122,7 @@ export const ViewAllMatch: React.FC = () => {
         const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
         setDynamicSports(buildNormalizedSportsList(list));
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     return () => {
       isMounted = false;

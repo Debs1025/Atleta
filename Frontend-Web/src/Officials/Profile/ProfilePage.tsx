@@ -9,10 +9,12 @@ import {
   getMe,
   getOfficialProfileData,
   updateOfficialProfileData,
-  getOfficialDashboard,
+  getAllOfficialMatchesMaster,
+  isMatchCreatedByOfficial,
+  isMatchLocallyCertified,
   changeOfficialPassword,
 } from '../../api/client';
-import type { AuthUser, OfficialDashboardResponse } from '../../api/types';
+import type { AuthUser, MatchSummaryItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/ProfilePage';
@@ -21,14 +23,15 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // get cached datas
   const [user, setUser] = useState<AuthUser | null>(
     () => getCachedData<AuthUser>('user_me') || getStoredUser()
   );
   const [profile, setProfile] = useState<any>(
     () => getCachedData<any>('official_profile') || getStoredUser()
   );
-  const [dashboard, setDashboard] = useState<OfficialDashboardResponse | null>(
-    () => getCachedData<OfficialDashboardResponse>('official_dashboard')
+  const [masterMatches, setMasterMatches] = useState<MatchSummaryItem[]>(
+    () => getCachedData<MatchSummaryItem[]>('all_official_matches_master') || []
   );
 
   // Edit profile modal state
@@ -60,8 +63,8 @@ export const ProfilePage: React.FC = () => {
       getOfficialProfileData().then((res) => {
         if (res) setProfile(res);
       }).catch(() => {}),
-      getOfficialDashboard().then((res) => {
-        if (res) setDashboard(res);
+      getAllOfficialMatchesMaster().then((res) => {
+        if (res) setMasterMatches(res);
       }).catch(() => {}),
     ]);
   }, [navigate]);
@@ -203,7 +206,17 @@ export const ProfilePage: React.FC = () => {
     (user?.uid ? `UUID-${user.uid}` : '') ||
     '—';
 
-  const auditsCount = dashboard?.audited_count ?? (dashboard?.total_matches ?? 0);
+  const officialMatches = React.useMemo(() => {
+    return masterMatches.filter((m) => isMatchCreatedByOfficial(m, user));
+  }, [masterMatches, user]);
+
+  const auditsCount = React.useMemo(() => {
+    const list = officialMatches.filter((m) => {
+      const cleanId = m.match_id.replace(/^#/, '');
+      return m.status === 'AUDITED' || isMatchLocallyCertified(cleanId) || m.raw_match?.is_certified;
+    });
+    return list.length;
+  }, [officialMatches]);
 
   const formattedActivityDate = profile?.last_activity
     ? new Date(profile.last_activity).toLocaleDateString('en-US', {
@@ -293,7 +306,7 @@ export const ProfilePage: React.FC = () => {
               <div style={styles.summaryBox}>
                 <div style={{ ...styles.summaryRow, ...styles.summaryRowBorder }}>
                   <span style={styles.rowLabel}>TOTAL AUDITS HANDLED</span>
-                  <span style={styles.rowValue}>{auditsCount} Matches</span>
+                  <span style={styles.rowValue}>{auditsCount} {auditsCount <= 1 ? 'Match' : 'Matches'}</span>
                 </div>
 
                 <div style={{ ...styles.summaryRow, ...styles.summaryRowBorder }}>

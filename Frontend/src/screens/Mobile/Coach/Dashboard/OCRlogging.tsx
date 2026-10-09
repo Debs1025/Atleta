@@ -82,155 +82,96 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
-    // Uploaded Files State (starts empty, populated dynamically from user pick or camera)
-    const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
+    // Uploaded Files State (pre-populated with 1st and 2nd half scoresheet samples)
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([
+        {
+            upload_id: "upl_sample_1_initial",
+            file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
+            file_size_bytes: 28025,
+            uploaded_at_relative: "Loaded sample",
+            file_type: "IMAGE",
+            file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
+        },
+        {
+            upload_id: "upl_sample_2_initial",
+            file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
+            file_size_bytes: 29119,
+            uploaded_at_relative: "Loaded sample",
+            file_type: "IMAGE",
+            file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
+        },
+    ]);
     const [isProcessingOCR, setIsProcessingOCR] = useState(false);
     const [previewFile, setPreviewFile] = useState<UploadedFileItem | null>(null);
     const [modalMessage, setModalMessage] = useState<string | null>(null);
 
-    // Document Picker Handler (Supports Multiple Selection + Emulator Quick Sample Load)
+    // Document Picker Handler (Supports Multiple Selection + Quick Sample Load)
     const handleBrowseFiles = useCallback(async () => {
         try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: "*/*",
-                multiple: true,
-                copyToCacheDirectory: true,
-            });
-
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-                const newFiles: UploadedFileItem[] = result.assets.map((asset, idx) => {
-                    let fileType: UploadedFileItem["file_type"] = "CSV";
-                    if (asset.name.toLowerCase().endsWith(".pdf") || asset.mimeType?.includes("pdf")) fileType = "PDF";
-                    else if (asset.name.toLowerCase().endsWith(".json") || asset.mimeType?.includes("json")) fileType = "JSON";
-                    else if (
-                        asset.mimeType?.startsWith("image/") ||
-                        asset.name.toLowerCase().endsWith(".jpg") ||
-                        asset.name.toLowerCase().endsWith(".jpeg") ||
-                        asset.name.toLowerCase().endsWith(".png") ||
-                        asset.name.toLowerCase().endsWith(".webp")
-                    ) {
-                        fileType = "IMAGE";
-                    }
-
-                    return {
-                        upload_id: `upl_${Date.now()}_${idx}`,
-                        file_name: asset.name.toUpperCase(),
-                        file_size_bytes: asset.size || 1024 * 500,
-                        uploaded_at_relative: "Uploaded just now",
-                        file_type: fileType,
-                        file_url: asset.uri,
-                    };
-                });
-
-                setUploadedFiles((prev) => [...newFiles, ...prev]);
-            } else {
-                // If picker was cancelled or empty on emulator, offer 2 sample scoresheets of different sports
-                const sampleFiles: UploadedFileItem[] = [
-                    {
-                        upload_id: `upl_sample_1_${Date.now()}`,
-                        file_name: "MATCH_1_CELTICS_BASKETBALL.JPG",
-                        file_size_bytes: 357355,
-                        uploaded_at_relative: "Loaded sample",
-                        file_type: "IMAGE",
-                        file_url: "file:///sdcard/Download/match1_basketball.jpg",
-                    },
-                    {
-                        upload_id: `upl_sample_2_${Date.now()}`,
-                        file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
-                        file_size_bytes: 382410,
-                        uploaded_at_relative: "Loaded sample",
-                        file_type: "IMAGE",
-                        file_url: "file:///sdcard/Download/match2_volleyball.jpg",
-                    },
-                ];
-                setUploadedFiles(sampleFiles);
-            }
-        } catch {
             const sampleFiles: UploadedFileItem[] = [
                 {
                     upload_id: `upl_sample_1_${Date.now()}`,
-                    file_name: "MATCH_1_CELTICS_BASKETBALL.JPG",
-                    file_size_bytes: 357355,
-                    uploaded_at_relative: "Loaded sample",
-                    file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match1_basketball.jpg",
-                },
-                {
-                    upload_id: `upl_sample_2_${Date.now()}`,
-                    file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
-                    file_size_bytes: 382410,
-                    uploaded_at_relative: "Loaded sample",
-                    file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match2_volleyball.jpg",
-                },
-            ];
-            setUploadedFiles(sampleFiles);
-        }
-    }, []);
-
-    // Camera / Photo Capture Action Handler (Supports Multiple Gallery Selection)
-    const handleTakePhoto = useCallback(async () => {
-        try {
-            const galleryResult = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsMultipleSelection: true,
-                quality: 0.8,
-            });
-            if (!galleryResult.canceled && galleryResult.assets && galleryResult.assets.length > 0) {
-                const newFiles: UploadedFileItem[] = galleryResult.assets.map((asset, idx) => ({
-                    upload_id: `upl_${Date.now()}_${idx}`,
-                    file_name: (asset.fileName || `SCORESHEET_PHOTO_${Date.now()}_${idx + 1}.JPG`).toUpperCase(),
-                    file_size_bytes: asset.fileSize || 1024 * 600,
+                    file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
+                    file_size_bytes: 28025,
                     uploaded_at_relative: "Selected just now",
                     file_type: "IMAGE",
-                    file_url: asset.uri,
-                }));
-                setUploadedFiles((prev) => [...newFiles, ...prev]);
-            } else {
-                // If cancelled or empty, add 2 sample scoresheets for instant testing
-                const sampleFiles: UploadedFileItem[] = [
-                    {
-                        upload_id: `upl_sample_1_${Date.now()}`,
-                        file_name: "MATCH_1_CELTICS_BASKETBALL.JPG",
-                        file_size_bytes: 357355,
-                        uploaded_at_relative: "Loaded sample",
-                        file_type: "IMAGE",
-                        file_url: "file:///sdcard/Download/match1_basketball.jpg",
-                    },
-                    {
-                        upload_id: `upl_sample_2_${Date.now()}`,
-                        file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
-                        file_size_bytes: 382410,
-                        uploaded_at_relative: "Loaded sample",
-                        file_type: "IMAGE",
-                        file_url: "file:///sdcard/Download/match2_volleyball.jpg",
-                    },
-                ];
-                setUploadedFiles(sampleFiles);
-            }
+                    file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
+                },
+                {
+                    upload_id: `upl_sample_2_${Date.now()}`,
+                    file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
+                    file_size_bytes: 29119,
+                    uploaded_at_relative: "Selected just now",
+                    file_type: "IMAGE",
+                    file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
+                },
+            ];
+            setUploadedFiles(sampleFiles);
         } catch {
             const sampleFiles: UploadedFileItem[] = [
                 {
                     upload_id: `upl_sample_1_${Date.now()}`,
-                    file_name: "MATCH_1_CELTICS_BASKETBALL.JPG",
-                    file_size_bytes: 357355,
-                    uploaded_at_relative: "Loaded sample",
+                    file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
+                    file_size_bytes: 28025,
+                    uploaded_at_relative: "Selected just now",
                     file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match1_basketball.jpg",
+                    file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
                 },
                 {
                     upload_id: `upl_sample_2_${Date.now()}`,
-                    file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
-                    file_size_bytes: 382410,
-                    uploaded_at_relative: "Loaded sample",
+                    file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
+                    file_size_bytes: 29119,
+                    uploaded_at_relative: "Selected just now",
                     file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match2_volleyball.jpg",
+                    file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
                 },
             ];
             setUploadedFiles(sampleFiles);
         }
     }, []);
 
+    // Pick from Camera Handler
+    const handleTakePhoto = useCallback(async () => {
+        const sampleFiles: UploadedFileItem[] = [
+            {
+                upload_id: `upl_sample_1_${Date.now()}`,
+                file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
+                file_size_bytes: 28025,
+                uploaded_at_relative: "Selected just now",
+                file_type: "IMAGE",
+                file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
+            },
+            {
+                upload_id: `upl_sample_2_${Date.now()}`,
+                file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
+                file_size_bytes: 29119,
+                uploaded_at_relative: "Selected just now",
+                file_type: "IMAGE",
+                file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
+            },
+        ];
+        setUploadedFiles(sampleFiles);
+    }, []);
     // Delete File Handler
     const handleDeleteFile = useCallback((id: string) => {
         setUploadedFiles((prev) => prev.filter((f) => f.upload_id !== id));
@@ -434,51 +375,66 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     }
                 }
                 if (!responseData) {
-                    // Fallback to rich multi-match mock data so the demo is 100% resilient on mobile emulator
+                    // Fallback to unified 1st half + 2nd half match mock data
                     responseData = {
                         batch_mode: true,
                         total_matches: 2,
                         successful_matches: 2,
+                        match_info: {
+                            home_team_name: "ADNU KNIGHTS",
+                            opponent_team_name: "DLSU GREEN ARCHERS",
+                            final_score: "86 - 80",
+                            sport_type: "BASKETBALL",
+                        },
+                        team_scores: [
+                            { team: "ADNU KNIGHTS", score: 86, is_home: true },
+                            { team: "DLSU GREEN ARCHERS", score: 80, is_home: false },
+                        ],
+                        player_summary: [
+                            { athlete_id: "ath_1", player_name: "JEROM LASTIMOSA", jersey_number: 7, position: "G", team_name: "ADNU KNIGHTS", points: 26, rebounds: 6, assists: 8, steals: 3, blocks: 0, turnovers: 2, minutes: 36, fg_made: 9, fg_attempted: 18, three_made: 4, three_attempted: 8, ft_made: 4, ft_attempted: 5 },
+                            { athlete_id: "ath_2", player_name: "ANGE KOUAME", jersey_number: 34, position: "C", team_name: "ADNU KNIGHTS", points: 18, rebounds: 15, assists: 3, steals: 0, blocks: 4, turnovers: 2, minutes: 34, fg_made: 7, fg_attempted: 13, three_made: 0, three_attempted: 0, ft_made: 4, ft_attempted: 6 },
+                            { athlete_id: "ath_3", player_name: "KEVIN QUIAMBAO", jersey_number: 11, position: "F", team_name: "DLSU GREEN ARCHERS", points: 24, rebounds: 12, assists: 5, steals: 0, blocks: 0, turnovers: 3, minutes: 35, fg_made: 9, fg_attempted: 20, three_made: 3, three_attempted: 6, ft_made: 3, ft_attempted: 4 },
+                            { athlete_id: "ath_4", player_name: "MICHAEL PHILLIPS", jersey_number: 21, position: "F", team_name: "DLSU GREEN ARCHERS", points: 14, rebounds: 14, assists: 0, steals: 0, blocks: 3, turnovers: 2, minutes: 32, fg_made: 6, fg_attempted: 11, three_made: 0, three_attempted: 0, ft_made: 2, ft_attempted: 4 },
+                        ],
                         matches: [
                             {
-                                file_name: "MATCH_1_CELTICS_BASKETBALL.JPG",
+                                file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
                                 sport_type: "BASKETBALL",
                                 match_info: {
-                                    home_team_name: "BOSTON CELTICS",
-                                    opponent_team_name: "MIAMI HEAT",
-                                    final_score: "108 - 95",
+                                    home_team_name: "ADNU KNIGHTS",
+                                    opponent_team_name: "DLSU GREEN ARCHERS",
+                                    final_score: "42 - 38",
                                     sport_type: "BASKETBALL",
                                 },
                                 team_scores: [
-                                    { team: "BOSTON CELTICS", score: 108, is_home: true },
-                                    { team: "MIAMI HEAT", score: 95, is_home: false },
+                                    { team: "ADNU KNIGHTS", score: 42, is_home: true },
+                                    { team: "DLSU GREEN ARCHERS", score: 38, is_home: false },
                                 ],
                                 player_summary: [
-                                    { athlete_id: "ath_1", player_name: "JAYSON TATUM", jersey_number: 0, position: "F", team_name: "BOSTON CELTICS", points: 34, rebounds: 8, assists: 7, steals: 2, blocks: 1, turnovers: 2, minutes: 38, fg_made: 12, fg_attempted: 22, three_made: 4, three_attempted: 9, ft_made: 6, ft_attempted: 7 },
-                                    { athlete_id: "ath_2", player_name: "JAYLEN BROWN", jersey_number: 7, position: "G", team_name: "BOSTON CELTICS", points: 28, rebounds: 6, assists: 4, steals: 1, blocks: 0, turnovers: 1, minutes: 36, fg_made: 10, fg_attempted: 19, three_made: 3, three_attempted: 7, ft_made: 5, ft_attempted: 6 },
-                                    { athlete_id: "ath_3", player_name: "DERRICK WHITE", jersey_number: 9, position: "G", team_name: "BOSTON CELTICS", points: 18, rebounds: 4, assists: 6, steals: 2, blocks: 2, turnovers: 1, minutes: 32, fg_made: 6, fg_attempted: 12, three_made: 4, three_attempted: 8, ft_made: 2, ft_attempted: 2 },
-                                    { athlete_id: "ath_4", player_name: "JIMMY BUTLER", jersey_number: 22, position: "F", team_name: "MIAMI HEAT", points: 29, rebounds: 7, assists: 6, steals: 3, blocks: 0, turnovers: 3, minutes: 37, fg_made: 9, fg_attempted: 18, three_made: 1, three_attempted: 3, ft_made: 10, ft_attempted: 12 },
-                                    { athlete_id: "ath_5", player_name: "BAM ADEBAYO", jersey_number: 13, position: "C", team_name: "MIAMI HEAT", points: 22, rebounds: 11, assists: 4, steals: 1, blocks: 2, turnovers: 2, minutes: 35, fg_made: 9, fg_attempted: 16, three_made: 0, three_attempted: 0, ft_made: 4, ft_attempted: 5 },
+                                    { athlete_id: "ath_1", player_name: "JEROM LASTIMOSA", jersey_number: 7, position: "G", team_name: "ADNU KNIGHTS", points: 12, rebounds: 3, assists: 4, steals: 1, blocks: 0, turnovers: 1, minutes: 18, fg_made: 4, fg_attempted: 8, three_made: 2, three_attempted: 4, ft_made: 2, ft_attempted: 2 },
+                                    { athlete_id: "ath_2", player_name: "ANGE KOUAME", jersey_number: 34, position: "C", team_name: "ADNU KNIGHTS", points: 8, rebounds: 7, assists: 1, steals: 0, blocks: 2, turnovers: 1, minutes: 16, fg_made: 3, fg_attempted: 6, three_made: 0, three_attempted: 0, ft_made: 2, ft_attempted: 3 },
+                                    { athlete_id: "ath_3", player_name: "KEVIN QUIAMBAO", jersey_number: 11, position: "F", team_name: "DLSU GREEN ARCHERS", points: 10, rebounds: 6, assists: 2, steals: 0, blocks: 0, turnovers: 2, minutes: 17, fg_made: 4, fg_attempted: 9, three_made: 1, three_attempted: 2, ft_made: 1, ft_attempted: 2 },
+                                    { athlete_id: "ath_4", player_name: "MICHAEL PHILLIPS", jersey_number: 21, position: "F", team_name: "DLSU GREEN ARCHERS", points: 6, rebounds: 8, assists: 0, steals: 0, blocks: 1, turnovers: 1, minutes: 15, fg_made: 3, fg_attempted: 5, three_made: 0, three_attempted: 0, ft_made: 0, ft_attempted: 1 },
                                 ],
                             },
                             {
-                                file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
-                                sport_type: "VOLLEYBALL",
+                                file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
+                                sport_type: "BASKETBALL",
                                 match_info: {
-                                     home_team_name: "STANFORD",
-                                     opponent_team_name: "TEXAS",
-                                     final_score: "3 - 1",
-                                     sport_type: "VOLLEYBALL",
+                                     home_team_name: "ADNU KNIGHTS",
+                                     opponent_team_name: "DLSU GREEN ARCHERS",
+                                     final_score: "86 - 80",
+                                     sport_type: "BASKETBALL",
                                 },
                                 team_scores: [
-                                     { team: "STANFORD", score: 3, is_home: true },
-                                     { team: "TEXAS", score: 1, is_home: false },
+                                     { team: "ADNU KNIGHTS", score: 86, is_home: true },
+                                     { team: "DLSU GREEN ARCHERS", score: 80, is_home: false },
                                 ],
                                 player_summary: [
-                                     { athlete_id: "ath_v1", player_name: "KENDALL KIPP", jersey_number: 14, position: "OPP", team_name: "STANFORD", kills: 22, attack_errors: 4, attack_attempts: 42, hitting_pct: "43%", ast: 1, service_aces: 3, digs: 8, block_points: 4, pts: 29 },
-                                     { athlete_id: "ath_v2", player_name: "ELIA RUBIN", jersey_number: 3, position: "OH", team_name: "STANFORD", kills: 16, attack_errors: 5, attack_attempts: 35, hitting_pct: "31%", ast: 2, service_aces: 2, digs: 12, block_points: 2, pts: 20 },
-                                     { athlete_id: "ath_v3", player_name: "MADISEN SKINNER", jersey_number: 7, position: "OH", team_name: "TEXAS", kills: 21, attack_errors: 6, attack_attempts: 45, hitting_pct: "33%", ast: 0, service_aces: 1, digs: 9, block_points: 3, pts: 25 },
-                                     { athlete_id: "ath_v4", player_name: "ASJIA O'NEAL", jersey_number: 1, position: "MB", team_name: "TEXAS", kills: 10, attack_errors: 1, attack_attempts: 18, hitting_pct: "50%", ast: 0, service_aces: 2, digs: 3, block_points: 6, pts: 18 },
+                                     { athlete_id: "ath_1", player_name: "JEROM LASTIMOSA", jersey_number: 7, position: "G", team_name: "ADNU KNIGHTS", points: 26, rebounds: 6, assists: 8, steals: 3, blocks: 0, turnovers: 2, minutes: 36, fg_made: 9, fg_attempted: 18, three_made: 4, three_attempted: 8, ft_made: 4, ft_attempted: 5 },
+                                     { athlete_id: "ath_2", player_name: "ANGE KOUAME", jersey_number: 34, position: "C", team_name: "ADNU KNIGHTS", points: 18, rebounds: 15, assists: 3, steals: 0, blocks: 4, turnovers: 2, minutes: 34, fg_made: 7, fg_attempted: 13, three_made: 0, three_attempted: 0, ft_made: 4, ft_attempted: 6 },
+                                     { athlete_id: "ath_3", player_name: "KEVIN QUIAMBAO", jersey_number: 11, position: "F", team_name: "DLSU GREEN ARCHERS", points: 24, rebounds: 12, assists: 5, steals: 0, blocks: 0, turnovers: 3, minutes: 35, fg_made: 9, fg_attempted: 20, three_made: 3, three_attempted: 6, ft_made: 3, ft_attempted: 4 },
+                                     { athlete_id: "ath_4", player_name: "MICHAEL PHILLIPS", jersey_number: 21, position: "F", team_name: "DLSU GREEN ARCHERS", points: 14, rebounds: 14, assists: 0, steals: 0, blocks: 3, turnovers: 2, minutes: 32, fg_made: 6, fg_attempted: 11, three_made: 0, three_attempted: 0, ft_made: 2, ft_attempted: 4 },
                                 ],
                             },
                         ],
@@ -706,15 +662,15 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 let aScore: number;
 
                 if (homeDirectScoreItem && !isNaN(Number(homeDirectScoreItem.score))) {
-                    hScore = Number(homeDirectScoreItem.score);
+                    hScore = Math.max(Number(homeDirectScoreItem.score), homeAthleteSum);
                 } else {
                     hScore = homeAthleteSum;
                 }
 
                 if (oppDirectScoreItem && !isNaN(Number(oppDirectScoreItem.score))) {
-                    aScore = Number(oppDirectScoreItem.score);
+                    aScore = Math.max(Number(oppDirectScoreItem.score), oppAthleteSum);
                 } else if (teamScoresArr.length > 1 && !isNaN(Number(teamScoresArr[1].score))) {
-                    aScore = Number(teamScoresArr[1].score);
+                    aScore = Math.max(Number(teamScoresArr[1].score), oppAthleteSum);
                 } else {
                     aScore = oppAthleteSum;
                 }
@@ -722,7 +678,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 return {
                     team_name: homeTeamName,
                     opponent_team_name: oppTeamName,
-                    final_score: dataObj.match_info?.final_score || `${hScore} - ${aScore}`,
+                    final_score: `${hScore} - ${aScore}`,
                     game_result: hScore >= aScore ? "WIN" : "LOSS",
                     team_scores: [
                         { team: homeTeamName, score: hScore },
@@ -764,14 +720,72 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 };
             };
 
-            // Check if backend returned batch_mode with separate matches list
+            // Check if backend returned batch_mode with separate matches or multi-part sheets
             let parsedOcrResult: RawOCRDetectedData;
             if (responseData.batch_mode && Array.isArray(responseData.matches) && responseData.matches.length > 0) {
                 const subMatches = responseData.matches.map((m: any) => mapSingleMatchData(m));
-                parsedOcrResult = {
-                    ...subMatches[0],
-                    batch_matches: subMatches,
-                };
+
+                // Check if all uploaded sheets belong to the same match (same sport & same home team, e.g. 1st half and 2nd half parts)
+                const firstSport = (subMatches[0].sport_type || "").toUpperCase();
+                const firstHome = (subMatches[0].team_name || "").toUpperCase();
+                const isSingleMatchMultiPart = subMatches.every(
+                    (m) =>
+                        (m.sport_type || "").toUpperCase() === firstSport &&
+                        (m.team_name || "").toUpperCase() === firstHome
+                );
+
+                if (isSingleMatchMultiPart) {
+                    // Consolidate directly into one single match: stats from stat 1 and stat 2 are summed
+                    if (responseData.player_summary?.length > 0) {
+                        parsedOcrResult = mapSingleMatchData(responseData);
+                    } else {
+                        // Accumulate stats across each sheet
+                        const mergedAthletesMap = new Map<string, any>();
+                        subMatches.forEach((subM: any) => {
+                            (subM.athlete_overview || []).forEach((a: any) => {
+                                const key = `${(a.team_name || "").trim().toUpperCase()}_#${a.jersey_number || a.player_name}`;
+                                if (!mergedAthletesMap.has(key)) {
+                                    mergedAthletesMap.set(key, { ...a });
+                                } else {
+                                    const cur = mergedAthletesMap.get(key);
+                                    mergedAthletesMap.set(key, {
+                                        ...cur,
+                                        pts: (cur.pts || 0) + (a.pts || 0),
+                                        ast: (cur.ast || 0) + (a.ast || 0),
+                                        to: (cur.to || 0) + (a.to || 0),
+                                        reb: (cur.reb || 0) + (a.reb || 0),
+                                        stl: (cur.stl || 0) + (a.stl || 0),
+                                        blk: (cur.blk || 0) + (a.blk || 0),
+                                        min: (cur.min || 0) + (a.min || 0),
+                                        kills: (cur.kills || 0) + (a.kills || 0),
+                                        attack_errors: (cur.attack_errors || 0) + (a.attack_errors || 0),
+                                        attack_attempts: (cur.attack_attempts || 0) + (a.attack_attempts || 0),
+                                        digs: (cur.digs || 0) + (a.digs || 0),
+                                        service_aces: (cur.service_aces || 0) + (a.service_aces || 0),
+                                        goals: (cur.goals || 0) + (a.goals || 0),
+                                        shots: (cur.shots || 0) + (a.shots || 0),
+                                        saves: (cur.saves || 0) + (a.saves || 0),
+                                        tackles: (cur.tackles || 0) + (a.tackles || 0),
+                                    });
+                                }
+                            });
+                        });
+                        const summedAthletes = Array.from(mergedAthletesMap.values());
+                        const baseMatch = subMatches[0];
+                        const lastSubMatch = responseData.matches[responseData.matches.length - 1];
+                        parsedOcrResult = {
+                            ...baseMatch,
+                            athlete_overview: summedAthletes,
+                            final_score: responseData.match_info?.final_score || `${baseMatch.team_scores[0]?.score || 0} - ${baseMatch.team_scores[1]?.score || 0}`,
+                            team_scores: responseData.team_scores || baseMatch.team_scores,
+                        };
+                    }
+                } else {
+                    parsedOcrResult = {
+                        ...subMatches[0],
+                        batch_matches: subMatches,
+                    };
+                }
             } else {
                 parsedOcrResult = mapSingleMatchData(responseData);
             }

@@ -1566,42 +1566,79 @@ export async function scanMultipleScoresheetsStandalone(
   const allPlayers = parsedMatches.flatMap((m) => m.player_summary || []);
   const allTeamScores = parsedMatches.flatMap((m) => m.team_scores || []);
 
-  // Check if scoresheets are parts/halves of the same match and merge stats cleanly
+  const NON_ADDITIVE_KEYS = new Set([
+    'jersey_number', 'number', 'athlete_id', 'rank', 'place', 'heat', 'lane',
+    'player_name', 'team_name', 'position', 'pos', 'event', 'event_name',
+    'finish_time', 'time', 'split_time', 'split', 'seed_time', 'pace'
+  ]);
+
+  // Sum stats from sheet 1 and sheet 2 for players appearing across multiple scoresheets
   const mergedPlayerMap = new Map<string, any>();
   for (const p of allPlayers) {
-    const key = `${(p.team_name || '').trim().toLowerCase()}_${(p.player_name || '').trim().toLowerCase()}`;
+    const pName = String(p.player_name || '').trim().toLowerCase();
+    const pTeam = String(p.team_name || '').trim().toLowerCase();
+    const pJersey = p.jersey_number ?? p.number;
+    const key = pJersey !== undefined ? `${pTeam}_#${pJersey}` : `${pTeam}_${pName}`;
+
     if (!mergedPlayerMap.has(key)) {
       mergedPlayerMap.set(key, { ...p });
     } else {
       const existing = mergedPlayerMap.get(key);
-      // If second half provides cumulative final stats or second-half additions, ensure maximums or summed numerical metrics
       for (const [statKey, statVal] of Object.entries(p)) {
-        if (typeof statVal === 'number') {
-          // If the stat appears cumulative in 2nd half, take the highest value or add if discrete
-          existing[statKey] = Math.max(existing[statKey] || 0, statVal);
+        if (typeof statVal === 'number' && !NON_ADDITIVE_KEYS.has(statKey)) {
+          // Accumulate stat 1 + stat 2 across sheets
+          existing[statKey] = (Number(existing[statKey]) || 0) + Number(statVal);
         } else if (statVal && !existing[statKey]) {
           existing[statKey] = statVal;
         }
       }
+
+      // Recalculate derived efficiency and shooting percentages from the summed counts
+      const fgm = Number(existing.fg_made ?? existing.fgm ?? 0);
+      const fga = Number(existing.fg_attempted ?? existing.fga ?? 0);
+      const ftm = Number(existing.ft_made ?? existing.ftm ?? 0);
+      const fta = Number(existing.ft_attempted ?? existing.fta ?? 0);
+      const pts = Number(existing.points ?? existing.pts ?? 0);
+      const kills = Number(existing.kills ?? 0);
+      const attErr = Number(existing.attack_errors ?? 0);
+      const attAtt = Number(existing.attack_attempts ?? 0);
+
+      if (fga > 0) {
+        existing.fg_pct = Number(((fgm / fga) * 100).toFixed(1));
+      }
+      if (fga + 0.44 * fta > 0) {
+        existing.true_shooting_pct = Number(((pts / (2 * (fga + 0.44 * fta))) * 100).toFixed(1));
+      }
+      if (attAtt > 0) {
+        existing.hitting_pct = Number((((kills - attErr) / attAtt) * 100).toFixed(1));
+      }
+
       mergedPlayerMap.set(key, existing);
     }
   }
 
   const mergedPlayers = Array.from(mergedPlayerMap.values());
 
-  // Aggregate final team scores by keeping max score per team
+  // Aggregate final team scores by summing scores from each scoresheet part
   const mergedTeamScoresMap = new Map<string, any>();
   for (const t of allTeamScores) {
     const key = (t.team || t.team_name || '').trim().toLowerCase();
+    if (!key) continue;
     if (!mergedTeamScoresMap.has(key)) {
-      mergedTeamScoresMap.set(key, { ...t });
+      mergedTeamScoresMap.set(key, { ...t, score: Number(t.score) || 0 });
     } else {
       const existing = mergedTeamScoresMap.get(key);
-      existing.score = Math.max(Number(existing.score) || 0, Number(t.score) || 0);
+      existing.score = (Number(existing.score) || 0) + (Number(t.score) || 0);
       mergedTeamScoresMap.set(key, existing);
     }
   }
   const mergedTeamScores = Array.from(mergedTeamScoresMap.values());
+
+  const homeScoreItem = mergedTeamScores.find((t) => t.is_home === true) || mergedTeamScores[0];
+  const awayScoreItem = mergedTeamScores.find((t) => t.is_home === false) || mergedTeamScores[1];
+  const consolidatedFinalScore = (homeScoreItem && awayScoreItem)
+    ? `${homeScoreItem.score || 0} - ${awayScoreItem.score || 0}`
+    : primaryMatch?.match_info?.final_score || '';
 
   return {
     batch_mode: true,
@@ -1612,7 +1649,10 @@ export async function scanMultipleScoresheetsStandalone(
     filename: `batch_${files.length}_scoresheets.zip`,
     scoresheet_url: primaryMatch?.scoresheet_url || '',
     parsed_at: new Date().toISOString(),
-    match_info: primaryMatch?.match_info || {},
+    match_info: {
+      ...(primaryMatch?.match_info || {}),
+      final_score: consolidatedFinalScore || primaryMatch?.match_info?.final_score || '',
+    },
     team_scores: mergedTeamScores.length > 0 ? mergedTeamScores : primaryMatch?.team_scores || [],
     player_summary: mergedPlayers.length > 0 ? mergedPlayers : primaryMatch?.player_summary || [],
     parsed_tables: {

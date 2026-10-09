@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -10,6 +10,8 @@ import {
   Loader2,
   Eye,
   X,
+  Plus,
+  Trash2,
   Download,
 } from 'lucide-react';
 import {
@@ -17,6 +19,7 @@ import {
   certifyMatchValidation,
   deleteOfficialMatch,
   uploadScoresheetFile,
+  uploadMultipleScoresheetFiles,
   downloadCertifiedMatchPdf,
   getCachedData,
   setCachedData,
@@ -24,7 +27,10 @@ import {
   isMatchLocallyCertified,
   recordOfficialCreatedMatchId,
   getStoredUser,
+  createOfficialMatch,
+  invalidateCache,
 } from '../../api/client';
+import { scanScoresheetStandalone, scanMultipleScoresheets } from '../../api/ocr';
 import type { MatchAuditDetail, BoxScoreRow, RaceResultRow } from '../../api/types';
 import { styles } from './styles/ScoresheetMatch';
 
@@ -32,97 +38,92 @@ export const ScoresheetMatch: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const appendFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   const cleanId = matchId ? matchId.replace(/^#/, '') : '';
-  const cached = cleanId ? (getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`) || (() => {
+
+  // Initial cached fallback state
+  const cached = useMemo(() => {
+    if (!cleanId) return null;
+    const directCache = getCachedData<MatchAuditDetail>(`match_audit_detail_${cleanId}`);
+    if (directCache) return directCache;
     try {
       const local = localStorage.getItem(`atleta_match_detail_${cleanId}`);
-      if (local) {
-        const parsed = JSON.parse(local);
-        if (parsed) return parsed;
-      }
-    } catch {}
-
-    const list = (getCachedData<any[]>('all_official_matches_master') || []).concat(getCachedData<any[]>('official_schedules') || []);
-    const item = list.find((m: any) => String(m.match_id || m.id || '').replace(/^#/, '') === cleanId);
-    if (!item) return null;
-    const raw = item.raw_match || {};
-    let hName = (item.home_team_name || raw.home_team_name || raw.team_id || raw.home_team || '').toUpperCase();
-    let aName = (item.opponent_team_name || raw.opponent_team_name || raw.away_team_name || raw.away_team || '').toUpperCase();
-    const gName = item.match_name || raw.match_name || item.match_class || '';
-    if ((!hName || hName === 'HOME TEAM') && gName && gName.includes(' vs ')) {
-      const parts = gName.split(' vs ');
-      if (parts[0]) hName = parts[0].replace(/\(.*\)/, '').trim().toUpperCase();
-      if (parts[1]) aName = parts[1].replace(/\(.*\)/, '').trim().toUpperCase();
-    }
-    hName = hName || 'HOME TEAM';
-    aName = aName || 'AWAY TEAM';
-    const sType = item.sport || raw.sport_type || 'Basketball';
-    return {
-      match_id: cleanId,
-      validation_id: item.validation_id || raw.validation_id || cleanId,
-      game_name: item.match_name || raw.match_name || `${hName} vs ${aName}`,
-      sport_type: sType,
-      league_class: item.match_class || `${sType.toUpperCase()} • VARSITY LEAGUE`,
-      match_date_formatted: item.date_time || item.match_date_formatted || 'DATE TBD',
-      home_team: { name: hName, score: Number(raw.home_score || 0), result: 'WIN', roster_stats: [] },
-      away_team: { name: aName, score: Number(raw.away_score || 0), result: 'LOSE', roster_stats: [] },
-      is_certified: Boolean(item.status === 'AUDITED' || item.status === 'Certified' || raw.is_certified),
-      scoresheet_url: raw.scoresheet_url || item.scoresheet_url,
-      audit_context_notes: raw.notes || '',
-    } as unknown as MatchAuditDetail;
-  })()) : null;
+      if (local) return JSON.parse(local);
+    } catch { }
+    return null;
+  }, [cleanId]);
 
   const [matchData, setMatchData] = useState<MatchAuditDetail | null>(() => cached || null);
   const [loading, setLoading] = useState(() => !cached);
   const [notes, setNotes] = useState<string>(() => {
+    try {
+      const draft = localStorage.getItem(`atleta_draft_note_${cleanId}`);
+      if (draft !== null) return draft;
+    } catch { }
     const raw = cached?.audit_context_notes;
-    return typeof raw === 'string' ? raw : (Array.isArray(raw) ? (raw as any[]).join('\n') : '');
+    return typeof raw === 'string' ? raw : Array.isArray(raw) ? (raw as any[]).join('\n') : '';
   });
+
   const [scoresheetUrl, setScoresheetUrl] = useState<string | undefined>(() => cached?.scoresheet_url);
   const [isUploading, setIsUploading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Editable rosters & race results
+  // Box score & race stats
   const [homeRoster, setHomeRoster] = useState<BoxScoreRow[]>(() => cached?.home_team?.roster_stats || []);
   const [awayRoster, setAwayRoster] = useState<BoxScoreRow[]>(() => cached?.away_team?.roster_stats || []);
   const [raceResults, setRaceResults] = useState<RaceResultRow[]>(() => cached?.race_results || []);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Modals & Actions
-  const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'PREVIEW' | 'NO_SCORESHEET' | null>(null);
+  // Modals & Action States
+  const [activeModal, setActiveModal] = useState<'CERTIFY' | 'REMOVE' | 'REMOVE_SUCCESS' | 'PREVIEW' | 'NO_SCORESHEET' | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Strictly check if match is certified (read-only locking)
+  const isCertified = Boolean(matchData?.is_certified || isMatchLocallyCertified(cleanId));
+
+  // Dynamic live score calculation from player roster points
+  const homeScore = useMemo(
+    () => (homeRoster.length > 0 ? homeRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0) : Number(matchData?.home_team?.score || 0)),
+    [homeRoster, matchData?.home_team?.score]
+  );
+  const awayScore = useMemo(
+    () => (awayRoster.length > 0 ? awayRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0) : Number(matchData?.away_team?.score || 0)),
+    [awayRoster, matchData?.away_team?.score]
+  );
+
+  const homeTeamDisplayName = matchData?.home_team?.name || (matchData as any)?.home_team_name || (matchData as any)?.team_id || 'HOME TEAM';
+  const awayTeamDisplayName = matchData?.away_team?.name || (matchData as any)?.opponent_team_name || (matchData as any)?.away_team_name || 'AWAY TEAM';
+
+  const isIndividualSport = useMemo(() => {
+    const s = (matchData?.sport_type || '').toLowerCase();
+    return s.includes('swim') || s.includes('track') || s.includes('field') || s.includes('athletic') || (raceResults && raceResults.length > 0);
+  }, [matchData?.sport_type, raceResults]);
 
   const loadMatchData = async (silent = Boolean(cached || matchData)) => {
     if (!cleanId) return;
     if (!silent) setLoading(true);
-
     try {
       const data = await getMatchAuditDetail(cleanId, false);
       if (data) {
         setMatchData(data);
         const resolvedNote = typeof data.audit_context_notes === 'string'
           ? data.audit_context_notes
-          : (Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '');
-        setNotes(resolvedNote);
+          : Array.isArray(data.audit_context_notes) ? (data.audit_context_notes as any[]).join('\n') : '';
+        let draft: string | null = null;
+        try { draft = localStorage.getItem(`atleta_draft_note_${cleanId}`); } catch { }
+        setNotes((draft !== null && !data.is_certified) ? draft : resolvedNote);
         if (data.scoresheet_url) setScoresheetUrl(data.scoresheet_url);
-        if (data.home_team?.roster_stats && data.home_team.roster_stats.length > 0) {
-          setHomeRoster(data.home_team.roster_stats);
-        }
-        if (data.away_team?.roster_stats && data.away_team.roster_stats.length > 0) {
-          setAwayRoster(data.away_team.roster_stats);
-        }
-        if (data.race_results && data.race_results.length > 0) {
-          setRaceResults(data.race_results);
-        }
-      } else {
-        setMatchData(null);
+        if (data.home_team?.roster_stats?.length) setHomeRoster(data.home_team.roster_stats);
+        if (data.away_team?.roster_stats?.length) setAwayRoster(data.away_team.roster_stats);
+        if (data.race_results?.length) setRaceResults(data.race_results);
       }
     } catch (err) {
       console.error('Failed to load match detail:', err);
-      setMatchData(null);
     } finally {
       setLoading(false);
     }
@@ -132,55 +133,275 @@ export const ScoresheetMatch: React.FC = () => {
     loadMatchData();
   }, [cleanId]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (matchData?.is_certified) return;
-    const file = e.target.files?.[0];
-    if (!file || !cleanId) return;
+  // Add and Remove Basketball Player helpers
+  const addBasketballPlayer = (team: 'home' | 'away') => {
+    const roster = team === 'home' ? homeRoster : awayRoster;
+    const nextNum = roster.length + 1;
+    const newPlayer: BoxScoreRow = {
+      jersey_no: String(nextNum).padStart(2, '0'),
+      player_name: `ATHLETE ${nextNum}`,
+      position: 'G',
+      minutes: '0',
+      pts: 0,
+      reb: 0,
+      ast: 0,
+      stl: 0,
+      blk: 0,
+      fg_pct: '0.0%',
+      three_p_pct: '0.0%',
+      ft_pct: '0.0%',
+    };
+    if (team === 'home') {
+      setHomeRoster((prev) => [...prev, newPlayer]);
+    } else {
+      setAwayRoster((prev) => [...prev, newPlayer]);
+    }
+  };
 
+  const removeBasketballPlayer = (team: 'home' | 'away', idx: number) => {
+    if (team === 'home') {
+      setHomeRoster((prev) => prev.filter((_, i) => i !== idx));
+    } else {
+      setAwayRoster((prev) => prev.filter((_, i) => i !== idx));
+    }
+  };
+
+  // Add and Remove Race Participant helpers
+  const addRaceParticipant = () => {
+    const nextRank = raceResults.length + 1;
+    const newRow: RaceResultRow = {
+      placement_rank: String(nextRank),
+      athlete_name: `ATHLETE ${nextRank}`,
+      team_name: 'DELEGATION',
+      distance: '100M',
+      finish_time: '00:00.00',
+      split_times: [],
+      efficiency: 0,
+      is_disqualified: false,
+    };
+    setRaceResults((prev) => [...prev, newRow]);
+  };
+
+  const removeRaceParticipant = (idx: number) => {
+    setRaceResults((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Edit
+  const handleToggleEdit = () => {
+    if (isCertified) return;
+
+    if (isEditing && matchData && cleanId) {
+      // Exit from Edit Mode
+      setIsEditing(false);
+      setIsSaving(true);
+
+      const hSum = homeRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0);
+      const aSum = awayRoster.reduce((sum, r) => sum + (Number(r.pts) || 0), 0);
+      const updated: MatchAuditDetail = {
+        ...matchData,
+        home_team: {
+          ...matchData.home_team,
+          score: hSum,
+          result: hSum >= aSum ? 'WIN' : 'LOSE',
+          roster_stats: homeRoster,
+          team_totals: {
+            jersey_no: '',
+            player_name: 'TEAM TOTALS',
+            minutes: '0',
+            pts: hSum,
+            reb: homeRoster.reduce((a, b) => a + (Number(b.reb) || 0), 0),
+            ast: homeRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
+            stl: homeRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
+            blk: homeRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
+            fg_pct: (() => {
+              const pcts = homeRoster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            three_p_pct: (() => {
+              const pcts = homeRoster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            ft_pct: (() => {
+              const pcts = homeRoster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+          },
+        },
+        away_team: {
+          ...matchData.away_team,
+          score: aSum,
+          result: aSum > hSum ? 'WIN' : 'LOSE',
+          roster_stats: awayRoster,
+          team_totals: {
+            jersey_no: '',
+            player_name: 'TEAM TOTALS',
+            minutes: '0',
+            pts: aSum,
+            reb: awayRoster.reduce((a, b) => a + (Number(b.reb) || 0), 0),
+            ast: awayRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
+            stl: awayRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
+            blk: awayRoster.reduce((a, b) => a + (Number(b.blk) || 0), 0),
+            fg_pct: (() => {
+              const pcts = awayRoster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            three_p_pct: (() => {
+              const pcts = awayRoster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+            ft_pct: (() => {
+              const pcts = awayRoster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+              return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+            })(),
+          },
+        },
+        race_results: raceResults,
+      };
+
+      // Synchronous Instant State & Storage Update
+      setMatchData(updated);
+      setCachedData(`match_audit_detail_${cleanId}`, updated);
+      try { localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updated)); } catch { }
+
+      // Fast Asynchronous Database Sync
+      const playerStatsPayload: any[] = [];
+      homeRoster.forEach((p, idx) => {
+        playerStatsPayload.push({
+          athlete_id: (p as any).athlete_id || `ath_home_${cleanId}_${idx + 1}`,
+          player_name: p.player_name,
+          team_name: homeTeamDisplayName,
+          jersey_number: Number(p.jersey_no) || idx + 1,
+          position: p.position || 'G',
+          stats: {
+            points: Number(p.pts || 0),
+            rebounds: Number(p.reb || 0),
+            assists: Number(p.ast || 0),
+            steals: Number(p.stl || 0),
+            blocks: Number(p.blk || 0),
+            fg_pct: p.fg_pct || '0.0%',
+            three_p_pct: p.three_p_pct || '0.0%',
+            ft_pct: p.ft_pct || '0.0%',
+          },
+        });
+      });
+
+      awayRoster.forEach((p, idx) => {
+        playerStatsPayload.push({
+          athlete_id: (p as any).athlete_id || `ath_away_${cleanId}_${idx + 1}`,
+          player_name: p.player_name,
+          team_name: awayTeamDisplayName,
+          jersey_number: Number(p.jersey_no) || idx + 1,
+          position: p.position || 'G',
+          stats: {
+            points: Number(p.pts || 0),
+            rebounds: Number(p.reb || 0),
+            assists: Number(p.ast || 0),
+            steals: Number(p.stl || 0),
+            blocks: Number(p.blk || 0),
+            fg_pct: p.fg_pct || '0.0%',
+            three_p_pct: p.three_p_pct || '0.0%',
+            ft_pct: p.ft_pct || '0.0%',
+          },
+        });
+      });
+
+      // Asynchronously update the match details
+      Promise.race([
+        createOfficialMatch({
+          match_id: cleanId,
+          team_id: homeTeamDisplayName,
+          home_team_name: homeTeamDisplayName,
+          opponent_team_name: awayTeamDisplayName,
+          sport_type: matchData.sport_type || 'Basketball',
+          match_date: (matchData as any).match_date || (matchData as any).match_date_formatted || new Date().toISOString(),
+          location: (matchData as any).location || (matchData as any).venue || 'Tournament Sports Complex',
+          scoresheet_url: scoresheetUrl?.startsWith('data:') ? undefined : scoresheetUrl,
+          player_stats: playerStatsPayload,
+          home_score: hSum,
+          away_score: aSum,
+          game_result: hSum >= aSum ? 'WIN' : 'LOSE',
+          notes: notes,
+        } as any),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ])
+        .then(() => {
+          invalidateCache('official_dashboard');
+          invalidateCache('official_schedules');
+          invalidateCache('all_official_matches_master');
+        })
+        .catch((err) => console.warn('Fast DB sync completed with local cache priority:', err))
+        .finally(() => setIsSaving(false));
+
+      return;
+    }
+
+    setIsEditing(true);
+  };
+
+  // OCR scoresheet upload & extraction processing
+  const processScoresheetFiles = async (inputFiles: File[]) => {
+    if (isCertified) return;
+    if (inputFiles.length === 0) {
+      setUploadedFiles([]);
+      setScoresheetUrl('');
+      setMatchData((prev) => (prev ? { ...prev, scoresheet_url: '' } : prev));
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (appendFileInputRef.current) appendFileInputRef.current.value = '';
+      return;
+    }
+    if (!cleanId) return;
+
+    setUploadedFiles(inputFiles);
     setIsUploading(true);
     setUploadError(null);
-    try {
-      const res = await uploadScoresheetFile(cleanId, file);
-      if (res?.scoresheet_url) setScoresheetUrl(res.scoresheet_url);
 
-      // Map real AI-extracted player statistics following mobile OCR logging logic
-      const rawPlayers: any[] = Array.isArray(res?.player_summary)
-        ? res.player_summary
-        : Array.isArray(res?.parsed_tables?.player_summary)
-        ? res.parsed_tables.player_summary
-        : [];
+    try {
+      // 1. Run direct Gemini OCR scan to ensure stats and team names are extracted
+      const ocrPromise = inputFiles.length > 1 ? scanMultipleScoresheets(inputFiles) : scanScoresheetStandalone(inputFiles[0]);
+      const uploadPromise = inputFiles.length > 1 ? uploadMultipleScoresheetFiles(cleanId, inputFiles).catch(() => null) : uploadScoresheetFile(cleanId, inputFiles[0]).catch(() => null);
+
+      const [ocrRes, uploadRes] = await Promise.all([ocrPromise, uploadPromise]);
+      const res = ocrRes || uploadRes;
+      const finalScoresheetUrl = uploadRes?.scoresheet_url || res?.scoresheet_url;
+      if (finalScoresheetUrl) setScoresheetUrl(finalScoresheetUrl);
+
+      let rawPlayers: any[] = Array.isArray(res?.player_summary)
+        ? [...res.player_summary]
+        : Array.isArray(res?.parsed_tables?.player_summary) ? [...res.parsed_tables.player_summary] : [];
+
+      const subMatches = Array.isArray(res?.matches) ? res.matches : (Array.isArray(res?.pages) ? res.pages : []);
+      if (subMatches.length > 0) {
+        subMatches.forEach((m: any) => {
+          const mPlayers = Array.isArray(m?.player_summary)
+            ? m.player_summary
+            : (Array.isArray(m?.parsed_tables?.player_summary) ? m.parsed_tables.player_summary : []);
+          mPlayers.forEach((incoming: any) => {
+            const incJersey = incoming.jersey_number ?? incoming.number;
+            const incName = String(incoming.player_name || incoming.name || '').trim().toUpperCase();
+            const exists = rawPlayers.some((p: any) => {
+              const pJersey = p.jersey_number ?? p.number;
+              const pName = String(p.player_name || p.name || '').trim().toUpperCase();
+              return (incJersey !== undefined && pJersey !== undefined && Number(incJersey) === Number(pJersey)) || (incName && pName && incName === pName);
+            });
+            if (!exists) rawPlayers.push(incoming);
+          });
+        });
+      }
 
       const teamScoresArr: any[] = Array.isArray(res?.team_scores)
         ? res.team_scores
-        : Array.isArray(res?.parsed_tables?.team_scores)
-        ? res.parsed_tables.team_scores
-        : [];
+        : Array.isArray(res?.parsed_tables?.team_scores) ? res.parsed_tables.team_scores : [];
 
       if (rawPlayers.length > 0) {
         const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
         const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
 
-        const ocrHomeName = String(
-          res?.match_info?.home_team_name ||
-          res?.match_info?.home_team ||
-          homeScoreItem?.team ||
-          matchData?.home_team.name ||
-          'HOME TEAM'
-        ).toUpperCase();
-
-        const ocrAwayName = String(
-          res?.match_info?.opponent_team_name ||
-          res?.match_info?.away_team ||
-          awayScoreItem?.team ||
-          matchData?.away_team.name ||
-          'AWAY TEAM'
-        ).toUpperCase();
+        const ocrHomeName = String(res?.match_info?.home_team_name || res?.match_info?.home_team || homeScoreItem?.team || matchData?.home_team.name || 'HOME TEAM').toUpperCase();
+        const ocrAwayName = String(res?.match_info?.opponent_team_name || res?.match_info?.away_team || awayScoreItem?.team || matchData?.away_team.name || 'AWAY TEAM').toUpperCase();
 
         const hName = (matchData?.home_team.name || 'HOME TEAM').toUpperCase();
         const aName = (matchData?.away_team.name || 'AWAY TEAM').toUpperCase();
-
-        const totalPlayers = rawPlayers.length;
-        const halfCount = Math.ceil(totalPlayers / 2);
+        const halfCount = Math.ceil(rawPlayers.length / 2);
 
         const hRows: BoxScoreRow[] = [];
         const aRows: BoxScoreRow[] = [];
@@ -200,18 +421,41 @@ export const ScoresheetMatch: React.FC = () => {
             isHome = idx >= halfCount;
           }
 
-          const jersey = p.jersey_number !== undefined && p.jersey_number !== null
-            ? String(p.jersey_number).padStart(2, '0')
-            : String(idx + 1).padStart(2, '0');
-
+          const jersey = p.jersey_number !== undefined && p.jersey_number !== null ? String(p.jersey_number).padStart(2, '0') : String(idx + 1).padStart(2, '0');
           const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
           const fga = Number(p.fg_attempted || p.fga || 0);
           const fgm = Number(p.fg_made || p.fgm || 0);
-          const fgPct = p.true_shooting_pct
-            ? `${Math.round(p.true_shooting_pct)}%`
-            : fga > 0
-            ? `${Math.round((fgm / fga) * 100)}%`
-            : '50%';
+          
+          let fgPct = '0.0%';
+          if (p.fg_pct || p.fg_percentage) {
+            const raw = String(p.fg_pct || p.fg_percentage).trim();
+            fgPct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (p.true_shooting_pct) {
+            const val = parseFloat(String(p.true_shooting_pct).replace('%', ''));
+            fgPct = !isNaN(val) ? `${Math.round(val)}%` : '0.0%';
+          } else if (fga > 0) {
+            fgPct = `${Math.round((fgm / fga) * 100)}%`;
+          }
+
+          let threePct = '0.0%';
+          const tpa = Number(p.three_p_attempted || p.three_p_attempts || p.tpa || p['3pa'] || 0);
+          const tpm = Number(p.three_p_made || p.tpm || p['3pm'] || 0);
+          if (p.three_p_pct || p.three_pct || p['3p_pct']) {
+            const raw = String(p.three_p_pct || p.three_pct || p['3p_pct']).trim();
+            threePct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (tpa > 0) {
+            threePct = `${Math.round((tpm / tpa) * 100)}%`;
+          }
+
+          let ftPct = '0.0%';
+          const fta = Number(p.ft_attempted || p.ft_attempts || p.fta || 0);
+          const ftm = Number(p.ft_made || p.ftm || 0);
+          if (p.ft_pct || p.ft_percentage) {
+            const raw = String(p.ft_pct || p.ft_percentage).trim();
+            ftPct = raw.endsWith('%') ? raw : `${raw}%`;
+          } else if (fta > 0) {
+            ftPct = `${Math.round((ftm / fta) * 100)}%`;
+          }
 
           const row: BoxScoreRow = {
             jersey_no: jersey,
@@ -224,57 +468,55 @@ export const ScoresheetMatch: React.FC = () => {
             stl: Number(p.steals ?? p.stl ?? 0),
             blk: Number(p.blocks ?? p.blk ?? 0),
             fg_pct: fgPct,
-            three_p_pct: p.three_p_pct ? `${p.three_p_pct}%` : '0.0%',
-            ft_pct: p.ft_pct ? `${p.ft_pct}%` : '0.0%',
+            three_p_pct: threePct,
+            ft_pct: ftPct,
           };
 
-          if (isHome) {
-            hRows.push(row);
-          } else {
-            aRows.push(row);
-          }
+          if (isHome) hRows.push(row);
+          else aRows.push(row);
         });
 
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
 
+        const hSum = hRows.reduce((a, b) => a + b.pts, 0);
+        const aSum = aRows.reduce((a, b) => a + b.pts, 0);
+
         setMatchData((prev) => {
           if (!prev) return prev;
-          const hSum = hRows.reduce((a, b) => a + b.pts, 0);
-          const aSum = aRows.reduce((a, b) => a + b.pts, 0);
           const updated: MatchAuditDetail = {
             ...prev,
-            scoresheet_url: res?.scoresheet_url || prev.scoresheet_url,
+            scoresheet_url: finalScoresheetUrl || prev.scoresheet_url,
             home_team: {
               ...prev.home_team,
+              name: (ocrHomeName && ocrHomeName !== 'HOME TEAM' ? ocrHomeName : prev.home_team.name) || 'HOME TEAM',
               score: hSum,
               result: hSum >= aSum ? 'WIN' : 'LOSE',
               roster_stats: hRows,
             },
             away_team: {
               ...prev.away_team,
+              name: (ocrAwayName && ocrAwayName !== 'AWAY TEAM' ? ocrAwayName : prev.away_team.name) || 'AWAY TEAM',
               score: aSum,
               result: aSum > hSum ? 'WIN' : 'LOSE',
               roster_stats: aRows,
             },
           };
           setCachedData(`match_audit_detail_${cleanId}`, updated);
+          try { localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updated)); } catch { }
           return updated;
         });
+      } else if (finalScoresheetUrl) {
+        setMatchData((prev) => (prev ? { ...prev, scoresheet_url: finalScoresheetUrl } : prev));
       }
     } catch (err: any) {
-      setUploadError(err?.message || 'Failed to upload scoresheet.');
+      setUploadError(err?.message || 'Failed to scan and upload scoresheet.');
     } finally {
       setIsUploading(false);
     }
   };
 
-  const updateBasketballStat = (
-    team: 'home' | 'away',
-    idx: number,
-    field: keyof BoxScoreRow,
-    value: any
-  ) => {
+  const updateBasketballStat = (team: 'home' | 'away', idx: number, field: keyof BoxScoreRow, value: any) => {
     const target = team === 'home' ? [...homeRoster] : [...awayRoster];
     target[idx] = { ...target[idx], [field]: value };
     if (team === 'home') setHomeRoster(target);
@@ -287,15 +529,6 @@ export const ScoresheetMatch: React.FC = () => {
     setRaceResults(updated);
   };
 
-  const handleOpenCertify = () => {
-    if (!scoresheetUrl || !scoresheetUrl.trim()) {
-      setActiveModal('NO_SCORESHEET');
-      return;
-    }
-    setActiveModal('CERTIFY');
-  };
-
-  // HANDLES CERTIFY AND MAKE SURE IT DOESN'T DISAPPEAR
   const handleCertify = async () => {
     if (!matchData) return;
     if (!scoresheetUrl || !scoresheetUrl.trim()) {
@@ -305,8 +538,45 @@ export const ScoresheetMatch: React.FC = () => {
     setActionLoading(true);
     setActionError(null);
     try {
+      const finalNotes = typeof notes === 'string' ? notes : Array.isArray(notes) ? (notes as any[]).join('\n') : '';
+
+      // Sync latest notes and match details directly to Match_Logs
+      await createOfficialMatch({
+        match_id: cleanId,
+        team_id: homeTeamDisplayName,
+        home_team_name: homeTeamDisplayName,
+        opponent_team_name: awayTeamDisplayName,
+        sport_type: matchData.sport_type || 'Basketball',
+        match_date: (matchData as any).match_date || (matchData as any).match_date_formatted || new Date().toISOString(),
+        location: (matchData as any).location || (matchData as any).venue || 'Tournament Sports Complex',
+        scoresheet_url: scoresheetUrl?.startsWith('data:') ? undefined : scoresheetUrl,
+        player_stats: isIndividualSport ? raceResults : [
+          ...homeRoster.map((p, idx) => ({
+            athlete_id: `ath_home_${idx + 1}`,
+            player_name: p.player_name,
+            team_name: homeTeamDisplayName,
+            jersey_number: Number(p.jersey_no) || idx + 1,
+            position: p.position || 'G',
+            stats: { points: Number(p.pts || 0), rebounds: Number(p.reb || 0), assists: Number(p.ast || 0), steals: Number(p.stl || 0), blocks: Number(p.blk || 0), fg_pct: p.fg_pct, three_p_pct: p.three_p_pct, ft_pct: p.ft_pct },
+          })),
+          ...awayRoster.map((p, idx) => ({
+            athlete_id: `ath_away_${idx + 1}`,
+            player_name: p.player_name,
+            team_name: awayTeamDisplayName,
+            jersey_number: Number(p.jersey_no) || idx + 1,
+            position: p.position || 'G',
+            stats: { points: Number(p.pts || 0), rebounds: Number(p.reb || 0), assists: Number(p.ast || 0), steals: Number(p.stl || 0), blocks: Number(p.blk || 0), fg_pct: p.fg_pct, three_p_pct: p.three_p_pct, ft_pct: p.ft_pct },
+          })),
+        ],
+        home_score: homeScore,
+        away_score: awayScore,
+        game_result: homeScore >= awayScore ? 'WIN' : 'LOSE',
+        notes: finalNotes,
+      } as any).catch(() => {});
+
       await certifyMatchValidation(matchData.validation_id || matchData.match_id, {
-        context_notes: typeof notes === 'string' ? notes : (Array.isArray(notes) ? (notes as any[]).join('\n') : ''),
+        context_notes: finalNotes,
+        notes: finalNotes,
         scoresheet_url: scoresheetUrl,
       });
       const currentUser = getStoredUser();
@@ -315,18 +585,18 @@ export const ScoresheetMatch: React.FC = () => {
         markMatchAsCertified(cleanId);
         if (uId) recordOfficialCreatedMatchId(cleanId, uId);
       }
-      if (matchData.match_id) {
-        const mKey = String(matchData.match_id).replace(/^#/, '');
-        markMatchAsCertified(mKey);
-        if (uId) recordOfficialCreatedMatchId(mKey, uId);
-      }
-      if (matchData.validation_id) {
-        const vKey = String(matchData.validation_id).replace(/^#/, '');
-        markMatchAsCertified(vKey);
-        if (uId) recordOfficialCreatedMatchId(vKey, uId);
-      }
-      // Optimistically mark as certified in state so the UI updates instantly with zero screen flash
-      setMatchData((prev) => prev ? ({ ...prev, is_certified: true, audit_context_notes: notes }) : prev);
+      const updatedDetail: MatchAuditDetail = {
+        ...matchData,
+        is_certified: true,
+        audit_context_notes: finalNotes,
+        scoresheet_url: scoresheetUrl,
+      };
+      setMatchData(updatedDetail);
+      setCachedData(`match_audit_detail_${cleanId}`, updatedDetail);
+      try {
+        localStorage.removeItem(`atleta_draft_note_${cleanId}`);
+        localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updatedDetail));
+      } catch { }
       setActiveModal(null);
       await loadMatchData(true);
     } catch (err: any) {
@@ -336,20 +606,7 @@ export const ScoresheetMatch: React.FC = () => {
     }
   };
 
-  const handleRemove = async () => {
-    if (!matchId) return;
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      await deleteOfficialMatch(matchId);
-      setActiveModal(null);
-      navigate('/matches');
-    } catch (err: any) {
-      setActionError(err?.message || 'Failed to remove match record.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownloadScoresheet = async () => {
     if (isDownloading) return;
@@ -395,7 +652,6 @@ export const ScoresheetMatch: React.FC = () => {
         }
       }
 
-      // Fallback: download certified PDF from API
       const blob = await downloadCertifiedMatchPdf(cleanId);
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -413,252 +669,224 @@ export const ScoresheetMatch: React.FC = () => {
     }
   };
 
-  const isIndividualSport = matchData?.sport_type
-    ? matchData.sport_type.toLowerCase().includes('swim') ||
-    matchData.sport_type.toLowerCase().includes('track') ||
-    matchData.sport_type.toLowerCase().includes('field')
-    : false;
+  const handleRemove = () => {
+    if (!cleanId) return;
+    deleteOfficialMatch(cleanId).catch((err) => console.error('Delete match error:', err));
+    setActiveModal('REMOVE_SUCCESS');
+  };
 
   const assignedList = Array.isArray(matchData?.assigned_coaches) && matchData.assigned_coaches.length > 0
     ? matchData.assigned_coaches
-    : matchData?.coach_name
-      ? [matchData.coach_name]
-      : [];
+    : matchData?.coach_name ? [matchData.coach_name] : [];
   const coachDisplay = assignedList.length > 0 ? assignedList.join(', ') : null;
 
-  const homeTeamDisplayName = matchData?.home_team?.name || (matchData as any)?.team_id || (matchData as any)?.home_team_name || 'HOME TEAM';
-  const awayTeamDisplayName = matchData?.away_team?.name || (matchData as any)?.opponent_team_name || (matchData as any)?.away_team_name || 'AWAY TEAM';
+  // Render Table for Team Basketball Stats with live sums
+  const renderTeamStatsTable = (teamName: string, roster: BoxScoreRow[], teamType: 'home' | 'away') => {
+    const liveScore = roster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
+    return (
+      <div style={styles.tableSection}>
+        <div style={styles.tableHeaderRow}>
+          <div style={styles.tableSectionTitle}>{teamName} PLAYER PERFORMANCE STATISTICS</div>
+          {teamType === 'home' && !isCertified && (
+            <button
+              type="button"
+              onClick={handleToggleEdit}
+              disabled={isSaving}
+              className="hover-btn-outline"
+              style={styles.editToggleBtn}
+            >
+              {isSaving ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
+                  <span>SAVING...</span>
+                </span>
+              ) : isEditing ? (
+                'SAVE CHANGES'
+              ) : (
+                'EDIT RESULTS'
+              )}
+            </button>
+          )}
+        </div>
+        <div style={styles.statsTableFrame}>
+          <table style={styles.statsTable}>
+            <thead>
+              <tr>
+                <th style={styles.statThNo}>[ NO ]</th>
+                <th style={styles.statThPlayerName}>[ PLAYER NAME ]</th>
+                <th style={styles.statTh}>[ MIN ]</th>
+                <th style={styles.statTh}>[ PTS ]</th>
+                <th style={styles.statTh}>[ REB ]</th>
+                <th style={styles.statTh}>[ AST ]</th>
+                <th style={styles.statTh}>[ STL ]</th>
+                <th style={styles.statTh}>[ BLK ]</th>
+                <th style={styles.statTh}>[ FG% ]</th>
+                <th style={styles.statTh}>[ 3P% ]</th>
+                <th style={isEditing && !isCertified ? styles.statTh : styles.statThLast}>[ FT% ]</th>
+                {isEditing && !isCertified && (
+                  <th style={styles.statThLast}>[ ACTION ]</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {roster.length > 0 ? (
+                roster.map((row, idx) => (
+                  <tr key={`${teamType}-${idx}`} style={styles.statTr}>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="text" value={row.jersey_no} onChange={(e) => updateBasketballStat(teamType, idx, 'jersey_no', e.target.value)} style={styles.statInput} />
+                      ) : row.jersey_no}
+                    </td>
+                    <td style={styles.statTdName}>
+                      {isEditing && !isCertified ? (
+                        <input type="text" value={row.player_name} onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)} style={styles.statInputName} />
+                      ) : row.player_name}
+                    </td>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="text" value={row.minutes} onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)} style={styles.statInput} />
+                      ) : row.minutes}
+                    </td>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="number" value={row.pts} onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))} style={styles.statInput} />
+                      ) : row.pts}
+                    </td>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="number" value={row.reb} onChange={(e) => updateBasketballStat(teamType, idx, 'reb', Number(e.target.value))} style={styles.statInput} />
+                      ) : row.reb}
+                    </td>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="number" value={row.ast} onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))} style={styles.statInput} />
+                      ) : row.ast}
+                    </td>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="number" value={row.stl} onChange={(e) => updateBasketballStat(teamType, idx, 'stl', Number(e.target.value))} style={styles.statInput} />
+                      ) : row.stl}
+                    </td>
+                    <td style={styles.statTd}>
+                      {isEditing && !isCertified ? (
+                        <input type="number" value={row.blk} onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))} style={styles.statInput} />
+                      ) : row.blk}
+                    </td>
+                    <td style={styles.statTd}>{row.fg_pct}</td>
+                    <td style={styles.statTd}>{row.three_p_pct}</td>
+                    <td style={isEditing && !isCertified ? styles.statTd : styles.statTdLast}>{row.ft_pct}</td>
+                    {isEditing && !isCertified && (
+                      <td style={styles.statTdLast}>
+                        <button
+                          type="button"
+                          onClick={() => removeBasketballPlayer(teamType, idx)}
+                          style={styles.removeRowBtn}
+                          title="Remove player"
+                        >
+                          <Trash2 style={{ width: 13, height: 13 }} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={isEditing && !isCertified ? 12 : 11} style={styles.tableEmptyNotice}>
+                    No player statistics recorded. Upload official scoresheet below to extract results with OCR.
+                  </td>
+                </tr>
+              )}
+              <tr style={styles.statTotalsTr}>
+                <td style={styles.statTotalsTd}></td>
+                <td style={styles.statTotalsTdName}>TEAM TOTALS</td>
+                <td style={styles.statTotalsTd}>0</td>
+                <td style={styles.statTotalsTd}>{liveScore}</td>
+                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.reb) || 0), 0)}</td>
+                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.ast) || 0), 0)}</td>
+                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.stl) || 0), 0)}</td>
+                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.blk) || 0), 0)}</td>
+                <td style={styles.statTotalsTd}>
+                  {(() => {
+                    const pcts = roster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+                  })()}
+                </td>
+                <td style={styles.statTotalsTd}>
+                  {(() => {
+                    const pcts = roster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+                  })()}
+                </td>
+                <td style={styles.statTotalsTd}>
+                  {(() => {
+                    const pcts = roster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
+                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
+                  })()}
+                </td>
+                {isEditing && !isCertified && <td style={styles.statTotalsTdLast}></td>}
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-  const homeScore = matchData?.home_team?.score || homeRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
-  const awayScore = matchData?.away_team?.score || awayRoster.reduce((acc, row) => acc + (Number(row.pts) || 0), 0) || 0;
-
-  // Render Table for Team Basketball Stats
-  const renderTeamStatsTable = (
-    teamName: string,
-    roster: BoxScoreRow[],
-    teamType: 'home' | 'away',
-    score: number
-  ) => (
-    <div style={styles.tableSection}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={styles.tableSectionTitle}>{teamName} PLAYER PERFORMANCE STATISTICS</div>
-        {teamType === 'home' && !matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
-          <button
-            type="button"
-            onClick={() => {
-              if (isEditing && matchData && cleanId) {
-                const updated: MatchAuditDetail = {
-                  ...matchData,
-                  home_team: { ...matchData.home_team, roster_stats: homeRoster },
-                  away_team: { ...matchData.away_team, roster_stats: awayRoster },
-                };
-                setCachedData(`match_audit_detail_${cleanId}`, updated);
-                try {
-                  localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updated));
-                } catch {}
-              }
-              setIsEditing(!isEditing);
-            }}
-            className="hover-btn-outline"
-            style={styles.editToggleBtn}
-          >
-            {isEditing ? 'SAVE CHANGES' : 'EDIT RESULTS'}
-          </button>
+        {isEditing && !isCertified && (
+          <div style={styles.addPlayerBtnRow}>
+            <button
+              type="button"
+              onClick={() => addBasketballPlayer(teamType)}
+              style={styles.addPlayerBtn}
+              className="hover-btn-outline"
+            >
+              <Plus style={{ width: 14, height: 14 }} />
+              <span>ADD PLAYER TO {teamName}</span>
+            </button>
+          </div>
         )}
       </div>
-      {/* temporary (will replace into dynamic stats based on sport) */}
-      <div style={styles.statsTableFrame}>
-        <table style={styles.statsTable}>
-          <thead>
-            <tr>
-              <th style={{ ...styles.statTh, width: '48px' }}>[ NO ]</th>
-              <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '14px' }}>[ PLAYER NAME ]</th>
-              <th style={styles.statTh}>[ MIN ]</th>
-              <th style={styles.statTh}>[ PTS ]</th>
-              <th style={styles.statTh}>[ REB ]</th>
-              <th style={styles.statTh}>[ AST ]</th>
-              <th style={styles.statTh}>[ STL ]</th>
-              <th style={styles.statTh}>[ BLK ]</th>
-              <th style={styles.statTh}>[ FG% ]</th>
-              <th style={styles.statTh}>[ 3P% ]</th>
-              <th style={{ ...styles.statTh, borderRight: 'none' }}>[ FT% ]</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roster.length > 0 ? (
-              roster.map((row, idx) => (
-                <tr key={`${teamType}-${idx}`} style={styles.statTr}>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.jersey_no}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'jersey_no', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.jersey_no
-                    )}
-                  </td>
-                  <td style={{ ...styles.statTd, ...styles.statTdName }}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.player_name}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)}
-                        style={styles.statInputName}
-                      />
-                    ) : (
-                      row.player_name
-                    )}
-                  </td>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.minutes}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.minutes
-                    )}
-                  </td>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={row.pts}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.pts
-                    )}
-                  </td>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={row.reb}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'reb', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.reb
-                    )}
-                  </td>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={row.ast}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.ast
-                    )}
-                  </td>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={row.stl}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'stl', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.stl
-                    )}
-                  </td>
-                  <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={row.blk}
-                        onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.blk
-                    )}
-                  </td>
-                  <td style={styles.statTd}>{row.fg_pct}</td>
-                  <td style={styles.statTd}>{row.three_p_pct}</td>
-                  <td style={{ ...styles.statTd, borderRight: 'none' }}>{row.ft_pct}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={11} style={{ padding: '24px', color: '#64748B', textAlign: 'center' }}>
-                  No player statistics recorded. Upload official scoresheet below to see results.
-                </td>
-              </tr>
-            )}
+    );
+  };
 
-            <tr style={styles.statTotalsTr}>
-              <td style={styles.statTotalsTd}></td>
-              <td style={{ ...styles.statTotalsTd, textAlign: 'left', paddingLeft: '14px' }}>TEAM TOTALS</td>
-              <td style={styles.statTotalsTd}>{'0'}</td>
-              <td style={styles.statTotalsTd}>{score}</td>
-              <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.reb) || 0), 0)}</td>
-              <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.ast) || 0), 0)}</td>
-              <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.stl) || 0), 0)}</td>
-              <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.blk) || 0), 0)}</td>
-              <td style={styles.statTotalsTd}>{roster.length > 0 ? '48.8%' : '0.0%'}</td>
-              <td style={styles.statTotalsTd}>{roster.length > 0 ? '28.5%' : '0.0%'}</td>
-              <td style={{ ...styles.statTotalsTd, borderRight: 'none' }}>{roster.length > 0 ? '78.0%' : '0.0%'}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  // Render Table for Swimming & Track and Field
+  // Render Table for Swimming & Athletics
   const renderIndividualRaceTable = () => (
     <div style={styles.tableSection}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={styles.tableSectionTitle}>
-          {matchData?.sport_type?.toUpperCase()} OFFICIAL RACE & EVENT RESULTS
-        </div>
-        {!matchData?.is_certified && Boolean(scoresheetUrl && scoresheetUrl.trim()) && (
+      <div style={styles.tableHeaderRow}>
+        <div style={styles.tableSectionTitle}>{matchData?.sport_type?.toUpperCase()} OFFICIAL RACE & EVENT RESULTS</div>
+        {!isCertified && (
           <button
             type="button"
-            onClick={() => {
-              if (isEditing && matchData && cleanId) {
-                const updated: MatchAuditDetail = {
-                  ...matchData,
-                  race_results: raceResults,
-                };
-                setCachedData(`match_audit_detail_${cleanId}`, updated);
-                try {
-                  localStorage.setItem(`atleta_match_detail_${cleanId}`, JSON.stringify(updated));
-                } catch {}
-              }
-              setIsEditing(!isEditing);
-            }}
+            onClick={handleToggleEdit}
+            disabled={isSaving}
             className="hover-btn-outline"
             style={styles.editToggleBtn}
           >
-            {isEditing ? 'SAVE CHANGES' : 'EDIT RESULTS'}
+            {isSaving ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
+                <span>SAVING...</span>
+              </span>
+            ) : isEditing ? (
+              'SAVE CHANGES'
+            ) : (
+              'EDIT RESULTS'
+            )}
           </button>
         )}
       </div>
-
       <div style={styles.statsTableFrame}>
         <table style={styles.statsTable}>
           <thead>
             <tr>
-              <th style={{ ...styles.statTh, width: '60px' }}>[ RANK ]</th>
-              <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '14px' }}>[ ATHLETE NAME ]</th>
+              <th style={styles.statThRank}>[ RANK ]</th>
+              <th style={styles.statThPlayerName}>[ ATHLETE NAME ]</th>
               <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
               <th style={styles.statTh}>[ DISTANCE ]</th>
               <th style={styles.statTh}>[ FINISH TIME ]</th>
               <th style={styles.statTh}>[ SPLIT TIMES ]</th>
               <th style={styles.statTh}>[ EFFICIENCY ]</th>
-              <th style={{ ...styles.statTh, borderRight: 'none' }}>[ STATUS ]</th>
+              <th style={isEditing && !isCertified ? styles.statTh : styles.statThLast}>[ STATUS ]</th>
+              {isEditing && !isCertified && (
+                <th style={styles.statThLast}>[ ACTION ]</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -666,105 +894,122 @@ export const ScoresheetMatch: React.FC = () => {
               raceResults.map((row, idx) => (
                 <tr key={`race-${idx}`} style={styles.statTr}>
                   <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.placement_rank}
-                        onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      `#${row.placement_rank}`
-                    )}
+                    {isEditing && !isCertified ? (
+                      <input type="text" value={row.placement_rank} onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)} style={styles.statInput} />
+                    ) : `#${row.placement_rank}`}
                   </td>
-                  <td style={{ ...styles.statTd, ...styles.statTdName }}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.athlete_name}
-                        onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)}
-                        style={styles.statInputName}
-                      />
-                    ) : (
-                      row.athlete_name
-                    )}
+                  <td style={styles.statTdName}>
+                    {isEditing && !isCertified ? (
+                      <input type="text" value={row.athlete_name} onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)} style={styles.statInputName} />
+                    ) : row.athlete_name}
                   </td>
                   <td style={styles.statTd}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.team_name || ''}
-                        onChange={(e) => updateRaceStat(idx, 'team_name', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.team_name || 'Individual'
-                    )}
+                    {isEditing && !isCertified ? (
+                      <input type="text" value={row.team_name || ''} onChange={(e) => updateRaceStat(idx, 'team_name', e.target.value)} style={styles.statInput} />
+                    ) : (row.team_name || 'Individual')}
                   </td>
                   <td style={styles.statTd}>{row.distance}</td>
-                  <td style={{ ...styles.statTd, fontWeight: 800 }}>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={row.finish_time}
-                        onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)}
-                        style={styles.statInput}
-                      />
-                    ) : (
-                      row.finish_time
-                    )}
+                  <td style={styles.statTdBold}>
+                    {isEditing && !isCertified ? (
+                      <input type="text" value={row.finish_time} onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)} style={styles.statInput} />
+                    ) : row.finish_time}
                   </td>
-                  <td style={styles.statTd}>
-                    {Array.isArray(row.split_times) && row.split_times.length > 0
-                      ? row.split_times.join(' / ')
-                      : '—'}
-                  </td>
+                  <td style={styles.statTd}>{Array.isArray(row.split_times) ? row.split_times.join(' / ') : '—'}</td>
                   <td style={styles.statTd}>{row.efficiency || 0}</td>
-                  <td style={{ ...styles.statTd, borderRight: 'none' }}>
-                    {row.is_disqualified ? (
-                      <span style={{ color: '#EF4444', fontWeight: 800 }}>DQ</span>
-                    ) : (
-                      <span style={{ color: '#10B981', fontWeight: 800 }}>OFFICIAL</span>
-                    )}
+                  <td style={isEditing && !isCertified ? styles.statTd : styles.statTdLast}>
+                    <span style={row.is_disqualified ? styles.statusDq : styles.statusOfficial}>
+                      {row.is_disqualified ? 'DQ' : 'OFFICIAL'}
+                    </span>
                   </td>
+                  {isEditing && !isCertified && (
+                    <td style={styles.statTdLast}>
+                      <button
+                        type="button"
+                        onClick={() => removeRaceParticipant(idx)}
+                        style={styles.removeRowBtn}
+                        title="Remove participant"
+                      >
+                        <Trash2 style={{ width: 13, height: 13 }} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={8} style={{ padding: '24px', color: '#64748B', textAlign: 'center' }}>
-                  No race results recorded. Upload official meet scoresheet below to see results.
+                <td colSpan={isEditing && !isCertified ? 9 : 8} style={styles.tableEmptyNotice}>
+                  No race results recorded. Upload official scoresheet below to extract results with OCR.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {isEditing && !isCertified && (
+        <div style={styles.addPlayerBtnRow}>
+          <button
+            type="button"
+            onClick={addRaceParticipant}
+            style={styles.addPlayerBtn}
+            className="hover-btn-outline"
+          >
+            <Plus style={{ width: 14, height: 14 }} />
+            <span>ADD ATHLETE TO EVENT</span>
+          </button>
+        </div>
+      )}
     </div>
   );
+
+  // Computed display pages for single or multi-file scoresheets
+  const displayPages = useMemo(() => {
+    if (uploadedFiles.length > 0) {
+      return uploadedFiles.map((file, idx) => ({
+        key: `file-${idx}`,
+        badge: `PAGE ${idx + 1}`,
+        name: file.name,
+        url: URL.createObjectURL(file),
+        isPdf: file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'),
+        isUploaded: true,
+        index: idx,
+      }));
+    }
+    if (!scoresheetUrl) return [];
+
+    // Safely resolve multi-urls without corrupting base64 data URLs
+    let rawUrls: string[] = [];
+    if (Array.isArray((matchData as any)?.scoresheet_urls)) {
+      rawUrls = (matchData as any).scoresheet_urls;
+    } else if (typeof scoresheetUrl === 'string' && scoresheetUrl.trim().startsWith('[')) {
+      try { rawUrls = JSON.parse(scoresheetUrl); } catch { rawUrls = [scoresheetUrl]; }
+    } else {
+      rawUrls = [scoresheetUrl];
+    }
+
+    return rawUrls.map((url, idx) => ({
+      key: `url-${idx}`,
+      badge: rawUrls.length > 1 ? `PAGE ${idx + 1}` : 'OFFICIAL SCORESHEET',
+      name: `Page ${idx + 1}`,
+      url,
+      isPdf: url.toLowerCase().includes('.pdf') || url.startsWith('data:application/pdf'),
+      isUploaded: false,
+      index: idx,
+    }));
+  }, [uploadedFiles, scoresheetUrl, matchData]);
 
   return (
     <div style={styles.shell}>
       <main style={styles.contentArea}>
         <div style={styles.topReturnBar}>
-          <button
-            type="button"
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-              } else {
-                navigate('/dashboard');
-              }
-            }}
-            className="hover-btn-outline"
-            style={styles.returnBtn}
-          >
+          <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-outline" style={styles.returnBtn}>
             <ArrowLeft style={{ width: 15, height: 15 }} />
             <span>RETURN TO DASHBOARD</span>
           </button>
         </div>
 
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)' }}>
+          <div style={styles.loadingContainer}>
             <Loader2 style={{ width: 40, height: 40, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
           </div>
         ) : matchData ? (
@@ -782,19 +1027,17 @@ export const ScoresheetMatch: React.FC = () => {
                   <Calendar style={{ width: 15, height: 15, color: '#64748B' }} />
                   <span>{matchData.match_date_formatted}</span>
                   {coachDisplay && (
-                    <span style={{ marginLeft: '12px', color: '#64748B', fontWeight: 600 }}>
-                      • Coach: <strong style={{ color: '#0B132B' }}>{coachDisplay}</strong>
+                    <span style={styles.coachHeaderTag}>
+                      • Coach: <strong style={styles.coachNameText}>{coachDisplay}</strong>
                     </span>
                   )}
-                  {matchData.is_certified && (
-                    <span style={{ ...styles.badgeWin, marginLeft: '12px' }}>
-                      OFFICIAL MATCH
-                    </span>
+                  {isCertified && (
+                    <span style={styles.certifiedHeaderBadge}>OFFICIAL MATCH</span>
                   )}
                 </div>
               </div>
 
-              {/* Scoreboard / Competitors Box */}
+              {/* Scoreboard Box with dynamic sums */}
               {!isIndividualSport ? (
                 <div style={styles.scoreboardTile}>
                   <div style={styles.scoreTeamBlock}>
@@ -805,9 +1048,7 @@ export const ScoresheetMatch: React.FC = () => {
                         {homeScore >= awayScore ? 'WIN' : 'LOSE'}
                       </span>
                     ) : (
-                      <span style={{ ...styles.badgeLose, backgroundColor: '#E2E8F0', color: '#64748B', border: '1px solid #CBD5E1' }}>
-                        UNPLAYED
-                      </span>
+                      <span style={styles.unplayedBadge}>UNPLAYED</span>
                     )}
                   </div>
                   <span style={styles.scoreDivider}>-</span>
@@ -819,9 +1060,7 @@ export const ScoresheetMatch: React.FC = () => {
                         {awayScore > homeScore ? 'WIN' : 'LOSE'}
                       </span>
                     ) : (
-                      <span style={{ ...styles.badgeLose, backgroundColor: '#E2E8F0', color: '#64748B', border: '1px solid #CBD5E1' }}>
-                        UNPLAYED
-                      </span>
+                      <span style={styles.unplayedBadge}>UNPLAYED</span>
                     )}
                   </div>
                 </div>
@@ -829,9 +1068,7 @@ export const ScoresheetMatch: React.FC = () => {
                 <div style={styles.scoreboardTile}>
                   <div style={styles.scoreTeamBlock}>
                     <span style={styles.scoreTeamLabel}>SPORT</span>
-                    <span style={{ ...styles.scoreValue, fontSize: '20px', textTransform: 'uppercase' }}>
-                      {matchData.sport_type}
-                    </span>
+                    <span style={styles.sportTitleVal}>{matchData.sport_type}</span>
                     <span style={styles.badgeWin}>TIMED EVENT</span>
                   </div>
                 </div>
@@ -839,12 +1076,10 @@ export const ScoresheetMatch: React.FC = () => {
             </div>
 
             {/* Data Tables */}
-            {isIndividualSport ? (
-              renderIndividualRaceTable()
-            ) : (
+            {isIndividualSport ? renderIndividualRaceTable() : (
               <>
-                {renderTeamStatsTable(homeTeamDisplayName, homeRoster, 'home', homeScore)}
-                {renderTeamStatsTable(awayTeamDisplayName, awayRoster, 'away', awayScore)}
+                {renderTeamStatsTable(homeTeamDisplayName, homeRoster, 'home')}
+                {renderTeamStatsTable(awayTeamDisplayName, awayRoster, 'away')}
               </>
             )}
 
@@ -855,151 +1090,161 @@ export const ScoresheetMatch: React.FC = () => {
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   accept=".pdf,.png,.jpg,.jpeg,.csv"
-                  style={{ display: 'none' }}
-                  onChange={handleFileUpload}
+                  style={styles.hiddenInput}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) processScoresheetFiles(files);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
                 />
-                {matchData.is_certified ? (
-                  <div
-                    className="hover-dropzone"
-                    style={{
-                      ...styles.dropzone,
-                      cursor: scoresheetUrl ? 'pointer' : 'default',
-                      backgroundColor: '#F8FAFC',
-                      borderColor: '#0B132B',
-                      borderStyle: 'solid',
-                      borderWidth: '1.5px',
-                      padding: '10px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minHeight: '160px',
-                      height: '100%',
-                      overflow: 'hidden',
-                      position: 'relative',
-                      transition: 'all 0.2s ease',
-                    }}
-                    onClick={() => {
-                      if (scoresheetUrl) setActiveModal('PREVIEW');
-                    }}
-                    title={scoresheetUrl ? 'Click to enlarge full scoresheet' : undefined}
-                  >
-                    {scoresheetUrl ? (
-                      scoresheetUrl.endsWith('.pdf') ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '16px' }}>
+                <input
+                  ref={appendFileInputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.csv"
+                  style={styles.hiddenInput}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) processScoresheetFiles([...uploadedFiles, ...files]);
+                    if (appendFileInputRef.current) appendFileInputRef.current.value = '';
+                  }}
+                />
+
+                {isUploading ? (
+                  <div style={styles.dropzone}>
+                    <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+                    <span style={styles.dropzoneText}>
+                      {uploadedFiles.length > 1 ? `SCANNING ${uploadedFiles.length} SCORESHEET PAGES WITH OCR...` : 'PROCESSING SCORESHEET OCR...'}
+                    </span>
+                    <span style={styles.dropzoneSubtext}>EXTRACTING ROSTER & STATISTICS AUTOMATICALLY</span>
+                  </div>
+                ) : displayPages.length > 1 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    {/* Bento Grid for Multi-page scoresheets */}
+                    <div style={styles.bentoGrid}>
+                      {displayPages.map((page, idx) => (
+                        <div
+                          key={page.key}
+                          style={{ ...styles.bentoCard, cursor: 'pointer' }}
+                          onClick={() => {
+                            setPreviewUrl(page.url);
+                            setActiveModal('PREVIEW');
+                          }}
+                          title="Click to enlarge preview"
+                        >
+                          <div style={styles.bentoHeader}>
+                            <span style={styles.bentoBadge}>{page.badge}</span>
+                            {!isCertified && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (page.isUploaded) {
+                                    processScoresheetFiles(uploadedFiles.filter((_, i) => i !== page.index));
+                                  } else {
+                                    processScoresheetFiles([]);
+                                  }
+                                }}
+                                style={styles.bentoDeleteBtn}
+                                title="Remove page"
+                              >
+                                <Trash2 style={{ width: 11, height: 11 }} />
+                                <span>DELETE</span>
+                              </button>
+                            )}
+                          </div>
+                          {page.isPdf ? (
+                            <iframe src={page.url} title={`Page ${idx + 1}`} style={styles.bentoThumb} />
+                          ) : (
+                            <img src={page.url} alt={`Page ${idx + 1}`} style={styles.bentoThumb} />
+                          )}
+                          <span style={styles.bentoFileName}>{page.name}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {!isCertified && (
+                      <div style={styles.actionToolbar}>
+                        <button type="button" onClick={() => appendFileInputRef.current?.click()} className="hover-btn-outline" style={styles.actionBtnPrimary}>
+                          <Plus style={{ width: 13, height: 13 }} />
+                          <span>ADD ANOTHER PAGE</span>
+                        </button>
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="hover-btn-outline" style={styles.actionBtnOutline}>
+                          <Upload style={{ width: 13, height: 13 }} />
+                          <span>REPLACE ALL</span>
+                        </button>
+                        <button type="button" onClick={() => processScoresheetFiles([])} className="hover-btn-outline" style={styles.actionBtnDanger}>
+                          <Trash2 style={{ width: 13, height: 13 }} />
+                          <span>REMOVE ALL</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : displayPages.length === 1 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <div
+                      className="hover-dropzone"
+                      style={styles.scoresheetPreviewTile}
+                      onClick={() => {
+                        setPreviewUrl(displayPages[0]?.url || scoresheetUrl || '');
+                        setActiveModal('PREVIEW');
+                      }}
+                      title="Click to enlarge full scoresheet"
+                    >
+                      {displayPages[0].isPdf ? (
+                        <div style={styles.scoresheetPdfBlock}>
                           <FileText style={{ width: 44, height: 44, color: '#0B132B' }} />
-                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#0B132B', letterSpacing: '0.04em' }}>
-                            CERTIFIED OFFICIAL SCORESHEET (PDF)
+                          <span style={styles.scoresheetPdfTitle}>
+                            {isCertified ? 'CERTIFIED OFFICIAL SCORESHEET (PDF)' : 'ATTACHED OFFICIAL SCORESHEET (PDF)'}
                           </span>
-                          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={styles.scoresheetPdfHint}>
                             <Eye style={{ width: 13, height: 13 }} /> CLICK TO VIEW FULL DOCUMENT
                           </span>
                         </div>
                       ) : (
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '100%',
-                            height: '100%',
-                            position: 'relative',
-                          }}
-                        >
-                          <img
-                            src={scoresheetUrl}
-                            alt="Certified Official Scoresheet"
-                            style={{
-                              maxWidth: '100%',
-                              maxHeight: '175px',
-                              width: 'auto',
-                              height: 'auto',
-                              objectFit: 'contain',
-                              borderRadius: '3px',
-                              display: 'block',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                              transition: 'transform 0.2s ease',
-                            }}
-                          />
-                          <div
-                            style={{
-                              marginTop: '8px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              backgroundColor: '#0B132B',
-                              color: '#FFFFFF',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              letterSpacing: '0.04em',
-                              padding: '4px 10px',
-                              borderRadius: '3px',
-                            }}
-                          >
+                        <div style={styles.scoresheetImgWrap}>
+                          <img src={displayPages[0].url} alt="Official Scoresheet" style={styles.scoresheetThumb} />
+                          <div style={styles.scoresheetEnlargeBadge}>
                             <Eye style={{ width: 13, height: 13 }} />
                             <span>CLICK TO ENLARGE PREVIEW</span>
                           </div>
                         </div>
-                      )
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '20px' }}>
-                        <FileText style={{ width: 32, height: 32, color: '#94A3B8' }} />
-                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748B' }}>
-                          NO SCORESHEET FILE ATTACHED
-                        </span>
-                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                          MATCH IS FINAL & CERTIFIED
-                        </span>
+                      )}
+                    </div>
+
+                    {!isCertified && (
+                      <div style={styles.actionToolbar}>
+                        <button type="button" onClick={() => appendFileInputRef.current?.click()} className="hover-btn-outline" style={styles.actionBtnPrimary}>
+                          <Plus style={{ width: 13, height: 13 }} />
+                          <span>ADD ANOTHER PAGE</span>
+                        </button>
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="hover-btn-outline" style={styles.actionBtnOutline}>
+                          <Upload style={{ width: 13, height: 13 }} />
+                          <span>REPLACE ALL</span>
+                        </button>
+                        <button type="button" onClick={() => processScoresheetFiles([])} className="hover-btn-outline" style={styles.actionBtnDanger}>
+                          <Trash2 style={{ width: 13, height: 13 }} />
+                          <span>REMOVE ALL</span>
+                        </button>
                       </div>
                     )}
+                  </div>
+                ) : isCertified ? (
+                  <div style={styles.noScoresheetCertifiedBox}>
+                    <FileText style={{ width: 32, height: 32, color: '#94A3B8' }} />
+                    <span style={styles.noScoresheetTitle}>NO SCORESHEET FILE ATTACHED</span>
+                    <span style={styles.noScoresheetSubtitle}>MATCH IS FINAL & CERTIFIED</span>
                   </div>
                 ) : (
                   <>
                     <div style={styles.dropzone} className="hover-dropzone" onClick={() => fileInputRef.current?.click()}>
-                      {isUploading ? (
-                        <Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
-                      ) : (
-                        <Upload style={{ width: 28, height: 28, color: '#0B132B' }} />
-                      )}
-                      <span style={styles.dropzoneText}>
-                        {isUploading
-                          ? 'PROCESSING SCORESHEET OCR...'
-                          : scoresheetUrl
-                            ? '[ UPLOAD REPLACEMENT SCORESHEET ]'
-                            : '[ UPLOAD SCORESHEET ]'}
-                      </span>
-                      <span style={styles.dropzoneSubtext}>
-                        MAXIMUM FILE SIZE: 25MB | FORMAT: PDF/CSV/PNG/JPG
-                      </span>
+                      <Upload style={{ width: 28, height: 28, color: '#0B132B' }} />
+                      <span style={styles.dropzoneText}>[ UPLOAD SCORESHEET ]</span>
+                      <span style={styles.dropzoneSubtext}>MAXIMUM FILE SIZE: 25MB | FORMAT: PDF/CSV/PNG/JPG</span>
                     </div>
-
-                    {uploadError && (
-                      <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>
-                        {uploadError}
-                      </div>
-                    )}
-
-                    {scoresheetUrl && (
-                      <div style={styles.scoresheetPreview}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <FileText style={{ width: 16, height: 16, color: '#0B132B' }} />
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#0B132B' }}>
-                            SCORESHEET ATTACHED
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setActiveModal('PREVIEW')}
-                          className="hover-btn-ghost"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', color: '#0B132B', fontSize: '11px', fontWeight: 800, cursor: 'pointer' }}
-                        >
-                          <Eye style={{ width: 14, height: 14 }} />
-                          <span>PREVIEW</span>
-                        </button>
-                      </div>
-                    )}
+                    {uploadError && <div style={styles.uploadErrorNotice}>{uploadError}</div>}
                   </>
                 )}
               </div>
@@ -1008,16 +1253,21 @@ export const ScoresheetMatch: React.FC = () => {
                 <span style={styles.boxLabel}>AUDIT CONTEXT NOTES</span>
                 <textarea
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  disabled={matchData.is_certified}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNotes(val);
+                    if (cleanId) {
+                      try { localStorage.setItem(`atleta_draft_note_${cleanId}`, val); } catch { }
+                    }
+                  }}
+                  disabled={isCertified}
                   placeholder="Comment any notes, official warnings, or manual point adjustments here..."
-                  className="hover-input"
                   style={styles.notesTextarea}
                 />
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Bottom Certification / Removal Action Bar */}
             <div style={styles.actionsRow}>
               <button
                 type="button"
@@ -1028,72 +1278,57 @@ export const ScoresheetMatch: React.FC = () => {
                 REMOVE MATCH
               </button>
 
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                {(matchData.is_certified || isMatchLocallyCertified(cleanId)) && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadScoresheet}
-                    disabled={isDownloading}
-                    className="hover-btn-solid"
-                    style={{ ...styles.downloadBtn, opacity: isDownloading ? 0.7 : 1 }}
-                  >
-                    {isDownloading ? (
-                      <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <Download style={{ width: 15, height: 15 }} />
-                    )}
-                    DOWNLOAD SCORESHEET
-                  </button>
-                )}
+              {(isCertified || Boolean(scoresheetUrl)) && (
+                <button
+                  type="button"
+                  onClick={handleDownloadScoresheet}
+                  disabled={isDownloading}
+                  className="hover-btn-solid"
+                  style={styles.downloadBtn}
+                >
+                  {isDownloading ? (
+                    <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <Download style={{ width: 14, height: 14 }} />
+                  )}
+                  <span>DOWNLOAD SCORESHEET</span>
+                </button>
+              )}
 
-                {!(matchData.is_certified || isMatchLocallyCertified(cleanId)) ? (
-                  <button
-                    type="button"
-                    onClick={handleOpenCertify}
-                    className="hover-btn-success"
-                    style={styles.certifyBtn}
-                  >
-                    CERTIFY MATCH
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    style={{ ...styles.certifyBtn, opacity: 0.7, cursor: 'default' }}
-                  >
-                    MATCH CERTIFIED
-                  </button>
-                )}
-              </div>
+              {!isCertified ? (
+                <button
+                  type="button"
+                  onClick={() => (!scoresheetUrl || !scoresheetUrl.trim() ? setActiveModal('NO_SCORESHEET') : setActiveModal('CERTIFY'))}
+                  className="hover-btn-success"
+                  style={styles.certifyBtn}
+                >
+                  CERTIFY MATCH
+                </button>
+              ) : (
+                <button type="button" disabled style={styles.certifyBtnDisabled}>
+                  MATCH CERTIFIED
+                </button>
+              )}
             </div>
           </>
         ) : (
-          <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
-            Match record not found.
-          </div>
+          <div style={styles.emptyNoticeText}>Match record not found.</div>
         )}
       </main>
 
-      {/* Confirmation & Preview Modals */}
+      {/* Confirmation Modals */}
       {activeModal === 'NO_SCORESHEET' && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalCard}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={styles.modalHeaderWithIcon}>
               <AlertTriangle style={{ width: 22, height: 22, color: '#EF4444' }} />
               <h3 style={styles.modalTitle}>UPLOAD SCORESHEET FIRST</h3>
             </div>
             <p style={styles.modalDesc}>
-              You cannot certify this match without an official scoresheet. Please upload a scoresheet first to verify the results before certifying.
+              You cannot certify this match without an official scoresheet. Please upload a scoresheet first to verify the results.
             </p>
             <div style={styles.modalActions}>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="hover-btn-outline"
-                style={styles.modalCancelBtn}
-              >
-                CANCEL
-              </button>
+              <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
               <button
                 type="button"
                 onClick={() => {
@@ -1113,14 +1348,14 @@ export const ScoresheetMatch: React.FC = () => {
       {activeModal === 'CERTIFY' && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalCard}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={styles.modalHeaderWithIcon}>
               <CheckCircle2 style={{ width: 22, height: 22, color: '#10B981' }} />
               <h3 style={styles.modalTitle}>CONFIRM CERTIFICATION</h3>
             </div>
             <p style={styles.modalDesc}>
               Are you sure you want to certify and lock this match record? Once certified, the official results will be committed to the standings and become read-only.
             </p>
-            {actionError && <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>{actionError}</div>}
+            {actionError && <div style={styles.actionErrorNotice}>{actionError}</div>}
             <div style={styles.modalActions}>
               <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
               <button type="button" onClick={handleCertify} disabled={actionLoading} className="hover-btn-success" style={styles.modalConfirmBtnGreen}>
@@ -1134,14 +1369,14 @@ export const ScoresheetMatch: React.FC = () => {
       {activeModal === 'REMOVE' && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalCard}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={styles.modalHeaderWithIcon}>
               <AlertTriangle style={{ width: 22, height: 22, color: '#EF4444' }} />
               <h3 style={styles.modalTitle}>REMOVE MATCH RECORD</h3>
             </div>
             <p style={styles.modalDesc}>
               Are you sure you want to remove this match record? All linked audit sessions and pending verifications will be permanently deleted.
             </p>
-            {actionError && <div style={{ fontSize: '12px', color: '#EF4444', fontWeight: 600 }}>{actionError}</div>}
+            {actionError && <div style={styles.actionErrorNotice}>{actionError}</div>}
             <div style={styles.modalActions}>
               <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CANCEL</button>
               <button type="button" onClick={handleRemove} disabled={actionLoading} className="hover-btn-danger" style={styles.modalConfirmBtnRed}>
@@ -1152,28 +1387,45 @@ export const ScoresheetMatch: React.FC = () => {
         </div>
       )}
 
-      {activeModal === 'PREVIEW' && scoresheetUrl && (
+      {activeModal === 'REMOVE_SUCCESS' && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalCard, maxWidth: '720px', maxHeight: '80vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={styles.modalTitle}>SCORESHEET PREVIEW</h3>
-              <button type="button" onClick={() => setActiveModal(null)} className="hover-close-x" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748B' }}>
-                <X style={{ width: 20, height: 20 }} />
-              </button>
+          <div style={styles.modalCard}>
+            <div style={styles.modalHeaderWithIcon}>
+              <CheckCircle2 style={{ width: 24, height: 24, color: '#10B981' }} />
+              <h3 style={styles.modalTitle}>MATCH RECORD REMOVED</h3>
             </div>
-            {scoresheetUrl.endsWith('.pdf') ? (
-              <iframe src={scoresheetUrl} title="Scoresheet Preview" style={{ width: '100%', height: '500px', border: '1px solid #CBD5E1' }} />
-            ) : (
-              <img src={scoresheetUrl} alt="Scoresheet" style={{ width: '100%', height: 'auto', border: '1px solid #CBD5E1', borderRadius: '4px' }} />
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-              <button type="button" onClick={() => setActiveModal(null)} className="hover-btn-outline" style={styles.modalCancelBtn}>CLOSE</button>
+            <p style={styles.modalDesc}>Match record <strong style={{ color: '#0B132B' }}>#{cleanId}</strong> was successfully removed.</p>
+            <div style={styles.modalActions}>
+              <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-solid" style={styles.modalConfirmBtnGreen}>
+                RETURN TO DASHBOARD
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {activeModal === 'PREVIEW' && (previewUrl || scoresheetUrl) && (
+        <div style={styles.modalOverlay} onClick={() => { setActiveModal(null); setPreviewUrl(null); }}>
+          <div style={styles.previewModalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.previewModalHeader}>
+              <h3 style={styles.modalTitle}>SCORESHEET PREVIEW</h3>
+              <button type="button" onClick={() => { setActiveModal(null); setPreviewUrl(null); }} className="hover-close-x" style={styles.closeXBtn}>
+                <X style={{ width: 20, height: 20 }} />
+              </button>
+            </div>
+            {(previewUrl || scoresheetUrl || '').toLowerCase().includes('.pdf') || (previewUrl || scoresheetUrl || '').startsWith('data:application/pdf') ? (
+              <iframe src={previewUrl || scoresheetUrl} title="Scoresheet Preview" style={styles.previewPdfIframe} />
+            ) : (
+              <img src={previewUrl || scoresheetUrl} alt="Scoresheet" style={styles.previewImg} />
+            )}
+            <div style={styles.previewModalFooter}>
+              <button type="button" onClick={() => { setActiveModal(null); setPreviewUrl(null); }} className="hover-btn-outline" style={styles.modalCancelBtn}>CLOSE</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 export default ScoresheetMatch;
