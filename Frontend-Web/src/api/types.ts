@@ -196,14 +196,14 @@ export interface MatchAuditDetail {
   home_team: {
     name: string;
     score: number;
-    result: 'WIN' | 'LOSE';
+    result: 'WIN' | 'LOSE' | 'DRAW';
     roster_stats: BoxScoreRow[];
     team_totals: BoxScoreRow;
   };
   away_team: {
     name: string;
     score: number;
-    result: 'WIN' | 'LOSE';
+    result: 'WIN' | 'LOSE' | 'DRAW';
     roster_stats: BoxScoreRow[];
     team_totals: BoxScoreRow;
   };

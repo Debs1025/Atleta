@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Info,
@@ -15,6 +15,7 @@ import {
   Upload,
   X,
   FileText,
+  Trophy,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -125,6 +126,142 @@ export const CreateMatch: React.FC = () => {
     normalizedSportUpper.includes('ATHLETIC') ||
     normalizedSportUpper.includes('TIME');
   const isBasketball = !isVolleyball && !isSoccer && !isIndividualSport;
+
+  // Dynamic Scoreboard State (from OCR extraction and live edits)
+  const [ocrDetectedTeamScores, setOcrDetectedTeamScores] = useState<{ team: string; score: number }[]>([]);
+  const [ocrFinalScoreStr, setOcrFinalScoreStr] = useState<string | null>(null);
+
+  // Dynamic Score Calculation (Aligned with Mobile getDynamicTeamScore)
+  const getDynamicTeamScore = useCallback(
+    (teamName: string) => {
+      if (!teamName) return { primary: '0 PTS', secondary: undefined, num: 0 };
+      const norm = teamName.trim().toUpperCase();
+      const isHome = norm === (homeTeam || 'TEAM 1').trim().toUpperCase();
+      const roster = isHome ? homeRoster : awayRoster;
+      const found = ocrDetectedTeamScores.find((t) => (t.team || '').trim().toUpperCase() === norm);
+
+      if (isVolleyball) {
+        let setsWon = 0;
+        let totalMatchPoints = roster.reduce(
+          (s, p) =>
+            s +
+            Number(
+              p.pts ||
+                Number(p.kills || 0) +
+                  Number(p.service_aces || 0) +
+                  Number(p.block_points || p.blk || 0)
+            ),
+          0
+        );
+
+        if (found && found.score !== undefined && !isNaN(Number(found.score))) {
+          const rawNum = Number(found.score);
+          if (rawNum <= 5) {
+            setsWon = rawNum;
+          } else {
+            totalMatchPoints = rawNum;
+          }
+        }
+
+        if (setsWon === 0 && ocrFinalScoreStr) {
+          const setMatch = ocrFinalScoreStr.match(/(\d+)\s*[-:]\s*(\d+)/);
+          if (setMatch) {
+            const homeSets = parseInt(setMatch[1], 10);
+            const awaySets = parseInt(setMatch[2], 10);
+            if (homeSets <= 5 && awaySets <= 5) {
+              setsWon = isHome ? homeSets : awaySets;
+            }
+          }
+        }
+
+        if (
+          setsWon > 0 ||
+          (ocrFinalScoreStr && ocrFinalScoreStr.match(/\b[0-3]\s*[-:]\s*[0-3]\b/))
+        ) {
+          return {
+            primary: `${setsWon} SETS`,
+            secondary: totalMatchPoints > 0 ? `${totalMatchPoints} TOTAL PTS` : undefined,
+            num: setsWon,
+          };
+        }
+
+        return {
+          primary: `${totalMatchPoints} PTS`,
+          secondary: undefined,
+          num: totalMatchPoints,
+        };
+      }
+
+      if (isSoccer) {
+        let goals = roster.reduce((s, p) => s + Number(p.goals || 0), 0);
+        if (found && found.score !== undefined && !isNaN(Number(found.score))) {
+          goals = Math.max(Number(found.score), goals);
+        }
+        return {
+          primary: `${goals} GOALS`,
+          secondary: undefined,
+          num: goals,
+        };
+      }
+
+      // Basketball & other count sports
+      const athleteSum = roster.reduce((s, p) => s + Number(p.pts || 0), 0);
+      let pts = athleteSum;
+      if (found && found.score !== undefined && !isNaN(Number(found.score))) {
+        pts = Math.max(Number(found.score), athleteSum);
+      }
+      return {
+        primary: `${pts} PTS`,
+        secondary: undefined,
+        num: pts,
+      };
+    },
+    [homeTeam, homeRoster, awayRoster, ocrDetectedTeamScores, ocrFinalScoreStr, isVolleyball, isSoccer]
+  );
+
+  const homeDynamicScore = useMemo(
+    () => getDynamicTeamScore(homeTeam || 'TEAM 1'),
+    [getDynamicTeamScore, homeTeam]
+  );
+  const awayDynamicScore = useMemo(
+    () => getDynamicTeamScore(awayTeam || 'TEAM 2'),
+    [getDynamicTeamScore, awayTeam]
+  );
+
+  const dynamicMatchResult = useMemo(() => {
+    const h = homeDynamicScore.num;
+    const a = awayDynamicScore.num;
+    if (h === 0 && a === 0 && homeRoster.length === 0 && awayRoster.length === 0) {
+      return {
+        homeResult: 'PENDING',
+        awayResult: 'PENDING',
+        finalScore: '0 - 0',
+        summary: 'Awaiting match data',
+      };
+    }
+    if (h > a) {
+      return {
+        homeResult: 'WIN',
+        awayResult: 'LOSS',
+        finalScore: `${h} - ${a}`,
+        summary: `${homeTeam || 'TEAM 1'} WINS`,
+      };
+    }
+    if (a > h) {
+      return {
+        homeResult: 'LOSS',
+        awayResult: 'WIN',
+        finalScore: `${h} - ${a}`,
+        summary: `${awayTeam || 'TEAM 2'} WINS`,
+      };
+    }
+    return {
+      homeResult: 'DRAW',
+      awayResult: 'DRAW',
+      finalScore: `${h} - ${a}`,
+      summary: 'TIED MATCH',
+    };
+  }, [homeDynamicScore.num, awayDynamicScore.num, homeTeam, awayTeam, homeRoster.length, awayRoster.length]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -322,6 +459,18 @@ export const CreateMatch: React.FC = () => {
         : Array.isArray(ocrRes?.parsed_tables?.team_scores)
         ? ocrRes.parsed_tables.team_scores
         : [];
+
+      if (teamScoresArr.length > 0) {
+        setOcrDetectedTeamScores(
+          teamScoresArr.map((t: any) => ({
+            team: String(t.team || '').trim().toUpperCase(),
+            score: Number(t.score || 0),
+          }))
+        );
+      }
+      if (ocrRes?.match_info?.final_score) {
+        setOcrFinalScoreStr(String(ocrRes.match_info.final_score).trim());
+      }
 
       const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
       const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
@@ -553,6 +702,8 @@ export const CreateMatch: React.FC = () => {
   };
 
   const handleRemoveAllFiles = () => {
+    setOcrDetectedTeamScores([]);
+    setOcrFinalScoreStr(null);
     processFiles([]);
   };
 
@@ -741,12 +892,6 @@ export const CreateMatch: React.FC = () => {
 
       const venueLocation = venue.trim() || 'Tournament Sports Complex';
       const playerStatsPayload: any[] = [];
-      const hSum = isSoccer
-        ? homeRoster.reduce((a, b) => a + (Number(b.goals ?? b.pts) || 0), 0)
-        : homeRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
-      const aSum = isSoccer
-        ? awayRoster.reduce((a, b) => a + (Number(b.goals ?? b.pts) || 0), 0)
-        : awayRoster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
 
       // Map live edited stats into payload
       homeRoster.forEach((p, idx) => {
@@ -867,9 +1012,10 @@ export const CreateMatch: React.FC = () => {
         scoresheet_url: scoresheetUrl,
         player_stats: playerStatsPayload,
         notes: notes.trim(),
-        home_score: hSum > 0 ? hSum : undefined,
-        away_score: aSum > 0 ? aSum : undefined,
-        game_result: hSum > 0 || aSum > 0 ? (hSum >= aSum ? 'WIN' : 'LOSS') : undefined,
+        home_score: homeDynamicScore.num,
+        away_score: awayDynamicScore.num,
+        game_result: dynamicMatchResult.homeResult,
+        final_score: dynamicMatchResult.finalScore,
       } as any);
 
       const rawMatchId = createdMatch?.match?.match_id || createdMatch?.match_id;
@@ -905,14 +1051,14 @@ export const CreateMatch: React.FC = () => {
           match_date_formatted: displayTime ? `${displayDate} / ${displayTime}` : displayDate,
           home_team: {
             name: finalHome.toUpperCase(),
-            score: hSum,
-            result: hSum >= aSum ? 'WIN' : 'LOSE',
+            score: homeDynamicScore.num,
+            result: dynamicMatchResult.homeResult === 'WIN' ? 'WIN' : dynamicMatchResult.homeResult === 'DRAW' ? 'DRAW' : 'LOSE',
             roster_stats: homeRoster,
             team_totals: {
               jersey_no: '',
               player_name: 'TEAM TOTALS',
               minutes: '0',
-              pts: hSum,
+              pts: homeDynamicScore.num,
               reb: homeRoster.reduce((a, b) => a + (Number(b.reb) || 0), 0),
               ast: homeRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
               stl: homeRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
@@ -935,14 +1081,14 @@ export const CreateMatch: React.FC = () => {
           },
           away_team: {
             name: finalAway.toUpperCase(),
-            score: aSum,
-            result: aSum > hSum ? 'WIN' : 'LOSE',
+            score: awayDynamicScore.num,
+            result: dynamicMatchResult.awayResult === 'WIN' ? 'WIN' : dynamicMatchResult.awayResult === 'DRAW' ? 'DRAW' : 'LOSE',
             roster_stats: awayRoster,
             team_totals: {
               jersey_no: '',
               player_name: 'TEAM TOTALS',
               minutes: '0',
-              pts: aSum,
+              pts: awayDynamicScore.num,
               reb: awayRoster.reduce((a, b) => a + (Number(b.reb) || 0), 0),
               ast: awayRoster.reduce((a, b) => a + (Number(b.ast) || 0), 0),
               stl: awayRoster.reduce((a, b) => a + (Number(b.stl) || 0), 0),
@@ -1965,9 +2111,236 @@ export const CreateMatch: React.FC = () => {
                     </p>
                   </div>
                 ) : isIndividualSport ? (
-                  renderIndividualRaceTable()
+                  <>
+                    {/* Dynamic Timed Event Header */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        border: '2px solid #0B132B',
+                        boxShadow: '3px 3px 0px #0B132B',
+                        backgroundColor: '#0B132B',
+                        color: '#FFFFFF',
+                        padding: '14px 20px',
+                        marginBottom: '16px',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>
+                          TIMED EVENT CLASSIFICATION
+                        </span>
+                        <h4 style={{ margin: '4px 0 0 0', fontSize: '17px', fontWeight: 900, color: '#FFFFFF' }}>
+                          {activeSportCategory.toUpperCase()} • RACE RESULTS
+                        </h4>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>
+                          RECORDED ATHLETES
+                        </span>
+                        <div style={{ fontSize: '22px', fontWeight: 900, color: '#00C8FF' }}>
+                          {raceResults.length} ATHLETES
+                        </div>
+                      </div>
+                    </div>
+                    {renderIndividualRaceTable()}
+                  </>
                 ) : (
                   <>
+                    {/* Dynamic Match Scoreboard Card (Aligned with Mobile) */}
+                    <div
+                      style={{
+                        border: '2px solid #0B132B',
+                        boxShadow: '3px 3px 0px #0B132B',
+                        backgroundColor: '#0B132B',
+                        color: '#FFFFFF',
+                        padding: '16px 20px',
+                        marginBottom: '18px',
+                      }}
+                    >
+                      {/* Scoreboard Header */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingBottom: '10px',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+                          marginBottom: '14px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Trophy style={{ width: 16, height: 16, color: '#00C8FF' }} />
+                          <span
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 900,
+                              letterSpacing: '0.06em',
+                              textTransform: 'uppercase',
+                              color: '#FFFFFF',
+                            }}
+                          >
+                            MATCH SCOREBOARD • {activeSportCategory.toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span
+                            style={{
+                              backgroundColor: '#00C8FF',
+                              color: '#0B132B',
+                              fontSize: '11px',
+                              fontWeight: 900,
+                              padding: '3px 10px',
+                              letterSpacing: '0.05em',
+                              borderRadius: '2px',
+                            }}
+                          >
+                            FINAL: {dynamicMatchResult.finalScore}
+                          </span>
+                          <span
+                            style={{
+                              backgroundColor:
+                                dynamicMatchResult.homeResult === 'DRAW'
+                                  ? '#F59E0B'
+                                  : dynamicMatchResult.homeResult === 'PENDING'
+                                  ? '#475569'
+                                  : '#10B981',
+                              color: '#FFFFFF',
+                              fontSize: '11px',
+                              fontWeight: 900,
+                              padding: '3px 10px',
+                              letterSpacing: '0.05em',
+                              borderRadius: '2px',
+                            }}
+                          >
+                            {dynamicMatchResult.summary}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Scoreboard Body */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr auto 1fr',
+                          alignItems: 'center',
+                          gap: '20px',
+                          padding: '4px 8px',
+                        }}
+                      >
+                        {/* Home Team */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>
+                              TEAM 1 (HOME)
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '9.5px',
+                                fontWeight: 900,
+                                padding: '1px 6px',
+                                backgroundColor:
+                                  dynamicMatchResult.homeResult === 'WIN'
+                                    ? '#10B981'
+                                    : dynamicMatchResult.homeResult === 'DRAW'
+                                    ? '#F59E0B'
+                                    : dynamicMatchResult.homeResult === 'PENDING'
+                                    ? '#334155'
+                                    : '#EF4444',
+                                color: '#FFFFFF',
+                                borderRadius: '2px',
+                              }}
+                            >
+                              {dynamicMatchResult.homeResult}
+                            </span>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '18px',
+                              fontWeight: 900,
+                              color: '#FFFFFF',
+                              letterSpacing: '-0.01em',
+                            }}
+                          >
+                            {homeTeam || 'TEAM 1'}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                            <span style={{ fontSize: '32px', fontWeight: 900, color: '#00C8FF', lineHeight: 1 }}>
+                              {homeDynamicScore.primary}
+                            </span>
+                            {homeDynamicScore.secondary && (
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8' }}>
+                                ({homeDynamicScore.secondary})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* VS Center */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 12px',
+                          }}
+                        >
+                          <span style={{ fontSize: '16px', fontWeight: 900, color: '#64748B', letterSpacing: '0.1em' }}>
+                            VS
+                          </span>
+                        </div>
+
+                        {/* Away Team */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span
+                              style={{
+                                fontSize: '9.5px',
+                                fontWeight: 900,
+                                padding: '1px 6px',
+                                backgroundColor:
+                                  dynamicMatchResult.awayResult === 'WIN'
+                                    ? '#10B981'
+                                    : dynamicMatchResult.awayResult === 'DRAW'
+                                    ? '#F59E0B'
+                                    : dynamicMatchResult.awayResult === 'PENDING'
+                                    ? '#334155'
+                                    : '#EF4444',
+                                color: '#FFFFFF',
+                                borderRadius: '2px',
+                              }}
+                            >
+                              {dynamicMatchResult.awayResult}
+                            </span>
+                            <span style={{ fontSize: '10px', fontWeight: 800, color: '#94A3B8', letterSpacing: '0.05em' }}>
+                              TEAM 2 (AWAY)
+                            </span>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '18px',
+                              fontWeight: 900,
+                              color: '#FFFFFF',
+                              letterSpacing: '-0.01em',
+                            }}
+                          >
+                            {awayTeam || 'TEAM 2'}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                            {awayDynamicScore.secondary && (
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8' }}>
+                                ({awayDynamicScore.secondary})
+                              </span>
+                            )}
+                            <span style={{ fontSize: '32px', fontWeight: 900, color: '#00C8FF', lineHeight: 1 }}>
+                              {awayDynamicScore.primary}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {renderTeamBoxScoreTable('home', homeTeam, homeRoster)}
                     {renderTeamBoxScoreTable('away', awayTeam, awayRoster)}
                   </>
