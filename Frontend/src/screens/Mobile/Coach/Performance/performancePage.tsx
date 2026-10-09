@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AtletaHeader } from "../Components/AtletaHeader";
 import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
+import { getSportsOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 
 interface PerformancePageProps {
   onSelectAthlete: (athlete: AthletePerformanceProfile) => void;
@@ -19,9 +20,10 @@ interface PerformancePageProps {
   onNotificationPress?: () => void;
   unreadNotificationCount?: number;
   athletes?: AthletePerformanceProfile[];
+  avatarUrl?: string | null;
 }
 
-const CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
+const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
 
 export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
@@ -30,15 +32,123 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   onNotificationPress,
   unreadNotificationCount = 0,
   athletes = [],
+  avatarUrl,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
   const [visibleCount, setVisibleCount] = useState(5);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [liveAthletes, setLiveAthletes] = useState<AthletePerformanceProfile[]>([]);
 
-  const displayAthletes = Array.isArray(athletes) ? athletes : [];
+  useEffect(() => {
+    let isMounted = true;
+    getAthletesOfflineFirst()
+      .then((list) => {
+        if (!isMounted || !Array.isArray(list) || list.length === 0) return;
+        const mapped: AthletePerformanceProfile[] = list.map((a: any) => {
+          const stats = a.stats || a.averages || {};
+          const avg = a.averages || a.stats || {};
+          const ppg = Number(avg.ppg ?? stats.ppg ?? a.ppg ?? a.pts ?? 0);
+          const rpg = Number(avg.rpg ?? stats.rpg ?? a.rpg ?? a.reb ?? 0);
+          const apg = Number(avg.apg ?? stats.apg ?? a.ast ?? a.apg ?? 0);
+          const per = Number(avg.per_score ?? stats.per_score ?? stats.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.3 + 12) : 25));
+          const rating = Number(a.rating_score || a.rating || (ppg > 0 ? Math.min(99, Math.round(ppg * 2.5 + 25)) : 75));
+
+          const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
+          const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
+          const wingspanCm = a.physical_attributes?.wingspan_cm || a.physical_profile?.wingspan_cm || a.wingspan_cm;
+
+          return {
+            athlete_id: a.athlete_id || a.user_id || a.id || `ath_${Date.now()}`,
+            user_id: a.user_id || a.athlete_id || a.id || "",
+            full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || "Athlete",
+            birthdate: a.birthdate || a.dob || "2004-10-03",
+            position_or_event: a.position || a.position_or_event || "Player",
+            location_province: a.province || a.location || "Camarines Sur",
+            team_name: a.team_name || "Free Agent",
+            rating_score: rating,
+            sport_category: (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() as any,
+            biometrics: a.biometrics || {
+              height_ft: heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : "-",
+              weight_lbs: weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : "-",
+              wingspan_ft: wingspanCm ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"` : "-",
+              vertical_jump_in: a.physical_profile?.vertical_cm ? `${Math.round(a.physical_profile.vertical_cm / 2.54)}"` : "-",
+            },
+            averages: {
+              ppg,
+              rpg,
+              apg,
+              games_played: Number(avg.games_played ?? stats.games_played ?? 0),
+              wins: Number(avg.wins ?? stats.wins ?? 0),
+              per_score: per,
+              fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
+            },
+            radar_competencies: a.radar_competencies || undefined,
+            eligibility_documents: {
+              psa_verified: Boolean(a.eligibility_documents?.psa_verified || a.documents?.psa_birth_certificate?.status === 'Verified'),
+              residency_verified: Boolean(a.eligibility_documents?.proof_of_residency || a.eligibility_documents?.residency_verified || a.documents?.proof_of_residency?.status === 'Verified'),
+            },
+            workload_analytics: a.workload_analytics || a.workload || undefined,
+            scoring_trends_last_10: Array.isArray(a.scoring_trends_last_10) && a.scoring_trends_last_10.length > 0 ? a.scoring_trends_last_10 : [],
+          };
+        });
+        setLiveAthletes(mapped);
+      })
+      .catch((err) => console.warn("Performance live sync:", err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = ["ALL"];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        if (mapped.length > 1) {
+          setCategories(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for performance:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const displayAthletes = useMemo(() => {
+    if (Array.isArray(athletes) && athletes.length > 0) {
+      return athletes.map((ath) => {
+        const matchingLive = liveAthletes.find(
+          (la) =>
+            (la.athlete_id && ath.athlete_id && (la.athlete_id === ath.athlete_id || la.user_id === ath.user_id)) ||
+            (la.full_name && ath.full_name && la.full_name.toLowerCase() === ath.full_name.toLowerCase())
+        );
+        if (matchingLive && (!ath.averages?.ppg || ath.averages.ppg === 0)) {
+          return {
+            ...ath,
+            rating_score: matchingLive.rating_score || 85,
+            averages: matchingLive.averages || ath.averages,
+            biometrics: matchingLive.biometrics || ath.biometrics,
+            scoring_trends_last_10: matchingLive.scoring_trends_last_10 || ath.scoring_trends_last_10,
+          };
+        }
+        return ath;
+      });
+    }
+    return liveAthletes;
+  }, [athletes, liveAthletes]);
 
   const filteredAthletes = useMemo(() => {
     return displayAthletes.filter((ath) => {
@@ -54,18 +164,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Atleta Header Component */}
-      <AtletaHeader
-        onSettingsPress={onSettingsPress}
-        onProfilePress={onProfilePress}
-        onNotificationPress={onNotificationPress}
-        unreadNotificationCount={unreadNotificationCount}
-      />
-
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 64, paddingBottom: 150 },
+          { paddingTop: headerTopPadding + 56, paddingBottom: 150 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -98,7 +200,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           style={styles.tabsScroll}
           contentContainerStyle={styles.tabsScrollContent}
         >
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const isActive = activeTab === cat;
             return (
               <TouchableOpacity
@@ -147,19 +249,47 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                 <Text style={styles.athleteSubline}>
                   {athlete.team_name} • {athlete.position_or_event}
                 </Text>
-                {athlete.sport_category === "BASKETBALL" && athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.ppg ?? 0} PPG • {athlete.averages.rpg ?? 0} RPG • {athlete.averages.apg ?? 0} APG
-                  </Text>
-                ) : athlete.sport_category === "SWIMMING" && athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.pb_50m_free ? `${athlete.averages.pb_50m_free} 50M` : "- 50M"} • {athlete.averages.swim_index_score ? `${athlete.averages.swim_index_score} SWIM INDEX` : "- SWIM INDEX"}
-                  </Text>
-                ) : athlete.sport_category === "TRACK AND FIELD" && athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "- 100M"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "- WIN"}
-                  </Text>
-                ) : null}
+                {(() => {
+                  const sc = String(athlete.sport_category || '').toUpperCase().trim();
+                  if (!athlete.averages) return null;
+                  if (sc.includes("BASKETBALL")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.ppg ?? 0} PPG • {athlete.averages.rpg ?? 0} RPG • {athlete.averages.apg ?? 0} APG
+                      </Text>
+                    );
+                  } else if (sc.includes("SWIM")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.pb_50m_free ? `${athlete.averages.pb_50m_free} 50M` : "-"} • {athlete.averages.swim_index_score ? `${athlete.averages.swim_index_score} SWIM INDEX` : "-"}
+                      </Text>
+                    );
+                  } else if (sc.includes("TRACK") || sc.includes("FIELD")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "-"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "-"}
+                      </Text>
+                    );
+                  } else if (sc.includes("VOLLEY")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.spike_kills ?? 0} KILLS • {athlete.averages.block_points ?? 0} BLOCKS • {athlete.averages.service_aces ?? 0} ACES
+                      </Text>
+                    );
+                  } else if (sc.includes("PICKLE")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.points_scored ?? 0} PTS • {athlete.averages.aces ?? 0} ACES • {athlete.averages.dinks ?? 0} DINKS
+                      </Text>
+                    );
+                  } else {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.per_score ? `${athlete.averages.per_score} PER` : (athlete.rating_score ? `${athlete.rating_score} RATING` : "-")}
+                      </Text>
+                    );
+                  }
+                })()}
                 <View style={[styles.progressTrack, { marginTop: 6 }]}>
                   <View
                     style={[
@@ -189,6 +319,13 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           </TouchableOpacity>
         )}
       </ScrollView>
+      <AtletaHeader
+        avatarUrl={avatarUrl}
+        onSettingsPress={onSettingsPress}
+        onProfilePress={onProfilePress}
+        onNotificationPress={onNotificationPress}
+        unreadNotificationCount={unreadNotificationCount}
+      />
     </View>
   );
 };

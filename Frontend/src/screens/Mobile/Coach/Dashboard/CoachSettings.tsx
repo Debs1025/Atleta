@@ -73,7 +73,7 @@ export function CoachSettings({
   onOpenPrivacy,
 }: CoachSettingsProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   // Local Reactive Client State
   const [settingsState, setSettingsState] = useState<CoachSettingsData>(settings);

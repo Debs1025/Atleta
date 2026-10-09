@@ -459,6 +459,49 @@ export const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
+  // Coach Notes Card
+  coachNotesCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 18,
+    marginBottom: 24,
+  },
+  coachNotesTitle: {
+    fontSize: 12,
+    fontFamily: fontBold,
+    fontWeight: '800',
+    color: '#00C8FF',
+    letterSpacing: 1,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#070D19',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 12,
+    marginBottom: 8,
+  },
+  noteIndex: {
+    fontSize: 12,
+    fontFamily: fontBold,
+    fontWeight: '800',
+    color: '#00C8FF',
+    marginRight: 10,
+    marginTop: 1,
+  },
+  noteContentText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: fontMedium,
+    color: '#E2E8F0',
+    lineHeight: 18,
+  },
 });
 
 export default styles;

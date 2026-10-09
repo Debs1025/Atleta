@@ -365,9 +365,28 @@ export const ScoresheetMatch: React.FC = () => {
       const finalScoresheetUrl = uploadRes?.scoresheet_url || res?.scoresheet_url;
       if (finalScoresheetUrl) setScoresheetUrl(finalScoresheetUrl);
 
-      const rawPlayers: any[] = Array.isArray(res?.player_summary)
-        ? res.player_summary
-        : Array.isArray(res?.parsed_tables?.player_summary) ? res.parsed_tables.player_summary : [];
+      let rawPlayers: any[] = Array.isArray(res?.player_summary)
+        ? [...res.player_summary]
+        : Array.isArray(res?.parsed_tables?.player_summary) ? [...res.parsed_tables.player_summary] : [];
+
+      const subMatches = Array.isArray(res?.matches) ? res.matches : (Array.isArray(res?.pages) ? res.pages : []);
+      if (subMatches.length > 0) {
+        subMatches.forEach((m: any) => {
+          const mPlayers = Array.isArray(m?.player_summary)
+            ? m.player_summary
+            : (Array.isArray(m?.parsed_tables?.player_summary) ? m.parsed_tables.player_summary : []);
+          mPlayers.forEach((incoming: any) => {
+            const incJersey = incoming.jersey_number ?? incoming.number;
+            const incName = String(incoming.player_name || incoming.name || '').trim().toUpperCase();
+            const exists = rawPlayers.some((p: any) => {
+              const pJersey = p.jersey_number ?? p.number;
+              const pName = String(p.player_name || p.name || '').trim().toUpperCase();
+              return (incJersey !== undefined && pJersey !== undefined && Number(incJersey) === Number(pJersey)) || (incName && pName && incName === pName);
+            });
+            if (!exists) rawPlayers.push(incoming);
+          });
+        });
+      }
 
       const teamScoresArr: any[] = Array.isArray(res?.team_scores)
         ? res.team_scores

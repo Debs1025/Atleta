@@ -12,6 +12,7 @@ import { CoachProfileScreen } from "./CoachProfile";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
 import { getAthleteProfileOfflineFirst } from "../../../../services/firebaseClient";
+import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
 
 const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [];
 
@@ -106,12 +107,26 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       ]);
 
       let homeData = homeRes;
-      if (!homeData && !profileRes && !statsRes) {
+      if (!homeData) {
         homeData = await getAthleteProfileOfflineFirst();
       }
 
       if (homeData || profileRes || statsRes || workloadRes || teamRes) {
-        const raw = { ...(homeData || {}), ...(profileRes || {}), ...(statsRes || {}) };
+        const raw = {
+          ...(profileRes || {}),
+          ...(homeData || {}),
+          ...(statsRes || {}),
+          stats: {
+            ...(homeData?.stats || {}),
+            ...(profileRes?.stats || {}),
+            ...(statsRes?.stats || {}),
+          },
+          averages: {
+            ...(homeData?.averages || {}),
+            ...(profileRes?.averages || {}),
+            ...(statsRes?.career_averages || {}),
+          },
+        };
         const stats = raw.stats || raw.analytics || raw;
         const phys = raw.physical_attributes || raw.physical_profile || raw;
 
@@ -229,19 +244,81 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             is_verified: Boolean(currentTeamId || (raw.current_affiliation?.is_verified ?? raw.is_verified)),
           },
           analytics: {
-            points_per_game: Number(stats.points_per_game ?? stats.ppg ?? stats.points ?? 0),
-            assists_per_game: Number(stats.assists_per_game ?? stats.apg ?? stats.assists ?? 0),
-            rebounds_per_game: Number(stats.rebounds_per_game ?? stats.rpg ?? stats.rebounds ?? 0),
-            field_goal_percentage: Number(stats.field_goal_percentage ?? stats.fg_pct ?? stats.fg_percentage ?? 0),
-            free_throw_percentage: Number(stats.free_throw_percentage ?? stats.ft_pct ?? stats.ft_percentage ?? 0),
-            last_5_games_scores:
-              (Array.isArray(stats.last_5_games_scores) && stats.last_5_games_scores.length > 0)
-                ? stats.last_5_games_scores
-                : (Array.isArray(homeRes?.five_game_trend) && homeRes.five_game_trend.length > 0)
-                ? homeRes.five_game_trend
-                : (Array.isArray(homeRes?.personal_analytics?.scoring_trend) && homeRes.personal_analytics.scoring_trend.length > 0)
-                ? homeRes.personal_analytics.scoring_trend
-                : stats.last_games || stats.recent_scores || [],
+            points_per_game: Number(
+              homeData?.personal_analytics?.ppg ||
+              homeRes?.personal_analytics?.ppg ||
+              statsRes?.career_averages?.ppg ||
+              stats.points_per_game ||
+              stats.ppg ||
+              stats.points ||
+              raw.averages?.ppg ||
+              0
+            ),
+            assists_per_game: Number(
+              homeData?.personal_analytics?.apg ||
+              homeRes?.personal_analytics?.apg ||
+              statsRes?.career_averages?.apg ||
+              stats.assists_per_game ||
+              stats.apg ||
+              stats.assists ||
+              stats.ast ||
+              raw.averages?.apg ||
+              raw.averages?.ast ||
+              0
+            ),
+            rebounds_per_game: Number(
+              homeData?.personal_analytics?.rpg ||
+              homeRes?.personal_analytics?.rpg ||
+              statsRes?.career_averages?.rpg ||
+              stats.rebounds_per_game ||
+              stats.rpg ||
+              stats.rebounds ||
+              stats.reb ||
+              raw.averages?.rpg ||
+              raw.averages?.reb ||
+              0
+            ),
+            field_goal_percentage: Number(
+              homeData?.shooting_efficiency?.fg_pct ||
+              homeRes?.shooting_efficiency?.fg_pct ||
+              statsRes?.shooting_accuracy_percentages?.fg_pct ||
+              raw.shooting_efficiency?.fg_pct ||
+              raw.averages?.fg_percentage ||
+              raw.averages?.fg_pct ||
+              stats.field_goal_percentage ||
+              stats.fg_pct ||
+              stats.fg_percentage ||
+              0
+            ),
+            free_throw_percentage: Number(
+              homeData?.shooting_efficiency?.ft_pct ||
+              homeRes?.shooting_efficiency?.ft_pct ||
+              statsRes?.shooting_accuracy_percentages?.ft_pct ||
+              raw.shooting_efficiency?.ft_pct ||
+              raw.averages?.ft_percentage ||
+              raw.averages?.ft_pct ||
+              stats.free_throw_percentage ||
+              stats.ft_pct ||
+              stats.ft_percentage ||
+              0
+            ),
+            last_5_games_scores: (() => {
+              const allScores = [
+                ...(Array.isArray(homeData?.last_5_games_scores) ? homeData.last_5_games_scores : []),
+                ...(Array.isArray(homeData?.five_game_trend) ? homeData.five_game_trend : []),
+                ...(Array.isArray(homeRes?.last_5_games_scores) ? homeRes.last_5_games_scores : []),
+                ...(Array.isArray(homeRes?.five_game_trend) ? homeRes.five_game_trend : []),
+                ...(Array.isArray(statsRes?.last_5_games_scores) ? statsRes.last_5_games_scores : []),
+                ...(Array.isArray(raw.stats?.last_5_games_scores) ? raw.stats.last_5_games_scores : []),
+                ...(Array.isArray(raw.averages?.last_5_games_scores) ? raw.averages.last_5_games_scores : []),
+                ...(Array.isArray(raw.scoring_trends_last_10) ? raw.scoring_trends_last_10 : []),
+                ...(Array.isArray(raw.five_game_trend) ? raw.five_game_trend : []),
+                ...(Array.isArray(stats.last_games) ? stats.last_games : []),
+                ...(Array.isArray(stats.recent_scores) ? stats.recent_scores : []),
+              ].map(Number).filter((s) => typeof s === "number" && !isNaN(s) && s > 0);
+
+              return allScores.length > 0 ? allScores.slice(-5) : [];
+            })(),
             // Swimming
             best_time_formatted: finishTime,
             split_time_formatted: splitTime,
@@ -258,7 +335,13 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           },
           avatar_url: raw.avatar_url || raw.user?.avatar_url || "",
           workload_analytics: workloadAnalyticsObj,
-          eligible_documents: raw.eligible_documents || raw.documents || [],
+          eligible_documents: (raw.eligible_documents && raw.eligible_documents.length > 0)
+            ? raw.eligible_documents
+            : (raw.documents && raw.documents.length > 0)
+              ? raw.documents
+              : (profile?.eligible_documents && profile.eligible_documents.length > 0)
+                ? profile.eligible_documents
+                : [],
           auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
         };
         setProfile(mappedProfile);
@@ -338,7 +421,6 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
   const handleUpdateProfile = (updatedProfile: AthleteProfile) => {
     setProfile(updatedProfile);
-    refreshAthleteData(false);
   };
 
   const handleUploadDocumentFromNotification = (docInfo: {
@@ -400,7 +482,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   };
 
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const unreadCount = notifications.filter((n) => !n.read_status).length;
 
@@ -426,7 +508,20 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       {/* Top Header Bar */}
       {!hideParentBars && (
         <View style={[styles.topHeaderBar, { paddingTop: headerTopPadding }]}>
-          <Text style={styles.brandLogoText}>ATLETA</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <AtletaAnimatedLogo size={30} showGlow={false} pulse={false} />
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 20,
+                fontWeight: "900",
+                letterSpacing: 2.5,
+                includeFontPadding: false,
+              }}
+            >
+              ATLETA
+            </Text>
+          </View>
           <Pressable
             style={styles.notificationButton}
             onPress={() => setShowNotifications(true)}
@@ -436,7 +531,13 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               style={styles.notificationIcon}
               resizeMode="contain"
             />
-            {unreadCount > 0 && <View style={styles.notificationBadge} />}
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            )}
           </Pressable>
         </View>
       )}

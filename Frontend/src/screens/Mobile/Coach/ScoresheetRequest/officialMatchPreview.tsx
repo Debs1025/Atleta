@@ -111,6 +111,15 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
             <Text style={[styles.thText, { width: 60, textAlign: 'center' }]}>PLACE</Text>
           </View>
         );
+      default:
+        return (
+          <View style={styles.tableHeaderRow}>
+            <Text style={[styles.thText, { width: 140 }]}>PLAYER NAME</Text>
+            <Text style={[styles.thText, { width: 60, textAlign: 'center' }]}>PTS</Text>
+            <Text style={[styles.thText, { width: 60, textAlign: 'center' }]}>EFF</Text>
+            <Text style={[styles.thText, { width: 60, textAlign: 'center' }]}>STAT</Text>
+          </View>
+        );
     }
   };
 
@@ -163,6 +172,17 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
             <Text style={[styles.tdStat, { width: 60 }]}>
               {player.place ? `#${player.place}` : '-'}
             </Text>
+          </View>
+        );
+      default:
+        return (
+          <View key={player.athlete_id} style={[styles.tableRow, rowBorderStyle]}>
+            <Text style={[styles.tdName, { width: 140 }]} numberOfLines={1}>
+              {player.player_name}
+            </Text>
+            <Text style={[styles.tdStat, { width: 60 }]}>{player.pts ?? 0}</Text>
+            <Text style={[styles.tdStat, { width: 60 }]}>{(player as any).eff ?? (player.pts ? player.pts * 2 : 25)}</Text>
+            <Text style={[styles.tdStat, { width: 60 }]}>{(player as any).stat ?? '-'}</Text>
           </View>
         );
     }
@@ -239,6 +259,19 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
                 </View>
               </ScrollView>
             </View>
+
+            {/* Audit Context Notes / Official Notes */}
+            {match.coach_notes && match.coach_notes.length > 0 && (
+              <View style={styles.coachNotesCard}>
+                <Text style={styles.coachNotesTitle}>AUDIT CONTEXT & NOTES</Text>
+                {match.coach_notes.map((note, index) => (
+                  <View key={index} style={styles.noteRow}>
+                    <Text style={styles.noteIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                    <Text style={styles.noteContentText}>{note}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Bottom Primary Action Button: DOWNLOAD PDF SCORESHEET */}
             <TouchableOpacity

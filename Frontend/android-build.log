@@ -1,0 +1,214 @@
+﻿> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :expo
+
+Using expo modules
+  - [32mexpo-asset[0m (10.0.10)
+  - [32mexpo-constants[0m (16.0.2)
+  - [32mexpo-document-picker[0m (12.0.2)
+  - [32mexpo-file-system[0m (17.0.1)
+  - [32mexpo-font[0m (12.0.10)
+  - [32mexpo-keep-awake[0m (13.0.2)
+  - [32mexpo-modules-core[0m (1.12.26)
+  - [32mexpo-secure-store[0m (13.0.2)
+
+
+> Configure project :react-native-async-storage_async-storage
+[AsyncStorage] Min. supported version of Kotlin is 2.1.0, current: 1.9.23.
+[AsyncStorage] Could not find ksp version for 1.9.23. Min. supported kotlin is 2.1.0. Using default ksp: 2.1.0-1.0.28
+[AsyncStorage] Min. supported version of Kotlin is 2.1.0, current: 1.9.23.
+[AsyncStorage] Could not find ksp version for 1.9.23. Min. supported kotlin is 2.1.0. Using default ksp: 2.1.0-1.0.28
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+ksp-2.1.0-1.0.28 is too new for kotlin-1.9.22. Please upgrade kotlin-gradle-plugin to 2.1.0.
+
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generatePackageList
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :expo:generateExpoModulesPackageListTask UP-TO-DATE
+> Task :expo:preBuild UP-TO-DATE
+> Task :expo:preDebugBuild UP-TO-DATE
+> Task :expo:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-asset:preBuild UP-TO-DATE
+> Task :expo-asset:preDebugBuild UP-TO-DATE
+> Task :expo-asset:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-constants:createExpoConfig UP-TO-DATE
+> Task :expo-constants:preBuild UP-TO-DATE
+> Task :expo-constants:preDebugBuild UP-TO-DATE
+> Task :expo-constants:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-document-picker:preBuild UP-TO-DATE
+> Task :expo-document-picker:preDebugBuild UP-TO-DATE
+> Task :expo-document-picker:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-file-system:preBuild UP-TO-DATE
+> Task :expo-file-system:preDebugBuild UP-TO-DATE
+> Task :expo-file-system:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-font:preBuild UP-TO-DATE
+> Task :expo-font:preDebugBuild UP-TO-DATE
+> Task :expo-font:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-keep-awake:preBuild UP-TO-DATE
+> Task :expo-keep-awake:preDebugBuild UP-TO-DATE
+> Task :expo-keep-awake:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-modules-core:preDebugBuild UP-TO-DATE
+> Task :expo-modules-core:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-secure-store:preBuild UP-TO-DATE
+> Task :expo-secure-store:preDebugBuild UP-TO-DATE
+> Task :expo-secure-store:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preDebugBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-safe-area-context:preBuild UP-TO-DATE
+> Task :react-native-safe-area-context:preDebugBuild UP-TO-DATE
+> Task :react-native-safe-area-context:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-screens:preBuild UP-TO-DATE
+> Task :react-native-screens:preDebugBuild UP-TO-DATE
+> Task :react-native-screens:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :expo:generateDebugResValues UP-TO-DATE
+> Task :expo:generateDebugResources UP-TO-DATE
+> Task :expo:packageDebugResources UP-TO-DATE
+> Task :expo-asset:generateDebugResValues UP-TO-DATE
+> Task :expo-asset:generateDebugResources UP-TO-DATE
+> Task :expo-asset:packageDebugResources UP-TO-DATE
+> Task :expo-constants:generateDebugResValues UP-TO-DATE
+> Task :expo-constants:generateDebugResources UP-TO-DATE
+> Task :expo-constants:packageDebugResources UP-TO-DATE
+> Task :expo-document-picker:generateDebugResValues UP-TO-DATE
+> Task :expo-document-picker:generateDebugResources UP-TO-DATE
+> Task :expo-document-picker:packageDebugResources UP-TO-DATE
+> Task :expo-file-system:generateDebugResValues UP-TO-DATE
+> Task :expo-file-system:generateDebugResources UP-TO-DATE
+> Task :expo-file-system:packageDebugResources UP-TO-DATE
+> Task :expo-font:generateDebugResValues UP-TO-DATE
+> Task :expo-font:generateDebugResources UP-TO-DATE
+> Task :expo-font:packageDebugResources UP-TO-DATE
+> Task :expo-keep-awake:generateDebugResValues UP-TO-DATE
+> Task :expo-keep-awake:generateDebugResources UP-TO-DATE
+> Task :expo-keep-awake:packageDebugResources UP-TO-DATE
+> Task :expo-modules-core:generateDebugResValues UP-TO-DATE
+> Task :expo-modules-core:generateDebugResources UP-TO-DATE
+> Task :expo-modules-core:packageDebugResources UP-TO-DATE
+> Task :expo-secure-store:generateDebugResValues UP-TO-DATE
+> Task :expo-secure-store:generateDebugResources UP-TO-DATE
+> Task :expo-secure-store:packageDebugResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResValues UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:packageDebugResources UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugResValues UP-TO-DATE
+> Task :react-native-safe-area-context:generateDebugResources UP-TO-DATE
+> Task :react-native-safe-area-context:packageDebugResources UP-TO-DATE
+> Task :react-native-screens:generateDebugResValues UP-TO-DATE
+> Task :react-native-screens:generateDebugResources UP-TO-DATE
+> Task :react-native-screens:packageDebugResources UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :expo:extractDeepLinksDebug UP-TO-DATE
+> Task :expo:processDebugManifest UP-TO-DATE
+> Task :expo-asset:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-asset:processDebugManifest UP-TO-DATE
+> Task :expo-constants:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-constants:processDebugManifest UP-TO-DATE
+> Task :expo-document-picker:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-document-picker:processDebugManifest UP-TO-DATE
+> Task :expo-file-system:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-file-system:processDebugManifest UP-TO-DATE
+> Task :expo-font:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-font:processDebugManifest UP-TO-DATE
+> Task :expo-keep-awake:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-keep-awake:processDebugManifest UP-TO-DATE
+> Task :expo-modules-core:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-modules-core:processDebugManifest UP-TO-DATE
+> Task :expo-secure-store:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-secure-store:processDebugManifest UP-TO-DATE
+> Task :react-native-async-storage_async-storage:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:processDebugManifest UP-TO-DATE
+> Task :react-native-safe-area-context:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-safe-area-context:processDebugManifest UP-TO-DATE
+> Task :react-native-screens:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-screens:processDebugManifest UP-TO-DATE
+
+> Task :app:processDebugMainManifest FAILED
+.\gradlew.bat : C:\Users\Nitro\Documents\Atleta\Frontend\android\app\src\debug\
+AndroidManifest.xml Error:
+At line:1 char:66
++ ... d\android'; .\gradlew.bat app:assembleDebug -x lint -x test --console ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\Nitro\...fest.xml Error: 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+	uses-sdk:minSdkVersion 23 cannot be smaller than version 24 declared in 
+library [io.github.react-native-async-storage:shared-storage-android:1.0.1] C:\
+Users\Nitro\.gradle\caches\8.8\transforms\4436085159756c45dfab131f9c57908d\tran
+sformed\jetified-shared-storage\AndroidManifest.xml as the library might be 
+using APIs not available in 23
+	Suggestion: use a compatible library with a minSdk of at most 23,
+		or increase this project's minSdk version to at least 24,
+		or use tools:overrideLibrary="org.asyncstorage.shared_storage" to force 
+usage (may lead to runtime failures)
+
+See https://developer.android.com/r/studio-ui/build/manifest-merger for more information about the manifest merger.
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:processDebugMainManifest'.
+> Manifest merger failed : uses-sdk:minSdkVersion 23 cannot be smaller than 
+version 24 declared in library 
+[io.github.react-native-async-storage:shared-storage-android:1.0.1] C:\Users\Ni
+tro\.gradle\caches\8.8\transforms\4436085159756c45dfab131f9c57908d\transformed\
+jetified-shared-storage\AndroidManifest.xml as the library might be using APIs 
+not available in 23
+  	Suggestion: use a compatible library with a minSdk of at most 23,
+  		or increase this project's minSdk version to at least 24,
+  		or use tools:overrideLibrary="org.asyncstorage.shared_storage" to force 
+usage (may lead to runtime failures)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.8/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 10s
+86 actionable tasks: 5 executed, 81 up-to-date

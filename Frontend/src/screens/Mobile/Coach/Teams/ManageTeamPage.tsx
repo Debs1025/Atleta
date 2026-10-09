@@ -14,16 +14,77 @@ import styles from "./styles/ManageTeamPage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Team, RosterAthlete } from "../DataTypes";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
-const AVAILABLE_SPORTS = ["BASKETBALL", "TRACK AND FIELD", "SWIMMING"] as const;
-
-const BASKETBALL_POSITIONS = [
-  { code: "PG", label: "Point Guard" },
-  { code: "SG", label: "Shooting Guard" },
-  { code: "SF", label: "Small Forward" },
-  { code: "PF", label: "Power Forward" },
-  { code: "C", label: "Center" },
+const DEFAULT_AVAILABLE_SPORTS = [
+  "BASKETBALL",
+  "VOLLEYBALL",
+  "TRACK AND FIELD",
+  "SWIMMING",
+  "PICKLEBALL",
 ];
+
+export const SPORT_POSITIONS_MAP: Record<string, { code: string; label: string }[]> = {
+  BASKETBALL: [
+    { code: "PG", label: "Point Guard" },
+    { code: "SG", label: "Shooting Guard" },
+    { code: "SF", label: "Small Forward" },
+    { code: "PF", label: "Power Forward" },
+    { code: "C", label: "Center" },
+  ],
+  VOLLEYBALL: [
+    { code: "S", label: "Setter" },
+    { code: "OH", label: "Outside Hitter" },
+    { code: "OPP", label: "Opposite Hitter" },
+    { code: "MB", label: "Middle Blocker" },
+    { code: "L", label: "Libero" },
+    { code: "DS", label: "Defensive Specialist" },
+  ],
+  PICKLEBALL: [
+    { code: "SGL", label: "Singles Player" },
+    { code: "DBL", label: "Doubles Partner" },
+    { code: "MXD", label: "Mixed Doubles" },
+  ],
+  BADMINTON: [
+    { code: "SGL", label: "Singles" },
+    { code: "DBL", label: "Doubles" },
+    { code: "MXD", label: "Mixed Doubles" },
+  ],
+  FOOTBALL: [
+    { code: "GK", label: "Goalkeeper" },
+    { code: "DF", label: "Defender" },
+    { code: "MF", label: "Midfielder" },
+    { code: "FW", label: "Forward" },
+    { code: "ST", label: "Striker" },
+  ],
+  SOCCER: [
+    { code: "GK", label: "Goalkeeper" },
+    { code: "DF", label: "Defender" },
+    { code: "MF", label: "Midfielder" },
+    { code: "FW", label: "Forward" },
+    { code: "ST", label: "Striker" },
+  ],
+};
+
+const DEFAULT_GENERIC_POSITIONS = [
+  { code: "PLY", label: "Player" },
+  { code: "STR", label: "Starter" },
+  { code: "RES", label: "Reserve" },
+  { code: "CPT", label: "Captain" },
+];
+
+export const getPositionsForSport = (sport?: string) => {
+  const norm = (sport || "").toUpperCase().trim();
+  if (SPORT_POSITIONS_MAP[norm]) return SPORT_POSITIONS_MAP[norm];
+  if (norm.includes("BASKET")) return SPORT_POSITIONS_MAP.BASKETBALL;
+  if (norm.includes("VOLLEY")) return SPORT_POSITIONS_MAP.VOLLEYBALL;
+  if (norm.includes("PICKLE")) return SPORT_POSITIONS_MAP.PICKLEBALL;
+  if (norm.includes("BADMINTON")) return SPORT_POSITIONS_MAP.BADMINTON;
+  if (norm.includes("FOOTBALL") || norm.includes("SOCCER")) return SPORT_POSITIONS_MAP.FOOTBALL;
+  return DEFAULT_GENERIC_POSITIONS;
+};
+
+const BASKETBALL_POSITIONS = SPORT_POSITIONS_MAP.BASKETBALL;
 
 const SWIMMING_TYPES = [
   "Freestyle",
@@ -88,7 +149,7 @@ export function ManageTeamPage({
   onAddPlayers,
 }: ManageTeamPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   // Add Players Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -99,6 +160,30 @@ export function ManageTeamPage({
   const [editName, setEditName] = useState(team.team_name);
   const [editSport, setEditSport] = useState<Team["sport_type"]>(team.sport_type);
   const [editDivision, setEditDivision] = useState(team.division || "Elite Professional");
+  const [availableSports, setAvailableSports] = useState<string[]>(DEFAULT_AVAILABLE_SPORTS);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        if (mapped.length > 0) {
+          setAvailableSports(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for team management:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Remove Player Confirmation Overlay State
   const [playerToRemove, setPlayerToRemove] = useState<RosterAthlete | null>(null);
@@ -211,11 +296,15 @@ export function ManageTeamPage({
               <View style={styles.sportBadgeOutline}>
                 <Ionicons
                   name={
-                    team.sport_type === "BASKETBALL"
+                    (team.sport_type || "").toUpperCase().includes("BASKETBALL")
                       ? "basketball"
-                      : team.sport_type === "SWIMMING"
+                      : (team.sport_type || "").toUpperCase().includes("SWIM")
                         ? "water"
-                        : "fitness"
+                        : (team.sport_type || "").toUpperCase().includes("TRACK")
+                          ? "fitness"
+                          : (team.sport_type || "").toUpperCase().includes("TENNIS") || (team.sport_type || "").toUpperCase().includes("PICKLE")
+                            ? "tennisball"
+                            : "trophy"
                   }
                   size={14}
                   color="#00C8FF"
@@ -259,7 +348,7 @@ export function ManageTeamPage({
                 </View>
 
                 {/* SPORT-DEPENDENT ROSTER COLUMNS */}
-                {team.sport_type === "BASKETBALL" && (
+                {team.sport_type !== "TRACK AND FIELD" && team.sport_type !== "SWIMMING" && (
                   <>
                     <View style={{ marginRight: 8, alignItems: "center" }}>
                       <Text style={styles.miniLabel}>POS</Text>
@@ -268,7 +357,7 @@ export function ManageTeamPage({
                         onPress={() => setPosPickerPlayer(player)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.posText}>{player.position || "SG"}</Text>
+                        <Text style={styles.posText}>{player.position || getPositionsForSport(team.sport_type)[0]?.code || "POS"}</Text>
                         <Ionicons name="chevron-down" size={12} color="#64748B" />
                       </TouchableOpacity>
                     </View>
@@ -434,7 +523,7 @@ export function ManageTeamPage({
 
               <Text style={styles.inputLabel}>SPORT CATEGORY</Text>
               <View style={styles.sportDropdownContainer}>
-                {AVAILABLE_SPORTS.map((s) => {
+                {availableSports.map((s) => {
                   const isSelected = editSport === s;
                   return (
                     <TouchableOpacity
@@ -483,7 +572,7 @@ export function ManageTeamPage({
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL 2: BASKETBALL POSITION PICKER */}
+      {/* MODAL 2: SPORT-SPECIFIC POSITION PICKER */}
       <Modal
         visible={posPickerPlayer !== null}
         transparent
@@ -496,9 +585,11 @@ export function ManageTeamPage({
           onPress={() => setPosPickerPlayer(null)}
         >
           <View style={[styles.confirmDialogCard, { paddingVertical: 20 }]}>
-            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>SELECT BASKETBALL POSITION</Text>
+            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>
+              SELECT {(team.sport_type || "ATHLETE").toUpperCase()} POSITION
+            </Text>
             <View style={{ width: "100%", gap: 8 }}>
-              {BASKETBALL_POSITIONS.map((pos) => (
+              {getPositionsForSport(team.sport_type).map((pos) => (
                 <TouchableOpacity
                   key={pos.code}
                   style={styles.pickerOptionRow}

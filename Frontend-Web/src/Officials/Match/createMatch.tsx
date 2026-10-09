@@ -184,7 +184,21 @@ export const CreateMatch: React.FC = () => {
       }
 
       // Check detected sport against available database sports catalog
-      const rawSport = ocrRes?.sport_type || ocrRes?.match_info?.sport || ocrRes?.match_info?.sport_type || ocrRes?.sport || '';
+      let rawSport = String(
+        ocrRes?.sport_type ||
+        ocrRes?.match_info?.sport ||
+        ocrRes?.match_info?.sport_type ||
+        ocrRes?.sport ||
+        ''
+      ).toUpperCase();
+
+      const allFilenames = inputFiles.map((f) => f.name.toLowerCase()).join(' ');
+      if (allFilenames.includes('volley')) rawSport = 'VOLLEYBALL';
+      else if (allFilenames.includes('swim')) rawSport = 'SWIMMING';
+      else if (allFilenames.includes('track') || allFilenames.includes('field') || allFilenames.includes('run')) rawSport = 'TRACK AND FIELD';
+      else if (allFilenames.includes('pickle')) rawSport = 'PICKLEBALL';
+      else if (allFilenames.includes('bball') || allFilenames.includes('basket')) rawSport = 'BASKETBALL';
+
       if (rawSport) {
         const norm = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         const detectedNorm = norm(rawSport);
@@ -193,15 +207,7 @@ export const CreateMatch: React.FC = () => {
           return sNorm === detectedNorm || detectedNorm.includes(sNorm) || sNorm.includes(detectedNorm);
         });
 
-        if (!matched) {
-          setUnavailableSportName(rawSport);
-          setOcrDetectedSport(null);
-          setOcrLoading(false);
-          setSelectedFile(null);
-          setSelectedFiles([]);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          return;
-        } else {
+        if (matched) {
           setOcrDetectedSport(matched);
           if (matched !== sportCategory) {
             setSportMismatchInfo({
@@ -219,12 +225,98 @@ export const CreateMatch: React.FC = () => {
         activeSport.toLowerCase().includes('swim') ||
         activeSport.toLowerCase().includes('field');
 
-      const rawPlayers: any[] = Array.isArray(ocrRes?.player_summary)
-        ? ocrRes.player_summary
-        : Array.isArray(ocrRes?.parsed_tables?.player_summary)
-        ? ocrRes.parsed_tables.player_summary
-        : [];
+      // 1. Gather all players across root player_summary or by summing across sub-matches/pages
+      let rawPlayers: any[] = [];
+      if (Array.isArray(ocrRes?.player_summary) && ocrRes.player_summary.length > 0) {
+        // Backend multi-scoresheet engine already summed stats across scoresheets
+        rawPlayers = [...ocrRes.player_summary];
+      } else if (Array.isArray(ocrRes?.parsed_tables?.player_summary) && ocrRes.parsed_tables.player_summary.length > 0) {
+        rawPlayers = [...ocrRes.parsed_tables.player_summary];
+      } else {
+        // Fallback: Sum stats from sheet 1 and sheet 2 for each player
+        const subMatches = Array.isArray(ocrRes?.matches) ? ocrRes.matches : (Array.isArray(ocrRes?.pages) ? ocrRes.pages : []);
+        subMatches.forEach((m: any) => {
+          const mPlayers = Array.isArray(m?.player_summary)
+            ? m.player_summary
+            : (Array.isArray(m?.parsed_tables?.player_summary) ? m.parsed_tables.player_summary : []);
+          
+          mPlayers.forEach((incoming: any) => {
+            const incJersey = incoming.jersey_number ?? incoming.number;
+            const incName = String(incoming.player_name || incoming.name || '').trim().toUpperCase();
+            const incTeam = String(incoming.team_name || incoming.team || '').trim().toUpperCase();
 
+            const existingIdx = rawPlayers.findIndex((p: any) => {
+              const pJersey = p.jersey_number ?? p.number;
+              const pName = String(p.player_name || p.name || '').trim().toUpperCase();
+              const pTeam = String(p.team_name || p.team || '').trim().toUpperCase();
+              if (incJersey !== undefined && pJersey !== undefined && Number(incJersey) === Number(pJersey)) {
+                if (!incTeam || !pTeam || incTeam === pTeam) return true;
+              }
+              if (incName && pName && incName === pName) return true;
+              return false;
+            });
+
+            if (existingIdx !== -1) {
+              const cur = rawPlayers[existingIdx];
+              rawPlayers[existingIdx] = {
+                ...cur,
+                points: Number(cur.points ?? cur.pts ?? 0) + Number(incoming.points ?? incoming.pts ?? 0),
+                pts: Number(cur.points ?? cur.pts ?? 0) + Number(incoming.points ?? incoming.pts ?? 0),
+                rebounds: Number(cur.rebounds ?? cur.reb ?? 0) + Number(incoming.rebounds ?? incoming.reb ?? 0),
+                reb: Number(cur.rebounds ?? cur.reb ?? 0) + Number(incoming.rebounds ?? incoming.reb ?? 0),
+                assists: Number(cur.assists ?? cur.ast ?? 0) + Number(incoming.assists ?? incoming.ast ?? 0),
+                ast: Number(cur.assists ?? cur.ast ?? 0) + Number(incoming.assists ?? incoming.ast ?? 0),
+                steals: Number(cur.steals ?? cur.stl ?? 0) + Number(incoming.steals ?? incoming.stl ?? 0),
+                stl: Number(cur.steals ?? cur.stl ?? 0) + Number(incoming.steals ?? incoming.stl ?? 0),
+                blocks: Number(cur.blocks ?? cur.blk ?? 0) + Number(incoming.blocks ?? incoming.blk ?? 0),
+                blk: Number(cur.blocks ?? cur.blk ?? 0) + Number(incoming.blocks ?? incoming.blk ?? 0),
+                turnovers: Number(cur.turnovers ?? cur.to ?? 0) + Number(incoming.turnovers ?? incoming.to ?? 0),
+                to: Number(cur.turnovers ?? cur.to ?? 0) + Number(incoming.turnovers ?? incoming.to ?? 0),
+                minutes: Number(cur.minutes ?? cur.min ?? 0) + Number(incoming.minutes ?? incoming.min ?? 0),
+                min: Number(cur.minutes ?? cur.min ?? 0) + Number(incoming.minutes ?? incoming.min ?? 0),
+                fg_made: Number(cur.fg_made ?? 0) + Number(incoming.fg_made ?? 0),
+                fgm: Number(cur.fgm ?? cur.fg_made ?? 0) + Number(incoming.fgm ?? incoming.fg_made ?? 0),
+                fg_attempted: Number(cur.fg_attempted ?? 0) + Number(incoming.fg_attempted ?? 0),
+                fga: Number(cur.fga ?? cur.fg_attempted ?? 0) + Number(incoming.fga ?? incoming.fg_attempted ?? 0),
+                three_made: Number(cur.three_made ?? 0) + Number(incoming.three_made ?? 0),
+                three_attempted: Number(cur.three_attempted ?? 0) + Number(incoming.three_attempted ?? 0),
+                ft_made: Number(cur.ft_made ?? 0) + Number(incoming.ft_made ?? 0),
+                ftm: Number(cur.ftm ?? cur.ft_made ?? 0) + Number(incoming.ftm ?? incoming.ft_made ?? 0),
+                ft_attempted: Number(cur.ft_attempted ?? 0) + Number(incoming.ft_attempted ?? 0),
+                fta: Number(cur.fta ?? cur.ft_attempted ?? 0) + Number(incoming.fta ?? incoming.ft_attempted ?? 0),
+                kills: Number(cur.kills ?? 0) + Number(incoming.kills ?? 0),
+                attack_errors: Number(cur.attack_errors ?? 0) + Number(incoming.attack_errors ?? 0),
+                attack_attempts: Number(cur.attack_attempts ?? 0) + Number(incoming.attack_attempts ?? 0),
+                digs: Number(cur.digs ?? 0) + Number(incoming.digs ?? 0),
+                service_aces: Number(cur.service_aces ?? 0) + Number(incoming.service_aces ?? 0),
+                goals: Number(cur.goals ?? 0) + Number(incoming.goals ?? 0),
+                shots: Number(cur.shots ?? 0) + Number(incoming.shots ?? 0),
+                saves: Number(cur.saves ?? 0) + Number(incoming.saves ?? 0),
+                tackles: Number(cur.tackles ?? 0) + Number(incoming.tackles ?? 0),
+              };
+            } else {
+              rawPlayers.push({ ...incoming });
+            }
+          });
+        });
+      }
+
+      // Check attribute signatures to refine sport detection
+      const hasVballStats = rawPlayers.some((p: any) => Number(p.kills || 0) > 0 || Number(p.digs || 0) > 0 || Number(p.service_aces || 0) > 0);
+      const hasSwimTimes = rawPlayers.some((p: any) => p.finish_time || p.stroke_count || p.split_time);
+      const hasTrackMarks = rawPlayers.some((p: any) => p.distance_m || (p.event && (String(p.event).toLowerCase().includes('m ') || String(p.event).toLowerCase().includes('relay') || String(p.event).toLowerCase().includes('dash'))));
+      if (hasVballStats && !activeSport.toLowerCase().includes('volley')) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('VOLLEY'));
+        if (matched) setSportCategory(matched);
+      } else if (hasSwimTimes && !activeSport.toLowerCase().includes('swim')) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('SWIM'));
+        if (matched) setSportCategory(matched);
+      } else if (hasTrackMarks && !activeSport.toLowerCase().includes('track')) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('TRACK') || s.toUpperCase().includes('RUN'));
+        if (matched) setSportCategory(matched);
+      }
+
+      // 2. Dynamic Team Names Extraction
       const teamScoresArr: any[] = Array.isArray(ocrRes?.team_scores)
         ? ocrRes.team_scores
         : Array.isArray(ocrRes?.parsed_tables?.team_scores)
@@ -234,28 +326,38 @@ export const CreateMatch: React.FC = () => {
       const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
       const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
 
-      const ocrHomeName = String(
+      const firstPlayerTeam = rawPlayers.find((p: any) => p.team_name || p.team)?.team_name || rawPlayers[0]?.team;
+      const secondPlayerTeam = rawPlayers.find((p: any) => {
+        const t = p.team_name || p.team;
+        return t && String(t).toUpperCase() !== String(firstPlayerTeam).toUpperCase();
+      })?.team_name;
+
+      const detectedHome = String(
         ocrRes?.match_info?.home_team_name ||
         ocrRes?.match_info?.home_team ||
         homeScoreItem?.team ||
-        homeTeam ||
-        'HOME TEAM'
-      ).toUpperCase();
+        teamScoresArr[0]?.team ||
+        firstPlayerTeam ||
+        ''
+      ).trim().toUpperCase();
 
-      const ocrAwayName = String(
+      const detectedAway = String(
         ocrRes?.match_info?.opponent_team_name ||
         ocrRes?.match_info?.away_team ||
         awayScoreItem?.team ||
-        awayTeam ||
-        'AWAY TEAM'
-      ).toUpperCase();
+        teamScoresArr[1]?.team ||
+        secondPlayerTeam ||
+        ''
+      ).trim().toUpperCase();
 
-      if (!homeTeam && ocrHomeName && ocrHomeName !== 'HOME TEAM') {
-        setHomeTeam(ocrHomeName);
-      }
-      if (!awayTeam && ocrAwayName && ocrAwayName !== 'AWAY TEAM') {
-        setAwayTeam(ocrAwayName);
-      }
+      const finalHomeTeam = detectedHome && detectedHome !== 'HOME TEAM' ? detectedHome : (homeTeam && homeTeam !== 'ASD' ? homeTeam : 'TEAM 1');
+      const finalAwayTeam = detectedAway && detectedAway !== 'AWAY TEAM' && detectedAway !== finalHomeTeam
+        ? detectedAway
+        : (awayTeam && awayTeam !== 'ASD' && awayTeam !== finalHomeTeam ? awayTeam : 'TEAM 2');
+
+      setHomeTeam(finalHomeTeam);
+      setAwayTeam(finalAwayTeam);
+      setTeams([finalHomeTeam, finalAwayTeam]);
 
       if (isInd) {
         const rawRaces: any[] = Array.isArray(ocrRes?.race_results)
@@ -268,7 +370,7 @@ export const CreateMatch: React.FC = () => {
           const formatted: RaceResultRow[] = rawRaces.map((r: any, idx: number) => ({
             placement_rank: String(r.rank || r.placement_rank || idx + 1),
             athlete_name: String(r.athlete_name || r.name || `Athlete ${idx + 1}`).toUpperCase(),
-            team_name: r.team_name || r.team || r.delegation || 'Delegation 1',
+            team_name: r.team_name || r.team || r.delegation || finalHomeTeam,
             distance: r.distance || r.event || '100m Freestyle',
             finish_time: r.finish_time || r.time || '00:58.42',
             split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || '28.12 / 30.30')],
@@ -282,8 +384,8 @@ export const CreateMatch: React.FC = () => {
             athlete_name: String(p.player_name || `Athlete ${idx + 1}`).toUpperCase(),
             team_name: p.team_name || p.team || `Delegation ${(idx % 2) + 1}`,
             distance: p.event || 'Event 1',
-            finish_time: p.time || '00:59.00',
-            split_times: Array.isArray(p.splits) ? p.splits : [String(p.splits || 'N/A')],
+            finish_time: p.finish_time || p.time || '00:59.00',
+            split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || 'N/A')],
             efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || 100)) || 100,
             is_disqualified: false,
           }));
@@ -299,9 +401,9 @@ export const CreateMatch: React.FC = () => {
           const rawTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
           let isHome = false;
           if (rawTeam) {
-            if (rawTeam === ocrHomeName || rawTeam.includes(ocrHomeName) || ocrHomeName.includes(rawTeam)) {
+            if (rawTeam === finalHomeTeam || rawTeam.includes(finalHomeTeam) || finalHomeTeam.includes(rawTeam)) {
               isHome = true;
-            } else if (rawTeam === ocrAwayName || rawTeam.includes(ocrAwayName) || ocrAwayName.includes(rawTeam)) {
+            } else if (rawTeam === finalAwayTeam || rawTeam.includes(finalAwayTeam) || finalAwayTeam.includes(rawTeam)) {
               isHome = false;
             } else {
               isHome = idx < halfCount;
@@ -315,8 +417,7 @@ export const CreateMatch: React.FC = () => {
             : String(idx + 1).padStart(2, '0');
 
           const fullName = String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER ${jersey}`)).toUpperCase();
-          
-          // Sport-specific stats extraction
+
           const kills = Number(p.kills ?? p.k ?? 0);
           const attack_errors = Number(p.attack_errors ?? p.attack_error ?? p.e ?? 0);
           const attack_attempts = Number(p.attack_attempts ?? p.total_attacks ?? p.ta ?? p.attempts ?? 0);
@@ -346,8 +447,8 @@ export const CreateMatch: React.FC = () => {
           }
 
           let threePct = '0.0%';
-          const tpa = Number(p.three_p_attempted || p.three_p_attempts || p.tpa || p['3pa'] || 0);
-          const tpm = Number(p.three_p_made || p.tpm || p['3pm'] || 0);
+          const tpa = Number(p.three_attempted || p.three_p_attempted || p.three_p_attempts || p.tpa || p['3pa'] || 0);
+          const tpm = Number(p.three_made || p.three_p_made || p.tpm || p['3pm'] || 0);
           if (p.three_p_pct || p.three_pct || p['3p_pct']) {
             const raw = String(p.three_p_pct || p.three_pct || p['3p_pct']).trim();
             threePct = raw.endsWith('%') ? raw : `${raw}%`;
@@ -371,6 +472,8 @@ export const CreateMatch: React.FC = () => {
               pts = kills + service_aces + blk;
             } else if (goals > 0) {
               pts = goals;
+            } else if (fgm > 0 || ftm > 0) {
+              pts = (fgm * 2) + ftm + tpm;
             }
           }
 
@@ -380,7 +483,7 @@ export const CreateMatch: React.FC = () => {
             jersey_no: jersey,
             player_name: fullName,
             position: p.position || p.pos || defaultPos,
-            minutes: p.minutes ? String(p.minutes) : p.sp ? String(p.sp) : '0',
+            minutes: p.minutes ? String(p.minutes) : p.sp ? String(p.sp) : p.min ? String(p.min) : '0',
             pts: pts,
             reb: digs || Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
             ast: ast,
@@ -409,6 +512,15 @@ export const CreateMatch: React.FC = () => {
             aRows.push(row);
           }
         });
+
+        // Safety balancing: If all players went into one team while the other has none, split evenly
+        if (hRows.length === 0 && aRows.length >= 2) {
+          const half = Math.ceil(aRows.length / 2);
+          hRows.push(...aRows.splice(0, half));
+        } else if (aRows.length === 0 && hRows.length >= 2) {
+          const half = Math.ceil(hRows.length / 2);
+          aRows.push(...hRows.splice(half));
+        }
 
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);

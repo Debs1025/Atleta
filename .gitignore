@@ -13,10 +13,9 @@ build/
 .env
 .env.*
 !.env.example
-Frontend-Web/.env
-Frontend-Web/.env.*
 Backend/.env
 Backend/.env.*
+!Backend/.env.example
 
 # Service Accounts and Secret Keys
 serviceAccountKey.json

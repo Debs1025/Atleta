@@ -12,7 +12,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachProfile";
-import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
+import { getCoachProfileOfflineFirst, getTeamsOfflineFirst, getMatchesOfflineFirst } from "../../../../services/firebaseClient";
 
 export interface CoachProfileProps {
   visible: boolean;
@@ -61,7 +62,7 @@ function InlineProfileSkeleton({ topPadding }: { topPadding: number }) {
   );
 }
 
-// API Request: fetch coach profile details (GET /api/coach/profile)
+// API & Firestore Data: fetch coach profile details live from Firestore
 export function CoachProfile({
   visible,
   onClose,
@@ -69,7 +70,7 @@ export function CoachProfile({
   profileData,
 }: CoachProfileProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [profile, setProfile] = useState<CoachProfileState>(profileData || DEFAULT_COACH_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,44 +87,104 @@ export function CoachProfile({
       setIsLoading(true);
       const fetchProfile = async () => {
         try {
-          const [profileRes, teamsRes]: [any, any] = await Promise.all([
+          // Fetch from Firestore-backed offline first & backend API in parallel
+          const [offlineProfileRes, profileRes, teamsRes, matchesRes]: [any, any, any, any] = await Promise.all([
+            getCoachProfileOfflineFirst(profileData?.user_id || profileData?.coach_id).catch(() => null),
             requestAuthenticatedJson("/coaches/profile").catch(() => null),
-            requestAuthenticatedJson("/teams").catch(() => null),
+            getTeamsOfflineFirst().catch(() => null),
+            getMatchesOfflineFirst().catch(() => null),
           ]);
 
-          if (isMounted && profileRes) {
-            const firstName = profileRes.first_name || profile.first_name || "Coach";
-            const lastName = profileRes.last_name || profile.last_name || "";
-            const fullName = profileRes.full_name || `${firstName} ${lastName}`.trim();
-            const rawSport = (profileRes.sport_type || profileRes.sports_focus || profile.sports_focus || "BASKETBALL").toUpperCase();
+          const combined = profileRes || offlineProfileRes;
+
+          if (isMounted && (combined || offlineProfileRes)) {
+            const data = combined || offlineProfileRes;
+            const firstName = data.first_name || offlineProfileRes?.first_name || profile.first_name || "Coach";
+            const lastName = data.last_name || offlineProfileRes?.last_name || profile.last_name || "";
+            const fullName = data.full_name || offlineProfileRes?.full_name || `${firstName} ${lastName}`.trim();
+            const rawSport = (data.sport_type || data.sports_focus || offlineProfileRes?.sport_type || profile.sports_focus || "BASKETBALL").toUpperCase();
             const sportFocus: CoachProfileState["sports_focus"] =
               rawSport.includes("SWIM")
                 ? "SWIMMING"
                 : rawSport.includes("TRACK")
                 ? "TRACK AND FIELD"
-                : "BASKETBALL";
+                : rawSport;
 
             let totalAthletesCount = 0;
-            if (Array.isArray(teamsRes)) {
+            if (Array.isArray(teamsRes) && teamsRes.length > 0) {
+              const athleteIds = new Set<string>();
               teamsRes.forEach((t: any) => {
-                totalAthletesCount += Array.isArray(t.roster_list) ? t.roster_list.length : 0;
+                if (Array.isArray(t.roster_list)) {
+                  t.roster_list.forEach((r: any) => {
+                    const id = r.athlete_id || r.user_id;
+                    if (id) athleteIds.add(id);
+                  });
+                }
               });
+              totalAthletesCount = athleteIds.size;
+            }
+            if (!totalAthletesCount && Array.isArray(data.athletes_managed)) {
+              totalAthletesCount = data.athletes_managed.length;
+            }
+            if (!totalAthletesCount) {
+              totalAthletesCount = data.system_statistics?.total_athletes || offlineProfileRes?.system_statistics?.total_athletes || 0;
             }
 
-            const institution = profileRes.current_institution || profileRes.institution || profile.current_institution || "";
-            const regionalAffiliation = profileRes.regional_affiliation || profile.regional_affiliation || "";
-            const nationalLeague = profileRes.national_sports_league || profile.national_sports_league || "";
+            let totalMatchesCount = 0;
+            if (Array.isArray(matchesRes) && matchesRes.length > 0) {
+              totalMatchesCount = matchesRes.length;
+            } else if (data.total_matches_logged || data.matches_logged || data.metric_logs) {
+              totalMatchesCount = Number(data.total_matches_logged || data.matches_logged || data.metric_logs);
+            } else {
+              totalMatchesCount = data.system_statistics?.metric_logs || offlineProfileRes?.system_statistics?.metric_logs || 0;
+            }
+
+            const institution = data.current_institution || offlineProfileRes?.current_institution || profile.current_institution || "";
+            const regionalAffiliation = data.regional_affiliation || offlineProfileRes?.regional_affiliation || profile.regional_affiliation || "";
+            const nationalLeague = data.national_sports_league || offlineProfileRes?.national_sports_league || profile.national_sports_league || "";
+            const avatarUrl = data.avatar_url || data.profile_image || offlineProfileRes?.avatar_url || offlineProfileRes?.profile_image || profile.avatar_url;
+
+            const rawCreds = data.certifications || data.credentials || offlineProfileRes?.certifications || offlineProfileRes?.credentials || profile.credentials || [];
+            const rawDocs = data.uploaded_documents || data.professional_documents || offlineProfileRes?.uploaded_documents || offlineProfileRes?.professional_documents || profile.uploaded_documents || [];
+
+            const normalizedDocs: UploadedDocument[] = Array.isArray(rawDocs)
+              ? rawDocs.map((d: any, idx: number) => {
+                  if (typeof d === "string") {
+                    return {
+                      id: `doc_${idx}`,
+                      file_name: d,
+                      file_type: d.toLowerCase().endsWith(".pdf") ? "PDF" : "JPG",
+                      file_url: d,
+                    };
+                  }
+                  return d;
+                })
+              : [];
+
+            const normalizedCreds: CredentialItem[] = Array.isArray(rawCreds)
+              ? rawCreds.map((c: any, idx: number) => {
+                  if (typeof c === "string") {
+                    return {
+                      id: `cred_${idx}`,
+                      title: c,
+                      type: "certified",
+                      icon_name: "shield-check",
+                    };
+                  }
+                  return c;
+                })
+              : [];
 
             const updated: CoachProfileState = {
-              coach_id: profileRes.coach_id || profileRes.user_id || profile.coach_id,
-              user_id: profileRes.user_id || profile.user_id,
+              coach_id: data.coach_id || offlineProfileRes?.coach_id || profile.coach_id,
+              user_id: data.user_id || offlineProfileRes?.user_id || profile.user_id,
               first_name: firstName,
               last_name: lastName,
               full_name: fullName,
-              email: profileRes.email || profile.email,
+              email: data.email || offlineProfileRes?.email || profile.email,
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
-              avatar_url: profileRes.avatar_url || profile.avatar_url,
+              avatar_url: avatarUrl,
               current_institution: institution,
               regional_affiliation: regionalAffiliation,
               national_sports_league: nationalLeague,
@@ -131,11 +192,11 @@ export function CoachProfile({
                 association_name: regionalAffiliation || nationalLeague || "",
                 office_name: institution || "",
               },
-              credentials: profileRes.certifications || profile.credentials || DEFAULT_COACH_PROFILE.credentials,
-              uploaded_documents: profileRes.uploaded_documents || profile.uploaded_documents || DEFAULT_COACH_PROFILE.uploaded_documents,
+              credentials: normalizedCreds,
+              uploaded_documents: normalizedDocs,
               system_statistics: {
-                total_athletes: totalAthletesCount || profileRes.system_statistics?.total_athletes || profile.system_statistics?.total_athletes || 0,
-                metric_logs: profileRes.metric_logs || profile.system_statistics?.metric_logs || 0,
+                total_athletes: totalAthletesCount,
+                metric_logs: totalMatchesCount,
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };
@@ -169,6 +230,12 @@ export function CoachProfile({
     }
   };
 
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [profile.avatar_url]);
+
   return (
     <Modal
       visible={visible}
@@ -178,37 +245,6 @@ export function CoachProfile({
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
-        {/* FIXED TOP HEADER BAR */}
-        <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>MY PROFILE</Text>
-            <View style={styles.headerRightActions}>
-              {onOpenEdit && (
-                <TouchableOpacity
-                  style={styles.editAssetIconButton}
-                  onPress={onOpenEdit}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Edit Profile"
-                >
-                  <Image
-                    source={require("../../../../assets/editbutton.png")}
-                    style={styles.editAssetImage}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.closeIconButton}
-                onPress={onClose}
-                activeOpacity={0.8}
-                accessibilityLabel="Close Profile"
-              >
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
         {isLoading ? (
           <InlineProfileSkeleton topPadding={headerTopPadding + 64} />
         ) : (
@@ -222,11 +258,12 @@ export function CoachProfile({
             {/* AVATAR & HERO HEADER */}
             <View style={styles.heroSection}>
               <View style={styles.avatarCircleFrame}>
-                {profile.avatar_url ? (
+                {profile.avatar_url && !avatarError ? (
                   <Image
                     source={{ uri: profile.avatar_url }}
                     style={styles.avatarCircleImage}
                     resizeMode="cover"
+                    onError={() => setAvatarError(true)}
                   />
                 ) : (
                   <Ionicons name="person" size={44} color="#00C8FF" />
@@ -280,17 +317,46 @@ export function CoachProfile({
               <Text style={styles.credentialsHeading}>CREDENTIALS</Text>
 
               {(() => {
-                const displayCredentials = [
-                  ...(profile.credentials || []),
-                  ...(profile.uploaded_documents || [])
-                    .filter((doc) => !profile.credentials?.some((c) => c.id === doc.id))
-                    .map((doc) => ({
-                      id: doc.id,
-                      title: doc.file_name.replace(/\.[^/.]+$/, ""),
-                      type: "certified",
+                const credsList = (profile.credentials || []).map((c: any, i: number) => {
+                  if (typeof c === "string") {
+                    return {
+                      id: `cred_${i}`,
+                      title: c.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
                       icon_name: "shield-check",
-                    })),
-                ];
+                    };
+                  }
+                  return {
+                    id: c.id || `cred_${i}`,
+                    title: (c.title || c.name || "Credential").replace(/\.[^/.]+$/, "").replace(/_/g, " "),
+                    icon_name: c.icon_name || "shield-check",
+                  };
+                });
+
+                const docsList = (profile.uploaded_documents || []).map((d: any, i: number) => {
+                  const fname = typeof d === "string" ? d : d.file_name || d.name || "Document";
+                  return {
+                    id: typeof d === "object" && d.id ? d.id : `doc_${i}`,
+                    title: fname.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
+                    icon_name: "shield-check",
+                  };
+                });
+
+                const displayCredentials = [...credsList];
+                docsList.forEach((d) => {
+                  if (!displayCredentials.some((c) => c.title.toLowerCase() === d.title.toLowerCase())) {
+                    displayCredentials.push(d);
+                  }
+                });
+
+                if (displayCredentials.length === 0) {
+                  return (
+                    <View style={[styles.credentialItemRow, { justifyContent: "center", borderBottomWidth: 0 }]}>
+                      <Text style={[styles.credentialTitleText, { color: "#64748B", fontSize: 13 }]}>
+                        No credentials uploaded
+                      </Text>
+                    </View>
+                  );
+                }
 
                 return displayCredentials.map((item, index) => {
                   const isLast = index === displayCredentials.length - 1;
@@ -315,20 +381,51 @@ export function CoachProfile({
             <View style={styles.statsGridContainer}>
               <View style={[styles.statColumn, styles.statBorderRight]}>
                 <Text style={styles.statNumberText}>
-                  {profile.system_statistics?.total_athletes ?? 42}
+                  {profile.system_statistics?.total_athletes ?? 0}
                 </Text>
                 <Text style={styles.statLabelText}>TOTAL ATHLETES</Text>
               </View>
 
               <View style={styles.statColumn}>
                 <Text style={styles.statNumberText}>
-                  {profile.system_statistics?.metric_logs ?? 156}
+                  {profile.system_statistics?.metric_logs ?? 0}
                 </Text>
                 <Text style={styles.statLabelText}>MATCH LOGGED</Text>
               </View>
             </View>
           </ScrollView>
         )}
+
+        {/* FIXED TOP HEADER BAR (rendered after ScrollView to ensure touch precedence on Android) */}
+        <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>MY PROFILE</Text>
+            <View style={styles.headerRightActions}>
+              {onOpenEdit && (
+                <TouchableOpacity
+                  style={styles.editAssetIconButton}
+                  onPress={onOpenEdit}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Edit Profile"
+                >
+                  <Image
+                    source={require("../../../../assets/editbutton.png")}
+                    style={styles.editAssetImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.closeIconButton}
+                onPress={onClose}
+                activeOpacity={0.8}
+                accessibilityLabel="Close Profile"
+              >
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </View>
     </Modal>
   );

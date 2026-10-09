@@ -34,6 +34,7 @@ interface MyTeamsPageProps {
   teams: Team[];
   athletesPool: RosterAthlete[];
   coachName?: string;
+  avatarUrl?: string | null;
   onSelectTeam: (team: Team) => void;
   onCreateTeam: (newTeamData: {
     team_name: string;
@@ -52,6 +53,7 @@ export function MyTeamsPage({
   teams,
   athletesPool,
   coachName,
+  avatarUrl,
   onSelectTeam,
   onCreateTeam,
   onLogout,
@@ -61,7 +63,7 @@ export function MyTeamsPage({
   unreadNotificationCount = 0,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -79,6 +81,7 @@ export function MyTeamsPage({
     <View style={styles.container}>
       {/* TOP HEADER */}
       <AtletaHeader
+        avatarUrl={avatarUrl}
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress || onLogout}
         onNotificationPress={onNotificationPress}
@@ -89,7 +92,7 @@ export function MyTeamsPage({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 64, paddingBottom: 120 },
+          { paddingTop: headerTopPadding + 56, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
       >

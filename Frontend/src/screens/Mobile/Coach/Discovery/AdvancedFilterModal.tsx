@@ -18,6 +18,7 @@ import {
   matchesAthleteFilters,
   SPORT_METRICS,
   RankingSortMetric,
+  getDefaultMetricForSport,
 } from './discoveryTypes';
 
 interface AdvancedFilterModalProps {
@@ -52,6 +53,43 @@ const POSITION_OPTIONS: Record<SportCategoryFilter, { label: string; value: stri
     { label: '400m Sprint', value: '400m' },
     { label: 'Hurdles', value: 'Hurdles' },
     { label: 'Long Jump', value: 'Jump' },
+  ],
+  VOLLEYBALL: [
+    { label: 'All', value: 'ALL' },
+    { label: 'Setter (S)', value: 'Setter' },
+    { label: 'Outside Hitter (OH)', value: 'Outside Hitter' },
+    { label: 'Opposite Hitter (OPP)', value: 'Opposite Hitter' },
+    { label: 'Middle Blocker (MB)', value: 'Middle Blocker' },
+    { label: 'Libero (L)', value: 'Libero' },
+    { label: 'Defensive Specialist (DS)', value: 'Defensive Specialist' },
+  ],
+  PICKLEBALL: [
+    { label: 'All', value: 'ALL' },
+    { label: 'Singles Player', value: 'Singles' },
+    { label: 'Doubles Partner', value: 'Doubles' },
+    { label: 'Mixed Doubles', value: 'Mixed' },
+  ],
+  BADMINTON: [
+    { label: 'All', value: 'ALL' },
+    { label: 'Singles', value: 'Singles' },
+    { label: 'Doubles', value: 'Doubles' },
+    { label: 'Mixed Doubles', value: 'Mixed' },
+  ],
+  FOOTBALL: [
+    { label: 'All', value: 'ALL' },
+    { label: 'Goalkeeper (GK)', value: 'Goalkeeper' },
+    { label: 'Defender (DF)', value: 'Defender' },
+    { label: 'Midfielder (MF)', value: 'Midfielder' },
+    { label: 'Forward (FW)', value: 'Forward' },
+    { label: 'Striker (ST)', value: 'Striker' },
+  ],
+  SOCCER: [
+    { label: 'All', value: 'ALL' },
+    { label: 'Goalkeeper (GK)', value: 'Goalkeeper' },
+    { label: 'Defender (DF)', value: 'Defender' },
+    { label: 'Midfielder (MF)', value: 'Midfielder' },
+    { label: 'Forward (FW)', value: 'Forward' },
+    { label: 'Striker (ST)', value: 'Striker' },
   ],
 };
 
@@ -130,11 +168,42 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
   };
 
   const handleReset = () => {
-    setDraftFilters(DEFAULT_ADVANCED_FILTERS);
-    setAdvancedFilters(DEFAULT_ADVANCED_FILTERS);
+    const resetFilters: AdvancedAthleteFilters = {
+      ...DEFAULT_ADVANCED_FILTERS,
+      sortBy: getDefaultMetricForSport(activeSportFilter),
+    };
+    setDraftFilters(resetFilters);
+    setAdvancedFilters(resetFilters);
   };
 
-  const positions = POSITION_OPTIONS[activeSportFilter] || POSITION_OPTIONS.BASKETBALL;
+  const positions = useMemo(() => {
+    const normSport = (activeSportFilter || '').toUpperCase().trim();
+    const configured = (POSITION_OPTIONS as Record<string, { label: string; value: string }[]>)[normSport];
+    if (configured) return configured;
+
+    const detected = new Set<string>();
+    athletes
+      .filter((a) => (a.sport_category || '').toUpperCase().trim() === normSport)
+      .forEach((a) => {
+        const p = (a.position_tag || '').trim();
+        if (p && p.toUpperCase() !== normSport) {
+          detected.add(p);
+        }
+      });
+
+    if (detected.size > 0) {
+      return [
+        { label: 'All', value: 'ALL' },
+        ...Array.from(detected).map((pos) => ({ label: pos, value: pos })),
+      ];
+    }
+
+    return [
+      { label: 'All', value: 'ALL' },
+      { label: 'Starters', value: 'Starter' },
+      { label: 'Reserves', value: 'Reserve' },
+    ];
+  }, [activeSportFilter, athletes]);
 
   return (
     <Modal
@@ -171,7 +240,8 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
               <Text style={modalStyles.sectionLabel}>SORT & RANK ATHLETES BY</Text>
               <View style={modalStyles.chipsWrap}>
                 {(SPORT_METRICS[activeSportFilter] || SPORT_METRICS.BASKETBALL).map((m) => {
-                  const isSelected = (draftFilters.sortBy || 'PER') === m.key;
+                  const defaultSort = getDefaultMetricForSport(activeSportFilter);
+                  const isSelected = (draftFilters.sortBy || defaultSort) === m.key;
                   return (
                     <TouchableOpacity
                       key={m.key}

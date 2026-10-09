@@ -11,14 +11,19 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
-const SPORT_OPTIONS: CoachProfileState["sports_focus"][] = [
+const DEFAULT_SPORT_OPTIONS: CoachProfileState["sports_focus"][] = [
   "BASKETBALL",
-  "SWIMMING",
+  "VOLLEYBALL",
   "TRACK AND FIELD",
+  "SWIMMING",
+  "PICKLEBALL",
 ];
 
 export interface CoachEditProfileProps {
@@ -37,6 +42,30 @@ export function CoachEditProfile({
   const currentProfile = profileData || DEFAULT_COACH_PROFILE;
 
   const [showSportDropdown, setShowSportDropdown] = useState(false);
+  const [sportOptions, setSportOptions] = useState<CoachProfileState["sports_focus"][]>(DEFAULT_SPORT_OPTIONS);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: CoachProfileState["sports_focus"][] = [];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').trim().toUpperCase();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        if (mapped.length > 0) {
+          setSportOptions(mapped);
+        }
+      })
+      .catch((err: any) => console.warn('Could not fetch dynamic sports for coach profile edit:', err));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Form State
   const [form, setForm] = useState({
@@ -97,19 +126,56 @@ export function CoachEditProfile({
     );
   };
 
-  // API Request: upload coach profile image (POST /api/coach/avatar/upload)
+  // API Request: upload coach profile image (POST /api/coach/avatar/upload or /users/avatar)
   const handlePickAvatarImage = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "image/*",
-        copyToCacheDirectory: true,
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Permission to access media library is required to select a profile picture.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const pickedAsset = result.assets[0];
-        setAvatarUri(pickedAsset.uri);
+        let finalDataUri = pickedAsset.uri;
+
+        if (pickedAsset.base64) {
+          const mime = pickedAsset.mimeType || "image/jpeg";
+          finalDataUri = `data:${mime};base64,${pickedAsset.base64}`;
+        } else {
+          try {
+            const b64 = await FileSystem.readAsStringAsync(pickedAsset.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            finalDataUri = `data:image/jpeg;base64,${b64}`;
+          } catch {}
+        }
+
+        setAvatarUri(finalDataUri);
+
+        // Instantly save to user avatar endpoint
+        try {
+          await requestAuthenticatedJson("/users/avatar", "POST", {
+            avatar_url: finalDataUri,
+          }).catch(async () => {
+            return await requestAuthenticatedJson("/coaches/avatar", "POST", {
+              avatar_url: finalDataUri,
+            });
+          });
+        } catch (syncErr) {
+          console.warn("Direct avatar upload fallback notice:", syncErr);
+        }
       }
-    } catch {
+    } catch (err) {
+      console.warn("Avatar picker error:", err);
       Alert.alert("Image Error", "Failed to select profile image.");
     }
   };
@@ -245,6 +311,8 @@ export function CoachEditProfile({
         ? "Track and Field"
         : form.sports_focus === "SWIMMING"
         ? "Swimming"
+        : form.sports_focus
+        ? form.sports_focus.charAt(0).toUpperCase() + form.sports_focus.slice(1).toLowerCase()
         : "Basketball";
 
     const patchPayload = {
@@ -285,7 +353,7 @@ export function CoachEditProfile({
     }
   };
 
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   return (
     <View style={styles.container}>
@@ -384,7 +452,7 @@ export function CoachEditProfile({
           {/* Dropdown Options */}
           {showSportDropdown && (
             <View style={styles.dropdownMenuCard}>
-              {SPORT_OPTIONS.map((sport) => {
+              {sportOptions.map((sport) => {
                 const isSelected = form.sports_focus === sport;
                 return (
                   <TouchableOpacity

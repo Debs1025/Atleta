@@ -1,22 +1,5 @@
 import { BASE_URL, getStoredToken, handleResponse } from './client';
 
-const getClientGeminiKey = (): string => {
-  return (
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
-    (import.meta as any).env?.VITE_GEMINI_KEY ||
-    (import.meta as any).env?.GEMINI_API_KEY ||
-    localStorage.getItem('gemini_api_key') ||
-    ''
-  ).trim().replace(/^["']|["']$/g, '');
-};
-
-const getGeminiEndpoint = (modelName: string): string => {
-  const base = String((import.meta as any).env?.VITE_GEMINI_ENDPOINT || '').trim().replace(/\/+$/, '');
-  if (!base) return '';
-  return `${base}/${modelName}:generateContent`;
-};
-
 export const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -30,7 +13,7 @@ export const readFileAsDataUrl = (file: File): Promise<string> => {
 
 export const compressImageForOcr = (
   file: File,
-  maxDimension = 1600,
+  maxDimension = 1800,
   quality = 0.85
 ): Promise<{ base64Data: string; mimeType: string; dataUrl: string }> => {
   return new Promise((resolve) => {
@@ -99,186 +82,131 @@ export const compressImageForOcr = (
   });
 };
 
+/**
+ * Single-file OCR scan routing directly to the backend OCR scanning engine
+ * (aligned with mobile canonical endpoint: /matches/ocr/scan)
+ */
+export const scanScoresheetOCR = async (file: File): Promise<any> => {
+  const token = getStoredToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('scoresheet', file);
+  formData.append('document', file);
+
+  const endpoints = [
+    `${BASE_URL}/matches/ocr/scan`,
+    `${BASE_URL}/matches/scan-scoresheet`,
+    `${BASE_URL}/matches/web/scan-scoresheet`,
+  ];
+
+  let lastError: Error | null = null;
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (res.ok) {
+        return await handleResponse<any>(res);
+      } else {
+        const errTxt = await res.text().catch(() => '');
+        lastError = new Error(`OCR scanner returned status ${res.status}: ${errTxt}`);
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Failed to connect to backend OCR scanner. Please make sure the backend server is running on port 5000.');
+};
+
+export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
+  return await scanScoresheetOCR(rawFile);
+};
+
 export const scanScoresheetClientDirect = async (
   rawFile: File,
   _homeTeam = 'Home Team',
   _awayTeam = 'Away Team',
-  sport = 'Basketball'
+  _sport = 'Basketball'
 ): Promise<any> => {
-  const { base64Data, mimeType, dataUrl } = await compressImageForOcr(rawFile);
-  const geminiKey = getClientGeminiKey();
-
-  let ocrResult: any = null;
-
-  // 1. Try dedicated Web OCR endpoint first
-  try {
-    const blob = dataUrl ? await fetch(dataUrl).then((r) => r.blob()).catch(() => rawFile) : rawFile;
-    const cleanName = rawFile.name.replace(/\.[^/.]+$/, '') + '.jpg';
-    const optimizedFile = new File([blob], cleanName, { type: mimeType || 'image/jpeg' });
-
-    const formData = new FormData();
-    formData.append('file', optimizedFile);
-    formData.append('scoresheet', optimizedFile);
-    const token = getStoredToken();
-    let backendRes = await fetch(`${BASE_URL}/matches/web/scan-scoresheet`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-    if (!backendRes.ok) {
-      backendRes = await fetch(`${BASE_URL}/matches/scan-scoresheet`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-    }
-    if (backendRes.ok) {
-      const data = await backendRes.json();
-      if (data && (Array.isArray(data.player_summary) || Array.isArray(data.team_scores))) {
-        return {
-          scoresheet_url: data.scoresheet_url || dataUrl,
-          ...data,
-        };
-      }
-    }
-  } catch (backendErr) {
-    console.warn('Backend web scan-scoresheet unreachable, trying direct client AI call:', backendErr);
-  }
-
-  // 2. Direct client-side Gemini Vision OCR call
-  if (base64Data && geminiKey) {
-    const modelsToTry = [
-      {
-        name: 'gemini-3.5-flash-lite',
-        config: { temperature: 0.1, maxOutputTokens: 8192 },
-      },
-      {
-        name: 'gemini-3.5-flash',
-        config: {
-          temperature: 0.1,
-          maxOutputTokens: 8192,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      },
-    ];
-
-    const promptText = `You are an expert sports scoresheet OCR and data extraction system.
-Carefully examine the provided document image/PDF/CSV.
-Extract the match overview, exact team names from the header/team blocks, final scores, and ALL individual athlete statistics into this strict JSON structure:
-{
-  "match_info": {
-    "sport_type": "${sport}",
-    "event_name": "League / Event Name",
-    "home_team_name": "Home Team Name",
-    "opponent_team_name": "Opponent Team Name",
-    "game_result": "WIN",
-    "final_score": "0 - 0"
-  },
-  "team_scores": [
-    {"team": "HomeTeamName", "score": 0, "is_home": true},
-    {"team": "AwayTeamName", "score": 0, "is_home": false}
-  ],
-  "player_summary": [
-    {
-      "player_name": "Full Name",
-      "jersey_number": 0,
-      "team_name": "TeamName",
-      "position": "G",
-      "points": 0,
-      "rebounds": 0,
-      "assists": 0,
-      "steals": 0,
-      "blocks": 0,
-      "turnovers": 0,
-      "fouls": 0,
-      "fg_made": 0,
-      "fg_attempted": 0,
-      "ft_made": 0,
-      "ft_attempted": 0
-    }
-  ]
-}
-
-CRITICAL RULES:
-1. You MUST transcribe EVERY player row from BOTH teams shown on the scoresheet into the "player_summary" array.
-2. For each player, include their exact jersey number, actual name, team name, and exact points and stats recorded on the sheet.
-3. Return ONLY valid JSON, nothing else.`;
-
-    for (const mObj of modelsToTry) {
-      try {
-        const geminiUrl = getGeminiEndpoint(mObj.name);
-        if (!geminiUrl) break;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-        const res = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': geminiKey,
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: promptText },
-                { inline_data: { mime_type: mimeType, data: base64Data } }
-              ]
-            }],
-            generationConfig: mObj.config,
-          })
-        });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const json = await res.json();
-          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (text) {
-            let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-            const firstBrace = clean.indexOf('{');
-            const lastBrace = clean.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-              clean = clean.substring(firstBrace, lastBrace + 1);
-            }
-            try {
-              const parsed = JSON.parse(clean);
-              if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
-                ocrResult = parsed;
-                break;
-              }
-            } catch (pErr) {
-              clean = clean.replace(/,\s*([\}\]])/g, '$1');
-              try {
-                const parsed = JSON.parse(clean);
-                if (parsed && (Array.isArray(parsed.player_summary) || Array.isArray(parsed.team_scores))) {
-                  ocrResult = parsed;
-                  break;
-                }
-              } catch (_) {}
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(`Direct client-side Gemini model ${mObj.name} failed/timed out, trying next:`, err);
-      }
-    }
-  }
-
-  return {
-    scoresheet_url: dataUrl,
-    ...(ocrResult || {
-      match_info: {},
-      team_scores: [],
-      player_summary: [],
-      parsed_tables: {
-        team_scores: [],
-        player_summary: [],
-      },
-    }),
-  };
+  return await scanScoresheetStandalone(rawFile);
 };
 
-// For single file upload
+/**
+ * Multi-file scoresheet OCR scan routing directly to the backend multi-scoresheet engine
+ * (aligned with mobile canonical endpoint: /matches/mobile/multi/scan-scoresheet)
+ */
+export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
+  if (!files || files.length === 0) return null;
+  if (files.length === 1) return scanScoresheetOCR(files[0]);
+
+  const token = getStoredToken();
+  const formData = new FormData();
+  files.forEach((f) => {
+    formData.append('files', f);
+    formData.append('scoresheet', f);
+  });
+
+  const endpoints = [
+    `${BASE_URL}/matches/mobile/multi/scan-scoresheet`,
+    `${BASE_URL}/matches/multi/scan-scoresheet`,
+    `${BASE_URL}/matches/web/multi/scan-scoresheet`,
+  ];
+
+  let lastError: Error | null = null;
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (res.ok) {
+        return await handleResponse<any>(res);
+      } else {
+        const errTxt = await res.text().catch(() => '');
+        lastError = new Error(`Multi-scoresheet OCR scanner returned status ${res.status}: ${errTxt}`);
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  // Fallback: If dedicated multi-scan endpoint returns 404 on deployed backend,
+  // scan each file individually via the active scanScoresheetOCR endpoint and combine
+  try {
+    const subMatches: any[] = [];
+    for (const f of files) {
+      const singleRes = await scanScoresheetOCR(f);
+      if (singleRes) {
+        subMatches.push(singleRes);
+      }
+    }
+    if (subMatches.length > 0) {
+      return {
+        success: true,
+        matches: subMatches,
+        pages: subMatches,
+        total_scoresheets_processed: subMatches.length,
+      };
+    }
+  } catch (individualErr: any) {
+    lastError = individualErr;
+  }
+
+  throw lastError || new Error('Failed to connect to backend multi-scoresheet scanner. Please verify network connectivity.');
+};
+
 export const uploadScoresheetFile = async (matchId: string, rawFile: File): Promise<any> => {
   const cleanId = matchId.replace(/^#/, '');
   const token = getStoredToken();
@@ -286,31 +214,20 @@ export const uploadScoresheetFile = async (matchId: string, rawFile: File): Prom
   formData.append('file', rawFile);
   formData.append('scoresheet', rawFile);
 
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
 
-  let responseData: any = null;
-
-  try {
-    const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-    if (res.ok) {
-      responseData = await res.json();
-    }
-  } catch (err) {
-    console.warn('Match scoresheet upload failed:', err);
+  if (res.ok) {
+    return await handleResponse<any>(res);
   }
 
-  if (!responseData) {
-    responseData = await scanScoresheetClientDirect(rawFile);
-  }
-
-  return responseData;
+  return await scanScoresheetStandalone(rawFile);
 };
 
 export const uploadMultipleScoresheetFiles = async (matchId: string, files: File[]): Promise<any> => {
@@ -338,78 +255,10 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
       return await handleResponse<any>(res);
     }
   } catch (err) {
-    console.warn('Service Unavailable', err);
+    console.warn('Multi match scoresheet upload failed:', err);
   }
 
   return scanMultipleScoresheets(files);
-};
-
-export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
-  return await scanScoresheetOCR(rawFile);
-};
-
-// For multi file upload
-export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
-  if (!files || files.length === 0) return null;
-  if (files.length === 1) return scanScoresheetOCR(files[0]);
-
-  const token = getStoredToken();
-  const formData = new FormData();
-  files.forEach((f) => {
-    formData.append('files', f);
-    formData.append('scoresheet', f);
-  });
-
-  try {
-    const res = await fetch(`${BASE_URL}/matches/multi/scan-scoresheet`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: formData,
-    });
-    if (res.ok) {
-      return await handleResponse<any>(res);
-    }
-  } catch (err) {
-    console.warn('Backend multi-scan endpoint unavailable:', err);
-  }
-
-  try {
-    const scanned = await Promise.all(files.map((f) => scanScoresheetOCR(f)));
-    const valid = scanned.filter(Boolean);
-    if (valid.length > 0) {
-      return {
-        batch_mode: true,
-        matches: valid,
-        pages: valid,
-      };
-    }
-  } catch (err) {
-    console.warn('Backend multi-file scan fallback failed:', err);
-  }
-
-  return scanScoresheetOCR(files[0]);
-};
-
-export const scanScoresheetOCR = async (file: File): Promise<any> => {
-  const token = getStoredToken();
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('scoresheet', file);
-  formData.append('document', file);
-
-  const res = await fetch(`${BASE_URL}/matches/ocr/scan`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: formData,
-  });
-
-  return handleResponse<any>(res);
 };
 
 export const submitVerifiedMatch = async (payload: any): Promise<any> => {

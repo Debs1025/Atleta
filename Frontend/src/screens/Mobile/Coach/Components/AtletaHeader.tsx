@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,21 +14,33 @@ export interface AtletaHeaderProps {
   onProfilePress?: () => void;
   onNotificationPress?: () => void;
   unreadNotificationCount?: number;
+  avatarUrl?: string | null;
 }
+
+import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
 
 export function AtletaHeader({
   onSettingsPress,
   onProfilePress,
   onNotificationPress,
   unreadNotificationCount = 0,
+  avatarUrl,
 }: AtletaHeaderProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
+  const [imageError, setImageError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageError(false);
+  }, [avatarUrl]);
 
   return (
     <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
       <View style={styles.header}>
-        <Text style={styles.brandTitle}>ATLETA</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <AtletaAnimatedLogo size={30} showGlow={false} pulse={false} />
+          <Text style={styles.brandTitle}>ATLETA</Text>
+        </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.iconCircleButton}
@@ -55,8 +67,18 @@ export function AtletaHeader({
             style={styles.profileCircleButton}
             onPress={onProfilePress}
             activeOpacity={0.8}
+            accessibilityLabel="Coach Profile"
           >
-            <Ionicons name="person" size={18} color="#070D19" />
+            {avatarUrl && !imageError ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                style={styles.profileAvatarImage}
+                resizeMode="cover"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <Ionicons name="person" size={18} color="#070D19" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -71,28 +93,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    elevation: 50,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
     backgroundColor: "#070D19",
   },
   header: {
+    height: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   brandTitle: {
     color: "#FFFFFF",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     fontFamily: fontBoldPlatform,
+    includeFontPadding: false,
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   iconCircleButton: {
     width: 38,
@@ -111,15 +136,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#00C8FF",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 19,
   },
   notificationBadge: {
     position: "absolute",
     top: -2,
     right: -2,
     backgroundColor: "#EF4444",
-    borderRadius: 9,
-    minWidth: 18,
-    height: 18,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 3,
@@ -128,8 +159,8 @@ const styles = StyleSheet.create({
   },
   notificationBadgeText: {
     color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "900",
   },
 });
 

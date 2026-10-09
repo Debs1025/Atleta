@@ -1,0 +1,111 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useDiscovery } from './DiscoveryContext';
+import { styles } from './styles/recruits';
+
+interface RecruitsProps {
+  onBack: () => void;
+}
+
+export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
+  const insets = useSafeAreaInsets();
+  const headerTopPadding = Math.max(insets.top, 44) + 16;
+
+  const { scoutingProposals, sortRecruits, setSortRecruits, athletes, teams } = useDiscovery();
+
+  const toggleSort = () => {
+    setSortRecruits(sortRecruits === 'date' ? 'status' : 'date');
+  };
+
+  const sortedProposals = [...scoutingProposals].sort((a, b) => {
+    if (sortRecruits === 'status') {
+      return a.offer_status.localeCompare(b.offer_status);
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  return (
+    <View style={styles.container}>
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>RECRUITS</Text>
+        </View>
+
+        <TouchableOpacity onPress={toggleSort} activeOpacity={0.8} style={styles.sortButton}>
+          <Ionicons name="swap-vertical" size={16} color="#00C8FF" />
+          <Text style={styles.sortText}>Sort</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={{ marginTop: 12 }}>
+          {sortedProposals.map((item) => {
+            const matchedAthlete = athletes.find(
+              (a) => a.athlete_id === item.athlete_id || a.athlete_id.replace(/^ath_/, '') === item.athlete_id.replace(/^ath_/, '')
+            );
+            const teamName = matchedAthlete?.team_name || (item.offer_status === 'ACCEPTED' && teams.length > 0 ? teams[0].team_name : null);
+
+            return (
+              <View key={item.scout_id} style={styles.recruitCard}>
+                <View style={styles.leftGroup}>
+                  <View style={styles.avatarCircle}>
+                    <Ionicons name="person" size={18} color="#00C8FF" />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recruitName}>{item.athlete_name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                      <Text style={styles.sportCategoryTag}>{item.sport_category}</Text>
+                      {teamName ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <Ionicons name="shield-checkmark" size={11} color="#38BDF8" />
+                          <Text style={{ color: '#38BDF8', fontSize: 11, fontWeight: '700' }}>{teamName}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.rightGroup}>
+                  {(item.offer_status || '').toUpperCase() === 'ACCEPTED' ? (
+                    <View style={styles.statusBadgeAccepted}>
+                      <Text style={styles.statusTextAccepted}>ACCEPTED</Text>
+                    </View>
+                  ) : (item.offer_status || '').toUpperCase() === 'DECLINED' ? (
+                    <View style={styles.statusBadgeDeclined}>
+                      <Text style={styles.statusTextDeclined}>DECLINED</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.statusBadgePending}>
+                      <Text style={styles.statusTextPending}>{(item.offer_status || 'PENDING').toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.relativeDateText}>{item.date_added_relative || 'Recent'}</Text>
+                </View>
+              </View>
+            );
+          })}
+
+          {/* Empty State Container matching wireframe */}
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="person-add-outline" size={32} color="#64748B" />
+            <Text style={styles.emptyStateText}>No more recruits found</Text>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+};
+
+export default RecruitsPage;

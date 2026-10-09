@@ -25,7 +25,7 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
   onEditResults,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 60) + 48;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [leaderboardData, setLeaderboardData] = useState<any[]>(matchItem?.leaderboard_entries || []);
   const [loading, setLoading] = useState(false);
@@ -35,12 +35,9 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
   const dateFormatted = matchItem?.full_date || matchItem?.date_formatted || "RECENT";
   const entriesCount = matchItem?.entries_count || leaderboardData.length;
 
-  useEffect(() => {
-    if (matchItem?.leaderboard_entries && matchItem.leaderboard_entries.length > 0) {
-      setLeaderboardData(matchItem.leaderboard_entries);
-      return;
-    }
+  const [fetchedNotes, setFetchedNotes] = useState<string[] | null>(null);
 
+  useEffect(() => {
     if (!matchItem?.match_id) return;
 
     let isMounted = true;
@@ -56,20 +53,27 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
         });
         if (res.ok) {
           const data = await res.json();
-          if (isMounted && Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
-            const mapped = data.player_metrics.map((p: any, idx: number) => {
-              const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : "");
-              const event = p.sport_stats?.event_name || "";
-              const detailStr = [dist, event, p.team_name].filter(Boolean).join(" • ") || p.position || "Swimmer";
-              const timeFormatted = p.sport_stats?.formatted_time || p.sport_stats?.time || (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : (p.sport_stats?.finish_time ? `${p.sport_stats.finish_time}s` : "-"));
-              return {
-                rank: p.sport_stats?.placement_rank || idx + 1,
-                name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || "Athlete",
-                detail: detailStr,
-                time_or_score: timeFormatted,
-              };
-            });
-            setLeaderboardData(mapped);
+          if (isMounted) {
+            if (Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
+              const mapped = data.player_metrics.map((p: any, idx: number) => {
+                const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : "");
+                const event = p.sport_stats?.event_name || "";
+                const detailStr = [dist, event, p.team_name].filter(Boolean).join(" • ") || p.position || "Swimmer";
+                const timeFormatted = p.sport_stats?.formatted_time || p.sport_stats?.time || (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : (p.sport_stats?.finish_time ? `${p.sport_stats.finish_time}s` : "-"));
+                return {
+                  rank: p.sport_stats?.placement_rank || idx + 1,
+                  name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || "Athlete",
+                  detail: detailStr,
+                  time_or_score: timeFormatted,
+                };
+              });
+              setLeaderboardData(mapped);
+            }
+            if (data.notes && Array.isArray(data.notes) && data.notes.length > 0) {
+              setFetchedNotes(data.notes);
+            } else if (typeof data.context_notes === 'string' && data.context_notes.trim().length > 0) {
+              setFetchedNotes([data.context_notes]);
+            }
           }
         }
       } catch (err) {
@@ -86,9 +90,11 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
   }, [matchItem]);
 
   const coachNotes =
-    matchItem?.coach_notes && matchItem.coach_notes.length > 0
-      ? matchItem.coach_notes
-      : ["Swimming match record logged."];
+    (fetchedNotes && fetchedNotes.length > 0)
+      ? fetchedNotes
+      : (matchItem?.coach_notes && matchItem.coach_notes.length > 0
+          ? matchItem.coach_notes
+          : ["Swimming match record logged."]);
 
   const handleEditPress = () => {
     if (onEditResults) onEditResults();

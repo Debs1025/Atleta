@@ -13,7 +13,7 @@ interface InquiriesProps {
 
 export function InquiriesScreen({ inquiries: propInquiries, onBack }: InquiriesProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [inquiries, setInquiries] = useState<InquirySchema[]>(propInquiries || []);
   const [loading, setLoading] = useState(!propInquiries);
 

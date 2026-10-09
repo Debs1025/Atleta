@@ -4,7 +4,7 @@ export interface AthleteDiscoveryItem {
   province: string; // e.g. "Albay"
   recruitment_status: 'Available' | 'Recruited' | string;
   position_tag: string; // e.g. "PG", "SWIMMING", "TRACK AND FIELD"
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
   biometrics: {
     height_ft: string; // "6'2""
     weight_lbs: string; // "185 lbs"
@@ -19,6 +19,12 @@ export interface AthleteDiscoveryItem {
     times_200m?: string;
     times_400m?: string;
     times_50m_free?: string;
+    spike_kills?: number;
+    block_points?: number;
+    service_aces?: number;
+    aces?: number;
+    dinks?: number;
+    points_scored?: number;
   };
   calculated_per: number; // e.g. 32.4
   efficiency_pct: number; // e.g. 88
@@ -29,6 +35,12 @@ export interface AthleteDiscoveryItem {
   };
   avatar_url?: string;
   jersey_number?: string;
+  team_id?: string;
+  team_name?: string;
+  coach_name?: string;
+  has_coach?: boolean;
+  is_scouted?: boolean;
+  scout_status?: 'PENDING' | 'ACCEPTED' | 'DECLINED' | string;
 }
 
 export interface ScoutingProposalItem {
@@ -45,7 +57,7 @@ export interface ScoutingProposalItem {
 export interface DiscoveryTeamItem {
   team_id: string;
   team_name: string;
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
   division_tag: string;
   description: string;
   head_coach: string;
@@ -71,7 +83,7 @@ export interface DiscoveryMatchPlayerStat {
 
 export interface DiscoveryMatchItem {
   match_id: string;
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
   headline: string;
   time_venue: string;
   team1_name: string;
@@ -91,39 +103,78 @@ export interface DiscoveryEventItem {
 }
 
 export type DiscoveryTab = 'PLAYERS' | 'TEAMS' | 'EVENTS';
-export type SportCategoryFilter = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+export type SportCategoryFilter = 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
 
-export type RankingSortMetric = 'PER' | 'PPG' | 'RPG' | 'AST' | 'FG_PCT' | 'EFF' | 'TIME_50M' | 'TIME_100M' | 'TIME_200M' | 'TIME_400M';
+export type RankingSortMetric = 'PER' | 'PPG' | 'RPG' | 'AST' | 'FG_PCT' | 'EFF' | 'TIME_50M' | 'TIME_100M' | 'TIME_200M' | 'TIME_400M' | 'SPIKE_KILLS' | 'BLOCK_POINTS' | 'SERVICE_ACES' | 'POINTS_SCORED' | 'ACES' | 'DINKS';
 
 export interface MetricOption {
   key: RankingSortMetric;
   label: string;
 }
 
-export const SPORT_METRICS: Record<SportCategoryFilter, MetricOption[]> = {
+export const DEFAULT_SPORT_METRICS: MetricOption[] = [
+  { key: 'PER', label: 'PER Score' },
+  { key: 'EFF', label: 'Efficiency %' },
+];
+
+export const SPORT_METRICS: Record<string, MetricOption[]> = {
   BASKETBALL: [
-    { key: 'PER', label: 'PER Score' },
     { key: 'PPG', label: 'Points (PPG)' },
     { key: 'RPG', label: 'Rebounds (RPG)' },
     { key: 'AST', label: 'Assists (AST)' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'FG_PCT', label: 'Field Goal %' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
   ],
   SWIMMING: [
-    { key: 'PER', label: 'PER Score' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'TIME_50M', label: '50m Free' },
     { key: 'TIME_100M', label: '100m Free' },
     { key: 'TIME_200M', label: '200m Free' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
   ],
   'TRACK AND FIELD': [
-    { key: 'PER', label: 'PER Score' },
-    { key: 'EFF', label: 'Efficiency %' },
     { key: 'TIME_100M', label: '100m Sprint' },
     { key: 'TIME_200M', label: '200m Sprint' },
     { key: 'TIME_400M', label: '400m Sprint' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
+  ],
+  VOLLEYBALL: [
+    { key: 'SPIKE_KILLS', label: 'Spike Kills' },
+    { key: 'BLOCK_POINTS', label: 'Block Points' },
+    { key: 'SERVICE_ACES', label: 'Service Aces' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
+  ],
+  PICKLEBALL: [
+    { key: 'POINTS_SCORED', label: 'Points Scored' },
+    { key: 'ACES', label: 'Service Aces' },
+    { key: 'DINKS', label: 'Successful Dinks' },
+    { key: 'EFF', label: 'Efficiency %' },
+    { key: 'PER', label: 'PER Score' },
   ],
 };
+
+export function getDefaultMetricForSport(sport?: string): RankingSortMetric {
+  const s = (sport || '').toUpperCase().replace(/&/g, 'AND').replace(/\s+/g, '').trim();
+  if (s.includes('SWIM')) {
+    return 'TIME_50M';
+  }
+  if (s.includes('TRACK') || s.includes('FIELD')) {
+    return 'TIME_100M';
+  }
+  if (s.includes('VOLLEY')) {
+    return 'SPIKE_KILLS';
+  }
+  if (s.includes('PICKLE')) {
+    return 'POINTS_SCORED';
+  }
+  if (s.includes('BASKET')) {
+    return 'PPG';
+  }
+  return 'PER';
+}
 
 export interface AdvancedAthleteFilters {
   position: string;
@@ -142,7 +193,7 @@ export const DEFAULT_ADVANCED_FILTERS: AdvancedAthleteFilters = {
   minEff: 0,
   heightRange: 'ALL',
   weightRange: 'ALL',
-  sortBy: 'PER',
+  sortBy: 'PPG',
 };
 
 export function matchesPosition(athletePos: string, filterPos: string): boolean {

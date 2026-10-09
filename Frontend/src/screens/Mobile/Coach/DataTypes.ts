@@ -21,7 +21,7 @@ export interface CoachProfileState {
   full_name: string;
   email: string;
   role_title: string; // e.g., "BASKETBALL COACH"
-  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   avatar_url?: string;
   current_institution?: string;
   regional_affiliation?: string;
@@ -74,6 +74,7 @@ export interface UserCoach {
   coach_id: string;
   current_institution: string;
   athlete_managed: string[]; // List of athlete UUIDs
+  avatar_url?: string;
 }
 
 export interface RosterAthlete {
@@ -89,15 +90,19 @@ export interface RosterAthlete {
   event_distance?: string;
   stroke_style?: string;
   avatar_url?: string;
+  rating_score?: number;
   missing_documents?: string[];
   birthdate?: string;
   province?: string;
   location?: string;
   physical_profile?: any;
   physical_attributes?: any;
+  biometrics?: any;
+  radar_competencies?: any;
   averages?: any;
   stats?: any;
   scoring_trends_last_10?: any;
+  workload_analytics?: any;
   eligibility_documents?: any;
   documents?: any;
 }
@@ -105,7 +110,7 @@ export interface RosterAthlete {
 export interface Team {
   team_id: string;
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING";
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL" | "PICKLEBALL" | string;
   division: string; // e.g. "Elite Professional"
   season_record: {
     wins: number;
@@ -136,7 +141,7 @@ export interface AthleteItem {
 
 export interface TeamDetailsState {
   team_name: string;
-  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "";
+  sport_type: "BASKETBALL" | "TRACK AND FIELD" | "SWIMMING" | "VOLLEYBALL" | "PICKLEBALL" | string;
   division: string;
   selected_roster: AthleteItem[];
 }
@@ -211,7 +216,7 @@ export interface AthletePerformanceProfile {
   location_province: string; // e.g. "Camaligan, PHI"
   team_name: string; // e.g. "Pacific Waves"
   rating_score: number; // e.g. 88
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   biometrics: {
     height_ft: string; // "6'2""
     weight_lbs: string; // "185 lbs"
@@ -250,6 +255,21 @@ export interface AthletePerformanceProfile {
     flip_turn_s?: string;
     swim_index_score?: number;
     podiums_count?: number;
+    // Volleyball specific
+    spike_kills?: number;
+    block_points?: number;
+    service_aces?: number;
+    digs?: number;
+    sets_played?: number;
+    attack_percentage?: number;
+    // Pickleball specific
+    points_scored?: number;
+    aces?: number;
+    dinks?: number;
+    unforced_errors?: number;
+    win_percentage?: number;
+    third_shot_drops?: number;
+    [key: string]: any;
   };
   radar_competencies: {
     speed: number;
@@ -268,7 +288,7 @@ export interface AthletePerformanceProfile {
 
 export interface MatchHistoryItem {
   match_id: string;
-  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD';
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   event_or_opponent: string; // e.g. "vs. BLUE EAGLES", "100m Freestyle", "200M DASH (REGIONAL)"
   date_formatted: string; // e.g. "OCT 24", "SEPT 29"
   date_group: string; // e.g. "OCTOBER 2026"

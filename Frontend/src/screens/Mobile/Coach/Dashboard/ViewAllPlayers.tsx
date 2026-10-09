@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Alert,
   Platform,
@@ -12,8 +12,10 @@ import styles from "./styles/ViewAllPlayers";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RosterAthlete, Team } from "../DataTypes";
+import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 
-const SPORT_CATEGORIES = ["ALL", "BASKETBALL", "TRACK AND FIELD", "SWIMMING"];
+const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
 
 const fontPlatform = Platform.select({
   ios: "System",
@@ -33,6 +35,7 @@ interface ViewAllPlayersProps {
   onBack: () => void;
   onSelectAthlete?: (player: RosterAthlete) => void;
   onLogout?: () => void;
+  availableSports?: string[];
 }
 
 // API Request: fetch all roster athletes across managed teams (GET /api/coach/athletes)
@@ -41,12 +44,53 @@ export function ViewAllPlayers({
   teams,
   onBack,
   onSelectAthlete,
+  availableSports,
 }: ViewAllPlayersProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("ALL");
+  const [categories, setCategories] = useState<string[]>(
+    availableSports && availableSports.length > 0 ? availableSports : DEFAULT_SPORT_CATEGORIES
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    getSportsOfflineFirst()
+      .then((sports: any) => {
+        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
+        const seen = new Set<string>();
+        const mapped: string[] = ["ALL"];
+        sports.forEach((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || "").toUpperCase().trim();
+          if (!raw || seen.has(raw)) return;
+          seen.add(raw);
+          mapped.push(raw);
+        });
+        athletesPool.forEach((a) => {
+          const raw = String(a.sport_type || "").toUpperCase().trim();
+          if (raw && !seen.has(raw)) {
+            seen.add(raw);
+            mapped.push(raw);
+          }
+        });
+        teams.forEach((t) => {
+          const raw = String(t.sport_type || "").toUpperCase().trim();
+          if (raw && !seen.has(raw)) {
+            seen.add(raw);
+            mapped.push(raw);
+          }
+        });
+        if (mapped.length > 1) {
+          setCategories(mapped);
+        }
+      })
+      .catch((err: any) => console.warn("Could not fetch dynamic sports for ViewAllPlayers:", err));
+    return () => {
+      isMounted = false;
+    };
+  }, [athletesPool, teams]);
 
   // Map athlete ID to team name dynamically
   const athleteTeamMap = useMemo(() => {
@@ -62,7 +106,8 @@ export function ViewAllPlayers({
   // Reactive player filtering
   const filteredPlayers = useMemo(() => {
     return athletesPool.filter((p) => {
-      const matchesCategory = activeCategory === "ALL" || p.sport_type === activeCategory;
+      const matchesCategory =
+        activeCategory === "ALL" || (p.sport_type || "").toUpperCase() === activeCategory.toUpperCase();
       const q = searchQuery.toLowerCase().trim();
       const teamName = athleteTeamMap[p.athlete_id] || "";
       const matchesSearch =
@@ -130,7 +175,7 @@ export function ViewAllPlayers({
             <Text style={styles.badgeCount}>{filteredPlayers.length} Athletes</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {SPORT_CATEGORIES.map((cat) => {
+            {categories.map((cat) => {
               const isActive = activeCategory === cat;
               return (
                 <TouchableOpacity
@@ -150,7 +195,9 @@ export function ViewAllPlayers({
 
         {/* Players List Container */}
         <View style={styles.playersListContainer}>
-          {filteredPlayers.length === 0 ? (
+          {athletesPool.length === 0 ? (
+            <SkeletonPlayerRows count={4} />
+          ) : filteredPlayers.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="people-outline" size={36} color="#64748B" style={{ marginBottom: 8 }} />
               <Text style={styles.emptyText}>No matching players found.</Text>

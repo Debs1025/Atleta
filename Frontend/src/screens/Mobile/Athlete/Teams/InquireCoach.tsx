@@ -30,7 +30,7 @@ export function InquireCoachScreen({
   onGoInquiries,
 }: InquireCoachProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [modalMode, setModalMode] = useState<"SUCCESS" | "ALREADY_SENT" | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [hasSentInquiry, setHasSentInquiry] = useState(false);

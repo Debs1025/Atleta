@@ -19,6 +19,7 @@ import {
   requestJson,
   storeAuthRole,
   storeAuthToken,
+  API_BASE,
   type AuthRole,
   type BannerTone,
   type LoginValues
@@ -184,13 +185,17 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
         onAuthenticated?.(role);
         form.reset(values);
-      } catch (error) {
+      } catch (error: any) {
+        const rawMsg = error?.message || String(error);
         const errorMessage = getAuthErrorMessage(error, "Invalid email or password. Please check your credentials and try again.");
+        const displayMsg = rawMsg && rawMsg !== "Something went wrong." && !rawMsg.includes("Invalid email")
+          ? `${errorMessage} (${rawMsg})`
+          : errorMessage;
         setFeedback({
           tone: "error",
-          message: errorMessage
+          message: displayMsg
         });
-        Alert.alert("Authentication Failed", errorMessage);
+        Alert.alert("Authentication Failed", `${displayMsg}\n\nServer: ${API_BASE}`);
       } finally {
         setLoading(false);
       }
@@ -226,19 +231,21 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           control={form.control}
           name="password"
           label="Password"
-          placeholder="••••••••"
+          placeholder="Enter your password"
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
         />
 
-        <Button label="Login" loading={loading} onPress={submit} />
+        <View style={{ marginTop: 6 }}>
+          <Button label="Login" loading={loading} onPress={submit} />
+        </View>
 
         <Text style={styles.link} onPress={onGoReset}>
           Forgot Password?
         </Text>
 
-        <View style={authScreenStyles.dividerRow}>
+        <View style={[authScreenStyles.dividerRow, styles.dividerRow]}>
           <View style={authScreenStyles.divider} />
           <Text style={authScreenStyles.or}>or</Text>
           <View style={authScreenStyles.divider} />
