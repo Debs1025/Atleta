@@ -1563,8 +1563,38 @@ export async function scanMultipleScoresheetsStandalone(
   // Find the first successful match to provide as the primary top-level fallback
   const primaryMatch = parsedMatches.find((m) => m.status === 'success') || parsedMatches[0];
 
-  const allPlayers = parsedMatches.flatMap((m) => m.player_summary || []);
-  const allTeamScores = parsedMatches.flatMap((m) => m.team_scores || []);
+  // Determine whether all uploaded scoresheets are a continuation of the same match
+  const getSport = (m: any) =>
+    String(m.match_info?.sport_type || m.match_info?.sport || m.sport_type || '').trim().toLowerCase();
+  const getHome = (m: any) =>
+    String(m.match_info?.home_team_name || m.match_info?.home_team || m.team_name || m.team_scores?.[0]?.team || '').trim().toLowerCase();
+  const getAway = (m: any) =>
+    String(m.match_info?.opponent_team_name || m.match_info?.away_team || m.opponent_team_name || m.team_scores?.[1]?.team || '').trim().toLowerCase();
+
+  const firstSport = getSport(primaryMatch);
+  const firstHome = getHome(primaryMatch);
+  const firstAway = getAway(primaryMatch);
+
+  const isContinuation = parsedMatches.length > 1 && parsedMatches.slice(1).every((m) => {
+    const fileName = String(m.file_name || '').toLowerCase();
+    const isExplicitPart = fileName.includes('part2') || fileName.includes('half2') || fileName.includes('2nd_half') || fileName.includes('continuation') || fileName.includes('page2') || fileName.includes('set2') || fileName.includes('set3');
+    if (isExplicitPart) return true;
+
+    const mSport = getSport(m);
+    if (firstSport && mSport && firstSport !== mSport) return false;
+
+    const mHome = getHome(m);
+    const mAway = getAway(m);
+    if (firstHome && mHome) {
+      const matchHome = firstHome === mHome || firstHome.includes(mHome) || mHome.includes(firstHome);
+      const matchAway = !firstAway || !mAway || firstAway === mAway || firstAway.includes(mAway) || mAway.includes(firstAway);
+      return matchHome || matchAway;
+    }
+    return false;
+  });
+
+  const allPlayers = isContinuation ? parsedMatches.flatMap((m) => m.player_summary || []) : (primaryMatch?.player_summary || []);
+  const allTeamScores = isContinuation ? parsedMatches.flatMap((m) => m.team_scores || []) : (primaryMatch?.team_scores || []);
 
   const NON_ADDITIVE_KEYS = new Set([
     'jersey_number', 'number', 'athlete_id', 'rank', 'place', 'heat', 'lane',
@@ -1572,7 +1602,7 @@ export async function scanMultipleScoresheetsStandalone(
     'finish_time', 'time', 'split_time', 'split', 'seed_time', 'pace'
   ]);
 
-  // Sum stats from sheet 1 and sheet 2 for players appearing across multiple scoresheets
+  // Sum stats from sheet 1 and sheet 2 for players appearing across continuation scoresheets
   const mergedPlayerMap = new Map<string, any>();
   for (const p of allPlayers) {
     const pName = String(p.player_name || '').trim().toLowerCase();
@@ -1586,7 +1616,7 @@ export async function scanMultipleScoresheetsStandalone(
       const existing = mergedPlayerMap.get(key);
       for (const [statKey, statVal] of Object.entries(p)) {
         if (typeof statVal === 'number' && !NON_ADDITIVE_KEYS.has(statKey)) {
-          // Accumulate stat 1 + stat 2 across sheets
+          // Accumulate stat 1 + stat 2 across continuation sheets
           existing[statKey] = (Number(existing[statKey]) || 0) + Number(statVal);
         } else if (statVal && !existing[statKey]) {
           existing[statKey] = statVal;
@@ -1619,7 +1649,7 @@ export async function scanMultipleScoresheetsStandalone(
 
   const mergedPlayers = Array.from(mergedPlayerMap.values());
 
-  // Aggregate final team scores by summing scores from each scoresheet part
+  // Aggregate final team scores by summing scores from each continuation sheet part
   const mergedTeamScoresMap = new Map<string, any>();
   for (const t of allTeamScores) {
     const key = (t.team || t.team_name || '').trim().toLowerCase();
@@ -1628,7 +1658,7 @@ export async function scanMultipleScoresheetsStandalone(
       mergedTeamScoresMap.set(key, { ...t, score: Number(t.score) || 0 });
     } else {
       const existing = mergedTeamScoresMap.get(key);
-      existing.score = (Number(existing.score) || 0) + (Number(t.score) || 0);
+      existing.score = isContinuation ? ((Number(existing.score) || 0) + (Number(t.score) || 0)) : Number(existing.score || 0);
       mergedTeamScoresMap.set(key, existing);
     }
   }
@@ -1636,12 +1666,13 @@ export async function scanMultipleScoresheetsStandalone(
 
   const homeScoreItem = mergedTeamScores.find((t) => t.is_home === true) || mergedTeamScores[0];
   const awayScoreItem = mergedTeamScores.find((t) => t.is_home === false) || mergedTeamScores[1];
-  const consolidatedFinalScore = (homeScoreItem && awayScoreItem)
+  const consolidatedFinalScore = (homeScoreItem && awayScoreItem && isContinuation)
     ? `${homeScoreItem.score || 0} - ${awayScoreItem.score || 0}`
     : primaryMatch?.match_info?.final_score || '';
 
   return {
     batch_mode: true,
+    is_continuation: isContinuation,
     total_matches: files.length,
     successful_matches: parsedMatches.filter((m) => m.status === 'success').length,
     matches: parsedMatches,
