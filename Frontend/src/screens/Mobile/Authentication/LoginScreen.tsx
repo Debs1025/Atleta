@@ -24,6 +24,7 @@ import {
   type BannerTone,
   type LoginValues
 } from "./authShared";
+import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
   NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
@@ -40,6 +41,7 @@ type LoginScreenProps = {
 export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScreenProps) {
   const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -118,26 +120,9 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       }
     }
 
-    try {
-      const res = await promptGoogleOAuthAsync();
-      if (res.type === "success" && (res.idToken || res.accessToken)) {
-        await handleSocialAuthWithToken("google", (res.idToken || res.accessToken)!);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Google sign-in failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Google sign-in failed."
-      });
-    }
+    // Fall back seamlessly to in-app Google Auth modal without leaving the app
+    setLoading(false);
+    setShowGoogleModal(true);
   };
 
   const handleFacebookSignInPress = async () => {
@@ -268,6 +253,23 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         <Text style={authScreenStyles.footer}>
           Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={onGoSignup}>Sign Up</Text>
         </Text>
+
+        <InAppGoogleAuthModal
+          visible={showGoogleModal}
+          onClose={() => setShowGoogleModal(false)}
+          onSuccess={(tokens) => {
+            const token = tokens.idToken || tokens.accessToken;
+            if (token) {
+              handleSocialAuthWithToken("google", token);
+            }
+          }}
+          onError={(err) => {
+            setFeedback({
+              tone: "error",
+              message: err || "Google sign-in could not be completed."
+            });
+          }}
+        />
       </View>
     </ScrollView>
   );

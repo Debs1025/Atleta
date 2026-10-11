@@ -798,11 +798,11 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
       };
     }
   } else {
-    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: appScheme });
+    const standaloneRedirectUri = customRedirectUri || "https://atleta-v1.firebaseapp.com/__/auth/handler";
 
     const googleAuthParams = new URLSearchParams({
       client_id: webClientId,
-      redirect_uri: schemeRedirectUri,
+      redirect_uri: standaloneRedirectUri,
       response_type: "id_token token",
       scope: "openid profile email",
       state,
@@ -813,7 +813,7 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${googleAuthParams.toString()}`;
 
     try {
-      const browserResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, schemeRedirectUri);
+      const browserResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, standaloneRedirectUri);
 
       if (browserResult.type === "success" && browserResult.url) {
         const parsed = extractTokensFromUrl(browserResult.url);

@@ -4,6 +4,7 @@ import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as DocumentPicker from "expo-document-picker";
+import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
   NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
@@ -212,6 +213,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
   // Calendar Birthdate Picker modal state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [pickerYear, setPickerYear] = useState(2004);
   const [pickerMonth, setPickerMonth] = useState(9);
   const [calendarMode, setCalendarMode] = useState<"DAYS" | "MONTHS" | "YEARS">("DAYS");
@@ -296,33 +298,9 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       }
     }
 
-    try {
-      const res = await promptGoogleOAuthAsync();
-      if (res.type === "success" && (res.idToken || res.accessToken)) {
-        const token = (res.idToken || res.accessToken)!;
-        setSocialToken({ provider: "google", idToken: token });
-        setFeedback({
-          tone: "info",
-          message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
-        });
-        setStep(3);
-        setLoading(false);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Google sign-up failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Google sign-up failed."
-      });
-    }
+    // Fall back smoothly to in-app Google Auth modal without leaving the app
+    setLoading(false);
+    setShowGoogleModal(true);
   };
 
   const handleFacebookSignUpPress = async () => {
@@ -749,6 +727,28 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
         yearsList={YEARS_LIST}
         onPrevMonth={handlePrevMonth}
         onNextMonth={handleNextMonth}
+      />
+
+      <InAppGoogleAuthModal
+        visible={showGoogleModal}
+        onClose={() => setShowGoogleModal(false)}
+        onSuccess={(tokens) => {
+          const token = tokens.idToken || tokens.accessToken;
+          if (token) {
+            setSocialToken({ provider: "google", idToken: token });
+            setFeedback({
+              tone: "info",
+              message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
+            });
+            setStep(3);
+          }
+        }}
+        onError={(err) => {
+          setFeedback({
+            tone: "error",
+            message: err || "Google sign-up failed."
+          });
+        }}
       />
     </View>
   );
