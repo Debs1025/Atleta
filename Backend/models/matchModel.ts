@@ -47,6 +47,7 @@ export interface OfficialAudit {
   context_notes?: string;         // Optional
   certified_at?: string;          // Optional ISO DateTime
   requested_by?: string;          // Optional coach_id or system
+  requested_by_coach_id?: string; // Optional requesting coach ID
   created_at: string;             // ISO DateTime, Required
 }
 

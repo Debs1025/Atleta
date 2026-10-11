@@ -273,6 +273,16 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
+    // 3. Persist updated status in local cache
+    try {
+      if (targetMatch) {
+        await saveMatchOfflineFirst({
+          ...targetMatch,
+          audit_status: 'PENDING REQUEST',
+        });
+      }
+    } catch (_) {}
+
     Alert.alert(
       'Audit Requested',
       'Official scoresheet audit request submitted to Tournament Officials.',
@@ -305,12 +315,24 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.log(`[ScoresheetRequest] Certification state updated for match ${matchId}.`);
     }
 
+    // 3. Persist granted & certified state to coach local cache
+    try {
+      const matchObj = matches.find((m) => m.match_id === matchId);
+      if (matchObj) {
+        await saveMatchOfflineFirst({
+          ...matchObj,
+          audit_status: 'REQUEST GRANTED',
+          is_certified: true,
+        });
+      }
+    } catch (_) {}
+
     Alert.alert(
       'Audit Granted & Certified',
       'Official scoresheet has been audited and certified by Tournament Officials!',
       [{ text: 'OK' }]
     );
-  }, []);
+  }, [matches]);
 
   // PDF Scoresheet Generator using expo-print & expo-sharing
   const generatePDFScoresheet = useCallback(async (match: OfficialMatchRecord) => {

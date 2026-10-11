@@ -304,11 +304,19 @@ export function CoachProfile({
               </View>
             </View>
 
-            {/* SPORTS FOCUS CARD */}
+            {/* SPORTS FOCUS & CORE SPECIALTIES CARD */}
             <View style={styles.cardContainer}>
-              <Text style={styles.cyanSubLabel}>SPORTS FOCUS</Text>
-              <View style={styles.sportsPillBadge}>
-                <Text style={styles.sportsPillText}>{profile.sports_focus}</Text>
+              <Text style={styles.cyanSubLabel}>CORE SPECIALTY & SPORTS FOCUS</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                {(profile.sports_focus ? profile.sports_focus.split(/[,/|]/) : ["Basketball"]).map((sp: string, idx: number) => {
+                  const cleanSp = sp.trim();
+                  if (!cleanSp) return null;
+                  return (
+                    <View key={idx} style={styles.sportsPillBadge}>
+                      <Text style={styles.sportsPillText}>{cleanSp}</Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
 

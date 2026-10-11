@@ -111,7 +111,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
         />
       )}
 
-      <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 56 : 0 }}>
+      <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 74 : 0 }}>
         {subView === 'rankings' || subView === 'recruits' ? (
           <DiscoveryPlayer mode={subView} onCloseSubView={() => setSubView('none')} />
         ) : subView === 'viewTeam' ? (

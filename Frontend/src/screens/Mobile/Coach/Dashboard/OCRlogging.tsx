@@ -36,26 +36,6 @@ interface OCRloggingProps {
     onUploadSuccess?: (ocrData: RawOCRDetectedData) => void;
 }
 
-// Initial files list with sample files on mobile emulator (Basketball + Volleyball)
-const INITIAL_MOCK_FILES: UploadedFileItem[] = [
-    {
-        upload_id: "upl_mock_1",
-        file_name: "MATCH_1_CELTICS_BASKETBALL.JPG",
-        file_size_bytes: 357355,
-        uploaded_at_relative: "Loaded on emulator",
-        file_type: "IMAGE",
-        file_url: "file:///sdcard/Download/match1_basketball.jpg",
-    },
-    {
-        upload_id: "upl_mock_2",
-        file_name: "MATCH_2_STANFORD_VOLLEYBALL.JPG",
-        file_size_bytes: 382410,
-        uploaded_at_relative: "Loaded on emulator",
-        file_type: "IMAGE",
-        file_url: "file:///sdcard/Download/match2_volleyball.jpg",
-    },
-];
-
 // Helper to format file size in human readable string
 const formatFileSize = (bytes: number): string => {
     if (bytes >= 1048576) {
@@ -82,95 +62,98 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
-    // Uploaded Files State (pre-populated with 1st and 2nd half scoresheet samples)
-    const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([
-        {
-            upload_id: "upl_sample_1_initial",
-            file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
-            file_size_bytes: 28025,
-            uploaded_at_relative: "Loaded sample",
-            file_type: "IMAGE",
-            file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
-        },
-        {
-            upload_id: "upl_sample_2_initial",
-            file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
-            file_size_bytes: 29119,
-            uploaded_at_relative: "Loaded sample",
-            file_type: "IMAGE",
-            file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
-        },
-    ]);
+    // Uploaded Files State (clean initial empty array)
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
     const [isProcessingOCR, setIsProcessingOCR] = useState(false);
     const [previewFile, setPreviewFile] = useState<UploadedFileItem | null>(null);
     const [modalMessage, setModalMessage] = useState<string | null>(null);
 
-    // Document Picker Handler (Supports Multiple Selection + Quick Sample Load)
+    // Native Document & Image Picker Handler (Supports Multiple File Batch Selection)
     const handleBrowseFiles = useCallback(async () => {
         try {
-            const sampleFiles: UploadedFileItem[] = [
-                {
-                    upload_id: `upl_sample_1_${Date.now()}`,
-                    file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
-                    file_size_bytes: 28025,
-                    uploaded_at_relative: "Selected just now",
-                    file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
-                },
-                {
-                    upload_id: `upl_sample_2_${Date.now()}`,
-                    file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
-                    file_size_bytes: 29119,
-                    uploaded_at_relative: "Selected just now",
-                    file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
-                },
-            ];
-            setUploadedFiles(sampleFiles);
-        } catch {
-            const sampleFiles: UploadedFileItem[] = [
-                {
-                    upload_id: `upl_sample_1_${Date.now()}`,
-                    file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
-                    file_size_bytes: 28025,
-                    uploaded_at_relative: "Selected just now",
-                    file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
-                },
-                {
-                    upload_id: `upl_sample_2_${Date.now()}`,
-                    file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
-                    file_size_bytes: 29119,
-                    uploaded_at_relative: "Selected just now",
-                    file_type: "IMAGE",
-                    file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
-                },
-            ];
-            setUploadedFiles(sampleFiles);
+            const docRes = await DocumentPicker.getDocumentAsync({
+                type: ["image/*", "application/pdf", "text/csv"],
+                multiple: true,
+                copyToCacheDirectory: true,
+            });
+
+            if (!docRes.canceled && docRes.assets && docRes.assets.length > 0) {
+                const newFiles: UploadedFileItem[] = docRes.assets.map((asset, idx) => {
+                    const ext = (asset.name || "").split(".").pop()?.toUpperCase() || "IMAGE";
+                    let fileType: "PDF" | "CSV" | "JSON" | "IMAGE" = "IMAGE";
+                    if (ext === "PDF") fileType = "PDF";
+                    else if (ext === "CSV") fileType = "CSV";
+                    else if (ext === "JSON") fileType = "JSON";
+
+                    return {
+                        upload_id: `upl_${Date.now()}_${idx}`,
+                        file_name: asset.name || `scoresheet_${idx + 1}.jpg`,
+                        file_size_bytes: asset.size || 25000,
+                        uploaded_at_relative: "Selected just now",
+                        file_type: fileType,
+                        file_url: asset.uri,
+                    };
+                });
+                setUploadedFiles((prev) => [...prev, ...newFiles]);
+                return;
+            }
+
+            // Fallback to ImagePicker gallery if document picker canceled or user chooses gallery
+            const imgRes = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsMultipleSelection: true,
+                quality: 0.85,
+            });
+
+            if (!imgRes.canceled && imgRes.assets && imgRes.assets.length > 0) {
+                const newFiles: UploadedFileItem[] = imgRes.assets.map((asset, idx) => {
+                    const fileName = asset.fileName || asset.uri.split("/").pop() || `scoresheet_${idx + 1}.jpg`;
+                    return {
+                        upload_id: `upl_${Date.now()}_${idx}`,
+                        file_name: fileName,
+                        file_size_bytes: asset.fileSize || 25000,
+                        uploaded_at_relative: "Selected just now",
+                        file_type: "IMAGE",
+                        file_url: asset.uri,
+                    };
+                });
+                setUploadedFiles((prev) => [...prev, ...newFiles]);
+            }
+        } catch (pickerErr) {
+            console.warn("Native file browsing error:", pickerErr);
         }
     }, []);
 
-    // Pick from Camera Handler
+    // Pick from Camera Handler (Native camera capture)
     const handleTakePhoto = useCallback(async () => {
-        const sampleFiles: UploadedFileItem[] = [
-            {
-                upload_id: `upl_sample_1_${Date.now()}`,
-                file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
-                file_size_bytes: 28025,
-                uploaded_at_relative: "Selected just now",
-                file_type: "IMAGE",
-                file_url: "file:///sdcard/Download/match_scoresheet_1st_half.jpg",
-            },
-            {
-                upload_id: `upl_sample_2_${Date.now()}`,
-                file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
-                file_size_bytes: 29119,
-                uploaded_at_relative: "Selected just now",
-                file_type: "IMAGE",
-                file_url: "file:///sdcard/Download/match_scoresheet_2nd_half.jpg",
-            },
-        ];
-        setUploadedFiles(sampleFiles);
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== "granted") {
+                setModalMessage("Camera permission is required to capture scoresheets directly.");
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.85,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const photo = result.assets[0];
+                const fileName = photo.fileName || photo.uri.split("/").pop() || `camera_scoresheet_${Date.now()}.jpg`;
+                const newFile: UploadedFileItem = {
+                    upload_id: `upl_camera_${Date.now()}`,
+                    file_name: fileName,
+                    file_size_bytes: photo.fileSize || 30000,
+                    uploaded_at_relative: "Captured just now",
+                    file_type: "IMAGE",
+                    file_url: photo.uri,
+                };
+                setUploadedFiles((prev) => [...prev, newFile]);
+            }
+        } catch (cameraErr) {
+            console.warn("Native camera capture error:", cameraErr);
+        }
     }, []);
     // Delete File Handler
     const handleDeleteFile = useCallback((id: string) => {
@@ -729,7 +712,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 const firstSport = (subMatches[0].sport_type || "").toUpperCase();
                 const firstHome = (subMatches[0].team_name || "").toUpperCase();
                 const isSingleMatchMultiPart = subMatches.every(
-                    (m) =>
+                    (m: any) =>
                         (m.sport_type || "").toUpperCase() === firstSport &&
                         (m.team_name || "").toUpperCase() === firstHome
                 );

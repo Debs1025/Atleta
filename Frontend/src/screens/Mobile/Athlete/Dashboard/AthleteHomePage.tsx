@@ -525,6 +525,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           <Pressable
             style={styles.notificationButton}
             onPress={() => setShowNotifications(true)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Notifications"
           >
             <Image
               source={require("../../../../assets/notification.png")}
@@ -543,7 +545,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       )}
 
       {/* Main Active Screen Body */}
-      <View style={[styles.screenContainer, { paddingTop: !hideParentBars ? headerTopPadding + 54 : 0 }]}>
+      <View style={[styles.screenContainer, { paddingTop: !hideParentBars ? headerTopPadding + 74 : 0 }]}>
         {activeTab === "HOME" &&
           (dashboardScreen === "TEAM_PROFILE" ? (
             <TeamProfileScreen

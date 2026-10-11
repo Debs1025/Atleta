@@ -220,10 +220,12 @@ export const styles = StyleSheet.create({
   },
   rowGroup: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   halfFormGroup: {
     flex: 1,
+    minWidth: 140,
     marginBottom: 16,
   },
   inputBox: {
@@ -234,7 +236,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1E293B",
     paddingHorizontal: 14,
-    height: 50,
+    minHeight: 50,
   },
   inputText: {
     flex: 1,

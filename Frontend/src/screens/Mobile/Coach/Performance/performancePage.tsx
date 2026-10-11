@@ -167,7 +167,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 56, paddingBottom: 150 },
+          { paddingTop: headerTopPadding + 74, paddingBottom: 150 },
         ]}
         showsVerticalScrollIndicator={false}
       >

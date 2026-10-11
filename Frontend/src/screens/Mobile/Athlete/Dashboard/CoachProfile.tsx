@@ -8,6 +8,17 @@ import { requestAuthenticatedJson } from "../../Authentication/authShared";
 
 export type CoachProfileData = CoachProfileSchema;
 
+const getSportIconName = (name: string): keyof typeof Ionicons.glyphMap => {
+  const s = (name || "").toLowerCase();
+  if (s.includes("basket")) return "basketball-outline";
+  if (s.includes("swim") || s.includes("water") || s.includes("pool")) return "water-outline";
+  if (s.includes("track") || s.includes("run") || s.includes("sprint") || s.includes("field")) return "walk-outline";
+  if (s.includes("volley")) return "tennisball-outline";
+  if (s.includes("pickle") || s.includes("tennis") || s.includes("paddle")) return "tennisball-outline";
+  if (s.includes("fitness") || s.includes("strength") || s.includes("conditioning")) return "fitness-outline";
+  return "trophy-outline";
+};
+
 interface CoachProfileProps {
   coachId?: string;
   coachData?: CoachProfileData;
@@ -56,9 +67,15 @@ export function CoachProfileScreen({
             role_title: c.role_title || `${sport} HEAD COACH`,
             tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
             years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
-            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
-            success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
-            recruits_placed: c.recruits_placed || "",
+            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0
+              ? c.specialties
+              : Array.isArray(c.core_specialties) && c.core_specialties.length > 0
+              ? c.core_specialties
+              : Array.isArray(c.sports_handled) && c.sports_handled.length > 0
+              ? c.sports_handled
+              : c.sport_type
+              ? [c.sport_type]
+              : ["Basketball"],
             philosophy: c.philosophy || c.bio || "Not specified",
             quote: c.quote || "Not specified",
             certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
@@ -175,13 +192,7 @@ export function CoachProfileScreen({
                   coachData.core_specialties.map((item, idx) => (
                     <View key={idx} style={styles.specialtyItemCard}>
                       <Ionicons
-                        name={
-                          idx === 0
-                            ? "basketball-outline"
-                            : idx === 1
-                            ? "fitness-outline"
-                            : "body-outline"
-                        }
+                        name={getSportIconName(item)}
                         size={16}
                         color="#38BDF8"
                         style={styles.specialtyIcon}
@@ -191,13 +202,6 @@ export function CoachProfileScreen({
                   ))
                 )}
               </View>
-            </View>
-
-            {/* Card 3: Success Rate */}
-            <View style={styles.metricCardCenter}>
-              <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
-              <Text style={styles.metricBigValue}>{coachData.success_rate}</Text>
-              {coachData.recruits_placed ? <Text style={styles.metricSubtext}>{coachData.recruits_placed}</Text> : null}
             </View>
           </View>
 

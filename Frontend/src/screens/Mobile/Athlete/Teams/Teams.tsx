@@ -49,8 +49,8 @@ export interface CoachProfileSchema {
   tags: string[]; // ["VARSITY", "RECRUITER", "ACTIVE SCOUTING"]
   years_experience: string; // "15+"
   core_specialties: string[];
-  success_rate: string; // "94%"
-  recruits_placed: string; // "80+ Recruits Placed"
+  success_rate?: string;
+  recruits_placed?: string;
   philosophy: string;
   quote: string;
   certificates: string[];

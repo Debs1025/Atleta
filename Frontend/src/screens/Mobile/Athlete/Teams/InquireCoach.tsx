@@ -145,11 +145,17 @@ export function InquireCoachScreen({
                 <View key={idx} style={styles.specialtyItemCard}>
                   <Ionicons
                     name={
-                      idx === 0
+                      (item || "").toLowerCase().includes("basket")
                         ? "basketball-outline"
-                        : idx === 1
+                        : (item || "").toLowerCase().includes("swim")
+                        ? "water-outline"
+                        : (item || "").toLowerCase().includes("track") || (item || "").toLowerCase().includes("run")
+                        ? "walk-outline"
+                        : (item || "").toLowerCase().includes("volley") || (item || "").toLowerCase().includes("pickle") || (item || "").toLowerCase().includes("tennis")
+                        ? "tennisball-outline"
+                        : (item || "").toLowerCase().includes("fitness")
                         ? "fitness-outline"
-                        : "body-outline"
+                        : "trophy-outline"
                     }
                     size={16}
                     color="#38BDF8"
@@ -159,13 +165,6 @@ export function InquireCoachScreen({
                 </View>
               ))}
             </View>
-          </View>
-
-          {/* Card 3: Success Rate */}
-          <View style={styles.metricCardCenter}>
-            <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
-            <Text style={styles.metricBigValue}>{coach.success_rate}</Text>
-            <Text style={styles.metricSubtext}>{coach.recruits_placed}</Text>
           </View>
         </View>
 

@@ -459,6 +459,47 @@ export async function certifyValidationService(
   const batch = db.batch();
   batch.set(validationRef!, { ...auditData, ...updatedAudit }, { merge: true });
   batch.set(matchRef, updatedMatch, { merge: true });
+
+  // Dispatch real-time notification to requesting coach
+  const targetCoachId =
+    auditData.requested_by_coach_id ||
+    auditData.requested_by ||
+    matchData.logged_by_coach_id;
+
+  if (targetCoachId) {
+    const notifId = `notif_${crypto.randomUUID()}`;
+    const cleanCoachId = targetCoachId.replace(/^coach_/, "");
+    batch.set(db.collection("Notifications").doc(notifId), {
+      notification_id: notifId,
+      user_id: targetCoachId,
+      recipient_id: targetCoachId,
+      title: "Scoresheet Request Granted",
+      message: `Tournament Officials have approved and certified the scoresheet for ${matchData.home_team_name || "Match"} vs ${matchData.away_team_name || "Opponent"}.`,
+      type: "AUDIT_GRANTED",
+      match_id: matchData.match_id || cleanId,
+      is_read: false,
+      read_status: false,
+      created_at: now,
+      timestamp: now,
+    });
+    if (cleanCoachId !== targetCoachId) {
+      const altNotifId = `notif_${crypto.randomUUID()}`;
+      batch.set(db.collection("Notifications").doc(altNotifId), {
+        notification_id: altNotifId,
+        user_id: cleanCoachId,
+        recipient_id: cleanCoachId,
+        title: "Scoresheet Request Granted",
+        message: `Tournament Officials have approved and certified the scoresheet for ${matchData.home_team_name || "Match"} vs ${matchData.away_team_name || "Opponent"}.`,
+        type: "AUDIT_GRANTED",
+        match_id: matchData.match_id || cleanId,
+        is_read: false,
+        read_status: false,
+        created_at: now,
+        timestamp: now,
+      });
+    }
+  }
+
   await batch.commit();
 
   return {

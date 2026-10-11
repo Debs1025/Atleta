@@ -57,7 +57,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1E293B",
     paddingHorizontal: 14,
-    height: 48,
+    minHeight: 48,
     justifyContent: "center",
   },
   inputText: {
@@ -74,7 +74,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#1E293B",
     paddingHorizontal: 14,
-    height: 48,
+    minHeight: 48,
   },
   dropdownText: {
     color: "#FFFFFF",

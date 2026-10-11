@@ -7,6 +7,8 @@ import {
   ScrollView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -144,8 +146,19 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         <Text style={styles.headerTitle}>SAVE MATCH DETAILS</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Game Name */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 60 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Game Name */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Game Name</Text>
           <View style={styles.inputBox}>
@@ -318,6 +331,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
           <Text style={styles.saveBtnText}>SAVE MATCH</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Game Type Selectable Picker Modal */}
       <Modal

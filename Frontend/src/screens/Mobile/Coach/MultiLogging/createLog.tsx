@@ -10,6 +10,8 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -831,8 +833,19 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         <Text style={styles.headerTitle}>CREATE LOG SESSION</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* SELECT SPORT */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 60 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* SELECT SPORT */}
         <Text style={styles.sectionLabel}>SELECT SPORT</Text>
 
         {loadingSports && sports.length === 0 ? (
@@ -1085,6 +1098,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
           <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Athlete Modal */}
       <Modal

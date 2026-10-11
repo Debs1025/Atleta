@@ -92,7 +92,7 @@ export function MyTeamsPage({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 56, paddingBottom: 120 },
+          { paddingTop: headerTopPadding + 74, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
       >

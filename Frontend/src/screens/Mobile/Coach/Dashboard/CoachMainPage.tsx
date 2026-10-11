@@ -1858,7 +1858,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingTop: headerTopPadding + 56, paddingBottom: 150 },
+              { paddingTop: headerTopPadding + 76, paddingBottom: 150 },
             ]}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
