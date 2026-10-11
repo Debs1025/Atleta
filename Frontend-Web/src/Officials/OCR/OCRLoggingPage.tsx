@@ -68,12 +68,40 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
       resolvedTeam = idx < halfCount ? oppTeamName : homeTeamName;
     }
 
+    const athleteName = String(
+      p.player_name ||
+      (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER #${p.jersey_number || startingIdx + idx + 1}`)
+    ).toUpperCase();
+    const athleteEvent = p.event || p.discipline || p.event_name || '';
+    const athleteEventId = p.event_id || (athleteEvent ? `evt_${athleteEvent.toLowerCase().replace(/[^a-z0-9]/g, '_')}` : undefined);
+    const cleanEventSlug = athleteEvent ? athleteEvent.toLowerCase().replace(/[^a-z0-9]/g, '_') : 'main';
+    const baseAthleteId = p.athlete_id || `ath_${startingIdx + idx + 1}`;
+    const rowUid = `${baseAthleteId}_${cleanEventSlug}_${idx + 1}`;
+
+    const rawStatsObj: Record<string, any> = {
+      ...(typeof p.stats === 'object' && p.stats !== null ? p.stats : {}),
+      ...(typeof p.sport_stats === 'object' && p.sport_stats !== null ? p.sport_stats : {}),
+      ...p,
+      event: athleteEvent,
+      event_id: athleteEventId,
+    };
+
     return {
-      athlete_id: `ath_${startingIdx + idx + 1}`,
-      player_name: String(p.player_name || (p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : `PLAYER #${p.jersey_number || startingIdx + idx + 1}`)).toUpperCase(),
+      athlete_id: baseAthleteId,
+      row_uid: rowUid,
+      player_name: athleteName,
       team_name: resolvedTeam,
       jersey_number: Number(p.jersey_number || 0),
       position: p.position || 'G',
+      event: athleteEvent,
+      event_id: athleteEventId,
+      heat: p.heat !== undefined ? p.heat : undefined,
+      lane: p.lane !== undefined ? p.lane : undefined,
+      placement_rank: p.placement_rank || p.rank || '',
+      finish_time: p.finish_time || p.time || '',
+      time: p.finish_time || p.time || p.result_time || '',
+      split: p.split || p.split_time || p.split_1 || '',
+      stats: rawStatsObj,
       // Basketball
       pts: Number(p.points ?? p.pts ?? 0),
       ast: Number(p.assists ?? p.ast ?? 0),
@@ -101,12 +129,6 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
       shots_on_target: Number(p.shots_on_target ?? p.sog ?? 0),
       saves: Number(p.saves ?? 0),
       tackles: Number(p.tackles ?? p.tkl ?? 0),
-      // Timed / Individual
-      time: p.finish_time || p.time || p.result_time || '',
-      finish_time: p.finish_time || p.time || '',
-      event: p.event || p.discipline || '',
-      split: p.split || p.split_1 || '',
-      placement_rank: p.placement_rank || p.rank || '',
     };
   });
 
@@ -212,7 +234,15 @@ const mergeContinuationRosters = (base: RawOCRDetectedData, continuation: RawOCR
   const mergedAthletes = [...base.athlete_overview];
 
   continuation.athlete_overview.forEach((incoming) => {
+    const incomingEvent = String(incoming.event || incoming.event_id || '').trim().toLowerCase();
+
     const existingIdx = mergedAthletes.findIndex((existing) => {
+      const existingEvent = String(existing.event || existing.event_id || '').trim().toLowerCase();
+      // Scenario 1 Disambiguation: If both records specify events and they differ, they represent separate events!
+      if (incomingEvent && existingEvent && incomingEvent !== existingEvent) {
+        return false;
+      }
+
       if (incoming.jersey_number && existing.jersey_number && incoming.jersey_number === existing.jersey_number) {
         if (!incoming.team_name || !existing.team_name || incoming.team_name === existing.team_name) return true;
       }
@@ -244,11 +274,16 @@ const mergeContinuationRosters = (base: RawOCRDetectedData, continuation: RawOCR
         shots_on_target: (curr.shots_on_target || 0) + (incoming.shots_on_target || 0),
         saves: (curr.saves || 0) + (incoming.saves || 0),
         tackles: (curr.tackles || 0) + (incoming.tackles || 0),
+        stats: {
+          ...(curr.stats || {}),
+          ...(incoming.stats || {}),
+        },
       };
     } else {
       mergedAthletes.push({
         ...incoming,
-        athlete_id: `ath_${mergedAthletes.length + 1}`,
+        athlete_id: incoming.athlete_id || `ath_${mergedAthletes.length + 1}`,
+        row_uid: incoming.row_uid || `${incoming.athlete_id || 'ath'}_${mergedAthletes.length + 1}`,
       });
     }
   });

@@ -362,10 +362,15 @@ export interface TeamScoreItem {
 
 export interface DetectedAthleteStat {
   athlete_id: string;
+  row_uid?: string;
   player_name: string;
   team_name?: string;
   jersey_number?: number;
   position?: string;
+  event_id?: string;
+  heat?: number | string;
+  lane?: number | string;
+  stats?: Record<string, any>;
 
   // Basketball
   pts?: number;

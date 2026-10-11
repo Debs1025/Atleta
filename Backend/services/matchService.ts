@@ -83,24 +83,27 @@ export function calculateIndividualSportMetrics(stats: Record<string, any>): {
   const distanceMeters = Number(String(rawDist).replace(/[^\d.]/g, '') || 100);
   const distance = `${distanceMeters}m`;
 
-  let finishTimeMs = Number(stats.finish_time_ms || 0);
-  if (finishTimeMs === 0 && stats.timer_seconds) {
-    finishTimeMs = Math.round(Number(stats.timer_seconds) * 1000);
-  }
-  if (finishTimeMs === 0 && stats.time) {
-    const parts = String(stats.time).split(':');
+  const finishTimeRaw = stats.finish_time_ms || stats.finish_time || stats.time || '';
+  let finishTimeMs = 0;
+  if (typeof finishTimeRaw === 'number' && !isNaN(finishTimeRaw)) {
+    finishTimeMs = finishTimeRaw;
+  } else if (typeof finishTimeRaw === 'string' && finishTimeRaw.trim().length > 0) {
+    const cleanTime = finishTimeRaw.replace(/[sS]/g, '').trim();
+    const parts = cleanTime.split(':');
     if (parts.length === 2) {
-      finishTimeMs = (parseFloat(parts[0]) * 60 + parseFloat(parts[1])) * 1000;
+      finishTimeMs = Math.round((parseFloat(parts[0]) * 60 + parseFloat(parts[1])) * 1000);
     } else {
-      finishTimeMs = (parseFloat(stats.time) || 0) * 1000;
+      finishTimeMs = Math.round((parseFloat(cleanTime) || 0) * 1000);
     }
+  } else if (stats.timer_seconds) {
+    finishTimeMs = Math.round(Number(stats.timer_seconds) * 1000);
   }
 
   const mins = Math.floor(finishTimeMs / 60000);
   const secs = ((finishTimeMs % 60000) / 1000).toFixed(2);
-  const formattedTime = stats.formatted_time || (finishTimeMs > 0 ? `${mins > 0 ? mins + ':' : ''}${Number(secs) < 10 && mins > 0 ? '0' : ''}${secs}s` : '00:00.00');
+  const formattedTime = stats.formatted_time || stats.time || (finishTimeMs > 0 ? `${mins > 0 ? mins + ':' : ''}${Number(secs) < 10 && mins > 0 ? '0' : ''}${secs}s` : '00:00.00');
 
-  const eventName = String(stats.event_name || `${distanceMeters}m Event`).trim();
+  const eventName = String(stats.event_name || stats.event || `${distanceMeters}m Event`).trim();
   const splitTimesMs = Array.isArray(stats.split_times_ms)
     ? stats.split_times_ms.map(Number)
     : Array.isArray(stats.split_times)
@@ -122,11 +125,12 @@ export function calculateIndividualSportMetrics(stats: Record<string, any>): {
   }
 
   const enrichedStats: any = {
+    ...stats,
     event_name: eventName,
     distance_meters: distanceMeters,
     distance: distance,
-    finish_time_ms: finishTimeMs,
-    time: formattedTime,
+    finish_time_ms: stats.finish_time_ms !== undefined ? stats.finish_time_ms : finishTimeMs,
+    time: stats.time || formattedTime,
     formatted_time: formattedTime,
     timer_seconds: finishTimeMs > 0 ? finishTimeMs / 1000 : (stats.timer_seconds || 0),
     split_times: stats.split_times || [],
@@ -270,10 +274,18 @@ export async function submitMatchSession(
   const awayRosterIds: string[] = [];
   const enrichedPlayerStats: any[] = [];
 
-  for (const item of payload.player_stats || []) {
+  const playerStatsList = payload.player_stats || [];
+  for (let idx = 0; idx < playerStatsList.length; idx++) {
+    const item = playerStatsList[idx];
     const athleteId = item.athlete_id || `ath_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const rawStats = item.stats || {};
-    const metricId = `metric_${matchId}_${athleteId}`;
+    const eventName = (item as any).event || (item as any).event_name || rawStats.event || rawStats.event_name || null;
+    const eventId = (item as any).event_id || rawStats.event_id || (eventName ? `evt_${String(eventName).toLowerCase().replace(/[^a-z0-9]/g, '_')}` : null);
+    const eventSlug = String(eventName || eventId || (item as any).discipline || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    // Ensure distinct metric_id for multi-event occurrences of the same athlete
+    const metricId = eventSlug
+      ? `metric_${matchId}_${athleteId}_${eventSlug}`
+      : `metric_${matchId}_${athleteId}_${idx}`;
     const pName = (item as any).player_name || 'Athlete';
     const rawTeam = ((item as any).team_name || (item as any).team || homeTeamName).trim();
     const isHomePlayer = rawTeam.toUpperCase() === homeTeamName.toUpperCase();
@@ -302,6 +314,12 @@ export async function submitMatchSession(
       enrichedStats = computed.enrichedStats;
     }
 
+    const finishTime = (item as any).finish_time || (item as any).time || rawStats.finish_time || rawStats.time || null;
+    const splitTime = (item as any).split || (item as any).split_time || rawStats.split || rawStats.split_time || null;
+    const placementRank = (item as any).placement_rank ?? (item as any).rank ?? rawStats.placement_rank ?? rawStats.rank ?? null;
+    const heatVal = (item as any).heat ?? rawStats.heat ?? null;
+    const laneVal = (item as any).lane ?? rawStats.lane ?? null;
+
     const metric: any = {
       metric_id: metricId,
       athlete_id: athleteId,
@@ -310,6 +328,15 @@ export async function submitMatchSession(
       jersey_number: (item as any).jersey_number ?? null,
       match_id: matchId,
       sport_category: payload.sport_type,
+      event: eventName,
+      event_id: eventId,
+      heat: heatVal,
+      lane: laneVal,
+      rank: placementRank,
+      placement_rank: placementRank,
+      finish_time: finishTime,
+      time: finishTime,
+      split: splitTime,
       sport_stats: enrichedStats,
       calculated_player_efficiency: efficiency,
       timestamp: now,
@@ -322,6 +349,13 @@ export async function submitMatchSession(
       player_name: pName,
       team_name: pTeam,
       jersey_number: (item as any).jersey_number ?? null,
+      event: eventName,
+      event_id: eventId,
+      heat: heatVal,
+      lane: laneVal,
+      placement_rank: placementRank,
+      finish_time: finishTime,
+      split: splitTime,
       pts: Number(rawStats.points ?? rawStats.pts ?? 0),
       ast: Number(rawStats.assists ?? rawStats.ast ?? 0),
       reb: Number(rawStats.rebounds ?? rawStats.reb ?? 0),
@@ -336,6 +370,26 @@ export async function submitMatchSession(
     const gameAst = Number(rawStats.assists ?? rawStats.ast ?? 0);
     const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? 0);
 
+    // Dynamic metrics for individual sports / athlete portfolio
+    const dynamicAverages: Record<string, any> = {};
+    if (finishTime) {
+      if (eventSlug.includes('50') && (eventSlug.includes('free') || payload.sport_type.toLowerCase().includes('swim'))) {
+        dynamicAverages.pb_50m_free = finishTime;
+      }
+      if (eventSlug.includes('100') && (eventSlug.includes('free') || payload.sport_type.toLowerCase().includes('swim'))) {
+        dynamicAverages.pb_100m_free = finishTime;
+      }
+      if (eventSlug.includes('100') && payload.sport_type.toLowerCase().includes('track')) {
+        dynamicAverages.pb_100m = finishTime;
+      }
+      if (eventSlug.includes('200') && payload.sport_type.toLowerCase().includes('track')) {
+        dynamicAverages.pb_200m = finishTime;
+      }
+    }
+    if (rawStats.reaction_time_s || rawStats.reaction_sec || rawStats.reaction_time_ms) {
+      dynamicAverages.reaction_time_s = rawStats.reaction_time_s || rawStats.reaction_sec || rawStats.reaction_time_ms;
+    }
+
     if (!athleteDoc.exists) {
       const nameParts = pName.split(/\s+/);
       await athleteRef.set({
@@ -347,7 +401,8 @@ export async function submitMatchSession(
         team_id: isHomePlayer ? homeTeamId : oppTeamId,
         jersey_number: (item as any).jersey_number ?? null,
         sport_type: payload.sport_type,
-        position: 'Player',
+        position: eventName || 'Player',
+        position_or_event: eventName || 'Player',
         averages: {
           ppg: gamePts,
           apg: gameAst,
@@ -357,6 +412,7 @@ export async function submitMatchSession(
           three_pt_percentage: 38,
           ft_percentage: 80,
           per_score: 22,
+          ...dynamicAverages,
         },
         scoring_trends_last_10: [gamePts],
         created_at: now,
@@ -388,6 +444,7 @@ export async function submitMatchSession(
           apg: newApg,
           rpg: newRpg,
           games_played: newGames,
+          ...dynamicAverages,
         },
         stats: {
           ...(currentData.stats || {}),
@@ -395,6 +452,7 @@ export async function submitMatchSession(
           apg: newApg,
           rpg: newRpg,
           games_played: newGames,
+          ...dynamicAverages,
         },
         scoring_trends_last_10: newTrends,
         updated_at: now,
@@ -1608,7 +1666,12 @@ export async function scanMultipleScoresheetsStandalone(
     const pName = String(p.player_name || '').trim().toLowerCase();
     const pTeam = String(p.team_name || '').trim().toLowerCase();
     const pJersey = p.jersey_number ?? p.number;
-    const key = pJersey !== undefined ? `${pTeam}_#${pJersey}` : `${pTeam}_${pName}`;
+    const pEvent = String(p.event || p.event_name || p.event_id || p.discipline || '').trim().toLowerCase();
+    const pHeat = p.heat !== undefined && p.heat !== null ? `_h${p.heat}` : '';
+    // Disambiguate multi-event entries so same athlete across different events (e.g. 50m vs 100m) are never collapsed
+    const key = pEvent
+      ? `${pTeam}_${pName}_${pEvent}${pHeat}`
+      : (pJersey !== undefined ? `${pTeam}_#${pJersey}` : `${pTeam}_${pName}`);
 
     if (!mergedPlayerMap.has(key)) {
       mergedPlayerMap.set(key, { ...p });
