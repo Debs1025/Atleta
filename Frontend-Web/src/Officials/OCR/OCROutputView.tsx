@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -10,8 +10,9 @@ import {
   Trophy,
   Layers,
 } from 'lucide-react';
-import type { RawOCRDetectedData, DetectedAthleteStat } from '../../api/types';
-import { submitVerifiedMatch } from '../../api/client';
+import type { RawOCRDetectedData, DetectedAthleteStat, SportConfiguration } from '../../api/types';
+import { submitVerifiedMatch, getSports } from '../../api/client';
+import { INITIAL_DEFAULT_SPORTS } from '../../SysAdmin/Sports_Management/SportPage';
 import { styles } from './styles/OCROutputView';
 
 interface OCROutputViewProps {
@@ -19,6 +20,91 @@ interface OCROutputViewProps {
   onBack: () => void;
   onSaveSuccess: () => void;
 }
+
+export interface DynamicColumn {
+  key: string;
+  label: string;
+  isNumeric: boolean;
+}
+
+// Common aliases map for mapping between admin stat schema keys and OCR extracted keys
+const STAT_ALIAS_MAP: Record<string, string[]> = {
+  finish_time_ms: ['finish_time', 'time', 'result_time', 'mark_time_ms', 'mark_time'],
+  finish_time: ['finish_time_ms', 'time', 'result_time', 'mark_time_ms'],
+  time: ['finish_time', 'finish_time_ms', 'result_time'],
+  split_times_ms: ['split', 'split_time', 'split_1', 'lap_splits'],
+  split: ['split_times_ms', 'split_time', 'split_1', 'lap_splits'],
+  lap_splits: ['split', 'split_times_ms', 'split_time'],
+  points: ['pts'],
+  pts: ['points'],
+  assists: ['ast'],
+  ast: ['assists'],
+  rebounds: ['reb', 'total_rebounds'],
+  reb: ['rebounds', 'total_rebounds'],
+  steals: ['stl'],
+  stl: ['steals'],
+  blocks: ['blk', 'block_points'],
+  blk: ['blocks', 'block_points'],
+  turnovers: ['to'],
+  to: ['turnovers'],
+  distance_meters: ['distance_m', 'distance', 'mark_distance_m'],
+  distance_m: ['distance_meters', 'distance', 'mark_distance_m'],
+  mark_distance_m: ['distance_m', 'distance_meters', 'distance'],
+  mark_time_ms: ['finish_time', 'time', 'finish_time_ms'],
+  stroke_rate: ['stroke_count', 'strokes', 'cadence', 'stroke_cadence'],
+  stroke_count: ['stroke_rate', 'strokes', 'cadence', 'stroke_cadence'],
+  stroke_cadence: ['stroke_rate', 'stroke_count', 'cadence'],
+  lap_count: ['laps', 'lap_splits'],
+  heat_number: ['heat'],
+  heat: ['heat_number'],
+  lane_number: ['lane'],
+  lane: ['lane_number'],
+  reaction_time_ms: ['reaction_sec', 'reaction_time_s', 'reaction_time'],
+  reaction_sec: ['reaction_time_ms', 'reaction_time_s'],
+  third_shot_drops: ['third_shot', 'third_shots'],
+  unforced_errors: ['unforced_err', 'errors'],
+  winners: ['smash_winners', 'forehand_winners', 'backhand_winners'],
+};
+
+// Helper to look up an athlete metric value by key or alias
+const getAthleteStatValue = (a: DetectedAthleteStat, key: string): any => {
+  if (a[key] !== undefined && a[key] !== null && a[key] !== '') return a[key];
+  if (a.stats && a.stats[key] !== undefined && a.stats[key] !== null && a.stats[key] !== '') return a.stats[key];
+
+  const aliases = STAT_ALIAS_MAP[key] || [];
+  for (const alt of aliases) {
+    if (a[alt] !== undefined && a[alt] !== null && a[alt] !== '') return a[alt];
+    if (a.stats && a.stats[alt] !== undefined && a.stats[alt] !== null && a.stats[alt] !== '') return a.stats[alt];
+  }
+
+  return '';
+};
+
+// Helper to ensure each athlete row has a distinct row_uid (Scenario 1 Disambiguation)
+const ensureAthleteRowUids = (athletes: DetectedAthleteStat[]): DetectedAthleteStat[] => {
+  return athletes.map((a, idx) => {
+    const rawEvt = a.event || a.discipline || (a.stats?.event) || '';
+    const cleanEvt = rawEvt ? String(rawEvt).trim().toLowerCase().replace(/[^a-z0-9]/g, '_') : 'event';
+    const baseId = a.athlete_id || `ath_${idx + 1}`;
+    const rowUid = a.row_uid || `${baseId}_${cleanEvt}_${idx + 1}`;
+    const eventId = a.event_id || (rawEvt ? `EVT-${cleanEvt.toUpperCase()}` : undefined);
+
+    const safeStats = {
+      ...(typeof a.stats === 'object' && a.stats !== null ? a.stats : {}),
+      event: rawEvt,
+      event_id: eventId,
+    };
+
+    return {
+      ...a,
+      athlete_id: baseId,
+      row_uid: rowUid,
+      event: rawEvt,
+      event_id: eventId,
+      stats: safeStats,
+    };
+  });
+};
 
 export const OCROutputView: React.FC<OCROutputViewProps> = ({
   rawOCRData,
@@ -40,14 +126,33 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Per-match athlete state dictionary
+  // Dynamic Sports Configurations fetched from Backend Admin API
+  const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>(() => INITIAL_DEFAULT_SPORTS);
+
+  useEffect(() => {
+    let mounted = true;
+    getSports()
+      .then((res) => {
+        if (mounted && res && Array.isArray(res.sports) && res.sports.length > 0) {
+          setConfiguredSports(res.sports);
+        }
+      })
+      .catch(() => {
+        // Fallback to INITIAL_DEFAULT_SPORTS
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Per-match athlete state dictionary with guaranteed row_uid disambiguation
   const [athleteStatsMap, setAthleteStatsMap] = useState<Record<number, DetectedAthleteStat[]>>(() => {
     const initial: Record<number, DetectedAthleteStat[]> = {};
     const list = (rawOCRData.batch_matches && rawOCRData.batch_matches.length > 0)
       ? rawOCRData.batch_matches
       : [rawOCRData];
     list.forEach((m, idx) => {
-      initial[idx] = m.athlete_overview || [];
+      initial[idx] = ensureAthleteRowUids(m.athlete_overview || []);
     });
     return initial;
   });
@@ -55,7 +160,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
   const currentMatch = matchesList[activeMatchIndex] || rawOCRData;
   const athleteStats = athleteStatsMap[activeMatchIndex] || [];
 
-  // Helper to update athlete stats for active match
+  // Helper to update athlete stats for active match using row_uid
   const updateActiveAthleteStats = (
     updater: (prev: DetectedAthleteStat[]) => DetectedAthleteStat[]
   ) => {
@@ -66,7 +171,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
   };
 
   // Sport type identification
-  const sportType = (currentMatch.sport_type || 'BASKETBALL').toUpperCase();
+  const sportType = (currentMatch.sport_type || 'BASKETBALL').trim().toUpperCase();
   const isVolleyball = sportType.includes('VOLLEY');
   const isSoccer = sportType.includes('SOCCER') || sportType.includes('FOOTBALL');
   const isIndividual =
@@ -76,6 +181,150 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     sportType.includes('ATHLETIC') ||
     sportType.includes('TIME');
   const isBasketball = !isVolleyball && !isSoccer && !isIndividual;
+
+  // Match configured sport schema from admin /sports API
+  const activeSportConfig = useMemo<SportConfiguration | null>(() => {
+    const norm = sportType.trim().toUpperCase();
+    const exact = configuredSports.find(
+      (s) =>
+        s.sport_name.trim().toUpperCase() === norm ||
+        s.short_identifier.trim().toUpperCase() === norm ||
+        norm.includes(s.sport_name.trim().toUpperCase()) ||
+        s.sport_name.trim().toUpperCase().includes(norm)
+    );
+    if (exact) return exact;
+
+    const fallback = INITIAL_DEFAULT_SPORTS.find(
+      (s) =>
+        s.sport_name.trim().toUpperCase() === norm ||
+        s.short_identifier.trim().toUpperCase() === norm ||
+        norm.includes(s.sport_name.trim().toUpperCase()) ||
+        s.sport_name.trim().toUpperCase().includes(norm)
+    );
+    return fallback || null;
+  }, [configuredSports, sportType]);
+
+  // Dynamically resolve table columns based on admin sport schema + detected metrics
+  const dynamicColumns = useMemo<DynamicColumn[]>(() => {
+    const cols: DynamicColumn[] = [];
+    const addedKeys = new Set<string>();
+
+    // 1. If admin configured stats exist for this sport, use them
+    if (activeSportConfig && Array.isArray(activeSportConfig.configurable_stats) && activeSportConfig.configurable_stats.length > 0) {
+      activeSportConfig.configurable_stats.forEach((cs) => {
+        const key = cs.stat_name_key.trim();
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          const cat = cs.measurement_category || 'Count';
+          const isNum = cat !== 'Percentage' && cat !== 'Time (ms)';
+          cols.push({
+            key,
+            label: (cs.label || key.replace(/_/g, ' ')).toUpperCase(),
+            isNumeric: isNum,
+          });
+        }
+      });
+    }
+
+    // 2. Default presets
+    if (cols.length === 0) {
+      if (isBasketball) {
+        [
+          { key: 'pts', label: 'PTS', isNumeric: true },
+          { key: 'ast', label: 'AST', isNumeric: true },
+          { key: 'to', label: 'TO', isNumeric: true },
+          { key: 'reb', label: 'REB', isNumeric: true },
+          { key: 'stl', label: 'STL', isNumeric: true },
+          { key: 'blk', label: 'BLK', isNumeric: true },
+          { key: 'min', label: 'MIN', isNumeric: true },
+          { key: 'fg_pct', label: 'FG%', isNumeric: false },
+        ].forEach((c) => {
+          addedKeys.add(c.key);
+          cols.push(c);
+        });
+      } else if (isVolleyball) {
+        [
+          { key: 'kills', label: 'KILLS', isNumeric: true },
+          { key: 'attack_errors', label: 'ATK ERR', isNumeric: true },
+          { key: 'attack_attempts', label: 'ATTEMPTS', isNumeric: true },
+          { key: 'hitting_pct', label: 'HIT %', isNumeric: false },
+          { key: 'service_aces', label: 'ACES', isNumeric: true },
+          { key: 'digs', label: 'DIGS', isNumeric: true },
+          { key: 'block_points', label: 'BLK PTS', isNumeric: true },
+        ].forEach((c) => {
+          addedKeys.add(c.key);
+          cols.push(c);
+        });
+      } else if (isSoccer) {
+        [
+          { key: 'goals', label: 'GOALS', isNumeric: true },
+          { key: 'shots', label: 'SHOTS', isNumeric: true },
+          { key: 'shots_on_target', label: 'SOT', isNumeric: true },
+          { key: 'saves', label: 'SAVES', isNumeric: true },
+          { key: 'tackles', label: 'TACKLES', isNumeric: true },
+          { key: 'min', label: 'MIN', isNumeric: true },
+        ].forEach((c) => {
+          addedKeys.add(c.key);
+          cols.push(c);
+        });
+      } else if (isIndividual) {
+        [
+          { key: 'split', label: 'SPLIT', isNumeric: false },
+          { key: 'time', label: 'TIME', isNumeric: false },
+          { key: 'finish_time', label: 'FINISH TIME', isNumeric: false },
+        ].forEach((c) => {
+          addedKeys.add(c.key);
+          cols.push(c);
+        });
+      }
+    }
+
+    // 3. Dynamic Discovery: Inspect athlete records for any custom stats detected on scoresheet
+    const SYSTEM_KEYS = new Set([
+      'athlete_id', 'row_uid', 'player_name', 'team_name', 'jersey_number', 'position',
+      'event', 'event_id', 'heat', 'lane', 'rank', 'placement_rank', 'stats', 'sport_stats',
+      'calculated_efficiency', 'calculated_player_efficiency', 'true_shooting_pct',
+      'fg_made', 'fg_attempted', 'ft_made', 'ft_attempted', 'three_made', 'three_attempted',
+      'offensive_rebounds', 'defensive_rebounds', 'result_time',
+    ]);
+
+    athleteStats.forEach((a) => {
+      Object.keys(a).forEach((k) => {
+        if (!SYSTEM_KEYS.has(k) && !addedKeys.has(k)) {
+          const val = (a as any)[k];
+          if (val !== undefined && val !== null && val !== '') {
+            addedKeys.add(k);
+            const isNum = typeof val === 'number';
+            cols.push({
+              key: k,
+              label: k.replace(/_/g, ' ').toUpperCase(),
+              isNumeric: isNum,
+            });
+          }
+        }
+      });
+
+      if (a.stats && typeof a.stats === 'object') {
+        const statsObj = a.stats as Record<string, any>;
+        Object.keys(statsObj).forEach((k) => {
+          if (!SYSTEM_KEYS.has(k) && !addedKeys.has(k)) {
+            const val = statsObj[k];
+            if (val !== undefined && val !== null && val !== '') {
+              addedKeys.add(k);
+              const isNum = typeof val === 'number';
+              cols.push({
+                key: k,
+                label: k.replace(/_/g, ' ').toUpperCase(),
+                isNumeric: isNum,
+              });
+            }
+          }
+        });
+      }
+    });
+
+    return cols;
+  }, [activeSportConfig, isBasketball, isVolleyball, isSoccer, isIndividual, athleteStats]);
 
   // Teams list for active match
   const teamList = useMemo(() => {
@@ -102,18 +351,33 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     );
   }, [athleteStats, selectedTeamFilter]);
 
-  // Totals calculations
+  // Dynamic Totals across all numeric columns
+  const columnTotals = useMemo(() => {
+    const totalsMap: Record<string, number> = {};
+    dynamicColumns.forEach((col) => {
+      if (col.isNumeric) {
+        totalsMap[col.key] = visibleAthletes.reduce((sum, a) => {
+          const val = getAthleteStatValue(a, col.key);
+          const num = typeof val === 'number' ? val : parseFloat(val);
+          return sum + (isNaN(num) ? 0 : num);
+        }, 0);
+      }
+    });
+    return totalsMap;
+  }, [dynamicColumns, visibleAthletes]);
+
+  // Legacy Totals for predefined sports
   const totals = useMemo(() => {
     if (isBasketball) {
       return visibleAthletes.reduce(
         (acc, curr) => {
-          acc.pts += curr.pts || 0;
-          acc.ast += curr.ast || 0;
-          acc.to += curr.to || 0;
-          acc.reb += curr.reb || 0;
-          acc.stl += curr.stl || 0;
-          acc.blk += curr.blk || 0;
-          acc.min += curr.min || 0;
+          acc.pts += curr.pts || curr.points || 0;
+          acc.ast += curr.ast || curr.assists || 0;
+          acc.to += curr.to || curr.turnovers || 0;
+          acc.reb += curr.reb || curr.rebounds || 0;
+          acc.stl += curr.stl || curr.steals || 0;
+          acc.blk += curr.blk || curr.blocks || 0;
+          acc.min += curr.min || curr.minutes || 0;
           return acc;
         },
         { pts: 0, ast: 0, to: 0, reb: 0, stl: 0, blk: 0, min: 0 }
@@ -149,46 +413,60 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     return {};
   }, [visibleAthletes, isBasketball, isVolleyball, isSoccer]);
 
-  // Stat Change Handler
+  // Stat Change Handler using row_uid (Scenario 1 Disambiguation & Scenario 2 In-Place Editing)
   const handleStatChange = (
-    targetAthleteId: string,
-    field: keyof DetectedAthleteStat,
+    targetRowUid: string,
+    field: string,
     value: string
   ) => {
     updateActiveAthleteStats((prev) => {
       const updated = [...prev];
-      const idx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
+      const idx = updated.findIndex((a) => (a.row_uid || a.athlete_id) === targetRowUid);
       if (idx === -1) return prev;
 
-      if (
+      const currentAthlete = { ...updated[idx] };
+      const currentStats = { ...(currentAthlete.stats || {}) };
+
+      const matchedCol = dynamicColumns.find((c) => c.key === field);
+      const isStringField =
         field === 'fg_pct' ||
         field === 'hitting_pct' ||
         field === 'time' ||
         field === 'finish_time' ||
-        field === 'event' ||
         field === 'split' ||
-        field === 'position'
-      ) {
-        updated[idx] = {
-          ...updated[idx],
-          [field]: value,
-        };
-      } else {
-        const numVal = parseInt(value, 10);
-        updated[idx] = {
-          ...updated[idx],
-          [field]: isNaN(numVal) ? 0 : numVal,
-        };
+        field === 'event' ||
+        field === 'event_id' ||
+        field === 'position' ||
+        field === 'player_name' ||
+        field === 'team_name' ||
+        (matchedCol && !matchedCol.isNumeric);
+
+      let parsedVal: any = value;
+      if (!isStringField) {
+        const num = parseFloat(value);
+        parsedVal = isNaN(num) ? 0 : num;
       }
+
+      currentAthlete[field] = parsedVal;
+      currentStats[field] = parsedVal;
+
+      const aliases = STAT_ALIAS_MAP[field] || [];
+      aliases.forEach((alt) => {
+        currentAthlete[alt] = parsedVal;
+        currentStats[alt] = parsedVal;
+      });
+
+      currentAthlete.stats = currentStats;
+      updated[idx] = currentAthlete;
       return updated;
     });
   };
 
-  // Toggle Athlete Team between Home and Away
-  const handleToggleTeam = (targetAthleteId: string) => {
+  // Toggle Athlete Team between Home and Away (targeted via row_uid)
+  const handleToggleTeam = (targetRowUid: string) => {
     updateActiveAthleteStats((prev) => {
       const updated = [...prev];
-      const idx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
+      const idx = updated.findIndex((a) => (a.row_uid || a.athlete_id) === targetRowUid);
       if (idx === -1) return prev;
       const current = (updated[idx].team_name || '').toUpperCase();
       const home = (currentMatch.team_name || 'HOME').toUpperCase();
@@ -208,7 +486,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
 
   const homeScore = useMemo(() => {
     const homePlayers = athleteStats.filter((a) => (a.team_name || '').toUpperCase() === homeTeamName);
-    if (isBasketball) return homePlayers.reduce((s, a) => s + (a.pts || 0), 0);
+    if (isBasketball) return homePlayers.reduce((s, a) => s + (a.pts || a.points || 0), 0);
     if (isVolleyball) {
       const scoreObj = (currentMatch.team_scores || []).find((t) => (t.team || '').toUpperCase() === homeTeamName);
       if (scoreObj && scoreObj.score !== undefined) return scoreObj.score;
@@ -224,7 +502,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
 
   const awayScore = useMemo(() => {
     const awayPlayers = athleteStats.filter((a) => (a.team_name || '').toUpperCase() === awayTeamName);
-    if (isBasketball) return awayPlayers.reduce((s, a) => s + (a.pts || 0), 0);
+    if (isBasketball) return awayPlayers.reduce((s, a) => s + (a.pts || a.points || 0), 0);
     if (isVolleyball) {
       const scoreObj = (currentMatch.team_scores || []).find((t) => (t.team || '').toUpperCase() === awayTeamName);
       if (scoreObj && scoreObj.score !== undefined) return scoreObj.score;
@@ -253,7 +531,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
 
   const scoreUnit = isVolleyball ? 'SETS' : isSoccer ? 'GOALS' : 'PTS';
 
-  // Save current active match
+  // Save / Commit verified match data to database (Scenario 2: dynamic schema without truncation)
   const handleSaveMatch = async () => {
     setFeedback(null);
     setSaving(true);
@@ -271,67 +549,68 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         home_score: homeScore,
         away_score: awayScore,
         notes: `Official OCR Logged Match (${sportType} - ${homeTeamName}: ${homeScore} vs ${awayTeamName}: ${awayScore})`,
-        player_stats: athleteStats.map((a) => ({
-          athlete_id: a.athlete_id,
-          player_name: a.player_name,
-          team_name: a.team_name,
-          jersey_number: a.jersey_number,
-          position: a.position,
-          // Basketball
-          pts: a.pts || 0,
-          ast: a.ast || 0,
-          reb: a.reb || 0,
-          stl: a.stl || 0,
-          blk: a.blk || 0,
-          to: a.to || 0,
-          min: a.min || 0,
-          fg_pct: a.fg_pct,
-          // Volleyball
-          kills: a.kills || 0,
-          attack_errors: a.attack_errors || 0,
-          attack_attempts: a.attack_attempts || 0,
-          hitting_pct: a.hitting_pct,
-          service_aces: a.service_aces || 0,
-          digs: a.digs || 0,
-          block_points: a.block_points || 0,
-          // Soccer
-          goals: a.goals || 0,
-          shots: a.shots || 0,
-          shots_on_target: a.shots_on_target || 0,
-          saves: a.saves || 0,
-          tackles: a.tackles || 0,
-          // Individual / Timed
-          time: a.time,
-          finish_time: a.finish_time,
-          event: a.event,
-          split: a.split,
-          placement_rank: a.placement_rank,
-          stats: {
-            points: a.pts || 0,
-            assists: a.ast || 0,
-            rebounds: a.reb || 0,
-            steals: a.stl || 0,
-            blocks: a.blk || 0,
-            turnovers: a.to || 0,
-            minutes: a.min || 0,
-            kills: a.kills || 0,
-            attack_errors: a.attack_errors || 0,
-            attack_attempts: a.attack_attempts || 0,
-            service_aces: a.service_aces || 0,
-            digs: a.digs || 0,
-            block_points: a.block_points || 0,
-            goals: a.goals || 0,
-            shots: a.shots || 0,
-            shots_on_target: a.shots_on_target || 0,
-            saves: a.saves || 0,
-            tackles: a.tackles || 0,
-            time: a.time,
-            finish_time: a.finish_time,
-            event: a.event,
-            split: a.split,
-            placement_rank: a.placement_rank,
-          },
-        })),
+        player_stats: athleteStats.map((a) => {
+          const completeStats: Record<string, any> = {
+            ...(a.stats || {}),
+          };
+
+          dynamicColumns.forEach((col) => {
+            const val = getAthleteStatValue(a, col.key);
+            if (val !== undefined && val !== null && val !== '') {
+              completeStats[col.key] = val;
+            }
+          });
+
+          const athleteEvent = a.event || a.discipline || completeStats.event || '';
+          const athleteEventId = a.event_id || (athleteEvent ? `EVT-${athleteEvent.toLowerCase().replace(/[^a-z0-9]/g, '_').toUpperCase()}` : undefined);
+          const athleteFinishTime = a.finish_time || a.time || completeStats.finish_time || completeStats.time || '';
+          const athleteSplit = a.split || completeStats.split || '';
+          const athleteRank = a.placement_rank || a.rank || completeStats.placement_rank || completeStats.rank || '';
+
+          completeStats.event = athleteEvent;
+          completeStats.event_id = athleteEventId;
+          completeStats.finish_time = athleteFinishTime;
+          completeStats.split = athleteSplit;
+          completeStats.placement_rank = athleteRank;
+
+          return {
+            athlete_id: a.athlete_id,
+            row_uid: a.row_uid,
+            player_name: a.player_name,
+            team_name: a.team_name,
+            jersey_number: a.jersey_number,
+            position: a.position,
+            event: athleteEvent,
+            event_id: athleteEventId,
+            heat: a.heat !== undefined ? a.heat : completeStats.heat,
+            lane: a.lane !== undefined ? a.lane : completeStats.lane,
+            placement_rank: athleteRank,
+            finish_time: athleteFinishTime,
+            time: athleteFinishTime,
+            split: athleteSplit,
+            // Dynamic stats dictionary without truncation
+            stats: completeStats,
+            // Direct top-level metrics for backward compatibility
+            pts: completeStats.pts ?? completeStats.points ?? 0,
+            ast: completeStats.ast ?? completeStats.assists ?? 0,
+            reb: completeStats.reb ?? completeStats.rebounds ?? 0,
+            stl: completeStats.stl ?? completeStats.steals ?? 0,
+            blk: completeStats.blk ?? completeStats.blocks ?? 0,
+            to: completeStats.to ?? completeStats.turnovers ?? 0,
+            min: completeStats.min ?? completeStats.minutes ?? 0,
+            kills: completeStats.kills ?? 0,
+            attack_errors: completeStats.attack_errors ?? 0,
+            attack_attempts: completeStats.attack_attempts ?? 0,
+            service_aces: completeStats.service_aces ?? 0,
+            digs: completeStats.digs ?? 0,
+            block_points: completeStats.block_points ?? 0,
+            goals: completeStats.goals ?? 0,
+            shots: completeStats.shots ?? 0,
+            shots_on_target: completeStats.shots_on_target ?? 0,
+            saves: completeStats.saves ?? 0,
+            tackles: completeStats.tackles ?? 0,
+          };
+        }),
       };
 
       await submitVerifiedMatch(payload);
@@ -362,6 +641,9 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
       setSaving(false);
     }
   };
+
+  // Determine if using custom/non-standard dynamic sport schema
+  const isCustomOrNonStandard = !isBasketball && !isVolleyball && !isSoccer && !isIndividual;
 
   return (
     <div style={styles.container}>
@@ -654,36 +936,53 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                 </tr>
               )}
 
-              {/* Individual / Timed Sports Header */}
+              {/* Individual / Timed Sports Header (Scenario 2: dynamic columns for sport-specific metrics) */}
               {isIndividual && (
                 <tr style={styles.theadRow}>
                   <th style={{ ...styles.thCenter, width: '48px' }}>RANK</th>
                   <th style={styles.th}>Athlete Name</th>
                   <th style={styles.th}>Team / Affiliation</th>
                   <th style={styles.th}>EVENT</th>
-                  <th style={styles.thCenter}>SPLIT</th>
-                  <th style={styles.thCenter}>TIME</th>
-                  <th style={styles.thCenter}>FINISH TIME</th>
+                  {dynamicColumns.map((col) => (
+                    <th key={col.key} style={styles.thCenter}>
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              )}
+
+              {/* Custom Admin / Non-standard Sports Header */}
+              {isCustomOrNonStandard && (
+                <tr style={styles.theadRow}>
+                  <th style={{ ...styles.thCenter, width: '48px' }}>#</th>
+                  <th style={styles.th}>Athlete Name</th>
+                  <th style={styles.th}>Team</th>
+                  {dynamicColumns.map((col) => (
+                    <th key={col.key} style={styles.thCenter}>
+                      {col.label}
+                    </th>
+                  ))}
                 </tr>
               )}
             </thead>
 
             <tbody>
-              {visibleAthletes.map((a) => {
+              {visibleAthletes.map((a, rowIdx) => {
                 const isHome = (a.team_name || '').toUpperCase() === homeTeamName;
+                const rowIdentity = a.row_uid || a.athlete_id;
 
                 return (
-                  <tr key={a.athlete_id} style={styles.tbodyRow}>
+                  <tr key={rowIdentity} style={styles.tbodyRow}>
                     <td style={styles.tdNum}>
                       {isIndividual
-                        ? a.placement_rank ? `#${a.placement_rank}` : '-'
+                        ? a.placement_rank ? `#${a.placement_rank}` : `#${rowIdx + 1}`
                         : a.jersey_number ? `#${a.jersey_number}` : '-'}
                     </td>
                     <td style={styles.tdAthleteName}>{a.player_name}</td>
                     <td style={styles.tdTeam}>
                       <button
                         type="button"
-                        onClick={() => handleToggleTeam(a.athlete_id)}
+                        onClick={() => handleToggleTeam(rowIdentity)}
                         title="Click to toggle Home / Away"
                         style={isHome ? styles.teamBadgeHome : styles.teamBadgeAway}
                       >
@@ -701,7 +1000,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                               <input
                                 type="number"
                                 value={a[stat] ?? 0}
-                                onChange={(e) => handleStatChange(a.athlete_id, stat, e.target.value)}
+                                onChange={(e) => handleStatChange(rowIdentity, stat, e.target.value)}
                                 style={styles.statInput}
                               />
                             ) : (
@@ -714,7 +1013,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                             <input
                               type="text"
                               value={a.fg_pct || '0%'}
-                              onChange={(e) => handleStatChange(a.athlete_id, 'fg_pct', e.target.value)}
+                              onChange={(e) => handleStatChange(rowIdentity, 'fg_pct', e.target.value)}
                               style={{ ...styles.statInput, width: '64px' }}
                             />
                           ) : (
@@ -733,7 +1032,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                               <input
                                 type="number"
                                 value={a[stat] ?? 0}
-                                onChange={(e) => handleStatChange(a.athlete_id, stat, e.target.value)}
+                                onChange={(e) => handleStatChange(rowIdentity, stat, e.target.value)}
                                 style={styles.statInput}
                               />
                             ) : (
@@ -746,7 +1045,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                             <input
                               type="text"
                               value={a.hitting_pct || '0%'}
-                              onChange={(e) => handleStatChange(a.athlete_id, 'hitting_pct', e.target.value)}
+                              onChange={(e) => handleStatChange(rowIdentity, 'hitting_pct', e.target.value)}
                               style={{ ...styles.statInput, width: '64px' }}
                             />
                           ) : (
@@ -759,7 +1058,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                               <input
                                 type="number"
                                 value={a[stat] ?? 0}
-                                onChange={(e) => handleStatChange(a.athlete_id, stat, e.target.value)}
+                                onChange={(e) => handleStatChange(rowIdentity, stat, e.target.value)}
                                 style={styles.statInput}
                               />
                             ) : (
@@ -779,7 +1078,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                               <input
                                 type="number"
                                 value={a[stat] ?? 0}
-                                onChange={(e) => handleStatChange(a.athlete_id, stat, e.target.value)}
+                                onChange={(e) => handleStatChange(rowIdentity, stat, e.target.value)}
                                 style={styles.statInput}
                               />
                             ) : (
@@ -790,7 +1089,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                       </>
                     )}
 
-                    {/* Individual / Timed Sports Cells */}
+                    {/* Individual / Timed Sports Cells (Scenario 1 Disambiguation & Scenario 2 Dynamic Schema) */}
                     {isIndividual && (
                       <>
                         <td style={styles.tdStat}>
@@ -798,49 +1097,59 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                             <input
                               type="text"
                               value={a.event || '-'}
-                              onChange={(e) => handleStatChange(a.athlete_id, 'event', e.target.value)}
+                              onChange={(e) => handleStatChange(rowIdentity, 'event', e.target.value)}
                               style={{ ...styles.statInput, width: '100px' }}
                             />
                           ) : (
                             a.event || '-'
                           )}
                         </td>
-                        <td style={styles.tdStat}>
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={a.split || '-'}
-                              onChange={(e) => handleStatChange(a.athlete_id, 'split', e.target.value)}
-                              style={{ ...styles.statInput, width: '70px' }}
-                            />
-                          ) : (
-                            a.split || '-'
-                          )}
-                        </td>
-                        <td style={styles.tdStat}>
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={a.time || '-'}
-                              onChange={(e) => handleStatChange(a.athlete_id, 'time', e.target.value)}
-                              style={{ ...styles.statInput, width: '80px' }}
-                            />
-                          ) : (
-                            a.time || '-'
-                          )}
-                        </td>
-                        <td style={styles.tdStat}>
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={a.finish_time || a.time || '-'}
-                              onChange={(e) => handleStatChange(a.athlete_id, 'finish_time', e.target.value)}
-                              style={{ ...styles.statInput, width: '80px' }}
-                            />
-                          ) : (
-                            a.finish_time || a.time || '-'
-                          )}
-                        </td>
+                        {dynamicColumns.map((col) => {
+                          const val = getAthleteStatValue(a, col.key);
+                          return (
+                            <td key={col.key} style={styles.tdStat}>
+                              {isEditing ? (
+                                <input
+                                  type={col.isNumeric ? 'number' : 'text'}
+                                  value={val}
+                                  onChange={(e) => handleStatChange(rowIdentity, col.key, e.target.value)}
+                                  style={{
+                                    ...styles.statInput,
+                                    width: col.isNumeric ? '56px' : '85px',
+                                  }}
+                                />
+                              ) : (
+                                val !== '' && val !== undefined ? val : '-'
+                              )}
+                            </td>
+                          );
+                        })}
+                      </>
+                    )}
+
+                    {/* Custom Admin / Non-standard Sports Cells */}
+                    {isCustomOrNonStandard && (
+                      <>
+                        {dynamicColumns.map((col) => {
+                          const val = getAthleteStatValue(a, col.key);
+                          return (
+                            <td key={col.key} style={styles.tdStat}>
+                              {isEditing ? (
+                                <input
+                                  type={col.isNumeric ? 'number' : 'text'}
+                                  value={val}
+                                  onChange={(e) => handleStatChange(rowIdentity, col.key, e.target.value)}
+                                  style={{
+                                    ...styles.statInput,
+                                    width: col.isNumeric ? '56px' : '85px',
+                                  }}
+                                />
+                              ) : (
+                                val !== '' && val !== undefined ? val : '-'
+                              )}
+                            </td>
+                          );
+                        })}
                       </>
                     )}
                   </tr>
@@ -893,9 +1202,42 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
 
                 {isIndividual && (
                   <>
-                    <td style={styles.tfootTdDash} colSpan={4}>
-                      {visibleAthletes.length} Participants Recorded
-                    </td>
+                    <td style={styles.tfootTdDash}>-</td>
+                    {dynamicColumns.map((col) => {
+                      if (col.isNumeric) {
+                        const sum = columnTotals[col.key] || 0;
+                        return (
+                          <td key={col.key} style={styles.tfootTdStatHighlight}>
+                            {Number.isInteger(sum) ? sum : sum.toFixed(1)}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={col.key} style={styles.tfootTdDash}>
+                          -
+                        </td>
+                      );
+                    })}
+                  </>
+                )}
+
+                {isCustomOrNonStandard && (
+                  <>
+                    {dynamicColumns.map((col) => {
+                      if (col.isNumeric) {
+                        const sum = columnTotals[col.key] || 0;
+                        return (
+                          <td key={col.key} style={styles.tfootTdStatHighlight}>
+                            {Number.isInteger(sum) ? sum : sum.toFixed(1)}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={col.key} style={styles.tfootTdDash}>
+                          -
+                        </td>
+                      );
+                    })}
                   </>
                 )}
               </tr>
