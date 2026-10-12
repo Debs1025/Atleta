@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Platform, ScrollView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,11 +20,14 @@ import {
   requestJson,
   storeAuthRole,
   storeAuthToken,
+  clearAuthMicroCache,
   API_BASE,
   type AuthRole,
   type BannerTone,
   type LoginValues
 } from "./authShared";
+import { clearFirebaseClientCaches } from "../../../services/firebaseClient";
+import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
   NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
@@ -40,6 +44,7 @@ type LoginScreenProps = {
 export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScreenProps) {
   const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [socialModal, setSocialModal] = useState<{ visible: boolean; provider: 'google' | 'facebook' }>({ visible: false, provider: 'google' });
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -76,6 +81,20 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
       if (token) await storeAuthToken(token);
       await storeAuthRole(role);
+
+      clearAuthMicroCache();
+      clearFirebaseClientCaches();
+      await AsyncStorage.multiRemove([
+        "atleta_coach_dashboard_cache_v2",
+        "atleta_offline_coach_profile_cache",
+        "atleta_offline_athlete_profile_cache",
+        "atleta_offline_teams_cache",
+        "atleta_offline_matches_cache",
+        "atleta_offline_athletes_cache",
+        "atleta_offline_sports_cache",
+        "atleta_coach_settings",
+        "atleta_cached_user",
+      ]).catch(() => null);
 
       onAuthenticated?.(role);
     } catch (error: any) {
@@ -118,52 +137,15 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       }
     }
 
-    try {
-      const res = await promptGoogleOAuthAsync();
-      if (res.type === "success" && (res.idToken || res.accessToken)) {
-        await handleSocialAuthWithToken("google", (res.idToken || res.accessToken)!);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Google sign-in failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Google sign-in failed."
-      });
-    }
+    // Fall back seamlessly to in-app Google Auth modal without leaving the app
+    setLoading(false);
+    setSocialModal({ visible: true, provider: "google" });
   };
 
-  const handleFacebookSignInPress = async () => {
-    setLoading(true);
+  const handleFacebookSignInPress = () => {
+    setLoading(false);
     setFeedback(null);
-
-    try {
-      const res = await promptFacebookOAuthAsync();
-      if (res.type === "success" && (res.accessToken || res.idToken)) {
-        await handleSocialAuthWithToken("facebook", (res.accessToken || res.idToken)!);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Facebook sign-in failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Facebook sign-in failed."
-      });
-    }
+    setSocialModal({ visible: true, provider: "facebook" });
   };
 
   const submit = form.handleSubmit(
@@ -173,7 +155,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
       try {
         const payload = {
-          email: values.email.trim().toLowerCase(),
+          email: values.email.trim().toLowerCase().replace(/%40/gi, "@"),
           password: values.password.trim()
         };
         const result = await requestJson("/users/login", payload);
@@ -182,6 +164,20 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
         if (token) await storeAuthToken(token);
         await storeAuthRole(role);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
 
         onAuthenticated?.(role);
         form.reset(values);
@@ -231,19 +227,21 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           control={form.control}
           name="password"
           label="Password"
-          placeholder="••••••••"
+          placeholder="Enter your password"
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
         />
 
-        <Button label="Login" loading={loading} onPress={submit} />
+        <View style={{ marginTop: 6 }}>
+          <Button label="Login" loading={loading} onPress={submit} />
+        </View>
 
         <Text style={styles.link} onPress={onGoReset}>
           Forgot Password?
         </Text>
 
-        <View style={authScreenStyles.dividerRow}>
+        <View style={[authScreenStyles.dividerRow, styles.dividerRow]}>
           <View style={authScreenStyles.divider} />
           <Text style={authScreenStyles.or}>or</Text>
           <View style={authScreenStyles.divider} />
@@ -266,6 +264,24 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         <Text style={authScreenStyles.footer}>
           Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={onGoSignup}>Sign Up</Text>
         </Text>
+
+        <InAppGoogleAuthModal
+          visible={socialModal.visible}
+          provider={socialModal.provider}
+          onClose={() => setSocialModal((prev) => ({ ...prev, visible: false }))}
+          onSuccess={(tokens) => {
+            const token = tokens.idToken || tokens.accessToken;
+            if (token) {
+              handleSocialAuthWithToken(socialModal.provider, token);
+            }
+          }}
+          onError={(err) => {
+            setFeedback({
+              tone: "error",
+              message: err || `${socialModal.provider === "facebook" ? "Facebook" : "Google"} sign-in could not be completed.`
+            });
+          }}
+        />
       </View>
     </ScrollView>
   );

@@ -83,9 +83,11 @@ export async function registerCoach(req: AuthRequest, res: Response): Promise<vo
 import { db } from '../utils/firebaseAdmin';
 
 export async function loginUser(req: AuthRequest, res: Response): Promise<void> {
-  const { email, password } = req.body || {};
+  const email = (req.body?.email || '').trim().toLowerCase().replace(/%40/gi, '@');
+  const password = req.body?.password;
+  const normalizedBody = { ...req.body, email };
   try {
-    const errors = validateLoginUser(req.body);
+    const errors = validateLoginUser(normalizedBody);
     if (errors.length > 0) {
       res.status(400).json({ errors });
       return;

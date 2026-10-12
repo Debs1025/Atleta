@@ -3,7 +3,8 @@ import { View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/AuthEntry";
 import * as SecureStore from "expo-secure-store";
-import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, type AuthRole } from "./authShared";
+import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, clearAuthMicroCache, type AuthRole } from "./authShared";
+import { clearFirebaseClientCaches } from "../../../services/firebaseClient";
 import { LoginScreen } from "./LoginScreen";
 import { PasswordResetScreen } from "./PasswordResetScreen";
 import { SignupScreen } from "./SignupScreen";
@@ -53,14 +54,22 @@ export function AuthEntry() {
   }, []);
 
   const handleLogout = async () => {
+    clearAuthMicroCache();
+    clearFirebaseClientCaches();
     await Promise.all([
       SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
       SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
-      AsyncStorage.removeItem("atleta_coach_dashboard_cache_v2").catch(() => null),
-      AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null),
-      AsyncStorage.removeItem("atleta_offline_athlete_profile_cache").catch(() => null),
-      AsyncStorage.removeItem("atleta_coach_settings").catch(() => null),
-      AsyncStorage.removeItem("atleta_cached_user").catch(() => null),
+      AsyncStorage.multiRemove([
+        "atleta_coach_dashboard_cache_v2",
+        "atleta_offline_coach_profile_cache",
+        "atleta_offline_athlete_profile_cache",
+        "atleta_offline_teams_cache",
+        "atleta_offline_matches_cache",
+        "atleta_offline_athletes_cache",
+        "atleta_offline_sports_cache",
+        "atleta_coach_settings",
+        "atleta_cached_user",
+      ]).catch(() => null),
     ]);
     setActiveRole(null);
     setScreen("login");

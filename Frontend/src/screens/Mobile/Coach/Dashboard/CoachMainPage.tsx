@@ -469,11 +469,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const cachedEmail = String(cached.coach?.email || "").toLowerCase();
 
           // Only hydrate if the cache strictly matches the currently authenticated coach
-          const isSameCoach =
+          const isSameCoach = Boolean(
             (currentUid && cachedCoachId && currentUid === cachedCoachId) ||
-            (currentEmail && cachedEmail && currentEmail === cachedEmail);
+            (currentEmail && cachedEmail && currentEmail === cachedEmail)
+          );
 
-          if (!isSameCoach && (currentUid || currentEmail)) {
+          if (!isSameCoach) {
             // Stale cache from another coach session - discard immediately
             await AsyncStorage.removeItem(COACH_DASHBOARD_CACHE_KEY).catch(() => null);
             return;
@@ -606,15 +607,50 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             setMatchHistoryList([]);
           }
 
-          const currentCoachId = (
-            profileRes?.coach_id ||
-            profileRes?.user_id ||
-            offlineProfileRes?.coach_id ||
-            offlineProfileRes?.user_id ||
-            coach?.coach_id ||
-            coach?.user_id ||
-            ""
-          );
+          let tokenUid = "";
+          let tokenEmail = "";
+          try {
+            const token = await getStoredAuthToken();
+            if (token && token.includes(".")) {
+              const base64Url = token.split(".")[1];
+              const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+              let decoded = "";
+              if (typeof atob === "function") {
+                decoded = atob(base64);
+              } else {
+                const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+                let str = base64.replace(/=+$/, "");
+                let output = "";
+                for (let bc = 0, bs = 0, buffer: any, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+                  buffer = chars.indexOf(buffer);
+                }
+                decoded = output;
+              }
+              const payload = JSON.parse(decoded);
+              tokenUid = String(payload.uid || payload.user_id || payload.sub || "").replace(/^coach_/, "").toLowerCase();
+              tokenEmail = String(payload.email || "").toLowerCase();
+            }
+          } catch {}
+
+          const isCoachMatch = (p: any) => {
+            if (!p || typeof p !== "object") return false;
+            const pUid = String(p.user_id || p.uid || p.coach_id || "").replace(/^coach_/, "").toLowerCase();
+            const pEmail = String(p.email || "").toLowerCase();
+            if (tokenUid && pUid && pUid === tokenUid) return true;
+            if (tokenEmail && pEmail && pEmail === tokenEmail) return true;
+            return !tokenUid && !tokenEmail;
+          };
+
+          const validProfileRes = isCoachMatch(profileRes) ? profileRes : null;
+          const validOfflineProfileRes = isCoachMatch(offlineProfileRes) ? offlineProfileRes : null;
+
+          if (offlineProfileRes && !validOfflineProfileRes) {
+            AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null);
+          }
+
+          const currentCoachId = tokenUid
+            ? (tokenUid.startsWith("coach_") ? tokenUid : `coach_${tokenUid}`)
+            : (validProfileRes?.coach_id || validProfileRes?.user_id || validOfflineProfileRes?.coach_id || coach?.coach_id || "");
           const cleanEffectiveCoachId = String(currentCoachId).replace(/^coach_/, "").toLowerCase();
 
           const isOwnedByCoach = (ath: any) => {
@@ -848,13 +884,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           let updatedCoachSnapshot: UserCoach | null = null;
           let updatedProfileSnapshot: CoachProfileState | null = null;
 
-          const effectiveProfile = profileRes || offlineProfileRes;
-          if (effectiveProfile) {
-            const fallbackEmailName = effectiveProfile.email ? effectiveProfile.email.split('@')[0] : "";
-            const firstName = effectiveProfile.first_name || offlineProfileRes?.first_name || fallbackEmailName || "Coach";
-            const lastName = effectiveProfile.last_name || offlineProfileRes?.last_name || "";
-            const fullName = effectiveProfile.full_name || offlineProfileRes?.full_name || (firstName !== "Coach" ? `${firstName} ${lastName}`.trim() : "Coach");
-            const rawSport = (effectiveProfile.sport_type || effectiveProfile.sports_focus || offlineProfileRes?.sport_type || "BASKETBALL").toUpperCase();
+          const effectiveProfile = validProfileRes || validOfflineProfileRes;
+          if (effectiveProfile || tokenUid || tokenEmail) {
+            const fallbackEmailName = (tokenEmail || effectiveProfile?.email || coach.email || "").split("@")[0];
+            const fallbackName = fallbackEmailName ? (fallbackEmailName.charAt(0).toUpperCase() + fallbackEmailName.slice(1)) : "Coach";
+            const firstName = effectiveProfile?.first_name || fallbackName;
+            const lastName = effectiveProfile?.last_name || "";
+            const fullName = effectiveProfile?.full_name || (firstName !== "Coach" ? `${firstName} ${lastName}`.trim() : "Coach");
+            const rawSport = (effectiveProfile?.sport_type || effectiveProfile?.sports_focus || "BASKETBALL").toUpperCase();
             const sportFocus: CoachProfileState["sports_focus"] =
               rawSport.includes("SWIM")
                 ? "SWIMMING"
@@ -863,24 +900,22 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 : rawSport;
 
             const resolvedAvatar =
-              profileRes?.avatar_url ||
-              (profileRes as any)?.profile_image ||
-              offlineProfileRes?.avatar_url ||
-              offlineProfileRes?.profile_image ||
-              coach.avatar_url ||
-              coachProfile.avatar_url ||
+              validProfileRes?.avatar_url ||
+              (validProfileRes as any)?.profile_image ||
+              validOfflineProfileRes?.avatar_url ||
+              validOfflineProfileRes?.profile_image ||
               "";
 
             const updatedCoach: UserCoach = {
-              user_id: effectiveProfile.user_id || offlineProfileRes?.user_id || coach.user_id || "",
+              user_id: effectiveProfile?.user_id || tokenUid || coach.user_id || "",
               first_name: firstName,
               last_name: lastName,
-              email: effectiveProfile.email || offlineProfileRes?.email || coach.email || "",
-              contact_number: effectiveProfile.contact_number || offlineProfileRes?.contact_number || coach.contact_number || "",
+              email: effectiveProfile?.email || tokenEmail || coach.email || "",
+              contact_number: effectiveProfile?.contact_number || coach.contact_number || "",
               role: "Coach",
-              coach_id: effectiveProfile.coach_id || effectiveProfile.user_id || offlineProfileRes?.coach_id || coach.coach_id || "",
-              current_institution: effectiveProfile.current_institution || offlineProfileRes?.current_institution || coach.current_institution || "",
-              athlete_managed: effectiveProfile.athlete_managed || offlineProfileRes?.athlete_managed || coach.athlete_managed || [],
+              coach_id: currentCoachId || (tokenUid ? `coach_${tokenUid}` : coach.coach_id || ""),
+              current_institution: effectiveProfile?.current_institution || "University Athletics",
+              athlete_managed: effectiveProfile?.athlete_managed || [],
               avatar_url: resolvedAvatar,
             };
             updatedCoachSnapshot = updatedCoach;
@@ -897,18 +932,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
               avatar_url: resolvedAvatar,
-              current_institution: effectiveProfile.current_institution || offlineProfileRes?.current_institution || "",
-              regional_affiliation: effectiveProfile.regional_affiliation || offlineProfileRes?.regional_affiliation || "",
-              national_sports_league: effectiveProfile.national_sports_league || offlineProfileRes?.national_sports_league || "",
+              current_institution: effectiveProfile?.current_institution || "University Athletics",
+              regional_affiliation: effectiveProfile?.regional_affiliation || "",
+              national_sports_league: effectiveProfile?.national_sports_league || "",
               regional_affiliations: {
-                association_name: effectiveProfile.regional_affiliation || effectiveProfile.national_sports_league || offlineProfileRes?.regional_affiliation || "",
-                office_name: effectiveProfile.current_institution || offlineProfileRes?.current_institution || "",
+                association_name: effectiveProfile?.regional_affiliation || effectiveProfile?.national_sports_league || "National Sports League",
+                office_name: effectiveProfile?.current_institution || "University Athletics",
               },
-              credentials: effectiveProfile.credentials || effectiveProfile.certifications || offlineProfileRes?.credentials || offlineProfileRes?.certifications || [],
-              uploaded_documents: effectiveProfile.uploaded_documents || offlineProfileRes?.uploaded_documents || [],
+              credentials: effectiveProfile?.credentials || effectiveProfile?.certifications || [],
+              uploaded_documents: effectiveProfile?.uploaded_documents || [],
               system_statistics: {
                 total_athletes: allHandledAthletes.length,
-                metric_logs: effectiveProfile.metric_logs || offlineProfileRes?.metric_logs || 0,
+                metric_logs: effectiveProfile?.metric_logs || effectiveProfile?.system_statistics?.metric_logs || 0,
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };

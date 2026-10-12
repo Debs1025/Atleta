@@ -326,6 +326,17 @@ let teamsLastFetched = 0;
 const MEMORY_CACHE_TTL_MS = 2 * 60 * 1000; // 2m cache validity before background revalidation
 const SPORTS_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000; // 10m cache validity for sports config catalog
 
+export function clearFirebaseClientCaches() {
+  sportsMemoryCache = null;
+  sportsLastFetched = 0;
+  athletesMemoryCache = null;
+  athletesLastFetched = 0;
+  matchesMemoryCache = null;
+  matchesLastFetched = 0;
+  teamsMemoryCache = null;
+  teamsLastFetched = 0;
+}
+
 async function quickFetchJson(url: string, headers: any, timeoutMs: number = 1800): Promise<any> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -707,49 +718,67 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
 const OFFLINE_COACH_PROFILE_CACHE_KEY = "atleta_offline_coach_profile_cache";
 
 /**
+ * Validates whether a cached profile belongs to the specified coach UID.
+ */
+function isMatchingCoachProfile(profile: any, targetUid: string): boolean {
+  if (!profile || typeof profile !== "object") return false;
+  const cleanTarget = (targetUid || "").replace(/^coach_/, "").trim().toLowerCase();
+  if (!cleanTarget) return false;
+  const pUid = String(profile.user_id || profile.uid || "").replace(/^coach_/, "").trim().toLowerCase();
+  const pCoachId = String(profile.coach_id || "").replace(/^coach_/, "").trim().toLowerCase();
+  return Boolean((pUid && pUid === cleanTarget) || (pCoachId && pCoachId === cleanTarget));
+}
+
+/**
  * Fetch individual coach profile with Firestore + storage offline fallback.
+ * Strictly scoped to the requested or authenticated coach; never leaks another coach's cache.
  */
 export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promise<any | null> {
-  // 1. Try REST API with snappy timeout
+  // Resolve UID from argument or active token
+  let uid = coachIdOrUid || "";
+  let tokenEmail = "";
   try {
     const token = await getStoredAuthToken();
-    const data = await quickFetchJson(`${API_BASE}/coaches/profile`, {
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 2000);
-    if (data && (data.full_name || data.user_id || data.coach_id)) {
-      await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
-      return data;
+    if (token && token.includes(".")) {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = safeBase64Decode(base64);
+      const payload = JSON.parse(decoded);
+      if (!uid) {
+        uid = payload.uid || payload.user_id || payload.sub || "";
+      }
+      tokenEmail = payload.email || "";
     }
   } catch (_) {}
 
-  // 2. Resolve UID from token or argument
-  let uid = coachIdOrUid || "";
-  if (!uid) {
-    try {
-      const token = await getStoredAuthToken();
-      if (token && token.includes(".")) {
-        const base64Url = token.split(".")[1];
-        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const decoded = safeBase64Decode(base64);
-        const payload = JSON.parse(decoded);
-        uid = payload.uid || payload.user_id || payload.sub || "";
-      }
-    } catch (_) {}
-  }
+  const rawUid = uid.replace(/^coach_/, "").trim();
+  const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
 
-  if (!uid) {
-    try {
-      const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY);
-      if (cached) return JSON.parse(cached);
-    } catch (_) {}
+  // 1. Try REST API with snappy timeout
+  try {
+    const token = await getStoredAuthToken();
+    const endpoint = coachIdOrUid && coachIdOrUid !== uid && coachIdOrUid !== rawUid
+      ? `${API_BASE}/coaches/${coachIdOrUid}/profile`
+      : `${API_BASE}/coaches/profile`;
+
+    const data = await quickFetchJson(endpoint, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2000);
+
+    if (data && (data.full_name || data.user_id || data.coach_id)) {
+      if (!rawUid || isMatchingCoachProfile(data, rawUid)) {
+        await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
+        return data;
+      }
+    }
+  } catch (_) {}
+
+  if (!rawUid) {
     return null;
   }
 
-  const rawUid = uid.replace(/^coach_/, "");
-  const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
-
-  // 3. Direct Firestore lookups across Coach_Profiles and Users collections
+  // 2. Direct Firestore lookups across Coach_Profiles and Users collections
   try {
     const [cDoc1, cDoc2, uDoc, teamsSnap, matchesSnap] = await Promise.all([
       getDoc(doc(db, "Coach_Profiles", canonicalCoachId)).catch(() => null),
@@ -763,14 +792,24 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
     const uData: Record<string, any> = (uDoc && uDoc.exists()) ? uDoc.data() : {};
 
     if (Object.keys(cData).length === 0 && Object.keys(uData).length === 0) {
+      // Check cached profile only if it belongs to this exact user
       const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (isMatchingCoachProfile(parsed, rawUid)) return parsed;
+        } catch (_) {}
+        // Stale cache from another coach - purge it immediately
+        await AsyncStorage.removeItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
+      }
       return null;
     }
 
-    const firstName = uData?.first_name || cData?.first_name || "Coach";
+    const emailFallbackName = (uData?.email || tokenEmail || "").split("@")[0] || "";
+    const defaultName = emailFallbackName ? (emailFallbackName.charAt(0).toUpperCase() + emailFallbackName.slice(1)) : "Coach";
+    const firstName = uData?.first_name || cData?.first_name || defaultName;
     const lastName = uData?.last_name || cData?.last_name || "";
-    const fullName = uData?.full_name || cData?.full_name || `${firstName} ${lastName}`.trim();
+    const fullName = uData?.full_name || cData?.full_name || (firstName !== "Coach" ? `${firstName} ${lastName}`.trim() : "Coach");
     const sportType = cData?.sport_type || uData?.sport_type || "Basketball";
     const avatarUrl = uData?.avatar_url || uData?.profile_image || cData?.avatar_url || cData?.profile_image || null;
     const institution = uData?.current_institution || cData?.current_institution || "";
@@ -837,7 +876,7 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
       first_name: firstName,
       last_name: lastName,
       full_name: fullName,
-      email: uData?.email || cData?.email || "",
+      email: uData?.email || cData?.email || tokenEmail || "",
       contact_number: uData?.contact_number || cData?.contact_number || "",
       sport_type: sportType,
       sports_focus: sportType.toUpperCase(),
@@ -861,7 +900,13 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
   } catch (fsErr) {
     console.warn("Firestore coach profile fetch error:", fsErr);
     const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (isMatchingCoachProfile(parsed, rawUid)) return parsed;
+      } catch (_) {}
+      await AsyncStorage.removeItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
+    }
   }
 
   return null;

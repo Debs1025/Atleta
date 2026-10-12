@@ -20,11 +20,13 @@ import {
   requestJson,
   storeAuthRole,
   storeAuthToken,
+  clearAuthMicroCache,
   API_BASE,
   type AuthRole,
   type BannerTone,
   type LoginValues
 } from "./authShared";
+import { clearFirebaseClientCaches } from "../../../services/firebaseClient";
 import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
@@ -80,11 +82,19 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       if (token) await storeAuthToken(token);
       await storeAuthRole(role);
 
-      await Promise.all([
-        AsyncStorage.removeItem("atleta_coach_dashboard_cache_v2").catch(() => null),
-        AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null),
-        AsyncStorage.removeItem("atleta_offline_athlete_profile_cache").catch(() => null),
-      ]);
+      clearAuthMicroCache();
+      clearFirebaseClientCaches();
+      await AsyncStorage.multiRemove([
+        "atleta_coach_dashboard_cache_v2",
+        "atleta_offline_coach_profile_cache",
+        "atleta_offline_athlete_profile_cache",
+        "atleta_offline_teams_cache",
+        "atleta_offline_matches_cache",
+        "atleta_offline_athletes_cache",
+        "atleta_offline_sports_cache",
+        "atleta_coach_settings",
+        "atleta_cached_user",
+      ]).catch(() => null);
 
       onAuthenticated?.(role);
     } catch (error: any) {
@@ -145,7 +155,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
       try {
         const payload = {
-          email: values.email.trim().toLowerCase(),
+          email: values.email.trim().toLowerCase().replace(/%40/gi, "@"),
           password: values.password.trim()
         };
         const result = await requestJson("/users/login", payload);
@@ -155,11 +165,19 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         if (token) await storeAuthToken(token);
         await storeAuthRole(role);
 
-        await Promise.all([
-          AsyncStorage.removeItem("atleta_coach_dashboard_cache_v2").catch(() => null),
-          AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null),
-          AsyncStorage.removeItem("atleta_offline_athlete_profile_cache").catch(() => null),
-        ]);
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
 
         onAuthenticated?.(role);
         form.reset(values);

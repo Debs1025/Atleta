@@ -199,11 +199,13 @@ export function getAuthErrorMessage(error: unknown, fallback: string) {
 
 // This lets users to stay logged in when reopenning the app
 export async function storeAuthToken(token: string) {
+  clearAuthMicroCache();
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
 }
 
 // This keeps the role of the user when reopening the app
 export async function storeAuthRole(role: AuthRole) {
+  clearAuthMicroCache();
   await SecureStore.setItemAsync(AUTH_ROLE_KEY, role);
 }
 
@@ -296,6 +298,11 @@ export async function getStoredAuthToken(): Promise<string | null> {
 const inFlightGetRequests = new Map<string, Promise<any>>();
 const getResponseMicroCache = new Map<string, { data: any; timestamp: number }>();
 const MICRO_CACHE_TTL_MS = 15000; // 15s microcache to eliminate redundant duplicate queries across screens
+
+export function clearAuthMicroCache() {
+  getResponseMicroCache.clear();
+  inFlightGetRequests.clear();
+}
 
 // Handles authenticated JSON requests with Authorization Bearer header
 export async function requestAuthenticatedJson(path: string, method: string = "GET", body?: unknown) {
