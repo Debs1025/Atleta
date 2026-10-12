@@ -718,9 +718,19 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
     Constants.appOwnership === "expo" ||
     Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-  const googleClientId = (runtime.process?.env?.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "").trim();
+  const googleClientId = (
+    runtime.process?.env?.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+    (Platform.OS === "android" ? runtime.process?.env?.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID : undefined) ||
+    (Platform.OS === "ios" ? runtime.process?.env?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID : undefined) ||
+    ""
+  ).trim();
   const fallbackGoogleClientId = "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com";
   const webClientId = googleClientId || fallbackGoogleClientId;
+
+  const rawScheme = Constants.expoConfig?.scheme;
+  const appScheme = typeof rawScheme === "string"
+    ? rawScheme
+    : (Array.isArray(rawScheme) && rawScheme.length > 0 ? rawScheme[0] : "com.anonymous.atleta");
 
   const expoOwner =
     Constants.expoConfig?.owner ||
@@ -795,11 +805,11 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
       };
     }
   } else {
-    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: "atleta" });
+    const standaloneRedirectUri = customRedirectUri || "https://atleta-v1.firebaseapp.com/__/auth/handler";
 
     const googleAuthParams = new URLSearchParams({
       client_id: webClientId,
-      redirect_uri: schemeRedirectUri,
+      redirect_uri: standaloneRedirectUri,
       response_type: "id_token token",
       scope: "openid profile email",
       state,
@@ -810,7 +820,7 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${googleAuthParams.toString()}`;
 
     try {
-      const browserResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, schemeRedirectUri);
+      const browserResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, standaloneRedirectUri);
 
       if (browserResult.type === "success" && browserResult.url) {
         const parsed = extractTokensFromUrl(browserResult.url);
@@ -852,13 +862,16 @@ export async function promptFacebookOAuthAsync(): Promise<FacebookAuthResult> {
     Constants.appOwnership === "expo" ||
     Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-  const facebookAppId = (runtime.process?.env?.EXPO_PUBLIC_FACEBOOK_APP_ID ?? "").trim();
-  if (!facebookAppId) {
-    return {
-      type: "error",
-      error: "Facebook App ID is not configured."
-    };
-  }
+  const rawScheme = Constants.expoConfig?.scheme;
+  const appScheme = typeof rawScheme === "string"
+    ? rawScheme
+    : (Array.isArray(rawScheme) && rawScheme.length > 0 ? rawScheme[0] : "com.anonymous.atleta");
+
+  const facebookAppId = (
+    runtime.process?.env?.EXPO_PUBLIC_FACEBOOK_APP_ID ||
+    (Constants.expoConfig as any)?.facebookAppId ||
+    "1478346524097898"
+  ).trim();
 
   const expoOwner =
     Constants.expoConfig?.owner ||
@@ -934,7 +947,7 @@ export async function promptFacebookOAuthAsync(): Promise<FacebookAuthResult> {
       };
     }
   } else {
-    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: "atleta" });
+    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: appScheme });
 
     const fbAuthParams = new URLSearchParams({
       client_id: facebookAppId,

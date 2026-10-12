@@ -26,7 +26,8 @@
         "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com",
-        "EXPO_PUBLIC_FACEBOOK_APP_ID": "1073849184511218"
+        "EXPO_PUBLIC_FACEBOOK_APP_ID": "1478346524097898",
+        "EXPO_PUBLIC_FACEBOOK_REDIRECT_URI": "https://atleta-v1.firebaseapp.com/__/auth/handler"
       }
     },
     "production": {
@@ -47,7 +48,8 @@
         "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com",
-        "EXPO_PUBLIC_FACEBOOK_APP_ID": "1073849184511218"
+        "EXPO_PUBLIC_FACEBOOK_APP_ID": "1478346524097898",
+        "EXPO_PUBLIC_FACEBOOK_REDIRECT_URI": "https://atleta-v1.firebaseapp.com/__/auth/handler"
       }
     }
   },

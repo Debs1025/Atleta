@@ -52,7 +52,7 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
   const facebookAppId = useMemo(() => {
     return (
       runtimeProcessEnv('EXPO_PUBLIC_FACEBOOK_APP_ID') ||
-      '1073849184511218'
+      '1478346524097898'
     ).trim();
   }, []);
 

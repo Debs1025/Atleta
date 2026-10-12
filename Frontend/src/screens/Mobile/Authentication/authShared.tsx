@@ -870,7 +870,7 @@ export async function promptFacebookOAuthAsync(): Promise<FacebookAuthResult> {
   const facebookAppId = (
     runtime.process?.env?.EXPO_PUBLIC_FACEBOOK_APP_ID ||
     (Constants.expoConfig as any)?.facebookAppId ||
-    "1073849184511218"
+    "1478346524097898"
   ).trim();
 
   const expoOwner =
