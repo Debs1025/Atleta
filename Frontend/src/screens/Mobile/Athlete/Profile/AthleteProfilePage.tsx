@@ -771,6 +771,39 @@ export function AthleteProfilePage({
     setSaveSuccessMsg(true);
     setTimeout(() => setSaveSuccessMsg(false), 2500);
 
+    // Synchronize to Firestore Athlete_Profiles & Users document
+    const athleteUid = profile.athlete_id || (profile as any).user_id;
+    if (athleteUid) {
+      const cleanId = String(athleteUid).replace(/^ath_/, "");
+      const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+      const firestorePayload = {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        birthdate: safeBirthdate,
+        gender: gender,
+        province: province,
+        category: category,
+        position: category,
+        height_cm: safeHeight,
+        weight_kg: safeWeight,
+        wingspan_cm: safeWingspan,
+        avatar_url: avatarUri,
+        eligible_documents: documents,
+        updated_at: new Date().toISOString(),
+      };
+
+      await Promise.all([
+        setDoc(doc(db, "Athlete_Profiles", canonicalId), firestorePayload, { merge: true }).catch(() => null),
+        setDoc(doc(db, "Athlete_Profiles", cleanId), firestorePayload, { merge: true }).catch(() => null),
+        setDoc(doc(db, "Users", cleanId), {
+          first_name: firstName,
+          last_name: lastName,
+          updated_at: new Date().toISOString(),
+        }, { merge: true }).catch(() => null),
+      ]);
+    }
+
     try {
       await requestAuthenticatedJson("/athletes/profile", "PATCH", {
         first_name: firstName,
@@ -784,6 +817,7 @@ export function AthleteProfilePage({
         province: province,
         birthdate: safeBirthdate,
         avatar_url: avatarUri,
+        eligible_documents: documents,
       });
     } catch (e) {
       // Non-blocking background sync catch

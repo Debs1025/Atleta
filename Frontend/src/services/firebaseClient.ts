@@ -125,24 +125,35 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   // 2b. Update local athletes cache and Firestore with new aggregate stats
   try {
     const existingAthletesRaw = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
-    if (existingAthletesRaw && Array.isArray(payload.player_stats)) {
-      let athletesList: any[] = JSON.parse(existingAthletesRaw);
-      payload.player_stats.forEach((ps: any) => {
+    let athletesList: any[] = existingAthletesRaw ? JSON.parse(existingAthletesRaw) : [];
+
+    if (Array.isArray(payload.player_stats)) {
+      for (const ps of payload.player_stats) {
+        const athId = ps.athlete_id || ps.user_id || ps.id || "";
+        const cleanAthId = String(athId).replace(/^ath_/, "");
+        const canonicalAthId = athId.startsWith("ath_") ? athId : `ath_${athId}`;
+
+        const newPts = Number(ps.pts ?? ps.stats?.points ?? ps.stats?.pts ?? 0);
+        const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? ps.stats?.reb ?? 0);
+        const newAst = Number(ps.ast ?? ps.stats?.assists ?? ps.stats?.ast ?? 0);
+        const newStl = Number(ps.stl ?? ps.stats?.steals ?? ps.stats?.stl ?? 0);
+        const newPf = Number(ps.pf ?? ps.stats?.fouls ?? ps.stats?.pf ?? 0);
+        const newTo = Number(ps.to ?? ps.stats?.turnovers ?? ps.stats?.to ?? 0);
+
         const idx = athletesList.findIndex(
           (a) =>
-            (ps.athlete_id && (a.athlete_id === ps.athlete_id || a.user_id === ps.athlete_id || a.id === ps.athlete_id)) ||
+            (athId && (a.athlete_id === athId || a.user_id === athId || a.id === athId || a.athlete_id === canonicalAthId || a.user_id === cleanAthId)) ||
             (ps.player_name && a.full_name && a.full_name.toLowerCase() === ps.player_name.toLowerCase())
         );
+
+        let updatedAthProfile: any = null;
+
         if (idx >= 0) {
           const ath = athletesList[idx];
           const prevGp = Number(ath.averages?.games_played ?? ath.stats?.games_played ?? (Number(ath.averages?.ppg || ath.pts || 0) > 0 ? 1 : 0));
           const prevPpg = Number(ath.averages?.ppg ?? ath.stats?.ppg ?? ath.pts ?? 0);
           const prevRpg = Number(ath.averages?.rpg ?? ath.stats?.rpg ?? ath.reb ?? 0);
           const prevApg = Number(ath.averages?.apg ?? ath.stats?.apg ?? ath.ast ?? 0);
-
-          const newPts = Number(ps.pts ?? ps.stats?.points ?? 0);
-          const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? 0);
-          const newAst = Number(ps.ast ?? ps.stats?.assists ?? 0);
 
           const newGp = prevGp + 1;
           const newPpg = Math.round(((prevPpg * prevGp + newPts) / newGp) * 10) / 10;
@@ -182,17 +193,88 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
             rating_score: newRating,
             scoring_trends_last_10: newTrends,
           };
-
-          // Also attempt update on Firestore Athlete_Profiles
-          const athId = ps.athlete_id || ath.athlete_id || ath.user_id;
-          if (athId) {
-            try {
-              const athDocRef = doc(db, "Athlete_Profiles", athId);
-              setDoc(athDocRef, athletesList[idx], { merge: true }).catch(() => null);
-            } catch (_) {}
-          }
+          updatedAthProfile = athletesList[idx];
+        } else if (athId) {
+          const newPer = Math.round(newPts * 1.2 + newReb * 1.0 + newAst * 1.5);
+          const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPts * 3.5)));
+          updatedAthProfile = {
+            athlete_id: athId,
+            full_name: ps.player_name || ps.name || "Athlete",
+            averages: {
+              ppg: newPts,
+              rpg: newReb,
+              apg: newAst,
+              games_played: 1,
+              per_score: newPer,
+              wins: payload.game_result === "WIN" ? 1 : 0,
+            },
+            stats: {
+              ppg: newPts,
+              rpg: newReb,
+              apg: newAst,
+              games_played: 1,
+              per: newPer,
+              points: newPts,
+              rebounds: newReb,
+              assists: newAst,
+            },
+            pts: newPts,
+            reb: newReb,
+            ast: newAst,
+            rating_score: newRating,
+            scoring_trends_last_10: [newPts],
+          };
+          athletesList.push(updatedAthProfile);
         }
-      });
+
+        // Commit player career totals to Firestore Athlete_Profiles
+        if (athId && updatedAthProfile) {
+          try {
+            await Promise.all([
+              setDoc(doc(db, "Athlete_Profiles", canonicalAthId), updatedAthProfile, { merge: true }).catch(() => null),
+              setDoc(doc(db, "Athlete_Profiles", cleanAthId), updatedAthProfile, { merge: true }).catch(() => null),
+            ]);
+          } catch (_) {}
+        }
+
+        // Commit player match metric to Performance_Metrics collection
+        if (athId) {
+          try {
+            const metricId = `metric_${matchId}_${cleanAthId}`;
+            const metricDoc = {
+              metric_id: metricId,
+              match_id: matchId,
+              athlete_id: canonicalAthId,
+              player_name: ps.player_name || ps.name || "Athlete",
+              team_name: cleanPayload.home_team_name,
+              sport_category: cleanPayload.sport_type,
+              points: newPts,
+              pts: newPts,
+              rebounds: newReb,
+              reb: newReb,
+              assists: newAst,
+              ast: newAst,
+              steals: newStl,
+              stl: newStl,
+              fouls: newPf,
+              pf: newPf,
+              turnovers: newTo,
+              to: newTo,
+              sport_stats: ps.stats || {},
+              timestamp: cleanPayload.created_at,
+              created_at: cleanPayload.created_at,
+            };
+            await setDoc(doc(db, "Performance_Metrics", metricId), metricDoc, { merge: true }).catch(() => null);
+
+            // Commit to player's match history sub-collection
+            await Promise.all([
+              setDoc(doc(db, "Athlete_Profiles", canonicalAthId, "match_history", matchId), metricDoc, { merge: true }).catch(() => null),
+              setDoc(doc(db, "Athlete_Profiles", cleanAthId, "match_history", matchId), metricDoc, { merge: true }).catch(() => null),
+            ]);
+          } catch (_) {}
+        }
+      }
+
       await AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(athletesList));
       athletesMemoryCache = athletesList;
       athletesLastFetched = Date.now();

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   ScrollView,
@@ -10,9 +10,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CoachSettingsData, DEFAULT_COACH_SETTINGS } from "../DataTypes";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachSettings";
+
+export const COACH_SETTINGS_STORAGE_KEY = "@atleta_coach_settings_preferences";
 
 export interface CoachSettingsProps {
   settings?: CoachSettingsData;
@@ -78,6 +81,25 @@ export function CoachSettings({
   // Local Reactive Client State
   const [settingsState, setSettingsState] = useState<CoachSettingsData>(settings);
 
+  // Load persisted toggle states on mount
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(COACH_SETTINGS_STORAGE_KEY)
+      .then((stored) => {
+        if (stored && isMounted) {
+          try {
+            const parsed = JSON.parse(stored);
+            setSettingsState((prev) => ({ ...prev, ...parsed }));
+          } catch (_) {}
+        }
+      })
+      .catch(() => null);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Modals & Passwords State
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -93,11 +115,18 @@ export function CoachSettings({
   const [showConfirmSec, setShowConfirmSec] = useState(true);
   const [passwordError, setPasswordError] = useState("");
 
-  // Update Setting Helper with live backend sync
+  // Update Setting Helper with instant local storage & live backend sync
   const updateSetting = async (key: keyof CoachSettingsData, value: any) => {
     const updated = { ...settingsState, [key]: value, updated_at: new Date().toISOString() };
     setSettingsState(updated);
     if (onUpdateSettings) onUpdateSettings(updated);
+
+    // Instantly write to local storage to persist across navigation and reloads
+    try {
+      await AsyncStorage.setItem(COACH_SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+    } catch (storeErr) {
+      console.warn("Settings storage error:", storeErr);
+    }
 
     try {
       await requestAuthenticatedJson("/coaches/me/settings", "PATCH", {

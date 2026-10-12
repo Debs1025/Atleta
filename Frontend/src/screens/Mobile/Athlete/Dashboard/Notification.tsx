@@ -181,8 +181,9 @@ export function NotificationPage({
             const rawType = n.type || "ACTION_REQUIRED";
             const isRecruitment = rawType.includes("INQUIRY") || rawType.includes("RECRUITMENT");
 
-            // Deduplicate recruitment notifications if an inquiry item is already present
-            if (isRecruitment && processedInquiryIds.size > 0) {
+            // Deduplicate recruitment notifications only if this specific inquiry was already added
+            const specificScoutId = n.metadata?.scout_id || n.scout_id;
+            if (isRecruitment && specificScoutId && processedInquiryIds.has(specificScoutId)) {
               return;
             }
 
@@ -498,7 +499,7 @@ export function NotificationPage({
       </View>
 
       {/* FILTER CHIPS */}
-      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingBottom: 12, gap: 8 }}>
+      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 14, gap: 8 }}>
         {(["ALL", "INQUIRIES", "DOCUMENTS", "UNREAD"] as const).map((tab) => (
           <Pressable
             key={tab}

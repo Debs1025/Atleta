@@ -492,14 +492,55 @@ export async function respondToRecruitmentInquiry(
         updateCoachDoc(db.collection('Users').doc(rawCoachId)),
       ]);
 
-      // Fire single notification to coach portal (deduplicated)
+      const isCoachResponding = (userId === rawCoachId || userId === canonicalCoachId || userId === coachId);
+      if (isCoachResponding) {
+        // Coach accepted athlete's inquiry -> Notify athlete
+        await createNotification({
+          recipient_id: rawAthUid,
+          sender_id: rawCoachId,
+          type: 'RECRUITMENT_INQUIRY',
+          title: 'Inquiry Accepted! 🎉',
+          message: `Your coach inquiry has been accepted for ${sportType}! Check your profile and roster.`,
+          metadata: { scout_id: inquiryId, offer_status: 'Accepted' },
+        }).catch((err) => console.warn('Notification error on inquiry accept to athlete:', err));
+      } else {
+        // Athlete accepted coach's proposal -> Notify coach
+        await createNotification({
+          recipient_id: rawCoachId,
+          sender_id: rawAthUid,
+          type: 'RECRUITMENT_INQUIRY',
+          title: 'Recruitment Accepted! 🎉',
+          message: `${athleteName} has accepted your recruitment inquiry for ${sportType}.`,
+          metadata: { scout_id: inquiryId, offer_status: 'Accepted' },
+        }).catch((err) => console.warn('Notification error on inquiry accept to coach:', err));
+      }
+    }
+  } else if (responseStatus === 'Declined') {
+    const coachId = inqData.coach_scout_id || inqData.coach_id;
+    const athleteId = inqData.athlete_id;
+    const rawCoachId = String(coachId).replace(/^coach_/, '');
+    const rawAthUid = String(athleteId).replace(/^ath_/, '');
+    const canonicalCoachId = String(coachId).startsWith('coach_') ? coachId : `coach_${coachId}`;
+
+    const isCoachResponding = (userId === rawCoachId || userId === canonicalCoachId || userId === coachId);
+    if (isCoachResponding) {
+      await createNotification({
+        recipient_id: rawAthUid,
+        sender_id: rawCoachId,
+        type: 'RECRUITMENT_INQUIRY',
+        title: 'Inquiry Update',
+        message: `Your recruitment inquiry was declined.${declineReason ? ` Reason: ${declineReason}` : ''}`,
+        metadata: { scout_id: inquiryId, offer_status: 'Declined' },
+      }).catch((err) => console.warn('Notification error on inquiry decline to athlete:', err));
+    } else {
       await createNotification({
         recipient_id: rawCoachId,
         sender_id: rawAthUid,
         type: 'RECRUITMENT_INQUIRY',
-        title: 'Recruitment Accepted! 🎉',
-        message: `${athleteName} has accepted your recruitment inquiry for ${sportType}.`,
-      }).catch((err) => console.warn('Notification error on inquiry accept:', err));
+        title: 'Recruitment Declined',
+        message: `An athlete declined the recruitment proposal.${declineReason ? ` Reason: ${declineReason}` : ''}`,
+        metadata: { scout_id: inquiryId, offer_status: 'Declined' },
+      }).catch((err) => console.warn('Notification error on inquiry decline to coach:', err));
     }
   }
 

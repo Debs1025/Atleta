@@ -16,6 +16,7 @@ import { styles } from "./styles/MatchDetails";
 import { useMatchSession } from "./MatchSessionContext";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { saveMatchOfflineFirst } from "../../../../services/firebaseClient";
+import { getSportStatSchema } from "./sportStatSchemas";
 
 interface MatchDetailsProps {
   onBack?: () => void;
@@ -27,6 +28,10 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   // Insets and Match Session
   const insets = useSafeAreaInsets();
   const { session, setSessionDetails, resetSession } = useMatchSession();
+  const schema = getSportStatSchema(session.sport_type);
+  const isTimedSport = (session.sport_type || "").toUpperCase().includes("SWIM") ||
+    (session.sport_type || "").toUpperCase().includes("TRACK") ||
+    (session.sport_type || "").toUpperCase().includes("FIELD");
 
   // Local form state pre-populated from session
   const [gameName, setGameName] = useState(session.game_name || "ADNU vs. UNC - Intramurals 2026");
@@ -80,6 +85,26 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         distance_meters: Number(tStats.distance_meters || 0),
         split_times: tStats.split_times || [],
         is_foul_dq: Boolean(tStats.is_foul_dq),
+        stats: {
+          points: Number(bStats.pts || 0),
+          pts: Number(bStats.pts || 0),
+          rebounds: Number(bStats.reb || 0),
+          reb: Number(bStats.reb || 0),
+          assists: Number(bStats.ast || 0),
+          ast: Number(bStats.ast || 0),
+          steals: Number(bStats.stl || 0),
+          stl: Number(bStats.stl || 0),
+          fouls: Number(bStats.pf || 0),
+          pf: Number(bStats.pf || 0),
+          turnovers: Number(bStats.to || 0),
+          to: Number(bStats.to || 0),
+          timer_seconds: Number(tStats.timer_seconds || 0),
+          finish_time: tStats.formatted_time || "00:00.00",
+          time: tStats.formatted_time || "00:00.00",
+          distance_meters: Number(tStats.distance_meters || 0),
+          split_times: tStats.split_times || [],
+          is_foul_dq: Boolean(tStats.is_foul_dq),
+        },
       };
     });
 
@@ -235,33 +260,27 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
 
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              {session.sport_type === "BASKETBALL" ? (
+              {!isTimedSport ? (
                 <>
-                  {/* Basketball Table Header */}
+                  {/* Dynamic Ball Games Table Header (Basketball, Volleyball, Pickleball) */}
                   <View style={styles.tableHeaderRow}>
                     <Text style={styles.tableColPlayerHeader}>PLAYER</Text>
-                    <Text style={styles.tableColHeader}>PTS</Text>
-                    <Text style={styles.tableColHeader}>REB</Text>
-                    <Text style={styles.tableColHeader}>AST</Text>
-                    <Text style={styles.tableColHeader}>STL</Text>
-                    <Text style={styles.tableColHeader}>PF</Text>
-                    <Text style={styles.tableColHeader}>TO</Text>
+                    {schema.tableHeaders.map((header, idx) => (
+                      <Text key={idx} style={styles.tableColHeader}>{header.label}</Text>
+                    ))}
                   </View>
 
-                  {/* Basketball Table Rows */}
+                  {/* Dynamic Ball Games Table Rows */}
                   {allPlayers.map((player) => {
-                    const stats = player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
+                    const stats: any = player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 };
                     return (
                       <View key={player.athlete_id} style={styles.tableDataRow}>
                         <Text style={styles.tableColPlayer} numberOfLines={1}>
                           {player.full_name}
                         </Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.pts)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.reb)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.ast)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.stl)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.pf)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.to)}</Text>
+                        {schema.tableHeaders.map((header, idx) => (
+                          <Text key={idx} style={styles.tableColText}>{formatNumber(stats[header.key])}</Text>
+                        ))}
                       </View>
                     );
                   })}

@@ -278,7 +278,24 @@ export async function submitMatchSession(
   for (let idx = 0; idx < playerStatsList.length; idx++) {
     const item = playerStatsList[idx];
     const athleteId = item.athlete_id || `ath_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const rawStats = item.stats || {};
+    const rawStats = item.stats || {
+      points: Number((item as any).pts ?? (item as any).points ?? 0),
+      pts: Number((item as any).pts ?? (item as any).points ?? 0),
+      rebounds: Number((item as any).reb ?? (item as any).rebounds ?? 0),
+      reb: Number((item as any).reb ?? (item as any).rebounds ?? 0),
+      assists: Number((item as any).ast ?? (item as any).assists ?? 0),
+      ast: Number((item as any).ast ?? (item as any).assists ?? 0),
+      steals: Number((item as any).stl ?? (item as any).steals ?? 0),
+      stl: Number((item as any).stl ?? (item as any).steals ?? 0),
+      fouls: Number((item as any).pf ?? (item as any).fouls ?? 0),
+      pf: Number((item as any).pf ?? (item as any).fouls ?? 0),
+      turnovers: Number((item as any).to ?? (item as any).turnovers ?? 0),
+      to: Number((item as any).to ?? (item as any).turnovers ?? 0),
+      finish_time: (item as any).formatted_time || (item as any).finish_time,
+      time: (item as any).formatted_time || (item as any).time,
+      distance_meters: (item as any).distance_meters,
+      split_times: (item as any).split_times,
+    };
     const eventName = (item as any).event || (item as any).event_name || rawStats.event || rawStats.event_name || null;
     const eventId = (item as any).event_id || rawStats.event_id || (eventName ? `evt_${String(eventName).toLowerCase().replace(/[^a-z0-9]/g, '_')}` : null);
     const eventSlug = String(eventName || eventId || (item as any).discipline || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
@@ -356,9 +373,9 @@ export async function submitMatchSession(
       placement_rank: placementRank,
       finish_time: finishTime,
       split: splitTime,
-      pts: Number(rawStats.points ?? rawStats.pts ?? 0),
-      ast: Number(rawStats.assists ?? rawStats.ast ?? 0),
-      reb: Number(rawStats.rebounds ?? rawStats.reb ?? 0),
+      pts: Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0),
+      ast: Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0),
+      reb: Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0),
       stats: enrichedStats,
     });
 
@@ -366,9 +383,9 @@ export async function submitMatchSession(
     const athleteRef = db.collection('Athlete_Profiles').doc(athleteId);
     const athleteDoc = await athleteRef.get();
     
-    const gamePts = Number(rawStats.points ?? rawStats.pts ?? 0);
-    const gameAst = Number(rawStats.assists ?? rawStats.ast ?? 0);
-    const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? 0);
+    const gamePts = Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0);
+    const gameAst = Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0);
+    const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0);
 
     // Dynamic metrics for individual sports / athlete portfolio
     const dynamicAverages: Record<string, any> = {};

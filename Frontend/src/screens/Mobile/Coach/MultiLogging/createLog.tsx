@@ -486,31 +486,8 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         : Array.isArray(coachAthletesRes)
         ? coachAthletesRes
         : [];
+      // Strictly restrict athlete selection to coach's assigned/owned roster
       let rawList: any[] = [...coachList, ...(initialAthletes || [])];
-
-      if (rawList.length === 0) {
-        const res = await fetch(`${API_BASE}/athletes?sport=${encodeURIComponent(sport)}`, {
-          headers: {
-            Accept: "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }).catch(() => null);
-
-        if (res && res.ok) {
-          const data = await res.json().catch(() => null);
-          rawList = Array.isArray(data?.athletes)
-            ? data.athletes
-            : Array.isArray(data)
-            ? data
-            : [];
-        } else {
-          // Offline / WiFi off: Load from persistent Firestore offline cache or initialAthletes
-          const offlineList = await getAthletesOfflineFirst(sport);
-          if (offlineList.length > 0) {
-            rawList = offlineList;
-          }
-        }
-      }
 
       if (rawList.length > 0) {
         // Deduplicate athletes by canonical ID or name
@@ -1168,39 +1145,9 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                 <Ionicons name="people-outline" size={32} color="#64748B" />
                 <Text style={{ color: "#8E9BAE", fontSize: 14, marginTop: 8, textAlign: "center" }}>
                   {searchQuery
-                    ? `No ${session.sport_type} athletes match "${searchQuery}".`
-                    : `No registered ${session.sport_type} athletes found in database.`}
+                    ? `No ${session.sport_type} athletes in your roster match "${searchQuery}".`
+                    : `No registered ${session.sport_type} athletes found in your roster. Please recruit or assign athletes to your roster first.`}
                 </Text>
-                <TouchableOpacity
-                  style={{
-                    marginTop: 14,
-                    paddingVertical: 10,
-                    paddingHorizontal: 16,
-                    backgroundColor: "#00D2FF",
-                    borderRadius: 8,
-                  }}
-                  onPress={() => {
-                    const fallbackName = searchQuery.trim() || "Harold Delos Santos";
-                    addAthleteToRoster({
-                      athlete_id: `ath_custom_${Date.now()}`,
-                      jersey_number: "0",
-                      last_name: fallbackName.split(" ").slice(-1)[0] || fallbackName,
-                      full_name: fallbackName.toUpperCase(),
-                      position_or_event: session.sport_type === "BASKETBALL" ? "Guard" : session.sport_type === "SWIMMING" ? "Freestyle" : session.sport_type === "TRACK AND FIELD" ? "100m" : "Player",
-                      is_active_on_field: false,
-                      sport_type: session.sport_type,
-                      basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-                      timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-                    });
-                    setShowAddModal(false);
-                    setSearchQuery("");
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={{ color: "#070D19", fontWeight: "bold" }}>
-                    + Add {searchQuery.trim() ? `"${searchQuery.trim()}"` : "Harold Delos Santos"}
-                  </Text>
-                </TouchableOpacity>
               </View>
             )}
           </View>

@@ -176,32 +176,10 @@ export function CoachProfileScreen({
           {/* Metric Cards Stack */}
           <View style={styles.metricCardStack}>
             {/* Card 1: Experience */}
-            <View style={styles.metricCardCenter}>
+            <View style={[styles.metricCardCenter, { width: "100%" }]}>
               <Text style={styles.metricCardLabel}>EXPERIENCE</Text>
               <Text style={styles.metricBigValue}>{coachData.years_experience}</Text>
               <Text style={styles.metricSubtext}>Years of Elite Coaching</Text>
-            </View>
-
-            {/* Card 2: Core Specialties */}
-            <View style={styles.metricCard}>
-              <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
-              <View style={styles.specialtiesList}>
-                {coachData.core_specialties.length === 0 ? (
-                  <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No specialties specified</Text>
-                ) : (
-                  coachData.core_specialties.map((item, idx) => (
-                    <View key={idx} style={styles.specialtyItemCard}>
-                      <Ionicons
-                        name={getSportIconName(item)}
-                        size={16}
-                        color="#38BDF8"
-                        style={styles.specialtyIcon}
-                      />
-                      <Text style={styles.specialtyText}>{item}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
             </View>
           </View>
 

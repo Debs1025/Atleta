@@ -11,8 +11,12 @@ import { TeamProfileScreen } from "./TeamProfile";
 import { CoachProfileScreen } from "./CoachProfile";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
-import { getAthleteProfileOfflineFirst } from "../../../../services/firebaseClient";
+import { getAthleteProfileOfflineFirst, db } from "../../../../services/firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
+
+const OFFLINE_ATHLETE_PROFILE_CACHE_KEY = "atleta_offline_athlete_profile_cache";
 
 const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [];
 
@@ -421,6 +425,27 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
   const handleUpdateProfile = (updatedProfile: AthleteProfile) => {
     setProfile(updatedProfile);
+    AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(updatedProfile)).catch(() => null);
+
+    const athleteUid = updatedProfile.athlete_id || (updatedProfile as any).user_id;
+    if (athleteUid) {
+      const cleanId = String(athleteUid).replace(/^ath_/, "");
+      const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+      setDoc(doc(db, "Athlete_Profiles", canonicalId), {
+        first_name: updatedProfile.first_name,
+        last_name: updatedProfile.last_name,
+        birthdate: updatedProfile.birthdate,
+        gender: updatedProfile.gender,
+        province: updatedProfile.province,
+        category: updatedProfile.category,
+        height_cm: updatedProfile.height_cm,
+        weight_kg: updatedProfile.weight_kg,
+        wingspan_cm: updatedProfile.wingspan_cm,
+        avatar_url: updatedProfile.avatar_url,
+        eligible_documents: updatedProfile.eligible_documents,
+        updated_at: new Date().toISOString(),
+      }, { merge: true }).catch(() => null);
+    }
   };
 
   const handleUploadDocumentFromNotification = (docInfo: {
@@ -478,6 +503,18 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     };
 
     setProfile(updatedProfile);
+    AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(updatedProfile)).catch(() => null);
+
+    const athleteUid = updatedProfile.athlete_id || (updatedProfile as any).user_id;
+    if (athleteUid) {
+      const cleanId = String(athleteUid).replace(/^ath_/, "");
+      const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+      setDoc(doc(db, "Athlete_Profiles", canonicalId), {
+        eligible_documents: updatedDocs,
+        updated_at: new Date().toISOString(),
+      }, { merge: true }).catch(() => null);
+    }
+
     refreshAthleteData(false);
   };
 

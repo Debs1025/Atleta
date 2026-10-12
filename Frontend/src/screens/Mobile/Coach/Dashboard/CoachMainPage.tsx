@@ -36,7 +36,7 @@ import { AtletaNavbar } from "../Components/AtletaNavbar";
 import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 import { CoachProfile } from "../Profile/CoachProfile";
 import { CoachEditProfile } from "../Profile/CoachEditProfile";
-import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+import { CoachProfileState, DEFAULT_COACH_PROFILE, CoachSettingsData, DEFAULT_COACH_SETTINGS } from "../DataTypes";
 import { OCRlogging } from "./OCRlogging";
 import { OCRoutput, RawOCRDetectedData } from "./OCRoutput";
 import { CreateLogScreen } from "../MultiLogging/createLog";
@@ -268,6 +268,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   const [matchHistoryList, setMatchHistoryList] = useState<MatchHistoryItem[]>([]);
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
+  const [coachSettingsData, setCoachSettingsData] = useState<CoachSettingsData>(DEFAULT_COACH_SETTINGS);
 
   // Helper function to dynamically compute performance profile from real metrics
   const computeAthletePerformance = (a: any, matchesList: MatchHistoryItem[] = matchHistoryList): AthletePerformanceProfile => {
@@ -565,23 +566,45 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             setMatchHistoryList([]);
           }
 
+          const currentCoachId = (
+            profileRes?.coach_id ||
+            profileRes?.user_id ||
+            offlineProfileRes?.coach_id ||
+            offlineProfileRes?.user_id ||
+            coach?.coach_id ||
+            coach?.user_id ||
+            ""
+          );
+          const cleanEffectiveCoachId = String(currentCoachId).replace(/^coach_/, "").toLowerCase();
+
+          const isOwnedByCoach = (ath: any) => {
+            if (!cleanEffectiveCoachId) return false;
+            const athCoachId = String(ath.coach_id || ath.coach_scout_id || ath.recruited_by_coach_id || ath.added_by_coach_id || ath.recruited_by || "").replace(/^coach_/, "").toLowerCase();
+            return Boolean(athCoachId && athCoachId === cleanEffectiveCoachId);
+          };
+
           const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes) && coachAthletesRes.athletes.length > 0
             ? coachAthletesRes.athletes
             : Array.isArray(syncRes?.handled_athletes) && syncRes.handled_athletes.length > 0
             ? syncRes.handled_athletes
-            : Array.isArray(offlineAthletes)
-            ? offlineAthletes
+            : (Array.isArray(offlineAthletes) ? offlineAthletes.filter(isOwnedByCoach) : []);
+
+          // Strictly scope teams to the coach's authenticated account (never fall back to global allTeamsRes)
+          const incomingCoachTeams: any[] = Array.isArray(teamsRes)
+            ? teamsRes
+            : Array.isArray(teamsRes?.teams)
+            ? teamsRes.teams
             : [];
 
-          const rawTeamsList: any[] = Array.isArray(teamsRes) && teamsRes.length > 0
-            ? teamsRes
-            : Array.isArray(teamsRes?.teams) && teamsRes.teams.length > 0
-            ? teamsRes.teams
-            : Array.isArray(allTeamsRes) && allTeamsRes.length > 0
-            ? allTeamsRes
-            : Array.isArray(allTeamsRes?.teams) && allTeamsRes.teams.length > 0
-            ? allTeamsRes.teams
-            : [];
+          const rawTeamsList: any[] = incomingCoachTeams.filter((t: any) => {
+            if (!cleanEffectiveCoachId) return false;
+            const teamCoachId = String(t.coach_id || t.coach_scout_id || "").replace(/^coach_/, "").toLowerCase();
+            if (teamCoachId) return teamCoachId === cleanEffectiveCoachId;
+            if (Array.isArray(t.coaching_staff)) {
+              return t.coaching_staff.some((cs: string) => String(cs).replace(/^coach_/, "").toLowerCase() === cleanEffectiveCoachId);
+            }
+            return false;
+          });
 
           const normalizeId = (id?: string) => (id || '').replace(/^ath_/, '').trim();
 
@@ -603,10 +626,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           }
           if (Array.isArray(offlineAthletes)) {
             offlineAthletes.forEach((oa: any) => {
-              const k = normalizeId(oa.athlete_id || oa.user_id);
-              if (k) {
-                const prev = richCoachAthletesMap.get(k) || {};
-                richCoachAthletesMap.set(k, { ...prev, ...oa });
+              if (isOwnedByCoach(oa)) {
+                const k = normalizeId(oa.athlete_id || oa.user_id);
+                if (k) {
+                  const prev = richCoachAthletesMap.get(k) || {};
+                  richCoachAthletesMap.set(k, { ...prev, ...oa });
+                }
               }
             });
           }
@@ -1508,6 +1533,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* SCREEN 5: COACH SETTINGS PAGE */}
       {activeView === "settings" && (
         <CoachSettings
+          settings={coachSettingsData}
+          onUpdateSettings={setCoachSettingsData}
           onBack={() => setActiveView("dashboard")}
           onLogout={onLogout}
         />
@@ -1702,39 +1729,44 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               console.warn("Could not persist match to Firestore:", saveErr);
             }
 
-            // Update roster athletes state with the confirmed OCR performance stats
+            // Update roster athletes state with the confirmed OCR performance stats (strictly for owned roster athletes)
             setAthletesPool((prev: RosterAthlete[]) => {
               const updated = [...prev];
-              finalData.athlete_overview.forEach((stat, idx) => {
+              finalData.athlete_overview.forEach((stat) => {
                 const existingIndex = updated.findIndex(
-                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase()
+                  (a) =>
+                    (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
+                    a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
                 );
                 if (existingIndex >= 0) {
                   updated[existingIndex] = {
                     ...updated[existingIndex],
                     jersey_number: String(stat.jersey_number || updated[existingIndex].jersey_number),
                   };
-                } else {
-                  updated.push({
-                    athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
-                    user_id: `usr_ocr_${idx + 1}`,
-                    full_name: stat.player_name,
-                    sport_type: (finalData.sport_type || "BASKETBALL") as any,
-                    position: "Guard",
-                    jersey_number: String(stat.jersey_number || idx + 1),
-                    is_eligibility_verified: true,
-                  });
                 }
+                // Do NOT push unmanaged/opponent athletes to coach's roster
               });
               return updated;
             });
 
-            // Update Performance page athletes list with confirmed match player stats & averages
+            // Update Performance page athletes list strictly for coach's active roster
             setPerfAthletes((prev: AthletePerformanceProfile[]) => {
               const updated = [...prev];
-              finalData.athlete_overview.forEach((stat, idx) => {
+              finalData.athlete_overview.forEach((stat) => {
+                const isRosterPlayer = athletesPool.some(
+                  (a) =>
+                    (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
+                    a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
+                );
+                if (!isRosterPlayer) {
+                  // Completely ignore/exclude opponent players and unmanaged athletes from auto-recruitment/stats
+                  return;
+                }
+
                 const existingIndex = updated.findIndex(
-                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase() || a.athlete_id === stat.athlete_id
+                  (a) =>
+                    (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
+                    a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
                 );
                 const gamePts = Number(stat.pts || 0);
                 const gameAst = Number(stat.ast || 0);
@@ -1770,57 +1802,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     },
                     scoring_trends_last_10: newTrends,
                   };
-                } else {
-                  updated.push({
-                    athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
-                    user_id: `usr_ocr_${idx + 1}`,
-                    full_name: stat.player_name,
-                    birthdate: "",
-                    position_or_event: "Player",
-                    location_province: "",
-                    team_name: stat.team_name || finalData.team_name || "",
-                    rating_score: Math.min(99, Math.max(75, Math.round(70 + (gamePts * 0.5) + (gameAst * 0.8) + (gameReb * 0.6)))),
-                    sport_category: (finalData.sport_type || "BASKETBALL").toUpperCase() as any,
-                    biometrics: {
-                      height_ft: "-",
-                      weight_lbs: "-",
-                      wingspan_ft: "-",
-                      vertical_jump_in: "-",
-                    },
-                    averages: {
-                      ppg: gamePts,
-                      rpg: gameReb,
-                      apg: gameAst,
-                      per_score: 24,
-                      games_played: 1,
-                      wins: 1,
-                      fg_percentage: 50,
-                      three_pt_percentage: 35,
-                      ft_percentage: 75,
-                    },
-                    workload_analytics: {
-                      target_7day_effort_pts: 500,
-                      current_7day_acute_load: 420,
-                      current_28day_chronic_load: 400,
-                      calculated_acwr: 1.05,
-                      workout_score: 85,
-                      fatigue_meter: 25,
-                      routine_score: 85,
-                      body_stress_pts: 25,
-                    },
-                    radar_competencies: {
-                      speed: 80,
-                      power: 75,
-                      agility: 82,
-                      iq: 85,
-                      tech: 80,
-                    },
-                    scoring_trends_last_10: [gamePts, gamePts],
-                    eligibility_documents: {
-                      psa_verified: true,
-                      residency_verified: true,
-                    },
-                  });
                 }
               });
               return updated;
@@ -1844,9 +1825,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               }))
             );
 
-            // Navigate directly to the Performance screen so coach can inspect the updated PPG, APG, RPG
-            setActiveTab("Performance");
-            setActiveView("performance");
+            // Redirect straight back to Home/Dashboard view
+            setActiveTab("Home");
+            setActiveView("dashboard");
           }}
         />
       )}

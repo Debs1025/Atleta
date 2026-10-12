@@ -3,6 +3,7 @@ import { Alert, Platform, View, Text, TouchableOpacity, StyleSheet } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 import { requestAuthenticatedJson, API_BASE } from '../../Authentication/authShared';
 import { getMatchesOfflineFirst, saveMatchOfflineFirst } from '../../../../services/firebaseClient';
@@ -220,11 +221,19 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Platform.OS === 'web') {
         window.open(fileUri, '_blank');
       } else {
-        await Print.printAsync({ uri: fileUri });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'application/pdf',
+            dialogTitle: 'Download ATLETA Scoresheet PDF',
+            UTI: 'com.adobe.pdf',
+          });
+        } else {
+          await Print.printAsync({ uri: fileUri });
+        }
       }
     } catch (error) {
       console.error('Error opening PDF file:', error);
-      Alert.alert('Error', 'Unable to open PDF viewer.');
+      Alert.alert('Error', 'Unable to open or share PDF file.');
     }
   }, []);
 
@@ -556,7 +565,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           Alert.alert('PDF Download', 'Scoresheet generated successfully.');
         }
       } else {
-        // Generate PDF file silently to local device storage without printer/sharing dialogs
+        // Generate valid physical PDF file in device document directory
         const { uri } = await Print.printToFileAsync({ html: htmlContent });
         const fileName = `ATLETA_Scoresheet_${match.match_id}.pdf`;
         const targetPath = `${FileSystem.documentDirectory}${fileName}`;
@@ -565,6 +574,15 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           from: uri,
           to: targetPath,
         });
+
+        // Prompt native download/save/share sheet
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(targetPath, {
+            mimeType: 'application/pdf',
+            dialogTitle: `Download ${fileName}`,
+            UTI: 'com.adobe.pdf',
+          });
+        }
 
         setDownloadModal({ visible: true, fileName, uri: targetPath });
       }

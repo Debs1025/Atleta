@@ -42,14 +42,6 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
     await requestAudit(match.match_id);
   }, [match, requestAudit]);
 
-  const handleToggleCertified = useCallback(async () => {
-    if (!match) return;
-    if (match.audit_status === 'REQUEST GRANTED') {
-      await requestAudit(match.match_id);
-    } else {
-      await grantAudit(match.match_id);
-    }
-  }, [match, requestAudit, grantAudit]);
 
   const handleDownloadPDF = useCallback(async () => {
     if (!match) return;
@@ -289,17 +281,6 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
                 </>
               )}
             </TouchableOpacity>
-
-            {/* Demo state switch button */}
-            <TouchableOpacity
-              style={styles.demoToggleBtn}
-              onPress={handleToggleCertified}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.demoToggleText}>
-                Demo: Switch to Unrequested / Pending View
-              </Text>
-            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -383,17 +364,6 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
                 {match.audit_status === 'PENDING REQUEST'
                   ? 'Request Pending Review (Tap to Resend)'
                   : 'Request Official Scoresheet'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Demo state switch button */}
-            <TouchableOpacity
-              style={styles.demoToggleBtn}
-              onPress={handleToggleCertified}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.demoToggleText}>
-                Demo: Certify Scoresheet (Show Certified State & Stats)
               </Text>
             </TouchableOpacity>
           </>

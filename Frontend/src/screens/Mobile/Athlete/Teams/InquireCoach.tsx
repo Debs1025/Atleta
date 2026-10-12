@@ -131,40 +131,10 @@ export function InquireCoachScreen({
         {/* Metric Cards Stack */}
         <View style={styles.metricCardStack}>
           {/* Card 1: Experience */}
-          <View style={styles.metricCardCenter}>
+          <View style={[styles.metricCardCenter, { width: "100%" }]}>
             <Text style={styles.metricCardLabel}>EXPERIENCE</Text>
             <Text style={styles.metricBigValue}>{coach.years_experience}</Text>
             <Text style={styles.metricSubtext}>Years of Elite Coaching</Text>
-          </View>
-
-          {/* Card 2: Core Specialties */}
-          <View style={styles.metricCard}>
-            <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
-            <View style={styles.specialtiesList}>
-              {coach.core_specialties.map((item, idx) => (
-                <View key={idx} style={styles.specialtyItemCard}>
-                  <Ionicons
-                    name={
-                      (item || "").toLowerCase().includes("basket")
-                        ? "basketball-outline"
-                        : (item || "").toLowerCase().includes("swim")
-                        ? "water-outline"
-                        : (item || "").toLowerCase().includes("track") || (item || "").toLowerCase().includes("run")
-                        ? "walk-outline"
-                        : (item || "").toLowerCase().includes("volley") || (item || "").toLowerCase().includes("pickle") || (item || "").toLowerCase().includes("tennis")
-                        ? "tennisball-outline"
-                        : (item || "").toLowerCase().includes("fitness")
-                        ? "fitness-outline"
-                        : "trophy-outline"
-                    }
-                    size={16}
-                    color="#38BDF8"
-                    style={styles.specialtyIcon}
-                  />
-                  <Text style={styles.specialtyText}>{item}</Text>
-                </View>
-              ))}
-            </View>
           </View>
         </View>
 

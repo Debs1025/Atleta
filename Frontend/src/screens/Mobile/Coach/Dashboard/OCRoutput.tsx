@@ -1306,14 +1306,14 @@ export function OCRoutput({
                                 setShowSuccessModal(false);
                                 if (onConfirmSave) {
                                     onConfirmSave({
-                                        ...rawOCRData,
+                                        ...currentActiveMatch,
                                         athlete_overview: athleteStats,
                                     });
                                 }
                             }}
                             activeOpacity={0.85}
                         >
-                            <Text style={styles.modalCtaText}>VIEW PERFORMANCE & STATS</Text>
+                            <Text style={styles.modalCtaText}>RETURN TO DASHBOARD</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
