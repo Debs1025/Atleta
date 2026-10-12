@@ -739,8 +739,39 @@ export async function socialLoginService(
     lastName = userData.last_name || lastName;
     avatarUrl = userData.avatar_url || avatarUrl;
   } else {
-    // New social user: provision User and Role Subtype records atomically
-    userRole = normalizeRole(roleInput);
+    // Check if registration profile fields were explicitly submitted
+    const hasProfileDetails =
+      Boolean(additionalData?.sport_type) ||
+      Boolean(additionalData?.terms_accepted) ||
+      Boolean(additionalData?.current_institution) ||
+      Boolean(additionalData?.years_of_experience) ||
+      Boolean(additionalData?.birthdate);
+
+    if (!hasProfileDetails) {
+      // New user attempting to log in without prior registration:
+      // Do NOT auto-provision a dummy Athlete with default sport. Return signal for signup!
+      return {
+        is_new_user: true,
+        require_signup: true,
+        message: 'No account found for this social login. Please complete signup to choose your role and profile details.',
+        user: {
+          user_id: uid,
+          email,
+          first_name: firstName,
+          last_name: lastName,
+          avatar_url: avatarUrl,
+          provider,
+        },
+        social_token: {
+          provider,
+          idToken,
+        },
+      };
+    }
+
+    // New social user submitting the signup registration form:
+    // Provision User and Role Subtype records atomically using their selected role and data
+    userRole = normalizeRole(additionalData?.role || roleInput);
     const now = new Date();
 
     const userData = {
@@ -787,12 +818,16 @@ export async function socialLoginService(
       profileData.regional_affiliation = additionalData?.regional_affiliation || null;
       profileData.national_sports_league = additionalData?.national_sports_league || null;
       profileData.accreditation_number = additionalData?.accreditation_number || null;
+      profileData.years_of_experience = Number(additionalData?.years_of_experience || 0);
+      profileData.certification_license_num = additionalData?.certification_license_num || null;
 
       // Also set on userData
       (userData as any).sport_type = profileData.sport_type;
       (userData as any).current_institution = profileData.current_institution;
       (userData as any).regional_affiliation = profileData.regional_affiliation;
       (userData as any).national_sports_league = profileData.national_sports_league;
+      (userData as any).years_of_experience = profileData.years_of_experience;
+      (userData as any).certification_license_num = profileData.certification_license_num;
     }
 
     const writeSocialUserToDb = async (targetDb: any) => {

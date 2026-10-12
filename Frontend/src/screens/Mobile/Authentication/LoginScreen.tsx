@@ -35,8 +35,18 @@ try {
   // Native module not linked in current binary
 }
 
+export type SocialSignupPayload = {
+  socialToken: { provider: "google" | "facebook"; idToken: string };
+  initialData?: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  };
+};
+
 type LoginScreenProps = {
-  onGoSignup: () => void;
+  onGoSignup: (socialData?: SocialSignupPayload) => void;
   onGoReset: () => void;
   onAuthenticated?: (role: AuthRole) => void;
 };
@@ -76,6 +86,22 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         : { access_token: idToken, accessToken: idToken, id_token: idToken, idToken, provider };
 
       const result = await requestJson(endpoint, payload);
+
+      // If new social user without a registered role/profile, route immediately to Sign Up
+      const resData = result as any;
+      if (resData?.require_signup || resData?.is_new_user) {
+        onGoSignup?.({
+          socialToken: { provider, idToken },
+          initialData: {
+            email: resData.user?.email || "",
+            first_name: resData.user?.first_name || "",
+            last_name: resData.user?.last_name || "",
+            avatar_url: resData.user?.avatar_url || "",
+          }
+        });
+        return;
+      }
+
       const token = extractAuthToken(result);
       const role = extractAuthRole(result) || "athlete";
 
@@ -262,7 +288,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         />
 
         <Text style={authScreenStyles.footer}>
-          Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={onGoSignup}>Sign Up</Text>
+          Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={() => onGoSignup?.()}>Sign Up</Text>
         </Text>
 
         <InAppGoogleAuthModal

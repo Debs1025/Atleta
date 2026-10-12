@@ -160,6 +160,14 @@ export async function socialLogin(req: Request, res: Response): Promise<void> {
     const providerType = provider === 'facebook' ? 'facebook' : 'google';
     const result = await socialLoginService(idToken, providerType, role || 'Athlete', body);
 
+    if (result && ((result as any).require_signup || (result as any).is_new_user)) {
+      res.status(200).json({
+        message: 'New user registration required.',
+        ...result,
+      });
+      return;
+    }
+
     res.status(200).json({
       message: `${providerType.toUpperCase()} login successful.`,
       ...result,

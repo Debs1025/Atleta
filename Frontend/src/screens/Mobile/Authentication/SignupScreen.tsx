@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +18,7 @@ import {
   Banner,
   Button,
   Checkbox,
+  clearAuthMicroCache,
   FormField,
   FullScreenOverlay,
   getAuthErrorMessage,
@@ -44,10 +46,22 @@ import {
 } from "./authShared";
 
 import { DatePickerModal } from "../Athlete/Profile/AthleteProfileModals";
-import { getSportsOfflineFirst } from "../../../services/firebaseClient";
+import { clearFirebaseClientCaches, getSportsOfflineFirst } from "../../../services/firebaseClient";
+
+export type InitialSocialData = {
+  socialToken: { provider: "google" | "facebook"; idToken: string };
+  initialData?: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  };
+};
 
 type SignupScreenProps = {
   onGoLogin: () => void;
+  initialSocialData?: InitialSocialData | null;
+  onAuthenticated?: (role: AuthRole) => void;
 };
 
 type ChoiceGroupProps = {
@@ -170,7 +184,7 @@ function ChoiceGroup({ label, placeholder = "Select an option", options, value, 
   );
 }
 
-export function SignupScreen({ onGoLogin }: SignupScreenProps) {
+export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: SignupScreenProps) {
   const [role, setRole] = useState<AuthRole>("athlete");
   const [step, setStep] = useState<AuthStep>(1);
   const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
@@ -179,7 +193,38 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const [accountCreated, setAccountCreated] = useState(false);
 
   const [socialToken, setSocialToken] = useState<{ provider: "google" | "facebook"; idToken: string } | null>(null);
+  const [coachSport, setCoachSport] = useState<string>("Basketball");
   const [sportOptions, setSportOptions] = useState<string[]>(DEFAULT_SPORT_OPTIONS);
+  const socialProfileRef = useRef<{ first_name: string; last_name: string; email: string }>({
+    first_name: "",
+    last_name: "",
+    email: "",
+  });
+
+  useEffect(() => {
+    if (initialSocialData?.socialToken) {
+      setSocialToken(initialSocialData.socialToken);
+      const fn = initialSocialData.initialData?.first_name || "";
+      const ln = initialSocialData.initialData?.last_name || "";
+      const em = initialSocialData.initialData?.email || "";
+      socialProfileRef.current = { first_name: fn, last_name: ln, email: em };
+
+      athleteForm.setValue("first_name", fn);
+      athleteForm.setValue("last_name", ln);
+      athleteForm.setValue("email", em);
+
+      coachForm.setValue("first_name", fn);
+      coachForm.setValue("last_name", ln);
+      coachForm.setValue("email", em);
+
+      setStep(1);
+      const providerLabel = initialSocialData.socialToken.provider === "google" ? "Google" : "Facebook";
+      setFeedback({
+        tone: "info",
+        message: `${providerLabel} connected! Select your role (Athlete or Coach) to continue.`
+      });
+    }
+  }, [initialSocialData]);
 
   useEffect(() => {
     let isMounted = true;
@@ -326,10 +371,20 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
   useEffect(() => {
     setFeedback(null);
-    setStep(1);
     setDocumentFile(null);
-    athleteForm.reset(DEFAULT_ATHLETE_VALUES);
-    coachForm.reset(DEFAULT_COACH_VALUES);
+    const sp = socialProfileRef.current;
+    athleteForm.reset({
+      ...DEFAULT_ATHLETE_VALUES,
+      first_name: sp.first_name || athleteForm.getValues("first_name") || "",
+      last_name: sp.last_name || athleteForm.getValues("last_name") || "",
+      email: sp.email || athleteForm.getValues("email") || "",
+    });
+    coachForm.reset({
+      ...DEFAULT_COACH_VALUES,
+      first_name: sp.first_name || coachForm.getValues("first_name") || "",
+      last_name: sp.last_name || coachForm.getValues("last_name") || "",
+      email: sp.email || coachForm.getValues("email") || "",
+    });
   }, [athleteForm, coachForm, role]);
 
   const goNext = async () => {
@@ -475,18 +530,41 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           credential: currentToken,
           provider: socialToken.provider,
           role: "Athlete",
+          first_name: values.first_name || socialProfileRef.current.first_name,
+          last_name: values.last_name || socialProfileRef.current.last_name,
           birthdate: values.birthdate,
           gender: values.gender,
           province: values.province,
-          sport_type: values.sport_type
+          sport_type: values.sport_type,
+          terms_accepted: true,
         });
         const token = extractAuthToken(result);
         const savedRole = extractAuthRole(result) || "athlete";
         if (token) await storeAuthToken(token);
         await storeAuthRole(savedRole);
-        setAccountCreated(true);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
         athleteForm.reset();
         setSocialToken(null);
+
+        if (onAuthenticated) {
+          onAuthenticated(savedRole);
+        } else {
+          setAccountCreated(true);
+        }
       } catch (error) {
         setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
       } finally {
@@ -510,19 +588,43 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           credential: currentToken,
           provider: socialToken.provider,
           role: "Coach",
+          first_name: values.first_name || socialProfileRef.current.first_name,
+          last_name: values.last_name || socialProfileRef.current.last_name,
+          sport_type: coachSport || "Basketball",
           certification_license_num: values.certification_license_num,
           years_of_experience: values.years_of_experience,
           current_institution: values.current_institution,
           regional_affiliation: values.regional_affiliation,
-          national_sports_league: values.national_sports_league
+          national_sports_league: values.national_sports_league,
+          terms_accepted: true,
         });
         const token = extractAuthToken(result);
         const savedRole = extractAuthRole(result) || "coach";
         if (token) await storeAuthToken(token);
         await storeAuthRole(savedRole);
-        setAccountCreated(true);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
         coachForm.reset();
         setSocialToken(null);
+
+        if (onAuthenticated) {
+          onAuthenticated(savedRole);
+        } else {
+          setAccountCreated(true);
+        }
       } catch (error) {
         setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
       } finally {
@@ -573,27 +675,31 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
                 <RolePill label="Coach" selected={role === "coach"} onPress={() => setRole("coach")} />
               </View>
               <Text style={styles.helper}>The fields below will update automatically for the role you choose.</Text>
-              <Button label="Continue" onPress={() => setStep(2)} />
+              <Button label="Continue" onPress={() => setStep(socialToken ? 3 : 2)} />
 
-              <View style={authScreenStyles.dividerRow}>
-                <View style={authScreenStyles.divider} />
-                <Text style={authScreenStyles.or}>or</Text>
-                <View style={authScreenStyles.divider} />
-              </View>
+              {!socialToken ? (
+                <>
+                  <View style={authScreenStyles.dividerRow}>
+                    <View style={authScreenStyles.divider} />
+                    <Text style={authScreenStyles.or}>or</Text>
+                    <View style={authScreenStyles.divider} />
+                  </View>
 
-              <Button
-                label="Sign Up with Google"
-                variant="secondary"
-                icon={require("../../../assets/google.png")}
-                onPress={handleGoogleSignUpPress}
-              />
-              <View style={authScreenStyles.spacer} />
-              <Button
-                label="Sign Up with Facebook"
-                variant="secondary"
-                icon={require("../../../assets/facebook.png")}
-                onPress={handleFacebookSignUpPress}
-              />
+                  <Button
+                    label="Sign Up with Google"
+                    variant="secondary"
+                    icon={require("../../../assets/google.png")}
+                    onPress={handleGoogleSignUpPress}
+                  />
+                  <View style={authScreenStyles.spacer} />
+                  <Button
+                    label="Sign Up with Facebook"
+                    variant="secondary"
+                    icon={require("../../../assets/facebook.png")}
+                    onPress={handleFacebookSignUpPress}
+                  />
+                </>
+              ) : null}
             </View>
           ) : null}
 
@@ -649,6 +755,13 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
           {step === 3 && role === "coach" ? (
             <View>
+              <ChoiceGroup
+                label="Sport Coaching"
+                placeholder="Select Sport Type"
+                options={sportOptions}
+                value={coachSport}
+                onChange={setCoachSport}
+              />
               <FormField control={coachForm.control} name="certification_license_num" label="Certification License Number" placeholder="Optional" error={coachErrors.certification_license_num?.message} />
               <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
               <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="e.g. Ateneo de Naga University" error={coachErrors.current_institution?.message} />
