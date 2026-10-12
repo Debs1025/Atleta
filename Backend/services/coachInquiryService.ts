@@ -388,12 +388,15 @@ export async function getAthleteInquiries(athleteId: string): Promise<EnrichedIn
 
   for (const inq of inquiries) {
     const coach = coachMap.get(inq.coach_scout_id);
+    const resolvedCoachName = (coach ? coach.full_name : inq.coach_name) || 'Coach';
+    const resolvedInstitution = (coach ? coach.current_institution : inq.current_institution) || 'Collegiate Program';
+    const resolvedSport = (coach ? coach.sport_type : inq.sport_type) || 'Basketball';
 
     enrichedInquiries.push({
       ...inq,
-      coach_name: coach ? coach.full_name : 'Coach',
-      current_institution: coach ? coach.current_institution : 'Collegiate Program',
-      sport_type: coach ? coach.sport_type || 'Basketball' : 'Basketball',
+      coach_name: resolvedCoachName,
+      current_institution: resolvedInstitution,
+      sport_type: resolvedSport,
     });
   }
 

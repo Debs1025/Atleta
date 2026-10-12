@@ -61,9 +61,12 @@ export function validateRegisterUser(data: Record<string, unknown>, hasFile: boo
   }
 
   // contact_number (Optional, 11 characters)
-  const contactNumber = typeof data.contact_number === 'string' ? data.contact_number.trim() : '';
+  let contactNumber = typeof data.contact_number === 'string' ? data.contact_number.replace(/[\s\-_()]/g, '') : '';
+  if (contactNumber.startsWith('+63')) contactNumber = '0' + contactNumber.slice(3);
+  else if (contactNumber.startsWith('63') && contactNumber.length === 12) contactNumber = '0' + contactNumber.slice(2);
+  data.contact_number = contactNumber;
   if (contactNumber && contactNumber.length !== 11) {
-    errors.push({ field: 'contact_number', message: 'Contact number must be exactly 11 characters.' });
+    errors.push({ field: 'contact_number', message: 'Contact number must be 11 digits starting with 09 (e.g. 09123456789).' });
   }
 
   // role (Required, Enum "Athlete" | "Coach" | "Official" | "System Admin")

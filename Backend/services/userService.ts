@@ -730,15 +730,51 @@ export async function socialLoginService(
     }
   }
 
-  let userRole: UserRole;
+  let userRole: UserRole | undefined;
 
   if (userDoc.exists) {
     const userData = userDoc.data()!;
-    userRole = userData.role || 'Athlete';
-    firstName = userData.first_name || firstName;
-    lastName = userData.last_name || lastName;
-    avatarUrl = userData.avatar_url || avatarUrl;
-  } else {
+    const assignedRole = userData.role as UserRole | undefined;
+
+    // Verify that the user has an actual completed profile in Athlete_Profiles or Coach_Profiles
+    let hasRoleProfile = false;
+    if (assignedRole === 'Coach') {
+      const canonicalCoachId = uid.startsWith('coach_') ? uid : `coach_${uid}`;
+      const [cpDoc1, cpDoc2] = await Promise.all([
+        db.collection('Coach_Profiles').doc(canonicalCoachId).get().catch(() => null),
+        db.collection('Coach_Profiles').doc(uid).get().catch(() => null),
+      ]);
+      hasRoleProfile = Boolean((cpDoc1 && cpDoc1.exists) || (cpDoc2 && cpDoc2.exists));
+    } else if (assignedRole === 'Athlete') {
+      const canonicalAthId = uid.startsWith('ath_') ? uid : `ath_${uid}`;
+      const [apDoc1, apDoc2] = await Promise.all([
+        db.collection('Athlete_Profiles').doc(canonicalAthId).get().catch(() => null),
+        db.collection('Athlete_Profiles').doc(uid).get().catch(() => null),
+      ]);
+      hasRoleProfile = Boolean((apDoc1 && apDoc1.exists) || (apDoc2 && apDoc2.exists));
+    } else if (assignedRole) {
+      hasRoleProfile = true;
+    }
+
+    const hasPassword = Boolean(userData.password);
+    const isProfileMarkedComplete = hasPassword ? true : userData.is_profile_complete === true;
+
+    const isFullyRegistered = Boolean(
+      assignedRole &&
+      hasRoleProfile &&
+      userData.require_signup !== true &&
+      isProfileMarkedComplete
+    );
+
+    if (isFullyRegistered) {
+      userRole = assignedRole!;
+      firstName = userData.first_name || firstName;
+      lastName = userData.last_name || lastName;
+      avatarUrl = userData.avatar_url || avatarUrl;
+    }
+  }
+
+  if (!userRole) {
     // Check if registration profile fields were explicitly submitted
     const hasProfileDetails =
       Boolean(additionalData?.sport_type) ||
@@ -778,11 +814,14 @@ export async function socialLoginService(
       user_id: uid,
       first_name: firstName,
       last_name: lastName,
+      full_name: `${firstName} ${lastName}`.trim(),
       email,
       contact_number: additionalData?.contact_number || null,
       role: userRole,
       provider,
       avatar_url: avatarUrl,
+      is_profile_complete: true,
+      require_signup: false,
       created_at: now,
       updated_at: now,
     };
@@ -838,6 +877,9 @@ export async function socialLoginService(
       if (userRole === 'Athlete') {
         const athleteId = `ath_${uid}`;
         batch.set(targetDb.collection('Athlete_Profiles').doc(athleteId), profileData);
+        // Clean up any stale coach profile documents
+        batch.delete(targetDb.collection('Coach_Profiles').doc(uid));
+        batch.delete(targetDb.collection('Coach_Profiles').doc(`coach_${uid}`));
       } else if (userRole === 'Coach') {
         const coachId = `coach_${uid}`;
         const settingsData = {
@@ -853,6 +895,9 @@ export async function socialLoginService(
         profileData.settings = settingsData;
         batch.set(targetDb.collection('Coach_Profiles').doc(coachId), profileData);
         batch.set(targetDb.collection('Users').doc(uid), { settings: settingsData }, { merge: true });
+        // Clean up any stale athlete profile documents
+        batch.delete(targetDb.collection('Athlete_Profiles').doc(uid));
+        batch.delete(targetDb.collection('Athlete_Profiles').doc(`ath_${uid}`));
       }
 
       await batch.commit();
@@ -1213,7 +1258,15 @@ export async function changePasswordService(uid: string, newPassword: string) {
 }
 
 export async function updateUserProfileService(uid: string, payload: Record<string, any>) {
-  const userDoc = await db.collection('Users').doc(uid).get();
+  const rawUid = uid.replace(/^(coach_|ath_|off_|admin_)/, '');
+  let userDoc = await db.collection('Users').doc(uid).get();
+  let targetUid = uid;
+  if (!userDoc.exists) {
+    userDoc = await db.collection('Users').doc(rawUid).get();
+    if (userDoc.exists) {
+      targetUid = rawUid;
+    }
+  }
   if (!userDoc.exists) {
     throw { code: 'USER_NOT_FOUND', message: 'User not found.' };
   }
@@ -1222,7 +1275,7 @@ export async function updateUserProfileService(uid: string, payload: Record<stri
   const role = userData.role as UserRole;
   const profileCollection = ROLE_COLLECTION_MAP[role] || 'Athlete_Profiles';
   const prefix = role === 'Athlete' ? 'ath_' : role === 'Coach' ? 'coach_' : role === 'Official' ? 'off_' : role === 'System Admin' ? 'admin_' : '';
-  const canonicalRoleDocId = prefix ? `${prefix}${uid}` : uid;
+  const canonicalRoleDocId = prefix ? `${prefix}${targetUid}` : targetUid;
 
   const now = new Date();
   const userUpdates: Record<string, any> = { updated_at: now };
@@ -1302,7 +1355,15 @@ export async function updateUserProfileService(uid: string, payload: Record<stri
 }
 
 export async function uploadUserAvatarService(uid: string, fileOrDataUrl: string | Express.Multer.File) {
-  const userDoc = await db.collection('Users').doc(uid).get();
+  const rawUid = uid.replace(/^(coach_|ath_|off_|admin_)/, '');
+  let userDoc = await db.collection('Users').doc(uid).get();
+  let targetUid = uid;
+  if (!userDoc.exists) {
+    userDoc = await db.collection('Users').doc(rawUid).get();
+    if (userDoc.exists) {
+      targetUid = rawUid;
+    }
+  }
   if (!userDoc.exists) {
     throw { code: 'USER_NOT_FOUND', message: 'User not found.' };
   }
@@ -1318,7 +1379,7 @@ export async function uploadUserAvatarService(uid: string, fileOrDataUrl: string
     throw { code: 'INVALID_FILE', message: 'Valid image file or base64 data URL is required.' };
   }
 
-  return await updateUserProfileService(uid, { avatar_url: avatarUrl, profile_image: avatarUrl });
+  return await updateUserProfileService(targetUid, { avatar_url: avatarUrl, profile_image: avatarUrl });
 }
 
 export async function getUserSettingsService(uid: string) {

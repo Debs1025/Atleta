@@ -15,7 +15,7 @@ import { RosterAthlete, Team } from "../DataTypes";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 
-const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
+const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING"];
 
 const fontPlatform = Platform.select({
   ios: "System",

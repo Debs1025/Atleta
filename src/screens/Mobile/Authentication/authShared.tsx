@@ -43,21 +43,50 @@ const runtime = globalThis as typeof globalThis & {
 const isExpoExecution = Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Constants.appOwnership === "expo";
 const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost || (Constants as any)?.manifest?.debuggerHost || "";
 const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
+const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
 
-// If testing via Expo Tunnel on a physical phone, 10.0.2.2 is unreachable, so use Vercel directly for instant sub-second responses
-const LOCAL_DEV_API = isTunnel
-  ? "https://atleta-backend.vercel.app"
-  : Platform.OS === "android"
-  ? "http://10.0.2.2:5000"
-  : "http://localhost:5000";
+const CLOUD_PROD_API = "https://atleta-backend.vercel.app/api/v1";
+const rawDevApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || `http://${hostIp}:5000`).trim().replace(/\/+$/, "");
+const CANDIDATE_DEV_API = rawDevApi.endsWith("/api/v1") ? rawDevApi : `${rawDevApi}/api/v1`;
 
-const rawApiBase = __DEV__
-  ? (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || LOCAL_DEV_API).trim().replace(/\/+$/, "")
-  : (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "https://atleta-backend.vercel.app").trim().replace(/\/+$/, "");
+// Default to Cloud Prod if on tunnel or not dev, otherwise candidate dev
+let activeApiBase = !__DEV__ || isTunnel ? CLOUD_PROD_API : CANDIDATE_DEV_API;
+export let API_BASE = activeApiBase;
 
-export const API_BASE = rawApiBase.endsWith("/api/v1")
-  ? rawApiBase
-  : `${rawApiBase}/api/v1`;
+let hasProbedApi = false;
+export async function getActiveApiBase(): Promise<string> {
+  if (hasProbedApi) return activeApiBase;
+  hasProbedApi = true;
+
+  if (!__DEV__ || isTunnel) {
+    activeApiBase = CLOUD_PROD_API;
+    API_BASE = CLOUD_PROD_API;
+    return CLOUD_PROD_API;
+  }
+
+  // Quick 600ms probe to check if local development server is reachable
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 600);
+  try {
+    const probeRes = await fetch(`${CANDIDATE_DEV_API}/sports`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    if (probeRes.ok || probeRes.status === 401 || probeRes.status === 404) {
+      activeApiBase = CANDIDATE_DEV_API;
+      API_BASE = CANDIDATE_DEV_API;
+      return activeApiBase;
+    }
+  } catch (_) {
+    // Local dev unreachable - immediately switch to Cloud Prod API
+  } finally {
+    clearTimeout(timer);
+  }
+
+  activeApiBase = CLOUD_PROD_API;
+  API_BASE = CLOUD_PROD_API;
+  return activeApiBase;
+}
 
 export const AUTH_TOKEN_KEY = (
   runtime.process?.env?.EXPO_PUBLIC_AUTH_TOKEN_KEY ||
@@ -70,7 +99,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 6000;
+const REQUEST_TIMEOUT_MS = 2500;
 
 // Types
 export type BannerTone = "error" | "success" | "info";
@@ -92,13 +121,22 @@ export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long.")
   .regex(/[A-Z]/, "Password must include at least 1 uppercase letter.")
-  .regex(/[@$!%*?&]/, "Password must include at least 1 special symbol (@$!%*?&).");
+  .regex(/[^a-zA-Z0-9]/, "Password must include at least 1 special symbol (e.g. !@#$%^&*).");
 
-export const contactSchema = z
-  .string()
-  .trim()
-  .min(1, "Contact number is required.")
-  .regex(/^09\d{9}$/, "Contact number must be 11 digits starting (09xxxxxxxxx).");
+export const contactSchema = z.preprocess(
+  (val) => {
+    if (typeof val !== "string") return val;
+    let cleaned = val.replace(/[\s\-_()]/g, "");
+    if (cleaned.startsWith("+63")) cleaned = "0" + cleaned.slice(3);
+    else if (cleaned.startsWith("63") && cleaned.length === 12) cleaned = "0" + cleaned.slice(2);
+    return cleaned;
+  },
+  z
+    .string()
+    .trim()
+    .min(1, "Contact number is required.")
+    .regex(/^09\d{9}$/, "Contact number must be 11 digits starting with 09 (e.g. 09123456789).")
+);
 
 export const athleteSignupSchema = z.object({
   role: z.literal("athlete"),
@@ -128,7 +166,10 @@ export const coachSignupSchema = z.object({
   password: passwordSchema,
   contact_number: contactSchema,
   certification_license_num: z.string().trim().max(100, "License number is too long.").optional().or(z.literal("")),
-  years_of_experience: z.coerce.number({ invalid_type_error: "Years of experience is required." }).int().min(0).max(60),
+  years_of_experience: z.preprocess(
+    (val) => (val === "" || val === null || val === undefined ? 0 : Number(val)),
+    z.number().int().min(0, "Years of experience must be at least 0.").max(60, "Years of experience cannot exceed 60.")
+  ),
   current_institution: z.string().trim().min(1, "Current institution is required.").max(255, "Current institution is too long."),
   regional_affiliation: z.string().trim().min(1, "Regional affiliation is required.").max(255, "Regional affiliation is too long."),
   national_sports_league: z.string().trim().max(255, "League name is too long.").optional().or(z.literal("")),
@@ -247,23 +288,21 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
 
 async function fetchApi(path: string, options: RequestInit) {
   let response: Response | undefined;
-  const primaryUrl = `${API_BASE}${path}`;
+  const baseUrl = await getActiveApiBase();
+  const primaryUrl = `${baseUrl}${path}`;
+
   try {
     response = await withRequestTimeout((signal) =>
       fetch(primaryUrl, { ...options, signal })
     );
   } catch (err) {
-    const candidates = [
-      primaryUrl.includes("10.0.2.2:5000") ? primaryUrl.replace("10.0.2.2:5000", "localhost:5000") : null,
-      `https://atleta-backend.vercel.app/api/v1${path}`,
-    ].filter((u): u is string => Boolean(u) && u !== primaryUrl);
-
-    for (const fallbackUrl of candidates) {
+    if (baseUrl !== CLOUD_PROD_API) {
+      activeApiBase = CLOUD_PROD_API;
+      API_BASE = CLOUD_PROD_API;
       try {
         response = await withRequestTimeout((signal) =>
-          fetch(fallbackUrl, { ...options, signal })
+          fetch(`${CLOUD_PROD_API}${path}`, { ...options, signal })
         );
-        if (response) break;
       } catch (_) {}
     }
 

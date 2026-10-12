@@ -15,7 +15,7 @@ import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { getSportsOfflineFirst, getTeamsOfflineFirst, db } from "../../../../services/firebaseClient";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 
 //schemas
 export interface Coach {
@@ -38,6 +38,7 @@ export interface TeamSchema {
   program_type_tag?: string; // e.g. "ELITE VARSITY PROGRAM"
   description: string;
   region: string; // e.g. "Bicol"
+  is_my_team?: boolean;
   head_coach: Coach;
 }
 
@@ -84,7 +85,6 @@ const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
   { label: "VOLLEYBALL", value: "VOLLEYBALL" },
   { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
   { label: "SWIMMING", value: "SWIMMING" },
-  { label: "PICKLEBALL", value: "PICKLEBALL" },
 ];
 
 const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
@@ -139,7 +139,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
   const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSport, setSelectedSport] = useState<string>(getInitialSport(athleteCategory));
+  const [selectedSport, setSelectedSport] = useState<string>("ALL");
   const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(DEFAULT_SPORT_CHIPS);
   const [loading, setLoading] = useState(true);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
@@ -170,9 +170,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   }, []);
 
   useEffect(() => {
-    if (athleteCategory) {
-      setSelectedSport(getInitialSport(athleteCategory));
-    }
+    // Keep ALL as default so athletes see all sports teams
   }, [athleteCategory]);
 
   useEffect(() => {
@@ -203,7 +201,16 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           setMyCurrentTeamName(currentTeamName);
 
           const restTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
-          const rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
+          let rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
+          if (rawList.length === 0) {
+            try {
+              const snap = await getDocs(collection(db, "Teams"));
+              if (!snap.empty) {
+                rawList = snap.docs.map((d) => ({ team_id: d.id, id: d.id, ...d.data() }));
+              }
+            } catch (_) {}
+          }
+
           const mergedMap = new Map<string, any>();
           rawList.forEach((item: any) => {
             const tid = item.team_id || item.id;
@@ -232,13 +239,11 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           const rawTeams = Array.from(mergedMap.values());
 
           const mappedTeams: TeamSchema[] = rawTeams
-            .filter((t: any) => {
-              // Exclude the athlete's current team if they already play in a team
-              if (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) return false;
-              if (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase()) return false;
-              return true;
-            })
             .map((t: any, idx: number) => {
+              const isMyTeam = Boolean(
+                (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) ||
+                (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase())
+              );
               const coachName = (
                 t.coach_name ||
                 t.head_coach?.full_name ||
@@ -255,6 +260,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
                 program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
                 description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
                 region: t.region || "NCR",
+                is_my_team: isMyTeam,
                 head_coach: {
                   coach_id: t.coach_id || t.managed_by_coach_id || "",
                   full_name: (coachName.trim().toLowerCase() !== "coach" ? coachName : "Head Coach").toUpperCase(),
@@ -619,7 +625,14 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         ) : (
           filteredTeams.map((team) => (
             <View key={team.team_id} style={styles.teamCard}>
-              <Text style={styles.teamName}>{team.team_name}</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={[styles.teamName, { flex: 1, marginRight: 8 }]}>{team.team_name}</Text>
+                {team.is_my_team && (
+                  <View style={{ backgroundColor: "#0284C7", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "700" }}>CURRENT TEAM</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.sportTag}>{team.sport_type}</Text>
               <Text style={styles.teamDescription} numberOfLines={2}>
                 {team.description}

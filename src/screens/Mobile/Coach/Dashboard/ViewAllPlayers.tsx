@@ -15,7 +15,7 @@ import { RosterAthlete, Team } from "../DataTypes";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 
-const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
+const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING"];
 
 const fontPlatform = Platform.select({
   ios: "System",
@@ -47,7 +47,7 @@ export function ViewAllPlayers({
   availableSports,
 }: ViewAllPlayersProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("ALL");

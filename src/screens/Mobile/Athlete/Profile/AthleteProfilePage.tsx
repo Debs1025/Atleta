@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
 import { AthleteProfile, EligibleDocument } from "../Dashboard/HomeAnalyticsPage";
 import {
   WorkloadWarningModal,
@@ -22,7 +23,8 @@ import {
   LogoutConfirmModal,
   DatePickerModal,
 } from "./AthleteProfileModals";
-import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { requestAuthenticatedJson, requestMultipart, getStoredAuthToken } from "../../Authentication/authShared";
 import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
 import { getSportsOfflineFirst, db } from "../../../../services/firebaseClient";
 import { doc, setDoc } from "firebase/firestore";
@@ -53,7 +55,6 @@ const DEFAULT_CATEGORIES: Array<AthleteProfile["category"]> = [
   "VOLLEYBALL",
   "TRACK AND FIELD",
   "SWIMMING",
-  "PICKLEBALL",
 ];
 
 const DEFAULT_WORKLOAD_DATA: WorkloadAnalyticsData = {
@@ -407,36 +408,28 @@ export function AthleteProfilePage({
   // Handler to pick/upload avatar image
   const handlePickAvatarImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission Denied", "Permission to access media library is required to select a profile picture.");
-        return;
-      }
+      try {
+        await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+      } catch {}
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const pickedAsset = result.assets[0];
-        let finalDataUri = pickedAsset.uri;
 
-        if (pickedAsset.base64) {
-          const mime = pickedAsset.mimeType || "image/jpeg";
-          finalDataUri = `data:${mime};base64,${pickedAsset.base64}`;
-        } else {
-          try {
-            const b64 = await FileSystem.readAsStringAsync(pickedAsset.uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            finalDataUri = `data:image/jpeg;base64,${b64}`;
-          } catch {}
-        }
+        // Compress and resize to 300x300 square using ImageManipulator (~30KB clean payload)
+        const manipResult = await ImageManipulator.manipulateAsync(
+          pickedAsset.uri,
+          [{ resize: { width: 300, height: 300 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
 
+        const finalDataUri = `data:image/jpeg;base64,${manipResult.base64}`;
         setAvatarUri(finalDataUri);
 
         const updated: AthleteProfile = {
@@ -771,23 +764,75 @@ export function AthleteProfilePage({
     setSaveSuccessMsg(true);
     setTimeout(() => setSaveSuccessMsg(false), 2500);
 
-    try {
-      await requestAuthenticatedJson("/athletes/profile", "PATCH", {
+    // Persist to AsyncStorage immediately
+    await AsyncStorage.setItem("atleta_offline_athlete_profile_cache", JSON.stringify(updated)).catch(() => null);
+
+    // Synchronize to Firestore Athlete_Profiles & Users document
+    let athleteUid = profile.athlete_id || (profile as any).user_id;
+    if (!athleteUid) {
+      try {
+        const token = await getStoredAuthToken();
+        if (token && token.includes(".")) {
+          const parts = token.split(".");
+          const decodedStr = (globalThis as any).atob ? (globalThis as any).atob(parts[1]) : "";
+          if (decodedStr) {
+            const parsed = JSON.parse(decodedStr);
+            athleteUid = parsed.uid || parsed.user_id || "";
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (athleteUid) {
+      const cleanId = String(athleteUid).replace(/^ath_/, "");
+      const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+      const firestorePayload = {
         first_name: firstName,
         last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        birthdate: safeBirthdate,
+        gender: gender,
+        province: province,
+        category: category,
+        position: category,
         height_cm: safeHeight,
         weight_kg: safeWeight,
         wingspan_cm: safeWingspan,
-        position: category,
-        sport_type: category,
-        gender: gender,
-        province: province,
-        birthdate: safeBirthdate,
         avatar_url: avatarUri,
-      });
-    } catch (e) {
-      // Non-blocking background sync catch
+        eligible_documents: documents,
+        updated_at: new Date().toISOString(),
+      };
+
+      await Promise.all([
+        setDoc(doc(db, "Athlete_Profiles", canonicalId), firestorePayload, { merge: true }).catch(() => null),
+        setDoc(doc(db, "Athlete_Profiles", cleanId), firestorePayload, { merge: true }).catch(() => null),
+        setDoc(doc(db, "Users", cleanId), {
+          first_name: firstName,
+          last_name: lastName,
+          avatar_url: avatarUri,
+          profile_image: avatarUri,
+          updated_at: new Date().toISOString(),
+        }, { merge: true }).catch(() => null),
+      ]);
     }
+
+    // Background sync to backend REST API
+    requestAuthenticatedJson("/athletes/profile", "PATCH", {
+      first_name: firstName,
+      last_name: lastName,
+      height_cm: safeHeight,
+      weight_kg: safeWeight,
+      wingspan_cm: safeWingspan,
+      position: category,
+      sport_type: category,
+      gender: gender,
+      province: province,
+      birthdate: safeBirthdate,
+      avatar_url: avatarUri,
+      eligible_documents: documents,
+    }).catch(() => null);
+
+    Alert.alert("Profile Updated", "Your athlete credentials and profile details have been saved successfully.");
   };
 
   // Cancel Edit

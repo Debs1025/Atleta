@@ -55,6 +55,7 @@ import { TrackfieldMatchResult } from "../Performance/trackfieldMatchResult";
 import { SwimmingMatchResult } from "../Performance/swimmingMatchResult";
 import { BasketballMatchResult } from "../Performance/basketballMatchResult";
 import { getMatchesOfflineFirst, getAthletesOfflineFirst, getSportsOfflineFirst, getCoachProfileOfflineFirst } from "../../../../services/firebaseClient";
+import { calculatePlayerRating } from "../Performance/performanceUtils";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -342,16 +343,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       per = Math.round((ppg * 1.2 + rpg * 1.0 + apg * 1.5) * 10) / 10;
     }
 
-    // Calculate dynamic rating score derived from PER / PPG / verified metrics
-    let rating = Number(a.rating_score || a.rating || 0);
-    if (!rating) {
-      if (per > 0) {
-        rating = Math.min(99, Math.max(60, Math.round(per * 2.8)));
-      } else if (ppg > 0) {
-        rating = Math.min(99, Math.max(60, Math.round(ppg * 3.5)));
-      } else {
-        rating = 0;
-      }
+    // Calculate dynamic rating score accurately derived from player stats
+    const dynamicRating = calculatePlayerRating({
+      ...a,
+      averages: { ...a.averages, ppg, rpg, apg, games_played: gp, wins, per_score: per },
+      stats: { ...a.stats, ppg, rpg, apg, games_played: gp, wins, per_score: per },
+    });
+    let rating = dynamicRating || Number(a.rating_score || a.rating || 0);
+    if (rating === 85 || rating === 75) {
+      rating = dynamicRating || 0;
     }
 
     const phys = a.physical_profile || a.physical_attributes || {};
@@ -504,6 +504,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           if (Array.isArray(cached.dynamicSports) && cached.dynamicSports.length > 0) {
             setDynamicSports(cached.dynamicSports);
           }
+
+          // Instantly dismiss loading screen if any cached data is available (<10ms)
+          if (cached.coach || cached.coachProfile || (Array.isArray(cached.teams) && cached.teams.length > 0)) {
+            setIsDashboardLoading(false);
+          }
         }
       } catch {}
     })();
@@ -518,28 +523,25 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const [
           profileRes,
           teamsRes,
-          allTeamsRes,
           syncRes,
-          matchesRes,
-          coachAthletesRes,
-          notifsRes,
           offlineMatches,
           offlineAthletes,
+          notifsRes,
           sportsRes,
-          offlineProfileRes,
-        ]: [any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
-          requestAuthenticatedJson("/coaches/profile").catch(() => null),
+        ]: [any, any, any, any, any, any, any] = await Promise.all([
+          getCoachProfileOfflineFirst().catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
-          requestAuthenticatedJson("/teams?all=true").catch(() => null),
           requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
-          requestAuthenticatedJson("/matches").catch(() => null),
-          requestAuthenticatedJson("/coaches/athletes").catch(() => null),
-          requestAuthenticatedJson("/notifications").catch(() => null),
           getMatchesOfflineFirst().catch(() => []),
           getAthletesOfflineFirst().catch(() => []),
+          requestAuthenticatedJson("/notifications").catch(() => null),
           getSportsOfflineFirst().catch(() => []),
-          getCoachProfileOfflineFirst().catch(() => null),
         ]);
+
+        const matchesRes: any = null;
+        const coachAthletesRes: any = null;
+        const allTeamsRes: any = null;
+        const offlineProfileRes: any = profileRes;
 
         if (isMounted) {
           // Process Notifications
@@ -751,7 +753,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 birthdate: athObj.birthdate || rich.birthdate,
                 province: athObj.province || rich.province,
                 location: athObj.location || rich.location,
-                rating_score: Number(athObj.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                rating_score: calculatePlayerRating(rich) || calculatePlayerRating(athObj) || Number(athObj.rating_score || rich.rating_score || 0),
                 biometrics: athObj.biometrics || rich.biometrics || undefined,
                 radar_competencies: athObj.radar_competencies || rich.radar_competencies || undefined,
                 physical_profile: athObj.physical_profile || rich.physical_profile || athObj.physical_attributes || rich.physical_attributes,
@@ -791,7 +793,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   birthdate: ha.birthdate || rich.birthdate,
                   province: ha.province || rich.province,
                   location: ha.location || rich.location,
-                  rating_score: Number(ha.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                  rating_score: calculatePlayerRating(rich) || calculatePlayerRating(ha) || Number(ha.rating_score || rich.rating_score || 0),
                   biometrics: ha.biometrics || rich.biometrics || undefined,
                   radar_competencies: ha.radar_competencies || rich.radar_competencies || undefined,
                   physical_profile: ha.physical_profile || rich.physical_profile || ha.physical_attributes || rich.physical_attributes,
@@ -857,7 +859,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 jersey_number: ha.jersey_number !== null && ha.jersey_number !== undefined ? String(ha.jersey_number) : (rich.jersey_number !== null && rich.jersey_number !== undefined ? String(rich.jersey_number) : '0'),
                 is_eligibility_verified: Boolean(ha.is_eligibility_verified ?? rich.is_eligibility_verified),
                 avatar_url: ha.avatar_url || rich.avatar_url || undefined,
-                rating_score: Number(ha.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                rating_score: calculatePlayerRating(rich) || calculatePlayerRating(ha) || Number(ha.rating_score || rich.rating_score || 0),
                 biometrics: ha.biometrics || rich.biometrics || undefined,
                 radar_competencies: ha.radar_competencies || rich.radar_competencies || undefined,
                 physical_profile: ha.physical_profile || rich.physical_profile || ha.physical_attributes || rich.physical_attributes,

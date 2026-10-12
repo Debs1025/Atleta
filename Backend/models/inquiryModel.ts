@@ -44,6 +44,9 @@ export interface RecruitmentInquiry {
   decline_reason?: string | null; // Optional, populated when status is "Declined"
   date_initiated: string;         // ISO DateTime string, Default: NOW()
   updated_at: string;             // ISO DateTime string, Default: NOW()
+  coach_name?: string;
+  current_institution?: string;
+  sport_type?: string;
 }
 
 // ─── Enriched Inquiry Response for Inquiry Tracker ──────────────────────────

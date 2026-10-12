@@ -368,14 +368,33 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         const isSentByAthlete = inq.initiated_by && (inq.initiated_by === inq.athlete_id || inq.initiated_by !== inq.coach_scout_id);
         if (isSentByAthlete && mappedStatus === "PENDING") return;
 
+        const coachName = inq.coach_name || inq.sender_name || inq.sender?.name || inq.coach?.full_name || "Coach";
+        const teamName = inq.current_institution || inq.team_name || inq.institution || "Varsity Program";
+        const sportName = (inq.sport_type || "BASKETBALL").toUpperCase();
+
         items.push({
           id: scoutId,
           type: "RECRUITMENT_INQUIRY",
           date_group: "TODAY",
           read_status: mappedStatus !== "PENDING",
-          title: isSentByAthlete ? `Inquiry ${mappedStatus}` : "Recruitment Inquiry",
-          message_body: inq.offer_message || inq.message || `${inq.coach_name || "Coach"} sent you a recruitment inquiry.`,
+          sender: {
+            name: coachName,
+            role_category: `${sportName} Inquiry`,
+          },
+          title: isSentByAthlete ? `Inquiry ${mappedStatus}` : `Recruitment Inquiry from Coach ${coachName}`,
+          message_body: inq.offer_message || inq.message || `Coach ${coachName} from ${teamName} sent you a recruitment inquiry.`,
           action_label: "View Inquiry",
+          inquiry_details: {
+            inquiry_id: scoutId,
+            coach_id: inq.coach_scout_id || inq.coach_id || "",
+            coach_name: coachName,
+            role_title: "Head Coach",
+            team_name: teamName,
+            sport: sportName,
+            message: inq.offer_message || inq.message || `Coach ${coachName} has sent you a formal recruitment proposal.`,
+            status: mappedStatus,
+            is_sent_by_me: Boolean(isSentByAthlete),
+          },
         });
       });
 
@@ -392,14 +411,33 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         if (processedInquiryIds.has(notifId)) return;
         processedInquiryIds.add(notifId);
 
+        const coachName = n.sender_name || n.sender?.name || n.metadata?.coach_name || n.metadata?.sender_name || "Coach";
+        const teamName = n.metadata?.current_institution || n.metadata?.team_name || "Varsity Program";
+        const sportName = (n.metadata?.sport_type || "Basketball").toUpperCase();
+
         items.push({
           id: notifId,
           type: isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
           date_group: "TODAY",
           read_status: Boolean(n.is_read),
-          title: n.title || (isRecruitment ? "Recruitment Inquiry" : "Action Required"),
-          message_body: n.message || n.message_body || "",
+          sender: isRecruitment ? {
+            name: coachName,
+            role_category: `${sportName} Inquiry`,
+          } : undefined,
+          title: n.title || (isRecruitment ? `Recruitment Inquiry from Coach ${coachName}` : "Action Required"),
+          message_body: n.message || n.message_body || (isRecruitment ? `Coach ${coachName} sent you a recruitment inquiry.` : ""),
           action_label: isRecruitment ? "View Inquiry" : "Upload Now ->",
+          inquiry_details: isRecruitment ? {
+            inquiry_id: n.metadata?.scout_id || notifId,
+            coach_id: n.metadata?.coach_id || n.sender_id || "",
+            coach_name: coachName,
+            role_title: "Head Coach",
+            team_name: teamName,
+            sport: sportName,
+            message: n.metadata?.message || n.message || `Coach ${coachName} has sent you a formal recruitment proposal.`,
+            status: "PENDING",
+            is_sent_by_me: false,
+          } : undefined,
         });
       });
 
@@ -414,7 +452,19 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   }, []);
 
   useEffect(() => {
-    refreshAthleteData(true);
+    // 1. Immediately hydrate cached profile so dashboard is responsive in <10ms
+    (async () => {
+      try {
+        const cached = await getAthleteProfileOfflineFirst();
+        if (cached && (cached.athlete_id || cached.first_name)) {
+          setProfile((prev) => ({ ...prev, ...cached }));
+          setLoading(false);
+        }
+      } catch (_) {}
+    })();
+
+    // 2. Refresh live athlete data in background without blocking
+    refreshAthleteData(false);
   }, [refreshAthleteData]);
 
   useEffect(() => {

@@ -12,6 +12,7 @@ import { AtletaHeader } from "../Components/AtletaHeader";
 import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
 import { getSportsOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
+import { calculatePlayerRating } from "./performanceUtils";
 
 interface PerformancePageProps {
   onSelectAthlete: (athlete: AthletePerformanceProfile) => void;
@@ -23,7 +24,7 @@ interface PerformancePageProps {
   avatarUrl?: string | null;
 }
 
-const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
+const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING"];
 
 export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
@@ -35,7 +36,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   avatarUrl,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 18;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
@@ -54,8 +55,22 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           const ppg = Number(avg.ppg ?? stats.ppg ?? a.ppg ?? a.pts ?? 0);
           const rpg = Number(avg.rpg ?? stats.rpg ?? a.rpg ?? a.reb ?? 0);
           const apg = Number(avg.apg ?? stats.apg ?? a.ast ?? a.apg ?? 0);
-          const per = Number(avg.per_score ?? stats.per_score ?? stats.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.3 + 12) : 25));
-          const rating = Number(a.rating_score || a.rating || (ppg > 0 ? Math.min(99, Math.round(ppg * 2.5 + 25)) : 75));
+          const per = Number(avg.per_score ?? stats.per_score ?? stats.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.3 + 12) : 0));
+          
+          const rating = calculatePlayerRating({
+            ...a,
+            averages: {
+              ...avg,
+              ppg,
+              rpg,
+              apg,
+              per_score: per,
+              fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
+              games_played: Number(avg.games_played ?? stats.games_played ?? 0),
+              wins: Number(avg.wins ?? stats.wins ?? 0),
+            },
+            stats,
+          });
 
           const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
           const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
@@ -135,16 +150,20 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             (la.athlete_id && ath.athlete_id && (la.athlete_id === ath.athlete_id || la.user_id === ath.user_id)) ||
             (la.full_name && ath.full_name && la.full_name.toLowerCase() === ath.full_name.toLowerCase())
         );
+        const resolvedRating = calculatePlayerRating(ath) || (matchingLive ? calculatePlayerRating(matchingLive) : 0);
         if (matchingLive && (!ath.averages?.ppg || ath.averages.ppg === 0)) {
           return {
             ...ath,
-            rating_score: matchingLive.rating_score || 85,
+            rating_score: resolvedRating,
             averages: matchingLive.averages || ath.averages,
             biometrics: matchingLive.biometrics || ath.biometrics,
             scoring_trends_last_10: matchingLive.scoring_trends_last_10 || ath.scoring_trends_last_10,
           };
         }
-        return ath;
+        return {
+          ...ath,
+          rating_score: resolvedRating || ath.rating_score || 0,
+        };
       });
     }
     return liveAthletes;
@@ -167,7 +186,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 56, paddingBottom: 150 },
+          { paddingTop: headerTopPadding + 74, paddingBottom: 150 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -249,23 +268,47 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                 <Text style={styles.athleteSubline}>
                   {athlete.team_name} • {athlete.position_or_event}
                 </Text>
-                {athlete.sport_category === "BASKETBALL" && athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.ppg ?? 0} PPG • {athlete.averages.rpg ?? 0} RPG • {athlete.averages.apg ?? 0} APG
-                  </Text>
-                ) : athlete.sport_category === "SWIMMING" && athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.pb_50m_free ? `${athlete.averages.pb_50m_free} 50M` : "-"} • {athlete.averages.swim_index_score ? `${athlete.averages.swim_index_score} SWIM INDEX` : "-"}
-                  </Text>
-                ) : athlete.sport_category === "TRACK AND FIELD" && athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "-"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "-"}
-                  </Text>
-                ) : athlete.averages ? (
-                  <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                    {athlete.averages.ppg ? `${athlete.averages.ppg} PPG • ` : ""}{athlete.averages.per_score ? `${athlete.averages.per_score} PER` : (athlete.rating_score ? `${athlete.rating_score} RATING` : "-")}
-                  </Text>
-                ) : null}
+                {(() => {
+                  const sc = String(athlete.sport_category || '').toUpperCase().trim();
+                  if (!athlete.averages) return null;
+                  if (sc.includes("BASKETBALL")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.ppg ?? 0} PPG • {athlete.averages.rpg ?? 0} RPG • {athlete.averages.apg ?? 0} APG
+                      </Text>
+                    );
+                  } else if (sc.includes("SWIM")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.pb_50m_free ? `${athlete.averages.pb_50m_free} 50M` : "-"} • {athlete.averages.swim_index_score ? `${athlete.averages.swim_index_score} SWIM INDEX` : "-"}
+                      </Text>
+                    );
+                  } else if (sc.includes("TRACK") || sc.includes("FIELD")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "-"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "-"}
+                      </Text>
+                    );
+                  } else if (sc.includes("VOLLEY")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.spike_kills ?? 0} KILLS • {athlete.averages.block_points ?? 0} BLOCKS • {athlete.averages.service_aces ?? 0} ACES
+                      </Text>
+                    );
+                  } else if (sc.includes("PICKLE")) {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.points_scored ?? 0} PTS • {athlete.averages.aces ?? 0} ACES • {athlete.averages.dinks ?? 0} DINKS
+                      </Text>
+                    );
+                  } else {
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {athlete.averages.per_score ? `${athlete.averages.per_score} PER` : (athlete.rating_score ? `${athlete.rating_score} RATING` : "-")}
+                      </Text>
+                    );
+                  }
+                })()}
                 <View style={[styles.progressTrack, { marginTop: 6 }]}>
                   <View
                     style={[

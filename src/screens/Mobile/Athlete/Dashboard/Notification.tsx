@@ -84,7 +84,7 @@ export function NotificationPage({
   onUploadDocumentSuccess,
 }: NotificationPageProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(
     externalNotifications || []
@@ -134,7 +134,10 @@ export function NotificationPage({
 
             const rawStatus = (inq.offer_status || "Sent").toUpperCase();
             const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
-            const coachName = inq.coach_name || "Head Coach";
+            const rawCoach = inq.coach_name || inq.sender_name || inq.sender?.name || inq.coach?.full_name || "";
+            const coachName = (rawCoach && rawCoach.trim().toLowerCase() !== "coach" && rawCoach.trim().toLowerCase() !== "head coach")
+              ? rawCoach
+              : (inq.coach_name || "Coach");
 
             const isSentByAthlete = inq.initiated_by && (inq.initiated_by === inq.athlete_id || inq.initiated_by !== inq.coach_scout_id);
             if (isSentByAthlete && mappedStatus === "PENDING") {
@@ -143,10 +146,10 @@ export function NotificationPage({
 
             const notifTitle = isSentByAthlete
               ? `Inquiry ${mappedStatus === "ACCEPTED" ? "Accepted" : "Declined"}`
-              : "Recruitment Inquiry";
+              : `Recruitment Inquiry from Coach ${coachName}`;
             const notifMessage = isSentByAthlete
-              ? `${coachName} has ${mappedStatus.toLowerCase()} your recruitment inquiry.`
-              : inq.offer_message || inq.message || `${coachName} from ${inq.current_institution || "Athletic Department"} sent you a recruitment inquiry.`;
+              ? `Coach ${coachName} has ${mappedStatus.toLowerCase()} your recruitment inquiry.`
+              : inq.offer_message || inq.message || `Coach ${coachName} from ${inq.current_institution || "Athletic Department"} sent you a recruitment inquiry.`;
 
             items.push({
               id: scoutId,
@@ -164,12 +167,12 @@ export function NotificationPage({
               target_route: "CoachProfile",
               inquiry_details: {
                 inquiry_id: scoutId,
-                coach_id: inq.coach_scout_id || "",
+                coach_id: inq.coach_scout_id || inq.coach_id || "",
                 coach_name: coachName,
                 role_title: "Head Coach",
-                team_name: inq.current_institution || "Varsity Team",
+                team_name: inq.current_institution || inq.team_name || "Varsity Team",
                 sport: (inq.sport_type || "BASKETBALL").toUpperCase(),
-                message: inq.offer_message || inq.message || "A coach has sent you a formal recruitment proposal.",
+                message: inq.offer_message || inq.message || `Coach ${coachName} has sent you a formal recruitment proposal.`,
                 status: mappedStatus,
                 is_sent_by_me: Boolean(isSentByAthlete),
               },
@@ -181,8 +184,9 @@ export function NotificationPage({
             const rawType = n.type || "ACTION_REQUIRED";
             const isRecruitment = rawType.includes("INQUIRY") || rawType.includes("RECRUITMENT");
 
-            // Deduplicate recruitment notifications if an inquiry item is already present
-            if (isRecruitment && processedInquiryIds.size > 0) {
+            // Deduplicate recruitment notifications only if this specific inquiry was already added
+            const specificScoutId = n.metadata?.scout_id || n.scout_id;
+            if (isRecruitment && specificScoutId && processedInquiryIds.has(specificScoutId)) {
               return;
             }
 
@@ -205,6 +209,11 @@ export function NotificationPage({
               ? (String(fallbackInquiry.offer_status || "Sent").toUpperCase().includes("ACCEPT") ? "ACCEPTED" : String(fallbackInquiry.offer_status || "Sent").toUpperCase().includes("DECLIN") ? "DECLINED" : "PENDING")
               : "PENDING";
 
+            const rawNotifCoach = n.sender_name || n.sender?.name || n.metadata?.coach_name || fallbackInquiry?.coach_name || "";
+            const notifCoachName = (rawNotifCoach && rawNotifCoach.trim().toLowerCase() !== "coach" && rawNotifCoach.trim().toLowerCase() !== "head coach")
+              ? rawNotifCoach
+              : (n.sender_name || fallbackInquiry?.coach_name || "Coach");
+
             items.push({
               id: notifId,
               type: isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
@@ -212,11 +221,11 @@ export function NotificationPage({
               timestamp_relative: formatRelativeTime(n.created_at),
               read_status: Boolean(n.is_read || n.read_status || isAcceptedNotif || isDeclinedNotif),
               sender: isRecruitment ? {
-                name: fallbackInquiry?.coach_name || "Head Coach",
-                role_category: "Recruitment Inquiry",
+                name: notifCoachName,
+                role_category: `${n.metadata?.sport_type || "Recruitment"} Inquiry`,
               } : undefined,
-              title: n.title || (isRecruitment ? "Recruitment Inquiry" : "Action Required"),
-              message_body: n.message || n.message_body || "",
+              title: n.title || (isRecruitment ? `Recruitment Inquiry from Coach ${notifCoachName}` : "Action Required"),
+              message_body: n.message || n.message_body || (isRecruitment ? `Coach ${notifCoachName} sent you a recruitment inquiry.` : ""),
               highlighted_text: n.action_url ? "Document Verification" : undefined,
               action_label: isRecruitment ? (mappedStatus === "ACCEPTED" ? "Inquiry Accepted ✓" : mappedStatus === "DECLINED" ? "Inquiry Declined" : "View Inquiry") : "Upload Now ->",
               document_details: !isRecruitment ? {
@@ -225,13 +234,13 @@ export function NotificationPage({
                 is_uploaded: false,
               } : undefined,
               inquiry_details: isRecruitment ? {
-                inquiry_id: fallbackInquiry?.scout_id || notifId,
-                coach_id: fallbackInquiry?.coach_scout_id || "",
-                coach_name: fallbackInquiry?.coach_name || "Head Coach",
+                inquiry_id: fallbackInquiry?.scout_id || n.metadata?.scout_id || notifId,
+                coach_id: fallbackInquiry?.coach_scout_id || n.metadata?.coach_id || n.sender_id || "",
+                coach_name: notifCoachName,
                 role_title: "Head Coach",
-                team_name: fallbackInquiry?.current_institution || "Varsity Team",
-                sport: (fallbackInquiry?.sport_type || "BASKETBALL").toUpperCase(),
-                message: fallbackInquiry?.offer_message || n.message || "A coach has sent you a formal recruitment proposal.",
+                team_name: fallbackInquiry?.current_institution || n.metadata?.current_institution || n.metadata?.team_name || "Varsity Team",
+                sport: (fallbackInquiry?.sport_type || n.metadata?.sport_type || "BASKETBALL").toUpperCase(),
+                message: fallbackInquiry?.offer_message || n.metadata?.message || n.message || `Coach ${notifCoachName} has sent you a formal recruitment proposal.`,
                 status: mappedStatus,
                 is_sent_by_me: isSender,
               } : undefined,
@@ -498,7 +507,7 @@ export function NotificationPage({
       </View>
 
       {/* FILTER CHIPS */}
-      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingBottom: 12, gap: 8 }}>
+      <View style={{ flexDirection: "row", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 14, gap: 8 }}>
         {(["ALL", "INQUIRIES", "DOCUMENTS", "UNREAD"] as const).map((tab) => (
           <Pressable
             key={tab}
@@ -580,7 +589,7 @@ export function NotificationPage({
                         </View>
                         <View style={styles.headerTextContainer}>
                           <Text style={styles.senderName}>
-                            {item.sender?.name || "Coach"}
+                            {item.sender?.name || item.inquiry_details?.coach_name || "Coach"}
                           </Text>
                           <Text style={styles.senderSubtitle}>
                             {item.sender?.role_category || "Inquiry"}
@@ -697,7 +706,7 @@ export function NotificationPage({
                     style={styles.modalAvatar}
                   />
                   <Text style={styles.modalCoachName}>
-                    {selectedInquiryNotif.sender?.name}
+                    {selectedInquiryNotif.sender?.name || selectedInquiryNotif.inquiry_details?.coach_name || "Coach"}
                   </Text>
                   <Text style={styles.modalCoachRole}>
                     {selectedInquiryNotif.inquiry_details?.role_title || "Head Coach"}{" "}

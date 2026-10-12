@@ -425,13 +425,36 @@ export async function dispatchRecruitmentProposal(
     throw new ServiceError('An active recruitment proposal has already been sent to this athlete.', 400);
   }
 
-  // 3. Create Scouting Proposal
+  // 3. Resolve Coach information
+  let coachName = 'Coach';
+  let coachInstitution = '';
+  try {
+    const rawCoachUid = coachId.replace(/^coach_/, '');
+    const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${coachId}`;
+    const [cUserDoc, cProfDoc1, cProfDoc2] = await Promise.all([
+      db.collection('Users').doc(rawCoachUid).get().catch(() => null),
+      db.collection('Coach_Profiles').doc(canonicalCoachId).get().catch(() => null),
+      db.collection('Coach_Profiles').doc(rawCoachUid).get().catch(() => null),
+    ]);
+
+    const cuData = cUserDoc?.exists ? cUserDoc.data() : null;
+    const cpData = (cProfDoc1?.exists ? cProfDoc1.data() : null) || (cProfDoc2?.exists ? cProfDoc2.data() : null);
+
+    const firstName = cuData?.first_name || cpData?.first_name || '';
+    const lastName = cuData?.last_name || cpData?.last_name || '';
+    coachName = cpData?.full_name || cuData?.full_name || (firstName ? `${firstName} ${lastName}`.trim() : 'Coach');
+    coachInstitution = cpData?.current_institution || cuData?.current_institution || cpData?.institution || cuData?.institution || '';
+  } catch {}
+
+  // 4. Create Scouting Proposal
   const scoutId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   const proposalData: Record<string, any> = {
     scout_id: scoutId,
     coach_scout_id: coachId,
+    coach_name: coachName,
+    current_institution: coachInstitution,
     athlete_id: athleteId,
     initiated_by: coachId, // Coach initiated
     offer_status: 'Sent',
@@ -445,14 +468,26 @@ export async function dispatchRecruitmentProposal(
   const userData = userDoc?.exists ? userDoc.data() : {};
   const athleteProfileData = athleteDoc?.exists ? athleteDoc.data() : {};
 
-  // Notify the athlete directly — write to Firestore immediately
+  // Notify the athlete directly — write to Firestore immediately with coach name
   const athleteUserId = rawAthleteUid || athleteId;
+  const notifMsg = offerDetails
+    ? `Coach ${coachName}${coachInstitution ? ` (${coachInstitution})` : ''} sent you a recruitment inquiry: "${offerDetails}"`
+    : `Coach ${coachName}${coachInstitution ? ` (${coachInstitution})` : ''} has sent you a formal recruitment proposal. Check your inquiry tracker for details.`;
+
   await createNotification({
     recipient_id: athleteUserId,
     sender_id: coachId,
+    sender_name: coachName,
     type: 'RECRUITMENT_INQUIRY',
-    title: 'New Recruitment Offer Received',
-    message: `A coach has sent you a formal recruitment proposal. Check your inquiry tracker for details.`,
+    title: `Recruitment Offer from Coach ${coachName}`,
+    message: notifMsg,
+    metadata: {
+      scout_id: scoutId,
+      coach_id: coachId,
+      coach_name: coachName,
+      current_institution: coachInstitution,
+      message: offerDetails || null,
+    },
   });
 
   return {

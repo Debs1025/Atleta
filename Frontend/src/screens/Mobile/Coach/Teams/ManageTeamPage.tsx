@@ -21,7 +21,6 @@ const DEFAULT_AVAILABLE_SPORTS = [
   "VOLLEYBALL",
   "TRACK AND FIELD",
   "SWIMMING",
-  "PICKLEBALL",
 ];
 
 export const SPORT_POSITIONS_MAP: Record<string, { code: string; label: string }[]> = {

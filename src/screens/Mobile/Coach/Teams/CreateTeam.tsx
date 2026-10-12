@@ -17,7 +17,6 @@ const DEFAULT_SPORT_CATEGORIES = [
   "VOLLEYBALL",
   "TRACK AND FIELD",
   "SWIMMING",
-  "PICKLEBALL",
 ];
 
 export interface CreateTeamProps {
@@ -47,7 +46,7 @@ export function CreateTeam({
         const mapped = fetched
           .map((s: any) => String(s.sport_name || s.name || s.short_identifier || '').toUpperCase().trim())
           .filter(Boolean);
-        const unique = Array.from(new Set([...mapped, ...DEFAULT_SPORT_CATEGORIES]));
+        const unique = Array.from(new Set(mapped));
         if (unique.length > 0) {
           setSportsList(unique);
         }
