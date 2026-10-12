@@ -213,7 +213,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
   // Calendar Birthdate Picker modal state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [socialModal, setSocialModal] = useState<{ visible: boolean; provider: 'google' | 'facebook' }>({ visible: false, provider: 'google' });
   const [pickerYear, setPickerYear] = useState(2004);
   const [pickerMonth, setPickerMonth] = useState(9);
   const [calendarMode, setCalendarMode] = useState<"DAYS" | "MONTHS" | "YEARS">("DAYS");
@@ -300,40 +300,13 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
     // Fall back smoothly to in-app Google Auth modal without leaving the app
     setLoading(false);
-    setShowGoogleModal(true);
+    setSocialModal({ visible: true, provider: "google" });
   };
 
-  const handleFacebookSignUpPress = async () => {
-    setLoading(true);
+  const handleFacebookSignUpPress = () => {
+    setLoading(false);
     setFeedback(null);
-
-    try {
-      const res = await promptFacebookOAuthAsync();
-      if (res.type === "success" && (res.accessToken || res.idToken)) {
-        const token = (res.accessToken || res.idToken)!;
-        setSocialToken({ provider: "facebook", idToken: token });
-        setFeedback({
-          tone: "info",
-          message: `Facebook account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
-        });
-        setStep(3);
-        setLoading(false);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Facebook sign-up failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Facebook sign-up failed."
-      });
-    }
+    setSocialModal({ visible: true, provider: "facebook" });
   };
 
   const athleteForm = useForm<AthleteSignupValues>({
@@ -730,15 +703,16 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       />
 
       <InAppGoogleAuthModal
-        visible={showGoogleModal}
-        onClose={() => setShowGoogleModal(false)}
+        visible={socialModal.visible}
+        provider={socialModal.provider}
+        onClose={() => setSocialModal((prev) => ({ ...prev, visible: false }))}
         onSuccess={(tokens) => {
           const token = tokens.idToken || tokens.accessToken;
           if (token) {
-            setSocialToken({ provider: "google", idToken: token });
+            setSocialToken({ provider: socialModal.provider, idToken: token });
             setFeedback({
               tone: "info",
-              message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
+              message: `${socialModal.provider === "facebook" ? "Facebook" : "Google"} account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
             });
             setStep(3);
           }
@@ -746,7 +720,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
         onError={(err) => {
           setFeedback({
             tone: "error",
-            message: err || "Google sign-up failed."
+            message: err || `${socialModal.provider === "facebook" ? "Facebook" : "Google"} sign-up failed.`
           });
         }}
       />

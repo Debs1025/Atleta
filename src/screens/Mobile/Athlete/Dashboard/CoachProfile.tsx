@@ -165,35 +165,7 @@ export function CoachProfileScreen({
               <Text style={styles.metricSubtext}>Years of Elite Coaching</Text>
             </View>
 
-            {/* Card 2: Core Specialties */}
-            <View style={styles.metricCard}>
-              <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
-              <View style={styles.specialtiesList}>
-                {coachData.core_specialties.length === 0 ? (
-                  <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No specialties specified</Text>
-                ) : (
-                  coachData.core_specialties.map((item, idx) => (
-                    <View key={idx} style={styles.specialtyItemCard}>
-                      <Ionicons
-                        name={
-                          idx === 0
-                            ? "basketball-outline"
-                            : idx === 1
-                            ? "fitness-outline"
-                            : "body-outline"
-                        }
-                        size={16}
-                        color="#38BDF8"
-                        style={styles.specialtyIcon}
-                      />
-                      <Text style={styles.specialtyText}>{item}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
-            </View>
-
-            {/* Card 3: Success Rate */}
+            {/* Card 2: Success Rate */}
             <View style={styles.metricCardCenter}>
               <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
               <Text style={styles.metricBigValue}>{coachData.success_rate}</Text>

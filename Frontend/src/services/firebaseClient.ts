@@ -951,8 +951,6 @@ export async function getTeamsOfflineFirst(): Promise<any[]> {
       nameMap.set('coach_001', 'Erick Nathaniel De Belen');
       nameMap.set('coach_usr_coach_001', 'Coach Nash Racela');
       nameMap.set('usr_coach_001', 'Coach Nash Racela');
-      nameMap.set('v5XWfDqgsYTFPx7xEWnBsssNcH83', 'Gerard Francis Pelonio');
-      nameMap.set('coach_v5XWfDqgsYTFPx7xEWnBsssNcH83', 'Gerard Francis Pelonio');
       nameMap.set('t358EW07qTaKPJLiFHNSClaLqXJ3', 'Coach Carter');
       nameMap.set('coach_t358EW07qTaKPJLiFHNSClaLqXJ3', 'Coach Carter');
 

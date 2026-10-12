@@ -18,12 +18,15 @@ function runtimeProcessEnv(key: string): string | undefined {
   return runtime.process?.env?.[key];
 }
 
-interface InAppGoogleAuthModalProps {
+export interface InAppSocialAuthModalProps {
   visible: boolean;
+  provider?: 'google' | 'facebook';
   onClose: () => void;
   onSuccess: (tokens: { idToken?: string; accessToken?: string }) => void;
   onError: (error: string) => void;
 }
+
+export type InAppGoogleAuthModalProps = InAppSocialAuthModalProps;
 
 const CHROME_USER_AGENT_ANDROID =
   'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
@@ -32,6 +35,7 @@ const SAFARI_USER_AGENT_IOS =
 
 export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
   visible,
+  provider = 'google',
   onClose,
   onSuccess,
   onError,
@@ -45,11 +49,30 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
     ).trim();
   }, []);
 
+  const facebookAppId = useMemo(() => {
+    return (
+      runtimeProcessEnv('EXPO_PUBLIC_FACEBOOK_APP_ID') ||
+      '1073849184511218'
+    ).trim();
+  }, []);
+
   const redirectUri = 'https://atleta-v1.firebaseapp.com/__/auth/handler';
 
   const authUrl = useMemo(() => {
     const nonce = Math.random().toString(36).substring(2, 15);
     const state = Math.random().toString(36).substring(2, 15);
+
+    if (provider === 'facebook') {
+      const params = new URLSearchParams({
+        client_id: facebookAppId,
+        redirect_uri: redirectUri,
+        response_type: 'token',
+        scope: 'email,public_profile',
+        display: 'touch',
+        state,
+      });
+      return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
+    }
 
     const params = new URLSearchParams({
       client_id: googleClientId,
@@ -62,7 +85,7 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
     });
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-  }, [googleClientId, visible]);
+  }, [googleClientId, facebookAppId, provider, visible]);
 
   const extractTokens = (url: string) => {
     let params: URLSearchParams;
@@ -127,11 +150,15 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
         {/* Modal In-App Header */}
         <View style={styles.header}>
           <View style={styles.headerTitleContainer}>
-            <View style={styles.googleIconBadge}>
-              <Ionicons name="logo-google" size={16} color="#4285F4" />
+            <View style={[styles.googleIconBadge, provider === "facebook" && { backgroundColor: "rgba(24, 119, 242, 0.15)", borderColor: "rgba(24, 119, 242, 0.3)" }]}>
+              <Ionicons
+                name={provider === "facebook" ? "logo-facebook" : "logo-google"}
+                size={16}
+                color={provider === "facebook" ? "#1877F2" : "#4285F4"}
+              />
             </View>
             <View>
-              <Text style={styles.headerTitle}>Google Sign-In</Text>
+              <Text style={styles.headerTitle}>{provider === "facebook" ? "Facebook Sign-In" : "Google Sign-In"}</Text>
               <Text style={styles.headerSubtitle}>Sign in securely inside Atleta</Text>
             </View>
           </View>

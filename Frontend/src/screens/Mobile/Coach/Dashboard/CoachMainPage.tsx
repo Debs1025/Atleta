@@ -433,12 +433,52 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     };
   };
 
-  // Instant cache hydration on mount (<10ms)
+  // Instant cache hydration on mount (<10ms) scoped to authenticated coach
   useEffect(() => {
-    AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY)
-      .then((raw) => {
+    (async () => {
+      try {
+        const token = await getStoredAuthToken();
+        let currentUid = "";
+        let currentEmail = "";
+        if (token && token.includes(".")) {
+          try {
+            const base64Url = token.split(".")[1];
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            let decoded = "";
+            if (typeof atob === "function") {
+              decoded = atob(base64);
+            } else {
+              const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+              let str = base64.replace(/=+$/, "");
+              let output = "";
+              for (let bc = 0, bs = 0, buffer: any, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+                buffer = chars.indexOf(buffer);
+              }
+              decoded = output;
+            }
+            const payload = JSON.parse(decoded);
+            currentUid = String(payload.uid || payload.user_id || payload.sub || "").replace(/^coach_/, "").toLowerCase();
+            currentEmail = String(payload.email || "").toLowerCase();
+          } catch {}
+        }
+
+        const raw = await AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY);
         if (raw) {
           const cached = JSON.parse(raw);
+          const cachedCoachId = String(cached.coach?.user_id || cached.coach?.coach_id || "").replace(/^coach_/, "").toLowerCase();
+          const cachedEmail = String(cached.coach?.email || "").toLowerCase();
+
+          // Only hydrate if the cache strictly matches the currently authenticated coach
+          const isSameCoach =
+            (currentUid && cachedCoachId && currentUid === cachedCoachId) ||
+            (currentEmail && cachedEmail && currentEmail === cachedEmail);
+
+          if (!isSameCoach && (currentUid || currentEmail)) {
+            // Stale cache from another coach session - discard immediately
+            await AsyncStorage.removeItem(COACH_DASHBOARD_CACHE_KEY).catch(() => null);
+            return;
+          }
+
           if (cached.coach) setCoach(cached.coach);
           if (cached.coachProfile) setCoachProfile(cached.coachProfile);
           if (Array.isArray(cached.teams) && cached.teams.length > 0) {
@@ -464,8 +504,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             setDynamicSports(cached.dynamicSports);
           }
         }
-      })
-      .catch(() => null);
+      } catch {}
+    })();
   }, []);
 
   // Live Backend Data Fetching on Mount
@@ -810,9 +850,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
           const effectiveProfile = profileRes || offlineProfileRes;
           if (effectiveProfile) {
-            const firstName = effectiveProfile.first_name || offlineProfileRes?.first_name || coach.first_name || "Coach";
-            const lastName = effectiveProfile.last_name || offlineProfileRes?.last_name || coach.last_name || "";
-            const fullName = effectiveProfile.full_name || offlineProfileRes?.full_name || `${firstName} ${lastName}`.trim();
+            const fallbackEmailName = effectiveProfile.email ? effectiveProfile.email.split('@')[0] : "";
+            const firstName = effectiveProfile.first_name || offlineProfileRes?.first_name || fallbackEmailName || "Coach";
+            const lastName = effectiveProfile.last_name || offlineProfileRes?.last_name || "";
+            const fullName = effectiveProfile.full_name || offlineProfileRes?.full_name || (firstName !== "Coach" ? `${firstName} ${lastName}`.trim() : "Coach");
             const rawSport = (effectiveProfile.sport_type || effectiveProfile.sports_focus || offlineProfileRes?.sport_type || "BASKETBALL").toUpperCase();
             const sportFocus: CoachProfileState["sports_focus"] =
               rawSport.includes("SWIM")

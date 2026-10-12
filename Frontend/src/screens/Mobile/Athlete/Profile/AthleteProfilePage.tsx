@@ -407,11 +407,9 @@ export function AthleteProfilePage({
   // Handler to pick/upload avatar image
   const handlePickAvatarImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission Denied", "Permission to access media library is required to select a profile picture.");
-        return;
-      }
+      try {
+        await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+      } catch {}
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/AuthEntry";
 import * as SecureStore from "expo-secure-store";
 import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, type AuthRole } from "./authShared";
@@ -54,7 +55,12 @@ export function AuthEntry() {
   const handleLogout = async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
-      SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null)
+      SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
+      AsyncStorage.removeItem("atleta_coach_dashboard_cache_v2").catch(() => null),
+      AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null),
+      AsyncStorage.removeItem("atleta_offline_athlete_profile_cache").catch(() => null),
+      AsyncStorage.removeItem("atleta_coach_settings").catch(() => null),
+      AsyncStorage.removeItem("atleta_cached_user").catch(() => null),
     ]);
     setActiveRole(null);
     setScreen("login");

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Platform, ScrollView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -41,7 +42,7 @@ type LoginScreenProps = {
 export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScreenProps) {
   const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [socialModal, setSocialModal] = useState<{ visible: boolean; provider: 'google' | 'facebook' }>({ visible: false, provider: 'google' });
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -78,6 +79,12 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
       if (token) await storeAuthToken(token);
       await storeAuthRole(role);
+
+      await Promise.all([
+        AsyncStorage.removeItem("atleta_coach_dashboard_cache_v2").catch(() => null),
+        AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null),
+        AsyncStorage.removeItem("atleta_offline_athlete_profile_cache").catch(() => null),
+      ]);
 
       onAuthenticated?.(role);
     } catch (error: any) {
@@ -122,33 +129,13 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
     // Fall back seamlessly to in-app Google Auth modal without leaving the app
     setLoading(false);
-    setShowGoogleModal(true);
+    setSocialModal({ visible: true, provider: "google" });
   };
 
-  const handleFacebookSignInPress = async () => {
-    setLoading(true);
+  const handleFacebookSignInPress = () => {
+    setLoading(false);
     setFeedback(null);
-
-    try {
-      const res = await promptFacebookOAuthAsync();
-      if (res.type === "success" && (res.accessToken || res.idToken)) {
-        await handleSocialAuthWithToken("facebook", (res.accessToken || res.idToken)!);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Facebook sign-in failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Facebook sign-in failed."
-      });
-    }
+    setSocialModal({ visible: true, provider: "facebook" });
   };
 
   const submit = form.handleSubmit(
@@ -167,6 +154,12 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
         if (token) await storeAuthToken(token);
         await storeAuthRole(role);
+
+        await Promise.all([
+          AsyncStorage.removeItem("atleta_coach_dashboard_cache_v2").catch(() => null),
+          AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null),
+          AsyncStorage.removeItem("atleta_offline_athlete_profile_cache").catch(() => null),
+        ]);
 
         onAuthenticated?.(role);
         form.reset(values);
@@ -255,18 +248,19 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         </Text>
 
         <InAppGoogleAuthModal
-          visible={showGoogleModal}
-          onClose={() => setShowGoogleModal(false)}
+          visible={socialModal.visible}
+          provider={socialModal.provider}
+          onClose={() => setSocialModal((prev) => ({ ...prev, visible: false }))}
           onSuccess={(tokens) => {
             const token = tokens.idToken || tokens.accessToken;
             if (token) {
-              handleSocialAuthWithToken("google", token);
+              handleSocialAuthWithToken(socialModal.provider, token);
             }
           }}
           onError={(err) => {
             setFeedback({
               tone: "error",
-              message: err || "Google sign-in could not be completed."
+              message: err || `${socialModal.provider === "facebook" ? "Facebook" : "Google"} sign-in could not be completed.`
             });
           }}
         />
