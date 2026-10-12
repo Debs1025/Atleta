@@ -4,6 +4,8 @@
     "slug": "atleta",
     "owner": "gerardpelonio303511",
     "scheme": ["com.anonymous.atleta", "atleta"],
+    "facebookAppId": "1478346524097898",
+    "facebookDisplayName": "Atleta",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

@@ -68,7 +68,6 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
         redirect_uri: redirectUri,
         response_type: 'token',
         scope: 'email,public_profile',
-        display: 'touch',
         state,
       });
       return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
@@ -110,20 +109,8 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
   const handleInterceptUrl = (url: string): boolean => {
     if (!url) return false;
 
-    if (
-      url.startsWith(redirectUri) ||
-      url.includes('id_token=') ||
-      url.includes('access_token=') ||
-      url.includes('error=') ||
-      url.includes('/oauth/error/') ||
-      url.includes('INVALID_APP_ID')
-    ) {
-      if (url.includes('INVALID_APP_ID') || url.includes('/oauth/error/')) {
-        onError(`Facebook returned: Invalid App ID (${facebookAppId}). The app ID does not exist or has not been set to Live in the Meta Developer Console.`);
-        onClose();
-        return true;
-      }
-
+    // Only intercept when redirected to our redirectUri or Firebase callback
+    if (url.startsWith(redirectUri) || (url.includes('atleta-v1.firebaseapp.com') && (url.includes('access_token=') || url.includes('id_token=')))) {
       const { idToken, accessToken, error } = extractTokens(url);
 
       if (idToken || accessToken) {
@@ -140,6 +127,13 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
         onClose();
         return true;
       }
+    }
+
+    // Intercept explicit Facebook OAuth error landing page
+    if (url.includes('facebook.com/oauth/error') || url.includes('PLATFORM__INVALID_APP_ID')) {
+      onError(`Facebook returned: Invalid App ID (${facebookAppId}). The app ID must be active on developers.facebook.com.`);
+      onClose();
+      return true;
     }
 
     return false;
@@ -190,7 +184,7 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
         {/* In-App WebView (User never leaves the application) */}
         <WebView
           source={{ uri: authUrl }}
-          userAgent={Platform.OS === 'ios' ? SAFARI_USER_AGENT_IOS : CHROME_USER_AGENT_ANDROID}
+          userAgent={provider === 'google' ? (Platform.OS === 'ios' ? SAFARI_USER_AGENT_IOS : CHROME_USER_AGENT_ANDROID) : undefined}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           sharedCookiesEnabled={true}
