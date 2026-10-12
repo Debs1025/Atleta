@@ -114,8 +114,16 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
       url.startsWith(redirectUri) ||
       url.includes('id_token=') ||
       url.includes('access_token=') ||
-      url.includes('error=')
+      url.includes('error=') ||
+      url.includes('/oauth/error/') ||
+      url.includes('INVALID_APP_ID')
     ) {
+      if (url.includes('INVALID_APP_ID') || url.includes('/oauth/error/')) {
+        onError(`Facebook returned: Invalid App ID (${facebookAppId}). The app ID does not exist or has not been set to Live in the Meta Developer Console.`);
+        onClose();
+        return true;
+      }
+
       const { idToken, accessToken, error } = extractTokens(url);
 
       if (idToken || accessToken) {
