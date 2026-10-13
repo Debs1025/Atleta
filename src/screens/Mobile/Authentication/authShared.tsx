@@ -46,11 +46,16 @@ const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngr
 const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
 
 const CLOUD_PROD_API = "https://atleta-backend.vercel.app/api/v1";
-const rawDevApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || `http://${hostIp}:5000`).trim().replace(/\/+$/, "");
-const CANDIDATE_DEV_API = rawDevApi.endsWith("/api/v1") ? rawDevApi : `${rawDevApi}/api/v1`;
+const envApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "").trim().replace(/\/+$/, "");
+const configuredApi = envApi
+  ? (envApi.endsWith("/api/v1") ? envApi : `${envApi}/api/v1`)
+  : CLOUD_PROD_API;
 
-// Default to Cloud Prod if on tunnel or not dev, otherwise candidate dev
-let activeApiBase = !__DEV__ || isTunnel ? CLOUD_PROD_API : CANDIDATE_DEV_API;
+const rawDevApi = `http://${hostIp}:5000`;
+const CANDIDATE_DEV_API = `${rawDevApi}/api/v1`;
+
+// If in production/EAS build, strictly use configuredApi or CLOUD_PROD_API
+let activeApiBase = !__DEV__ ? configuredApi : (isTunnel ? configuredApi : CANDIDATE_DEV_API);
 export let API_BASE = activeApiBase;
 
 let hasProbedApi = false;
@@ -58,15 +63,21 @@ export async function getActiveApiBase(): Promise<string> {
   if (hasProbedApi) return activeApiBase;
   hasProbedApi = true;
 
-  if (!__DEV__ || isTunnel) {
-    activeApiBase = CLOUD_PROD_API;
-    API_BASE = CLOUD_PROD_API;
-    return CLOUD_PROD_API;
+  if (!__DEV__) {
+    activeApiBase = configuredApi;
+    API_BASE = configuredApi;
+    return configuredApi;
   }
 
-  // Quick 600ms probe to check if local development server is reachable
+  if (isTunnel) {
+    activeApiBase = configuredApi;
+    API_BASE = configuredApi;
+    return configuredApi;
+  }
+
+  // Quick 1000ms probe to check if local development server is reachable
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 600);
+  const timer = setTimeout(() => controller.abort(), 1000);
   try {
     const probeRes = await fetch(`${CANDIDATE_DEV_API}/sports`, {
       method: "GET",
@@ -78,13 +89,13 @@ export async function getActiveApiBase(): Promise<string> {
       return activeApiBase;
     }
   } catch (_) {
-    // Local dev unreachable - immediately switch to Cloud Prod API
+    // Local dev unreachable - immediately switch to Configured / Cloud Prod API
   } finally {
     clearTimeout(timer);
   }
 
-  activeApiBase = CLOUD_PROD_API;
-  API_BASE = CLOUD_PROD_API;
+  activeApiBase = configuredApi;
+  API_BASE = configuredApi;
   return activeApiBase;
 }
 
@@ -99,7 +110,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 2500;
+const REQUEST_TIMEOUT_MS = 8000;
 
 // Types
 export type BannerTone = "error" | "success" | "info";

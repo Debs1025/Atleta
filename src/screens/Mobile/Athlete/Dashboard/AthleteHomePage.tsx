@@ -445,9 +445,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     } catch (error) {
       // Token authentication fallback
     } finally {
-      if (isInitialLoad) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   }, []);
 
@@ -463,8 +461,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       } catch (_) {}
     })();
 
-    // 2. Refresh live athlete data in background without blocking
-    refreshAthleteData(false);
+    // 2. Fetch live athlete data
+    refreshAthleteData(true);
   }, [refreshAthleteData]);
 
   useEffect(() => {

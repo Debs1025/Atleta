@@ -338,7 +338,7 @@ export function clearFirebaseClientCaches() {
   AsyncStorage.removeItem(OFFLINE_SPORTS_CACHE_KEY).catch(() => null);
 }
 
-async function quickFetchJson(url: string, headers: any, timeoutMs: number = 1800): Promise<any> {
+async function quickFetchJson(url: string, headers: any, timeoutMs: number = 6000): Promise<any> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -365,7 +365,7 @@ async function revalidateAthletesInBackground(): Promise<void> {
     const data = await quickFetchJson(`${API_BASE}/coaches/athletes`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 2500);
+    }, 6000);
 
     const list = Array.isArray(data?.athletes) ? data.athletes : Array.isArray(data) ? data : [];
     if (list.length > 0) {
@@ -460,7 +460,7 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
     const data = await quickFetchJson(`${API_BASE}/coaches/athletes`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 1800);
+    }, 6000);
 
     const list = Array.isArray(data?.athletes) ? data.athletes : Array.isArray(data) ? data : [];
     if (list.length > 0) {
@@ -497,13 +497,13 @@ export async function getSportsOfflineFirst(forceRefresh: boolean = false): Prom
     return sportsMemoryCache;
   }
 
-  // 2. Network Fetch with Snappy Timeout (2.0s)
+  // 2. Network Fetch with Snappy Timeout (6.0s)
   try {
     const token = await getStoredAuthToken();
     const data = await quickFetchJson(`${API_BASE}/sports`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 2000);
+    }, 6000);
 
     const list = Array.isArray(data?.sports)
       ? data.sports
@@ -591,7 +591,7 @@ export async function getMatchesOfflineFirst(): Promise<any[]> {
     const data = await quickFetchJson(`${API_BASE}/matches`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 1800);
+    }, 6000);
 
     const list = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
     if (list.length > 0) {

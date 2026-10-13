@@ -524,24 +524,27 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           profileRes,
           teamsRes,
           syncRes,
-          offlineMatches,
-          offlineAthletes,
+          matchesRes,
+          coachAthletesRes,
           notifsRes,
           sportsRes,
-        ]: [any, any, any, any, any, any, any] = await Promise.all([
-          getCoachProfileOfflineFirst().catch(() => null),
+          offlineMatches,
+          offlineAthletes,
+          offlineProfileRes,
+        ]: [any, any, any, any, any, any, any, any, any, any] = await Promise.all([
+          requestAuthenticatedJson("/coaches/profile").catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
           requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
-          getMatchesOfflineFirst().catch(() => []),
-          getAthletesOfflineFirst().catch(() => []),
+          requestAuthenticatedJson("/matches").catch(() => null),
+          requestAuthenticatedJson("/coaches/athletes").catch(() => null),
           requestAuthenticatedJson("/notifications").catch(() => null),
           getSportsOfflineFirst().catch(() => []),
+          getMatchesOfflineFirst().catch(() => []),
+          getAthletesOfflineFirst().catch(() => []),
+          getCoachProfileOfflineFirst().catch(() => null),
         ]);
 
-        const matchesRes: any = null;
-        const coachAthletesRes: any = null;
         const allTeamsRes: any = null;
-        const offlineProfileRes: any = profileRes;
 
         if (isMounted) {
           // Process Notifications
