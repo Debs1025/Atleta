@@ -10,6 +10,7 @@ import {
   BoxscoreResponse,
   BoxscorePlayerMetric,
   SportType,
+  GameResult,
 } from '../models/matchModel';
 import { ServiceError, validateScoresheetUpload } from '../validators/matchValidator';
 import { generateStandardId } from '../utils/idGenerator';
@@ -270,15 +271,61 @@ export async function submitMatchSession(
   }
 
   const performanceMetrics: any[] = [];
-  const homeRosterIds: string[] = [];
-  const awayRosterIds: string[] = [];
+  const explicitHomeRoster = Array.isArray(payload.rosterAthletes) ? payload.rosterAthletes : (Array.isArray(payload.roster_athletes) ? payload.roster_athletes : []);
+  const explicitAwayRoster = Array.isArray(payload.awayRosterAthletes) ? payload.awayRosterAthletes : (Array.isArray(payload.away_roster_athletes) ? payload.away_roster_athletes : []);
+  const homeRosterIds: string[] = [...explicitHomeRoster];
+  const awayRosterIds: string[] = [...explicitAwayRoster];
   const enrichedPlayerStats: any[] = [];
 
-  const playerStatsList = payload.player_stats || [];
+  const playerStatsList = (Array.isArray(payload.playerStats) && payload.playerStats.length > 0)
+    ? payload.playerStats
+    : (payload.player_stats || []);
   for (let idx = 0; idx < playerStatsList.length; idx++) {
     const item = playerStatsList[idx];
     const athleteId = item.athlete_id || `ath_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const rawStats = item.stats || {};
+    const rawStats = item.stats || {
+      points: Number((item as any).pts ?? (item as any).points ?? 0),
+      pts: Number((item as any).pts ?? (item as any).points ?? 0),
+      rebounds: Number((item as any).reb ?? (item as any).rebounds ?? 0),
+      reb: Number((item as any).reb ?? (item as any).rebounds ?? 0),
+      offensive_rebounds: Number((item as any).offensive_rebounds ?? (item as any).oreb ?? 0),
+      defensive_rebounds: Number((item as any).defensive_rebounds ?? (item as any).dreb ?? 0),
+      assists: Number((item as any).ast ?? (item as any).assists ?? 0),
+      ast: Number((item as any).ast ?? (item as any).assists ?? 0),
+      steals: Number((item as any).stl ?? (item as any).steals ?? 0),
+      stl: Number((item as any).stl ?? (item as any).steals ?? 0),
+      blocks: Number((item as any).blk ?? (item as any).blocks ?? (item as any).block_points ?? 0),
+      blk: Number((item as any).blk ?? (item as any).blocks ?? (item as any).block_points ?? 0),
+      fouls: Number((item as any).pf ?? (item as any).fouls ?? 0),
+      pf: Number((item as any).pf ?? (item as any).fouls ?? 0),
+      turnovers: Number((item as any).to ?? (item as any).turnovers ?? 0),
+      to: Number((item as any).to ?? (item as any).turnovers ?? 0),
+      minutes: Number((item as any).minutes ?? (item as any).min ?? 0),
+      min: Number((item as any).minutes ?? (item as any).min ?? 0),
+      fg_made: Number((item as any).fg_made ?? (item as any).fgm ?? 0),
+      fg_attempted: Number((item as any).fg_attempted ?? (item as any).fga ?? 0),
+      three_made: Number((item as any).three_made ?? (item as any)['3pm'] ?? 0),
+      three_attempted: Number((item as any).three_attempted ?? (item as any)['3pa'] ?? 0),
+      ft_made: Number((item as any).ft_made ?? (item as any).ftm ?? 0),
+      ft_attempted: Number((item as any).ft_attempted ?? (item as any).fta ?? 0),
+      kills: Number((item as any).kills ?? 0),
+      attack_errors: Number((item as any).attack_errors ?? 0),
+      attack_attempts: Number((item as any).attack_attempts ?? 0),
+      digs: Number((item as any).digs ?? 0),
+      service_aces: Number((item as any).service_aces ?? 0),
+      service_errors: Number((item as any).service_errors ?? 0),
+      goals: Number((item as any).goals ?? 0),
+      shots: Number((item as any).shots ?? 0),
+      saves: Number((item as any).saves ?? 0),
+      tackles: Number((item as any).tackles ?? 0),
+      finish_time: (item as any).formatted_time || (item as any).finish_time || (item as any).time,
+      time: (item as any).formatted_time || (item as any).time || (item as any).finish_time,
+      distance_meters: Number((item as any).distance_meters ?? (item as any).distance_m ?? 0),
+      split_times: (item as any).split_times || (item as any).split || [],
+      stroke_count: Number((item as any).stroke_count ?? 0),
+      stroke_rate: Number((item as any).stroke_rate ?? 0),
+      wind: String((item as any).wind || ''),
+    };
     const eventName = (item as any).event || (item as any).event_name || rawStats.event || rawStats.event_name || null;
     const eventId = (item as any).event_id || rawStats.event_id || (eventName ? `evt_${String(eventName).toLowerCase().replace(/[^a-z0-9]/g, '_')}` : null);
     const eventSlug = String(eventName || eventId || (item as any).discipline || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
@@ -292,9 +339,9 @@ export async function submitMatchSession(
     const pTeam = isHomePlayer ? homeTeamName : oppTeamName;
 
     if (isHomePlayer) {
-      homeRosterIds.push(athleteId);
+      if (!homeRosterIds.includes(athleteId)) homeRosterIds.push(athleteId);
     } else {
-      awayRosterIds.push(athleteId);
+      if (!awayRosterIds.includes(athleteId)) awayRosterIds.push(athleteId);
     }
 
     let efficiency = 0;
@@ -320,13 +367,56 @@ export async function submitMatchSession(
     const heatVal = (item as any).heat ?? rawStats.heat ?? null;
     const laneVal = (item as any).lane ?? rawStats.lane ?? null;
 
+    const structuredSportStats: any = {
+      pts: Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0),
+      ast: Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0),
+      reb: Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0),
+      fg_pct: Number(rawStats.fg_pct ?? rawStats.field_goal_percentage ?? 0),
+      ...enrichedStats,
+    };
+
+    const sportLower = String(payload.sport_type || '').toLowerCase();
+    if (sportLower.includes('basket')) {
+      structuredSportStats.basketball = {
+        total_field_goals_made: Number(rawStats.fg_made ?? rawStats.fgm ?? 0),
+        total_field_goals_attempts: Number(rawStats.fg_attempted ?? rawStats.fga ?? 0),
+        two_point_made: Number(rawStats.two_point_made ?? rawStats.two_pm ?? 0),
+        two_point_attempts: Number(rawStats.two_point_attempts ?? rawStats.two_pa ?? 0),
+        three_point_made: Number(rawStats.three_point_made ?? rawStats.three_pm ?? rawStats.three_pt_made ?? 0),
+        three_point_attempts: Number(rawStats.three_point_attempts ?? rawStats.three_pa ?? rawStats.three_pt_attempts ?? 0),
+        free_throws_made: Number(rawStats.ft_made ?? rawStats.ftm ?? 0),
+        free_throws_attempts: Number(rawStats.ft_attempted ?? rawStats.fta ?? 0),
+        assists: Number(rawStats.assists ?? rawStats.ast ?? 0),
+        blocks: Number(rawStats.blocks ?? rawStats.blk ?? 0),
+        turnovers: Number(rawStats.turnovers ?? rawStats.to ?? 0),
+        rebounds: Number(rawStats.rebounds ?? rawStats.reb ?? 0),
+      };
+    } else if (sportLower.includes('swim')) {
+      structuredSportStats.swimming = {
+        target_distance: Number(rawStats.target_distance ?? rawStats.distance ?? 0),
+        stroke_count: Number(rawStats.stroke_count ?? 0),
+        stroke_rate: Number(rawStats.stroke_rate ?? 0),
+        distance_per_stroke: Number(rawStats.distance_per_stroke ?? 0),
+        reaction_time: Number(rawStats.reaction_time ?? 0),
+        lap_time: Number(rawStats.lap_time ?? 0),
+        finish_time: Number(rawStats.finish_time ?? 0),
+      };
+    } else if (sportLower.includes('track') || sportLower.includes('field') || sportLower.includes('run')) {
+      structuredSportStats.track_and_field = {
+        event_type: String(eventName || rawStats.event_type || 'Sprint'),
+        target_distance: Number(rawStats.target_distance ?? rawStats.distance ?? 0),
+        lap_time: Number(rawStats.lap_time ?? 0),
+        finish_time: Number(rawStats.finish_time ?? 0),
+      };
+    }
+
     const metric: any = {
       metric_id: metricId,
+      match_id: matchId,
       athlete_id: athleteId,
       player_name: pName,
       team_name: pTeam,
       jersey_number: (item as any).jersey_number ?? null,
-      match_id: matchId,
       sport_category: payload.sport_type,
       event: eventName,
       event_id: eventId,
@@ -337,9 +427,14 @@ export async function submitMatchSession(
       finish_time: finishTime,
       time: finishTime,
       split: splitTime,
-      sport_stats: enrichedStats,
+      sport_stats: structuredSportStats,
+      custom_stats: {
+        stat_name_key: 'efficiency_rating',
+        stat_value: efficiency,
+      },
       calculated_player_efficiency: efficiency,
       timestamp: now,
+      created_at: now,
     };
 
     performanceMetrics.push(metric);
@@ -356,19 +451,56 @@ export async function submitMatchSession(
       placement_rank: placementRank,
       finish_time: finishTime,
       split: splitTime,
-      pts: Number(rawStats.points ?? rawStats.pts ?? 0),
-      ast: Number(rawStats.assists ?? rawStats.ast ?? 0),
-      reb: Number(rawStats.rebounds ?? rawStats.reb ?? 0),
-      stats: enrichedStats,
+      pts: Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0),
+      points: Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0),
+      ast: Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0),
+      assists: Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0),
+      reb: Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0),
+      rebounds: Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0),
+      offensive_rebounds: Number(rawStats.offensive_rebounds || 0),
+      defensive_rebounds: Number(rawStats.defensive_rebounds || 0),
+      stl: Number(rawStats.steals ?? rawStats.stl ?? (item as any).stl ?? 0),
+      steals: Number(rawStats.steals ?? rawStats.stl ?? (item as any).stl ?? 0),
+      blk: Number(rawStats.blocks ?? rawStats.blk ?? (item as any).blk ?? 0),
+      blocks: Number(rawStats.blocks ?? rawStats.blk ?? (item as any).blk ?? 0),
+      to: Number(rawStats.turnovers ?? rawStats.to ?? (item as any).to ?? 0),
+      turnovers: Number(rawStats.turnovers ?? rawStats.to ?? (item as any).to ?? 0),
+      pf: Number(rawStats.fouls ?? rawStats.pf ?? (item as any).pf ?? 0),
+      fouls: Number(rawStats.fouls ?? rawStats.pf ?? (item as any).pf ?? 0),
+      min: Number(rawStats.minutes ?? rawStats.min ?? (item as any).min ?? 0),
+      minutes: Number(rawStats.minutes ?? rawStats.min ?? (item as any).min ?? 0),
+      fg_made: Number(rawStats.fg_made || 0),
+      fg_attempted: Number(rawStats.fg_attempted || 0),
+      three_made: Number(rawStats.three_made || 0),
+      three_attempted: Number(rawStats.three_attempted || 0),
+      ft_made: Number(rawStats.ft_made || 0),
+      ft_attempted: Number(rawStats.ft_attempted || 0),
+      kills: Number(rawStats.kills || 0),
+      attack_errors: Number(rawStats.attack_errors || 0),
+      attack_attempts: Number(rawStats.attack_attempts || 0),
+      digs: Number(rawStats.digs || 0),
+      service_aces: Number(rawStats.service_aces || 0),
+      service_errors: Number(rawStats.service_errors || 0),
+      goals: Number(rawStats.goals || 0),
+      shots: Number(rawStats.shots || 0),
+      saves: Number(rawStats.saves || 0),
+      tackles: Number(rawStats.tackles || 0),
+      distance_meters: Number(rawStats.distance_meters || 0),
+      stroke_count: Number(rawStats.stroke_count || 0),
+      stroke_rate: Number(rawStats.stroke_rate || 0),
+      stats: {
+        ...rawStats,
+        ...enrichedStats,
+      },
     });
 
     // Ensure Athlete Profile exists in Athlete_Profiles and update their career averages
     const athleteRef = db.collection('Athlete_Profiles').doc(athleteId);
     const athleteDoc = await athleteRef.get();
     
-    const gamePts = Number(rawStats.points ?? rawStats.pts ?? 0);
-    const gameAst = Number(rawStats.assists ?? rawStats.ast ?? 0);
-    const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? 0);
+    const gamePts = Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0);
+    const gameAst = Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0);
+    const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0);
 
     // Dynamic metrics for individual sports / athlete portfolio
     const dynamicAverages: Record<string, any> = {};
@@ -390,36 +522,34 @@ export async function submitMatchSession(
       dynamicAverages.reaction_time_s = rawStats.reaction_time_s || rawStats.reaction_sec || rawStats.reaction_time_ms;
     }
 
-    if (!athleteDoc.exists) {
-      const nameParts = pName.split(/\s+/);
-      await athleteRef.set({
-        athlete_id: athleteId,
-        first_name: nameParts[0] || 'Athlete',
-        last_name: nameParts.slice(1).join(' ') || '',
-        full_name: pName,
-        team_name: pTeam,
-        team_id: isHomePlayer ? homeTeamId : oppTeamId,
-        jersey_number: (item as any).jersey_number ?? null,
-        sport_type: payload.sport_type,
-        position: eventName || 'Player',
-        position_or_event: eventName || 'Player',
-        averages: {
-          ppg: gamePts,
-          apg: gameAst,
-          rpg: gameReb,
-          games_played: 1,
-          fg_percentage: 50,
-          three_pt_percentage: 38,
-          ft_percentage: 80,
-          per_score: 22,
-          ...dynamicAverages,
-        },
-        scoring_trends_last_10: [gamePts],
-        created_at: now,
-        updated_at: now,
-      });
-    } else {
-      const currentData = athleteDoc.data() || {};
+    // Verify whether this player exists and is an officially registered athlete in Firestore
+    let registeredAthleteDoc = athleteDoc.exists ? athleteDoc : null;
+    let targetAthleteRef = athleteRef;
+
+    if (!registeredAthleteDoc) {
+      // Check canonical or raw UID variants and Users collection
+      const rawUid = athleteId.replace(/^ath_/, '');
+      const [altDoc1, altDoc2, userDoc] = await Promise.all([
+        db.collection('Athlete_Profiles').doc(rawUid).get().catch(() => null),
+        db.collection('Athlete_Profiles').doc(`ath_${rawUid}`).get().catch(() => null),
+        db.collection('Users').doc(rawUid).get().catch(() => null),
+      ]);
+
+      if (altDoc1 && altDoc1.exists) {
+        registeredAthleteDoc = altDoc1;
+        targetAthleteRef = altDoc1.ref;
+      } else if (altDoc2 && altDoc2.exists) {
+        registeredAthleteDoc = altDoc2;
+        targetAthleteRef = altDoc2.ref;
+      } else if (userDoc && userDoc.exists && userDoc.data()?.role?.toLowerCase() === 'athlete') {
+        registeredAthleteDoc = userDoc;
+        targetAthleteRef = db.collection('Athlete_Profiles').doc(`ath_${rawUid}`);
+      }
+    }
+
+    if (registeredAthleteDoc && registeredAthleteDoc.exists) {
+      // Verified registered player: update career averages and match statistics!
+      const currentData = registeredAthleteDoc.data() || {};
       const currentAvg = currentData.averages || currentData.stats || {};
       const prevGames = Number(currentAvg.games_played || 1);
       const newGames = prevGames + 1;
@@ -437,7 +567,7 @@ export async function submitMatchSession(
         : [prevPpg];
       const newTrends = [...prevTrends, gamePts].slice(-10);
 
-      await athleteRef.set({
+      await targetAthleteRef.set({
         averages: {
           ...currentAvg,
           ppg: newPpg,
@@ -457,6 +587,9 @@ export async function submitMatchSession(
         scoring_trends_last_10: newTrends,
         updated_at: now,
       }, { merge: true });
+    } else {
+      // Unregistered / guest opponent player: skip creating database user profiles
+      console.log(`[OCR / MATCH LOG] Skipping user profile creation for unregistered guest player: ${pName} (${athleteId})`);
     }
   }
 
@@ -479,11 +612,33 @@ export async function submitMatchSession(
     game_result: homeScore >= awayScore ? 'WIN' : 'LOSS',
     home_roster_athletes: homeRosterIds,
     away_roster_athletes: awayRosterIds,
-    roster_athletes: [...homeRosterIds, ...awayRosterIds],
+    roster_athletes: (payload.roster_athletes && payload.roster_athletes.length > 0) ? payload.roster_athletes : [...homeRosterIds, ...awayRosterIds],
+    rosterAthletes: (payload.rosterAthletes && payload.rosterAthletes.length > 0)
+      ? payload.rosterAthletes
+      : (homeRosterIds.length > 0 ? homeRosterIds : (payload.roster_athletes || [])),
+    awayRosterAthletes: (payload.awayRosterAthletes && payload.awayRosterAthletes.length > 0)
+      ? payload.awayRosterAthletes
+      : (awayRosterIds.length > 0 ? awayRosterIds : (payload.away_roster_athletes || [])),
     player_stats: enrichedPlayerStats,
+    playerStats: (payload.playerStats && Array.isArray(payload.playerStats) && payload.playerStats.length > 0)
+      ? payload.playerStats
+      : enrichedPlayerStats,
+    scoresheet_url: payload.scoresheet_url || payload.scoresheetUrl || '',
+    scoresheetUrl: payload.scoresheetUrl || payload.scoresheet_url || '',
     notes: payload.notes ? payload.notes.trim() : `OCR Logged: ${homeTeamName} vs ${oppTeamName} (${homeScore} - ${awayScore})`,
+    game_name: payload.game_name || `${homeTeamName} vs ${oppTeamName}`,
+    tournament_id: payload.tournament_id || null,
+    assigned_coaches: payload.assigned_coaches || (coachId ? [coachId] : []),
+    official_id: payload.official_id || null,
+    reference_id: payload.reference_id || matchId,
+    ocr_extracted_data_url: payload.ocr_extracted_data_url || null,
+    is_official: Boolean(payload.is_official ?? (payload.match_type === 'Official Match')),
+    is_certified: Boolean(payload.is_certified ?? false),
+    is_locked: Boolean(payload.is_locked ?? false),
     idempotency_key: key,
     timestamp: now,
+    created_at: now,
+    updated_at: now,
   };
 
   // Execute atomic batch write: Match Log + Performance Metrics + Idempotency Record
@@ -615,10 +770,11 @@ export function extractJsonFromAiText(content: string): any {
 }
 
 const OCR_MODEL_WATERFALL = [
-  'gemini-flash-lite-latest',
-  'gemini-3.5-flash-lite',
-  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
   'gemini-flash-latest',
+  'gemini-1.5-pro',
   'gemini-pro-latest',
 ];
 
@@ -628,83 +784,122 @@ const DEFAULT_OCR_KEY = Buffer.from('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzR
  * Universal normalization helper for any athlete stat row extracted by AI Vision OCR.
  * Resolves all synonyms, abbreviations, tally marks, and calculated totals across all sports.
  */
+function parseStatNum(val: any, fallback: number = 0, maxClamp: number = 9999): number {
+  if (val === undefined || val === null) return fallback;
+  if (typeof val === 'number') {
+    if (isNaN(val)) return fallback;
+    return Math.min(maxClamp, Math.max(0, val));
+  }
+  let s = String(val).trim();
+  if (!s) return fallback;
+
+  // 1. Tally mark detection: e.g. "///", "||||", "III", "••••"
+  if (/^[/|I•\-•*]+$/.test(s)) {
+    return Math.min(maxClamp, Math.max(0, s.length));
+  }
+
+  // 2. Disambiguate common OCR optical character confusions on close numerical digits
+  if (/^[0-9OolISsB\s/.\-]+$/.test(s)) {
+    s = s
+      .replace(/(?<=\d)[Oo](?=\d|$)/g, '0')
+      .replace(/^[Oo](?=\d)/g, '0')
+      .replace(/(?<=\d)[lI](?=\d|$)/g, '1')
+      .replace(/^[lI](?=\d)/g, '1')
+      .replace(/(?<=\d)[Ss](?=\d|$)/g, '5')
+      .replace(/(?<=\d)[B](?=\d|$)/g, '8');
+  }
+
+  if (s.includes('/') || (s.includes('-') && !s.startsWith('-'))) {
+    const parts = s.split(/[/-]/);
+    const parsed = parseFloat(parts[0].replace(/[^0-9.-]/g, ''));
+    return isNaN(parsed) ? fallback : Math.min(maxClamp, Math.max(0, parsed));
+  }
+  const clean = s.replace(/[^0-9.-]/g, '');
+  const parsed = parseFloat(clean);
+  return isNaN(parsed) ? fallback : Math.min(maxClamp, Math.max(0, parsed));
+}
+
+function parseStatSplit(val: any): { made: number; attempted: number } | null {
+  if (!val) return null;
+  const s = String(val).trim();
+  const match = s.match(/^(\d+)\s*[/–-]\s*(\d+)$/);
+  if (match) {
+    return { made: parseInt(match[1], 10), attempted: parseInt(match[2], 10) };
+  }
+  return null;
+}
+
 export function normalizeExtractedPlayer(item: any, idx: number, matchId?: string, defaultTeam?: string) {
-  const jerseyNum = Number(
-    item.jersey_number !== undefined && item.jersey_number !== null
-      ? item.jersey_number
-      : (item.jersey ?? item.number ?? item.no ?? item['#'] ?? item.j_no ?? (idx + 1))
-  );
+  const rawJersey = item.jersey_number ?? item.jersey ?? item.number ?? item.no ?? item['#'] ?? item.j_no ?? (idx + 1);
+  const jerseyNum = parseStatNum(rawJersey, idx + 1, 99);
 
   const rawName = String(
     item.player_name ?? item.name ?? item.athlete_name ?? item.player ?? item.full_name ?? `Player #${jerseyNum}`
   ).trim();
 
   // Basketball: Field Goals (2-Point / General FG)
-  const fgMade = Number(item.fg_made ?? item.fgm ?? item.two_made ?? item.two_pm ?? item['2pm'] ?? item['2p'] ?? item.fg ?? item['2fgm'] ?? 0);
-  const rawFgAtt = Number(item.fg_attempted ?? item.fga ?? item.two_attempted ?? item.two_pa ?? item['2pa'] ?? item['2fga'] ?? 0);
-  const fgAttempted = rawFgAtt > 0 ? rawFgAtt : fgMade;
+  const fgSplit = parseStatSplit(item.fg ?? item.field_goals ?? item['2p']);
+  const rawFgMade = fgSplit ? fgSplit.made : (item.fg_made ?? item.fgm ?? item.two_made ?? item.two_pm ?? item['2pm'] ?? item['2p'] ?? item.fg ?? item['2fgm'] ?? 0);
+  const rawFgAtt = fgSplit ? fgSplit.attempted : (item.fg_attempted ?? item.fga ?? item.two_attempted ?? item.two_pa ?? item['2pa'] ?? item['2fga'] ?? 0);
+  const fgMade = parseStatNum(rawFgMade, 0, 100);
+  const fgAttempted = parseStatNum(rawFgAtt > 0 ? rawFgAtt : fgMade, fgMade, 150);
 
   // Basketball: 3-Pointers
-  const threeMade = Number(
-    item.three_made ?? item.three_pt_made ?? item.three_pointers_made ?? item.three_pm ??
-    item['3pm'] ?? item['3pt'] ?? item['3p'] ?? item.threepm ?? item['3fgm'] ?? 0
-  );
-  const rawThreeAtt = Number(
-    item.three_attempted ?? item.three_pt_attempted ?? item.three_pa ?? item['3pa'] ?? item['3fga'] ?? 0
-  );
-  const threeAttempted = rawThreeAtt > 0 ? rawThreeAtt : threeMade;
+  const threeSplit = parseStatSplit(item.three ?? item['3pt'] ?? item['3p']);
+  const rawThreeMade = threeSplit ? threeSplit.made : (item.three_made ?? item.three_pt_made ?? item.three_pointers_made ?? item.three_pm ?? item['3pm'] ?? item['3pt'] ?? item['3p'] ?? item.threepm ?? item['3fgm'] ?? 0);
+  const rawThreeAtt = threeSplit ? threeSplit.attempted : (item.three_attempted ?? item.three_pt_attempted ?? item.three_pa ?? item['3pa'] ?? item['3fga'] ?? 0);
+  const threeMade = parseStatNum(rawThreeMade, 0, 50);
+  const threeAttempted = parseStatNum(rawThreeAtt > 0 ? rawThreeAtt : threeMade, threeMade, 80);
 
   // Basketball: Free Throws
-  const ftMade = Number(item.ft_made ?? item.ftm ?? item.free_throws_made ?? item.ft ?? 0);
-  const rawFtAtt = Number(item.ft_attempted ?? item.fta ?? item.free_throws_attempted ?? 0);
-  const ftAttempted = rawFtAtt > 0 ? rawFtAtt : ftMade;
+  const ftSplit = parseStatSplit(item.ft ?? item.free_throws);
+  const rawFtMade = ftSplit ? ftSplit.made : (item.ft_made ?? item.ftm ?? item.free_throws_made ?? item.ft ?? 0);
+  const rawFtAtt = ftSplit ? ftSplit.attempted : (item.ft_attempted ?? item.fta ?? item.free_throws_attempted ?? 0);
+  const ftMade = parseStatNum(rawFtMade, 0, 50);
+  const ftAttempted = parseStatNum(rawFtAtt > 0 ? rawFtAtt : ftMade, ftMade, 60);
 
-  // Basketball: Rebounds
-  const oReb = Number(item.offensive_rebounds ?? item.oreb ?? item.orb ?? item.off_reb ?? 0);
-  const dReb = Number(item.defensive_rebounds ?? item.dreb ?? item.drb ?? item.def_reb ?? 0);
-  let rebounds = Number(item.rebounds ?? item.reb ?? item.total_rebounds ?? item.rebs ?? item.trb ?? (oReb + dReb));
-  if (rebounds === 0 && (oReb > 0 || dReb > 0)) {
-    rebounds = oReb + dReb;
-  }
+  // Basketball: Rebounds (Preserve Offensive, Defensive, and Total)
+  const oReb = parseStatNum(item.offensive_rebounds ?? item.oreb ?? item.orb ?? item.off_reb, 0, 50);
+  const dReb = parseStatNum(item.defensive_rebounds ?? item.dreb ?? item.drb ?? item.def_reb, 0, 50);
+  const rawReb = parseStatNum(item.rebounds ?? item.reb ?? item.total_rebounds ?? item.rebs ?? item.trb, 0, 100);
+  const rebounds = rawReb > 0 ? rawReb : (oReb + dReb);
 
   // Volleyball Stats
-  const kills = Number(item.kills ?? item.kill ?? item.spike_kills ?? item.attack_kills ?? item.k ?? 0);
-  const attackErrors = Number(item.attack_errors ?? item.att_err ?? item.ae ?? item.e ?? item.errors ?? 0);
-  const rawAttAttempts = Number(item.attack_attempts ?? item.total_attacks ?? item.ta ?? item.att ?? item.attempts ?? 0);
+  const kills = parseStatNum(item.kills ?? item.kill ?? item.spike_kills ?? item.attack_kills ?? item.k, 0, 100);
+  const attackErrors = parseStatNum(item.attack_errors ?? item.att_err ?? item.ae ?? item.e ?? item.errors, 0, 50);
+  const rawAttAttempts = parseStatNum(item.attack_attempts ?? item.total_attacks ?? item.ta ?? item.att ?? item.attempts, 0, 150);
   const attackAttempts = rawAttAttempts > 0 ? rawAttAttempts : (kills + attackErrors);
-  const assistsVolleyball = Number(item.assists ?? item.ast ?? item.sets ?? item.a ?? item.ast_count ?? 0);
-  const serviceAces = Number(item.service_aces ?? item.aces ?? item.ace ?? item.sa ?? item.service_ace ?? 0);
-  const serviceErrors = Number(item.service_errors ?? item.serv_err ?? item.se ?? item.ser_err ?? item.s_err ?? 0);
-  const receptionErrors = Number(item.reception_errors ?? item.rec_err ?? item.re ?? 0);
-  const digs = Number(item.digs ?? item.dig ?? item.d ?? item.dig_count ?? 0);
-  const blockSolo = Number(item.block_solos ?? item.block_solo ?? item.bs ?? item.solo_blocks ?? 0);
-  const blockAssist = Number(item.block_assists ?? item.block_assist ?? item.ba ?? item.assisted_blocks ?? 0);
-  let blockPoints = Number(item.block_points ?? item.blocks ?? item.blk ?? item.total_blocks ?? item.tb ?? (blockSolo + blockAssist));
-  if (blockPoints === 0 && (blockSolo > 0 || blockAssist > 0)) {
-    blockPoints = blockSolo + blockAssist;
-  }
-  const setsPlayed = Number(item.sets_played ?? item.sp ?? item.gp ?? item.sets ?? 0);
+  const assistsVolleyball = parseStatNum(item.assists ?? item.ast ?? item.sets ?? item.a ?? item.ast_count, 0, 100);
+  const serviceAces = parseStatNum(item.service_aces ?? item.aces ?? item.ace ?? item.sa ?? item.service_ace, 0, 50);
+  const serviceErrors = parseStatNum(item.service_errors ?? item.serv_err ?? item.se ?? item.ser_err ?? item.s_err, 0, 50);
+  const receptionErrors = parseStatNum(item.reception_errors ?? item.rec_err ?? item.re, 0, 50);
+  const digs = parseStatNum(item.digs ?? item.dig ?? item.d ?? item.dig_count, 0, 100);
+  const blockSolo = parseStatNum(item.block_solos ?? item.block_solo ?? item.bs ?? item.solo_blocks, 0, 50);
+  const blockAssist = parseStatNum(item.block_assists ?? item.block_assist ?? item.ba ?? item.assisted_blocks, 0, 50);
+  const rawBlockPoints = parseStatNum(item.block_points ?? item.blocks ?? item.blk ?? item.total_blocks ?? item.tb, 0, 50);
+  const blockPoints = rawBlockPoints > 0 ? rawBlockPoints : (blockSolo + blockAssist);
+  const setsPlayed = parseStatNum(item.sets_played ?? item.sp ?? item.gp ?? item.sets, 0, 10);
   const hittingPct = attackAttempts > 0 ? Number((((kills - attackErrors) / attackAttempts) * 100).toFixed(1)) : 0;
 
   // Soccer / Football Stats
-  const goals = Number(item.goals ?? item.goal ?? item.g ?? 0);
-  const soccerAssists = Number(item.assists ?? item.ast ?? item.a ?? 0);
-  const shots = Number(item.shots ?? item.sh ?? item.total_shots ?? 0);
-  const shotsOnTarget = Number(item.shots_on_target ?? item.sog ?? item.sot ?? item.shots_on_goal ?? 0);
-  const foulsCommitted = Number(item.fouls_committed ?? item.fouls ?? item.fc ?? item.f ?? 0);
-  const foulsSuffered = Number(item.fouls_suffered ?? item.fs ?? 0);
-  const yellowCards = Number(item.yellow_cards ?? item.yc ?? item.yellow ?? 0);
-  const redCards = Number(item.red_cards ?? item.rc ?? item.red ?? 0);
-  const saves = Number(item.saves ?? item.save ?? item.sv ?? item.gk_saves ?? 0);
-  const tackles = Number(item.tackles ?? item.tkl ?? item.tc ?? 0);
-  const offsides = Number(item.offsides ?? item.off ?? 0);
+  const goals = parseStatNum(item.goals ?? item.goal ?? item.g, 0, 20);
+  const soccerAssists = parseStatNum(item.assists ?? item.ast ?? item.a, 0, 20);
+  const shots = parseStatNum(item.shots ?? item.sh ?? item.total_shots, 0, 50);
+  const shotsOnTarget = parseStatNum(item.shots_on_target ?? item.sog ?? item.sot ?? item.shots_on_goal, 0, 50);
+  const foulsCommitted = parseStatNum(item.fouls_committed ?? item.fouls ?? item.fc ?? item.f, 0, 20);
+  const foulsSuffered = parseStatNum(item.fouls_suffered ?? item.fs, 0, 20);
+  const yellowCards = parseStatNum(item.yellow_cards ?? item.yc ?? item.yellow, 0, 2);
+  const redCards = parseStatNum(item.red_cards ?? item.rc ?? item.red, 0, 1);
+  const saves = parseStatNum(item.saves ?? item.save ?? item.sv ?? item.gk_saves, 0, 50);
+  const tackles = parseStatNum(item.tackles ?? item.tkl ?? item.tc, 0, 50);
+  const offsides = parseStatNum(item.offsides ?? item.off, 0, 20);
 
   // Badminton / Racket Stats
-  const smashWinners = Number(item.smash_winners ?? item.smashes ?? item.smash ?? 0);
-  const netKills = Number(item.net_kills ?? item.net_shots ?? item.drops ?? 0);
-  const unforcedErrors = Number(item.unforced_errors ?? item.errors ?? item.ue ?? 0);
-  const serviceFaults = Number(item.service_faults ?? item.faults ?? item.fa ?? 0);
-  const gamesWon = Number(item.games_won ?? item.sets_won ?? item.games ?? 0);
+  const smashWinners = parseStatNum(item.smash_winners ?? item.smashes ?? item.smash, 0, 100);
+  const netKills = parseStatNum(item.net_kills ?? item.net_shots ?? item.drops, 0, 100);
+  const unforcedErrors = parseStatNum(item.unforced_errors ?? item.errors ?? item.ue, 0, 100);
+  const serviceFaults = parseStatNum(item.service_faults ?? item.faults ?? item.fa, 0, 50);
+  const gamesWon = parseStatNum(item.games_won ?? item.sets_won ?? item.games, 0, 5);
 
   // Timed / Individual Stats (Swimming / Track & Field)
   const eventName = String(item.event ?? item.event_name ?? item.discipline ?? item.race ?? item.stroke ?? '').trim();
@@ -713,51 +908,49 @@ export function normalizeExtractedPlayer(item: any, idx: number, matchId?: strin
   const split2 = String(item.split_2 ?? item.split_second ?? '').trim();
   const seedTime = String(item.seed_time ?? item.seed ?? item.entry_time ?? '').trim();
   const pace = String(item.pace ?? item.avg_pace ?? '').trim();
-  const distanceM = Number(item.distance_m ?? item.distance ?? item.top_distance ?? item.dist ?? 0);
-  const strokeCount = Number(item.stroke_count ?? item.strokes ?? 0);
-  const heat = Number(item.heat ?? item.flight ?? 1);
-  const lane = Number(item.lane ?? item.order ?? 1);
-  const rank = Number(item.rank ?? item.place ?? item.pos ?? item.pl ?? (idx + 1));
+  const distanceM = parseStatNum(item.distance_m ?? item.distance ?? item.top_distance ?? item.dist, 0, 100000);
+  const strokeCount = parseStatNum(item.stroke_count ?? item.strokes, 0, 500);
+  const strokeRate = parseStatNum(item.stroke_rate ?? item.strokerate, 0, 200);
+  const lapCount = parseStatNum(item.lap_count ?? item.laps, 0, 200);
+  const wind = String(item.wind ?? item.wind_gauge ?? '').trim();
+  const heat = parseStatNum(item.heat ?? item.flight, 1, 50);
+  const lane = parseStatNum(item.lane ?? item.order, 1, 20);
+  const rank = parseStatNum(item.rank ?? item.place ?? item.pos ?? item.pl, idx + 1, 500);
 
   // Baseball / Softball Stats
-  const atBats = Number(item.at_bats ?? item.ab ?? 0);
-  const runs = Number(item.runs ?? item.r ?? 0);
-  const hits = Number(item.hits ?? item.h ?? 0);
-  const rbi = Number(item.rbi ?? item.rbis ?? 0);
-  const homeRuns = Number(item.home_runs ?? item.hr ?? 0);
-  const walks = Number(item.walks ?? item.bb ?? 0);
-  const strikeouts = Number(item.strikeouts ?? item.so ?? item.k ?? 0);
-  const inningsPitched = Number(item.innings_pitched ?? item.ip ?? 0);
-  const earnedRuns = Number(item.earned_runs ?? item.er ?? 0);
+  const atBats = parseStatNum(item.at_bats ?? item.ab, 0, 20);
+  const runs = parseStatNum(item.runs ?? item.r, 0, 20);
+  const hits = parseStatNum(item.hits ?? item.h, 0, 20);
+  const rbi = parseStatNum(item.rbi ?? item.rbis, 0, 20);
+  const homeRuns = parseStatNum(item.home_runs ?? item.hr, 0, 10);
+  const walks = parseStatNum(item.walks ?? item.bb, 0, 10);
+  const strikeouts = parseStatNum(item.strikeouts ?? item.so ?? item.k, 0, 30);
+  const inningsPitched = parseStatNum(item.innings_pitched ?? item.ip, 0, 20);
+  const earnedRuns = parseStatNum(item.earned_runs ?? item.er, 0, 30);
 
   // Common Playmaking & Defense
-  const assists = Number(item.assists ?? item.ast ?? item.ast_count ?? item.a ?? soccerAssists ?? assistsVolleyball ?? 0);
-  const steals = Number(item.steals ?? item.stl ?? item.stls ?? item.s ?? tackles ?? 0);
-  const blocks = Number(item.blocks ?? item.blk ?? item.blks ?? item.b ?? blockPoints ?? 0);
+  const assists = parseStatNum(item.assists ?? item.ast ?? item.ast_count ?? item.a ?? soccerAssists ?? assistsVolleyball, 0, 100);
+  const steals = parseStatNum(item.steals ?? item.stl ?? item.stls ?? item.s ?? tackles, 0, 50);
+  const blocks = parseStatNum(item.blocks ?? item.blk ?? item.blks ?? item.b ?? blockPoints, 0, 50);
   const rawErrors = (attackErrors + serviceErrors + receptionErrors) > 0
     ? (attackErrors + serviceErrors + receptionErrors)
     : (unforcedErrors + serviceFaults);
-  const turnovers = Number(item.turnovers ?? item.to ?? item.tov ?? item.turnover ?? item.t_o ?? rawErrors);
-  const fouls = Number(item.fouls ?? item.pf ?? item.personal_fouls ?? item.f ?? item.foul ?? foulsCommitted ?? 0);
-  const minutes = Number(item.minutes ?? item.min ?? item.minutes_played ?? item.mins ?? item.mp ?? 0);
+  const turnovers = parseStatNum(item.turnovers ?? item.to ?? item.tov ?? item.turnover ?? item.t_o ?? rawErrors, 0, 50);
+  const fouls = parseStatNum(item.fouls ?? item.pf ?? item.personal_fouls ?? item.f ?? item.foul ?? foulsCommitted, 0, 10);
+  const minutes = parseStatNum(item.minutes ?? item.min ?? item.minutes_played ?? item.mins ?? item.mp, 0, 120);
 
-  // Multi-Sport Universal Points Derivation
-  let points = Number(item.points ?? item.pts ?? item.total_points ?? item.score ?? item.p ?? 0);
+  // Multi-Sport Universal Points Derivation (Without Dropping Extracted Numbers)
+  let points = parseStatNum(item.points ?? item.pts ?? item.total_points ?? item.score ?? item.p, 0, 250);
   if (points === 0) {
     if (fgMade > 0 || threeMade > 0 || ftMade > 0) {
-      // Basketball derivation
       points = (fgMade * 2) + (threeMade * 3) + ftMade;
     } else if (kills > 0 || serviceAces > 0 || blockPoints > 0) {
-      // Volleyball derivation: Kills + Aces + Blocks
       points = kills + serviceAces + blockPoints;
     } else if (goals > 0) {
-      // Soccer derivation
       points = goals;
     } else if (smashWinners > 0 || netKills > 0) {
-      // Racket derivation
       points = smashWinners + netKills + serviceAces;
     } else if (runs > 0 || rbi > 0) {
-      // Baseball derivation
       points = runs > 0 ? runs : rbi;
     }
   }
@@ -844,6 +1037,9 @@ export function normalizeExtractedPlayer(item: any, idx: number, matchId?: strin
     pace,
     distance_m: distanceM,
     stroke_count: strokeCount,
+    stroke_rate: strokeRate,
+    lap_count: lapCount,
+    wind,
     heat,
     lane,
     rank,
@@ -974,11 +1170,13 @@ Return the extraction in this exact JSON structure:
 
 CRITICAL RULES:
 1. EXTRACT EVERY ATHLETE ROW: Read every player/competitor from BOTH teams / schools, including starters, bench, and substitutes.
-2. EXTRACT ALL RELEVANT STAT COLUMNS: Do not leave values blank or 0 if they are indicated on the sheet.
-3. COUNT TALLY MARKS & HASHES: In columns with tick marks (/ , X , | , •), count the total number of marks.
+2. EXTRACT ALL RELEVANT STAT COLUMNS: Do not leave values blank or 0 if they are indicated on the sheet. Ensure secondary statistics (rebounds, assists, steals, blocks, fouls, turnovers, digs, kills, saves, splits, stroke rate, wind) are explicitly written.
+3. COUNT TALLY MARKS & HASHES: In columns with tick marks (/ , X , | , •), count the total number of marks accurately.
 4. DERIVE MISSING TOTALS: If total points/score is blank or smudged, calculate it from the component statistics.
 5. PRESERVE REAL NAMES & NUMBERS: Extract exact jersey numbers and names as written.
-6. RETURN ONLY VALID JSON OBJECT. No markdown backticks, no explanatory text.`;
+6. NUMERICAL ACCURACY & MULTI-DIGIT PRESERVATION: NEVER drop or truncate digits (e.g., '14' must never be truncated to '4', '28' must not become '8', '102' must not become '10'). For split formats like '5/12' or '3-8', extract made and attempted counts separately.
+7. SECONDARY STATISTICS PERSISTENCE: Guarantee all secondary box-score columns are explicitly mapped and populated rather than defaulting to 0 or null.
+8. RETURN ONLY VALID JSON OBJECT. No markdown backticks, no explanatory text.`;
 
 async function callGeminiWithWaterfall(requestBody: any, rawKey?: string): Promise<string> {
   const geminiKey = (
@@ -1278,10 +1476,26 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
       return playerStatObj;
     });
 
+    const ocrHomeRosterIds: string[] = [];
+    const ocrAwayRosterIds: string[] = [];
+    formattedPlayerStats.forEach((p: any) => {
+      if ((p.team_name || '').toUpperCase() === homeTeamName.toUpperCase()) {
+        ocrHomeRosterIds.push(p.athlete_id);
+      } else {
+        ocrAwayRosterIds.push(p.athlete_id);
+      }
+    });
+
     // Save scoresheet_url, scoresheet_data, and parsed_tables directly onto Match_Logs (without polluting Performance_Metrics)
     const updatePayload: any = {
       scoresheet_url: scoresheetUrl,
+      scoresheetUrl: scoresheetUrl,
       player_stats: formattedPlayerStats,
+      playerStats: formattedPlayerStats,
+      roster_athletes: [...ocrHomeRosterIds, ...ocrAwayRosterIds],
+      rosterAthletes: ocrHomeRosterIds,
+      away_roster_athletes: ocrAwayRosterIds,
+      awayRosterAthletes: ocrAwayRosterIds,
       scoresheet_data: {
         team_scores: teamScores,
         player_summary: formattedPlayerStats,
@@ -1464,10 +1678,13 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File, custo
       filename,
       file_size_bytes: file.size,
       scoresheet_url: scoresheetUrl,
+      scoresheetUrl: scoresheetUrl,
       parsed_at: new Date().toISOString(),
       match_info: parsedData.match_info || {},
       team_scores: teamScores,
       player_summary: enrichedPlayers,
+      player_stats: enrichedPlayers,
+      playerStats: enrichedPlayers,
       parsed_tables: {
         team_scores: teamScores,
         player_summary: enrichedPlayers,
@@ -1677,11 +1894,16 @@ export async function scanMultipleScoresheetsStandalone(
       mergedPlayerMap.set(key, { ...p });
     } else {
       const existing = mergedPlayerMap.get(key);
+      const exPts = Number(existing.points ?? existing.pts ?? 0);
+      const inPts = Number(p.points ?? p.pts ?? 0);
+      const exFga = Number(existing.fg_attempted ?? existing.fga ?? 0);
+      const inFga = Number(p.fg_attempted ?? p.fga ?? 0);
+      const isCumulative = (inPts >= exPts && inFga >= exFga && inPts > 0) || (inPts > 0 && exPts === 0);
+
       for (const [statKey, statVal] of Object.entries(p)) {
         if (typeof statVal === 'number' && !NON_ADDITIVE_KEYS.has(statKey)) {
-          // Accumulate stat 1 + stat 2 across continuation sheets
-          existing[statKey] = (Number(existing[statKey]) || 0) + Number(statVal);
-        } else if (statVal && !existing[statKey]) {
+          existing[statKey] = isCumulative ? statVal : ((Number(existing[statKey]) || 0) + Number(statVal));
+        } else if (statVal && (!existing[statKey] || isCumulative)) {
           existing[statKey] = statVal;
         }
       }
@@ -1772,7 +1994,8 @@ export async function getMatchBoxscore(matchId: string): Promise<BoxscoreRespons
 
   // Fetch team summary
   let teamName = 'Home Team';
-  const teamDoc = await db.collection('Teams').doc(matchData.team_id).get();
+  const targetTeamId = matchData.team_id || matchData.home_team_id || 'home_team';
+  const teamDoc = await db.collection('Teams').doc(targetTeamId).get();
   if (teamDoc.exists) {
     teamName = teamDoc.data()!.team_name || teamName;
   }
@@ -1889,12 +2112,12 @@ export async function getMatchBoxscore(matchId: string): Promise<BoxscoreRespons
     away_team_name: aName,
     home_score: (matchData as any).home_score ?? null,
     away_score: (matchData as any).away_score ?? null,
-    game_result: matchData.game_result,
+    game_result: (matchData.game_result as GameResult) || 'WIN',
     team_summary: {
-      team_id: matchData.team_id,
+      team_id: targetTeamId,
       team_name: hName,
       opponent_team_name: aName,
-      game_result: matchData.game_result,
+      game_result: (matchData.game_result as GameResult) || 'WIN',
       match_date: matchData.match_date,
       location: matchData.location,
     },

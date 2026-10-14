@@ -90,8 +90,6 @@ export const scanScoresheetOCR = async (file: File): Promise<any> => {
   const token = getStoredToken();
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('scoresheet', file);
-  formData.append('document', file);
 
   const endpoints = [
     `${BASE_URL}/matches/ocr/scan`,
@@ -150,7 +148,6 @@ export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
   const formData = new FormData();
   files.forEach((f) => {
     formData.append('files', f);
-    formData.append('scoresheet', f);
   });
 
   const endpoints = [
@@ -239,7 +236,6 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
   const formData = new FormData();
   files.forEach((f) => {
     formData.append('files', f);
-    formData.append('scoresheet', f);
   });
 
   try {

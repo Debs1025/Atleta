@@ -139,6 +139,18 @@ export interface CreateMatchPayload {
   game_name?: string;
   coaches?: string[];
   notes?: string;
+  scoresheet_url?: string;
+  scoresheetUrl?: string;
+  player_stats?: any[];
+  playerStats?: any[];
+  roster_athletes?: string[];
+  rosterAthletes?: string[];
+  away_roster_athletes?: string[];
+  awayRosterAthletes?: string[];
+  home_score?: number;
+  away_score?: number;
+  game_result?: string;
+  final_score?: string;
   [key: string]: any;
 }
 
@@ -148,29 +160,57 @@ export interface BoxScoreRow {
   jersey_no: string;
   player_name: string;
   position?: string;
-  minutes: string;
-  pts: number;
-  reb: number;
-  ast: number;
-  stl: number;
-  blk: number;
-  fg_pct: string;
-  three_p_pct: string;
-  ft_pct: string;
+  minutes?: string;
+  pts?: number;
+  reb?: number;
+  ast?: number;
+  stl?: number;
+  blk?: number;
+  fg_pct?: string;
+  three_p_pct?: string;
+  ft_pct?: string;
+  // Secondary basketball / multi-sport stats
+  fouls?: number;
+  pf?: number;
+  offensive_rebounds?: number;
+  defensive_rebounds?: number;
+  fg_made?: number;
+  fg_attempted?: number;
+  three_made?: number;
+  three_attempted?: number;
+  ft_made?: number;
+  ft_attempted?: number;
   // Volleyball
   kills?: number;
   attack_errors?: number;
   attack_attempts?: number;
   hitting_pct?: string;
   service_aces?: number;
+  service_errors?: number;
+  reception_errors?: number;
   digs?: number;
   block_points?: number;
+  sets_played?: number;
+  set_scores?: string | number[];
   // Soccer
   goals?: number;
   shots?: number;
   shots_on_target?: number;
   saves?: number;
   tackles?: number;
+  // Timed / Individual (Swimming / Track)
+  finish_time?: string;
+  time?: string;
+  split?: string;
+  split_times?: string[] | number[];
+  lap_splits?: string | string[];
+  stroke_rate?: number;
+  stroke_count?: number;
+  distance_m?: number;
+  wind?: string;
+  heat?: number | string;
+  lane?: number | string;
+  placement_rank?: number | string;
   [key: string]: any;
 }
 
@@ -372,15 +412,33 @@ export interface DetectedAthleteStat {
   lane?: number | string;
   stats?: Record<string, any>;
 
-  // Basketball
+  // Basketball & general
   pts?: number;
+  points?: number;
   ast?: number;
+  assists?: number;
   to?: number;
+  turnovers?: number;
   reb?: number;
+  rebounds?: number;
+  offensive_rebounds?: number;
+  defensive_rebounds?: number;
   stl?: number;
+  steals?: number;
   blk?: number;
+  blocks?: number;
+  fouls?: number;
+  pf?: number;
+  personal_fouls?: number;
   min?: number;
+  minutes?: number;
   fg_pct?: string;
+  fg_made?: number;
+  fg_attempted?: number;
+  three_made?: number;
+  three_attempted?: number;
+  ft_made?: number;
+  ft_attempted?: number;
 
   // Volleyball
   kills?: number;
@@ -388,8 +446,14 @@ export interface DetectedAthleteStat {
   attack_attempts?: number;
   hitting_pct?: string;
   service_aces?: number;
+  service_errors?: number;
+  reception_errors?: number;
   digs?: number;
   block_points?: number;
+  block_solos?: number;
+  block_assists?: number;
+  sets_played?: number;
+  set_scores?: string | number[];
 
   // Soccer
   goals?: number;
@@ -397,18 +461,28 @@ export interface DetectedAthleteStat {
   shots_on_target?: number;
   saves?: number;
   tackles?: number;
+  fouls_committed?: number;
+  yellow_cards?: number;
+  red_cards?: number;
 
   // Timed / Individual (Swimming / Track & Field)
   time?: string;
   finish_time?: string;
   event?: string;
+  event_name?: string;
   stroke_count?: number;
+  stroke_rate?: number;
+  lap_count?: number;
+  lap_splits?: string | string[];
   distance_m?: number;
   split?: string;
   split_2?: string;
+  split_times?: string[] | number[];
   pace?: string;
   reaction_sec?: string;
+  wind?: string;
   placement_rank?: number | string;
+  rank?: number | string;
   [key: string]: any;
 }
 
@@ -442,6 +516,14 @@ export interface RawOCRDetectedData {
   location?: string;
   venue?: string;
   notes?: string;
+  scoresheet_url?: string;
+  scoresheetUrl?: string;
+  rosterAthletes?: string[];
+  roster_athletes?: string[];
+  awayRosterAthletes?: string[];
+  away_roster_athletes?: string[];
+  playerStats?: any[];
+  player_stats?: any[];
   athlete_overview: DetectedAthleteStat[];
   expanded_metrics?: ExpandedPerformanceMetrics;
   batch_matches?: RawOCRDetectedData[];
@@ -456,5 +538,320 @@ export interface UploadedFileItem {
   file_type: 'PDF' | 'CSV' | 'JSON' | 'IMAGE';
   file_url: string;
   raw_file?: File;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14 Core Atleta Research Paper Data Dictionary Models
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DataDictionaryUser {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  contact_number: string | null;
+  role: 'Athlete' | 'Coach' | 'Official' | 'System Admin';
+  provider: 'google' | 'password';
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryAdminProfile {
+  admin_id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  department_code: string;
+  institution: string;
+  clearance_level: number;
+  is_active: boolean;
+  is_elevated: boolean;
+  permissions: string[];
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryAthleteProfile {
+  athlete_id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  gender: string;
+  birthdate: string;
+  province: string;
+  sports_type: string;
+  position: string;
+  jersey_number: number | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  avatar_url: string | null;
+  recruitment_status: 'Available' | 'Recruited' | string;
+  leaderboard_rank: number;
+  eligibility_documents: {
+    psa_verified: boolean;
+    academic_check: boolean;
+    proof_of_residency: boolean;
+  };
+  achievements: {
+    title: string;
+    year: number;
+    content: string;
+  }[];
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryTeam {
+  team_id: string;
+  team_name: string;
+  sport_type: string;
+  division: string;
+  coach_id: string;
+  roster_list: string[];
+  season_record: {
+    wins: number;
+    losses: number;
+  };
+  created_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryCoachProfile {
+  coach_id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  account_status: 'Active' | 'Inactive';
+  sport_type: string;
+  years_of_experience: number;
+  current_institution: string;
+  regional_affiliation: string;
+  national_sports_league: string;
+  team_id: string | null;
+  teams_managed: string[];
+  athletes_managed: {
+    athlete_id: string;
+    full_name: string;
+  }[];
+  matches_logged: number;
+  total_matches_logged: number;
+  professional_documents: string[];
+  profile_image: string | null;
+  quote: string | null;
+  system_statistics: {
+    metric_logs: number;
+    total_records: number;
+  };
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryOfficialProfile {
+  official_id: string;
+  user_id: string;
+  organization_name: string;
+  official_license_number: string;
+  certification_status: 'Pending' | 'Certified';
+  assigned_tournaments: string[];
+  is_active: boolean;
+  avatar_url: string | null;
+  profile_image: string | null;
+  settings: any[];
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryMatchLog {
+  match_id: string;
+  game_name: string;
+  tournament_id: string | null;
+  sport_type: string;
+  match_type: 'Official Match' | 'Unofficial Match' | string;
+  match_date: string;
+  location: string;
+  home_team_id: string;
+  home_team_name: string;
+  home_score: number;
+  away_team_id: string;
+  away_team_name: string;
+  opponent_team_name: string;
+  away_score: number;
+  game_result: 'WIN' | 'LOSE' | 'TIE' | string;
+  assigned_coaches: string[];
+  official_id: string | null;
+  reference_id: string;
+  scoresheet_url: string;
+  ocr_extracted_data_url: string | null;
+  is_official: boolean;
+  is_certified: boolean;
+  is_locked: boolean;
+  roster_athletes: string[];
+  notes: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryScoutingRegistry {
+  scout_id: string;
+  athlete_id: string;
+  coach_scout_id: string;
+  initiated_by: string;
+  date_initiated: string;
+  offer_message: string;
+  offer_status: 'Sent' | 'Accepted' | 'Declined';
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryOfficialValidation {
+  validation_id: string;
+  audit_id: string;
+  match_id: string;
+  official_id: string | null;
+  requested_by: string;
+  requested_by_coach_id: string;
+  requested_at: string;
+  verification_status: 'Pending' | 'Certified' | 'Rejected';
+  status: 'Pending' | 'Certified' | 'Rejected';
+  ocr_extracted_data_url: string | null;
+  scoresheet_attachment_url: string | null;
+  timestamp: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryPerformanceMetric {
+  metric_id: string;
+  match_id: string;
+  athlete_id: string;
+  player_name: string;
+  jersey_number: string | number;
+  sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK_AND_FIELD' | string;
+  calculated_player_efficiency: number;
+  sport_stats: {
+    pts?: number;
+    ast?: number;
+    reb?: number;
+    fg_pct?: number;
+    basketball?: {
+      total_field_goals_made: number;
+      total_field_goals_attempts: number;
+      two_point_made: number;
+      two_point_attempts: number;
+      three_point_made: number;
+      three_point_attempts: number;
+      free_throws_made: number;
+      free_throws_attempts: number;
+      assists: number;
+      blocks: number;
+      turnovers: number;
+      rebounds: number;
+    };
+    swimming?: {
+      target_distance: number;
+      stroke_count: number;
+      stroke_rate: number;
+      distance_per_stroke: number;
+      reaction_time: number;
+      lap_time: number;
+      finish_time: number;
+    };
+    track_and_field?: {
+      event_type: string;
+      target_distance: number;
+      lap_time: number;
+      finish_time: number;
+    };
+    [key: string]: any;
+  };
+  custom_stats?: {
+    stat_name_key: string;
+    stat_value: number;
+  };
+  team_name: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryWorkloadAnalysis {
+  workload_id: string;
+  athlete_id: string;
+  session_type: 'Practice' | 'Game' | 'Conditioning' | string;
+  session_duration_mins: number;
+  srpe_score: number;
+  daily_load: number;
+  entry_date: string;
+  short_term_load: number;
+  long_term_load: number;
+  injury_risk_index: number;
+  monotony_score: number;
+  strain_score: number;
+  created_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionarySportsConfiguration {
+  sport_id: string;
+  canonical_id: string;
+  sport_name: string;
+  short_identifier: string;
+  category: 'Team' | 'Individual' | string;
+  is_active: boolean;
+  is_timed_sport: boolean;
+  measurement_type: string;
+  configurable_stats: {
+    stat_name_key: string;
+    label: string;
+    measurement_category: string;
+  }[];
+  metric_keys: {
+    key: string;
+    label: string;
+    data_type: 'number' | 'string';
+    weight: number;
+    is_positive: boolean;
+  }[];
+  rules: {
+    scoring_type: string;
+    period_count: number;
+    period_duration_minutes: number;
+    period_name: 'Quarter' | 'Half' | 'Round' | string;
+  };
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryTournamentRegistry {
+  org_id: string;
+  name: string;
+  organization_name: string;
+  registered_by: string;
+  status: 'Active' | 'Inactive';
+  created_at: string;
+  [key: string]: any;
+}
+
+export interface DataDictionaryAnthropometricMeasurement {
+  measurement_id: string;
+  athlete_id: string;
+  recorded_by: string;
+  height_cm: number | null;
+  weight_kg: number | null;
+  wingspan_cm: number | null;
+  standing_reach_cm: number | null;
+  vertical_jump_cm: number | null;
+  body_fat_pct: number | null;
+  recorded_at: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: any;
 }
 

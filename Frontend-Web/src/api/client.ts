@@ -968,6 +968,12 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
   const away = String(payload.opponent_team_name || (payload as any).away_team_id || 'Opponent').trim() || 'Opponent';
   const location = String(payload.location || payload.venue || 'Tournament Sports Complex').trim() || 'Tournament Sports Complex';
 
+  const rawPayload = payload as any;
+  const playerStatsList = rawPayload.playerStats || rawPayload.player_stats || [];
+  const rosterAthletesList = rawPayload.rosterAthletes || rawPayload.roster_athletes || [];
+  const awayRosterAthletesList = rawPayload.awayRosterAthletes || rawPayload.away_roster_athletes || [];
+  const scoresheetUrlVal = rawPayload.scoresheetUrl || rawPayload.scoresheet_url || '';
+
   let data: any = null;
   try {
     const res = await fetch(`${BASE_URL}/matches/official`, {
@@ -978,7 +984,8 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
-        match_id: (payload as any).match_id,
+        ...rawPayload,
+        match_id: rawPayload.match_id,
         team_id: home,
         home_team_id: home,
         home_team_name: home,
@@ -995,13 +1002,20 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         game_name: payload.game_name || `${home} vs ${away}`,
         coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
         assigned_coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
-        scoresheet_url: (payload as any).scoresheet_url,
-        player_stats: (payload as any).player_stats || [],
-        home_score: (payload as any).home_score,
-        away_score: (payload as any).away_score,
-        game_result: (payload as any).game_result,
-        scoresheet_data: (payload as any).scoresheet_data,
-        notes: (payload as any).notes || '',
+        scoresheet_url: scoresheetUrlVal,
+        scoresheetUrl: scoresheetUrlVal,
+        player_stats: playerStatsList,
+        playerStats: playerStatsList,
+        roster_athletes: rosterAthletesList,
+        rosterAthletes: rosterAthletesList,
+        away_roster_athletes: awayRosterAthletesList,
+        awayRosterAthletes: awayRosterAthletesList,
+        home_score: rawPayload.home_score,
+        away_score: rawPayload.away_score,
+        game_result: rawPayload.game_result,
+        final_score: rawPayload.final_score,
+        scoresheet_data: rawPayload.scoresheet_data,
+        notes: rawPayload.notes || '',
       }),
     });
     if (!res.ok) {
@@ -1713,11 +1727,11 @@ export const getMatchAuditDetail = async (
     const computeTotals = (rows: import('./types').BoxScoreRow[], fallbackScore: number): import('./types').BoxScoreRow => {
       let pts = 0, reb = 0, ast = 0, stl = 0, blk = 0;
       rows.forEach((r) => {
-        pts += r.pts;
-        reb += r.reb;
-        ast += r.ast;
-        stl += r.stl;
-        blk += r.blk;
+        pts += r.pts ?? 0;
+        reb += r.reb ?? 0;
+        ast += r.ast ?? 0;
+        stl += r.stl ?? 0;
+        blk += r.blk ?? 0;
       });
       return {
         jersey_no: '',
@@ -1734,8 +1748,8 @@ export const getMatchAuditDetail = async (
       };
     };
 
-    const homeScore = match.home_score !== undefined ? Number(match.home_score) : homePlayers.reduce((a, b) => a + b.pts, 0);
-    const awayScore = match.away_score !== undefined ? Number(match.away_score) : awayPlayers.reduce((a, b) => a + b.pts, 0);
+    const homeScore = match.home_score !== undefined ? Number(match.home_score) : homePlayers.reduce((a, b) => a + (b.pts ?? 0), 0);
+    const awayScore = match.away_score !== undefined ? Number(match.away_score) : awayPlayers.reduce((a, b) => a + (b.pts ?? 0), 0);
 
     const cachedMaster = getCachedData<import('./types').MatchSummaryItem[]>('all_official_matches_master');
     const cachedItem = cachedMaster?.find((m) => m.match_id.replace(/^#/, '') === matchId);
@@ -1754,8 +1768,8 @@ export const getMatchAuditDetail = async (
     let finalHomeRoster = homePlayers;
     let finalAwayRoster = awayPlayers;
     const finalRaceResults = raceResults;
-    const computedHomePts = finalHomeRoster.reduce((a, b) => a + b.pts, 0);
-    const computedAwayPts = finalAwayRoster.reduce((a, b) => a + b.pts, 0);
+    const computedHomePts = finalHomeRoster.reduce((a, b) => a + (b.pts ?? 0), 0);
+    const computedAwayPts = finalAwayRoster.reduce((a, b) => a + (b.pts ?? 0), 0);
     const finalHomeScore = computedHomePts > 0
       ? computedHomePts
       : (homeScore !== undefined && homeScore !== null && Number(homeScore) > 0 ? Number(homeScore) : 0);

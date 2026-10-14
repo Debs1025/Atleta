@@ -100,7 +100,22 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
         }))
       : [];
 
+    const playerStatsList = Array.isArray(raw.playerStats) && raw.playerStats.length > 0
+      ? raw.playerStats
+      : (Array.isArray(raw.player_stats) ? raw.player_stats : playerStats);
+
+    const rosterAthletesList = Array.isArray(raw.rosterAthletes)
+      ? raw.rosterAthletes
+      : (Array.isArray(raw.roster_athletes) ? raw.roster_athletes : []);
+
+    const awayRosterAthletesList = Array.isArray(raw.awayRosterAthletes)
+      ? raw.awayRosterAthletes
+      : (Array.isArray(raw.away_roster_athletes) ? raw.away_roster_athletes : []);
+
+    const scoresheetUrlVal = raw.scoresheetUrl || raw.scoresheet_url || '';
+
     const payload: MatchSubmissionPayload = {
+      ...raw,
       team_id: raw.team_id || raw.team_name || raw.home_team_name || 'team_home',
       sport_type: normalizedSport as any,
       match_name: raw.match_name || raw.game_name || 'Match Game',
@@ -112,7 +127,14 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
       home_score: raw.home_score !== undefined ? Number(raw.home_score) : undefined,
       away_score: raw.away_score !== undefined ? Number(raw.away_score) : undefined,
       notes: raw.notes || '',
-      player_stats: playerStats,
+      player_stats: playerStatsList,
+      playerStats: playerStatsList,
+      roster_athletes: rosterAthletesList,
+      rosterAthletes: rosterAthletesList,
+      away_roster_athletes: awayRosterAthletesList,
+      awayRosterAthletes: awayRosterAthletesList,
+      scoresheet_url: scoresheetUrlVal,
+      scoresheetUrl: scoresheetUrlVal,
     };
 
     const errors = validateSubmitMatch(payload, idempotencyKey);
