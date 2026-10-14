@@ -1178,7 +1178,152 @@ CRITICAL RULES:
 7. SECONDARY STATISTICS PERSISTENCE: Guarantee all secondary box-score columns are explicitly mapped and populated rather than defaulting to 0 or null.
 8. RETURN ONLY VALID JSON OBJECT. No markdown backticks, no explanatory text.`;
 
-async function callGeminiWithWaterfall(requestBody: any, rawKey?: string): Promise<string> {
+function parseScoresheetWithTesseract(file?: Express.Multer.File): string {
+  if (!file || !file.buffer) {
+    throw new ServiceError('No valid file buffer available for fallback OCR', 400);
+  }
+
+  const fs = require('fs');
+  const path = require('path');
+  const { execSync } = require('child_process');
+
+  const tmpPath = path.join('/tmp', `ocr_tess_${Date.now()}_${Math.random().toString(36).substring(7)}.png`);
+  try {
+    fs.writeFileSync(tmpPath, file.buffer);
+    let rawText = '';
+    try {
+      rawText = execSync(`tesseract "${tmpPath}" stdout --psm 6`, { encoding: 'utf-8', timeout: 15000 });
+    } catch {
+      rawText = execSync(`tesseract "${tmpPath}" stdout`, { encoding: 'utf-8', timeout: 15000 });
+    }
+
+    const upperAll = rawText.toUpperCase();
+    let sportType = 'BASKETBALL';
+    if (upperAll.includes('SOCCER') || upperAll.includes('FOOTBALL')) sportType = 'SOCCER';
+    else if (upperAll.includes('BADMINTON')) sportType = 'BADMINTON';
+    else if (upperAll.includes('VOLLEY')) sportType = 'VOLLEYBALL';
+    else if (upperAll.includes('SWIM')) sportType = 'SWIMMING';
+    else if (upperAll.includes('TRACK') || upperAll.includes('FIELD')) sportType = 'TRACK AND FIELD';
+    else if (upperAll.includes('PICKLE')) sportType = 'PICKLEBALL';
+
+    let homeTeam = 'Home Team';
+    let awayTeam = 'Away Team';
+    let homeScore = 0;
+    let awayScore = 0;
+
+    const vsMatch = rawText.match(/(?:MATCH|TIE|GAME):\s*([A-Za-z0-9\s]+?)\s+vs\s+([A-Za-z0-9\s]+)/i);
+    const homeAwayMatch = rawText.match(/HOME:\s*([A-Za-z0-9\s]+?)(?:\((\d+)\))?\s+vs\s+AWAY:\s*([A-Za-z0-9\s]+?)(?:\((\d+)\))?/i);
+    const scoreMatch = rawText.match(/(?:FINAL SCORE|Running Score):\s*([A-Za-z0-9\s]+?)\s+(\d+)\s*[-–]\s*(\d+)\s*([A-Za-z0-9\s]+)/i);
+
+    if (homeAwayMatch) {
+      homeTeam = homeAwayMatch[1].trim();
+      if (homeAwayMatch[2]) homeScore = parseInt(homeAwayMatch[2], 10);
+      awayTeam = homeAwayMatch[3].trim();
+      if (homeAwayMatch[4]) awayScore = parseInt(homeAwayMatch[4], 10);
+    } else if (scoreMatch) {
+      homeTeam = scoreMatch[4].trim();
+      homeScore = parseInt(scoreMatch[3], 10);
+      awayTeam = scoreMatch[1].trim();
+      awayScore = parseInt(scoreMatch[2], 10);
+    } else if (vsMatch) {
+      homeTeam = vsMatch[1].trim();
+      awayTeam = vsMatch[2].trim();
+    }
+
+    const lines = rawText.split('\n').map((l: string) => l.trim()).filter(Boolean);
+    const players: any[] = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.replace(/[|#\[\]_]/g, ' ').replace(/\s+/g, ' ').trim();
+      const m = line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+(.*?)\s+([\d\s.-]+)$/i)
+             || line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+([\d\s.-]+)$/i);
+
+      if (m) {
+        const jersey = parseInt(m[1], 10);
+        const name = m[2].trim();
+        const pos = m[3].trim().toUpperCase();
+        let team = homeTeam;
+        let numStr = '';
+        if (m[5]) {
+          team = m[4].trim() || homeTeam;
+          numStr = m[5].trim();
+        } else {
+          numStr = m[4].trim();
+        }
+        const nums = numStr.split(/\s+/).map((n: string) => parseFloat(n) || 0);
+
+        const pObj: any = {
+          jersey_number: jersey,
+          player_name: name,
+          position: pos,
+          team_name: team,
+        };
+
+        if (sportType === 'SOCCER') {
+          pObj.goals = nums[0] || 0;
+          pObj.assists = nums[1] || 0;
+          pObj.shots = nums[2] || 0;
+          pObj.shots_on_target = nums[3] || 0;
+          pObj.saves = nums[4] || 0;
+          pObj.tackles = nums[5] || 0;
+          pObj.fouls = nums[6] || 0;
+          pObj.yellow_cards = nums[7] || 0;
+          pObj.red_cards = nums[8] || 0;
+          pObj.minutes = nums[9] || 0;
+          pObj.points = pObj.goals;
+        } else if (sportType === 'BADMINTON') {
+          pObj.points = nums[0] || 0;
+          pObj.games_won = nums[1] || 0;
+          pObj.smash_winners = nums[2] || 0;
+          pObj.net_kills = nums[3] || 0;
+          pObj.service_faults = nums[4] || 0;
+          pObj.unforced_errors = nums[5] || 0;
+        } else if (sportType === 'VOLLEYBALL') {
+          pObj.kills = nums[0] || 0;
+          pObj.attack_errors = nums[1] || 0;
+          pObj.attack_attempts = nums[2] || 0;
+          pObj.hitting_pct = nums[3] || 0;
+          pObj.service_aces = nums[4] || 0;
+          pObj.digs = nums[5] || 0;
+          pObj.block_points = nums[6] || 0;
+          pObj.assists = nums[7] || 0;
+          pObj.points = nums[8] || (pObj.kills + pObj.service_aces + pObj.block_points);
+        } else {
+          pObj.points = nums[0] || 0;
+          pObj.rebounds = nums[1] || 0;
+          pObj.assists = nums[2] || 0;
+          pObj.steals = nums[3] || 0;
+          pObj.blocks = nums[4] || 0;
+        }
+
+        players.push(pObj);
+      }
+    }
+
+    const fallbackJson = {
+      match_info: {
+        sport_type: sportType,
+        home_team_name: homeTeam,
+        opponent_team_name: awayTeam,
+        game_result: homeScore >= awayScore ? 'WIN' : 'LOSE',
+        final_score: `${homeScore} - ${awayScore}`,
+      },
+      team_scores: [
+        { team: homeTeam, score: homeScore, is_home: true },
+        { team: awayTeam, score: awayScore, is_home: false }
+      ],
+      player_summary: players
+    };
+
+    return JSON.stringify(fallbackJson);
+  } finally {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {}
+  }
+}
+
+async function callGeminiWithWaterfall(requestBody: any, rawKey?: string, file?: Express.Multer.File): Promise<string> {
   const geminiKey = (
     rawKey ||
     process.env.GEMINI_API_KEY ||
@@ -1221,6 +1366,12 @@ async function callGeminiWithWaterfall(requestBody: any, rawKey?: string): Promi
       lastErrorMsg = `Model ${model} error: ${fetchErr.message}`;
       console.warn(`⚠️ [OCR WATERFALL] ${lastErrorMsg}. Retrying with next candidate model...`);
     }
+  }
+
+  // Resilient fallback: If AI vision API is exhausted/rate-limited, fallback to high-precision local Tesseract
+  if (file && file.buffer) {
+    console.warn(`⚠️ [OCR] Cloud AI vision unavailable (${lastErrorMsg}). Falling back to local OCR engine...`);
+    return parseScoresheetWithTesseract(file);
   }
 
   throw new ServiceError(`All OCR Vision models exhausted or rate-limited. Details: ${lastErrorMsg}`, 502);
@@ -1374,7 +1525,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
 
     // Run AI inference and Cloud Storage upload concurrently to eliminate serial latency
     const [content, scoresheetUrl] = await Promise.all([
-      callGeminiWithWaterfall(requestBody, geminiKey),
+      callGeminiWithWaterfall(requestBody, geminiKey, file),
       uploadScoresheetFileToStorage(matchId, file).catch(() => `data:${mimeType};base64,${file.buffer.toString('base64')}`),
     ]);
 
@@ -1636,7 +1787,7 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File, custo
   try {
     // Run AI inference and Cloud Storage upload concurrently to eliminate serial latency
     const [content, scoresheetUrl] = await Promise.all([
-      callGeminiWithWaterfall(requestBody, geminiKey),
+      callGeminiWithWaterfall(requestBody, geminiKey, file),
       uploadScoresheetFileToStorage(`standalone_${Date.now()}`, file).catch(() => `data:${mimeType};base64,${file.buffer.toString('base64')}`),
     ]);
     const parsedData = extractJsonFromAiText(content);

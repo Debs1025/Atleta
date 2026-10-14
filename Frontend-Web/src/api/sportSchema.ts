@@ -353,6 +353,18 @@ export function resolveSportColumns(
         addedKeys.add(c.key);
         cols.push(c);
       });
+    } else if (norm.includes('BADM')) {
+      [
+        { key: 'pts', label: 'POINTS', isNumeric: true },
+        { key: 'games_won', label: 'GAMES', isNumeric: true },
+        { key: 'smash_winners', label: 'SMASHES', isNumeric: true },
+        { key: 'net_kills', label: 'NET KILLS', isNumeric: true },
+        { key: 'service_faults', label: 'FAULTS', isNumeric: true },
+        { key: 'unforced_errors', label: 'ERRORS', isNumeric: true },
+      ].forEach((c) => {
+        addedKeys.add(c.key);
+        cols.push(c);
+      });
     } else if (isSoccer) {
       [
         { key: 'goals', label: 'GOALS', isNumeric: true },

@@ -794,11 +794,13 @@ export const CreateMatch: React.FC = () => {
       ).toUpperCase();
 
       const allFilenames = inputFiles.map((f) => f.name.toLowerCase()).join(' ');
-      if (allFilenames.includes('volley')) rawSport = 'VOLLEYBALL';
+      if (allFilenames.includes('pickle')) rawSport = 'PICKLEBALL';
+      else if (allFilenames.includes('badm')) rawSport = 'BADMINTON';
+      else if (allFilenames.includes('soccer') || allFilenames.includes('football')) rawSport = 'SOCCER';
+      else if (allFilenames.includes('volley')) rawSport = 'VOLLEYBALL';
       else if (allFilenames.includes('swim')) rawSport = 'SWIMMING';
       else if (allFilenames.includes('track') || allFilenames.includes('field') || allFilenames.includes('run')) rawSport = 'TRACK AND FIELD';
-      else if (allFilenames.includes('pickle')) rawSport = 'PICKLEBALL';
-      else if (allFilenames.includes('bball') || allFilenames.includes('basket')) rawSport = 'BASKETBALL';
+      else if (allFilenames.includes('bball') || allFilenames.includes('basket') || allFilenames.includes('camarines') || allFilenames.includes('celtics')) rawSport = 'BASKETBALL';
 
       if (rawSport) {
         const norm = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -920,9 +922,17 @@ export const CreateMatch: React.FC = () => {
         return Boolean(p.distance_m) || Boolean(p.wind) || ev.includes('jump') || ev.includes('dash') || ev.includes('hurdle') || ev.includes('relay') || ev.includes('track');
       });
       const hasPickleSignatures = rawSport.includes('PICKLE') || allFilenames.includes('pickle');
+      const hasBadmintonSignatures = rawSport.includes('BADM') || allFilenames.includes('badm') || rawPlayers.some((p: any) => Number(p.smash_winners || 0) > 0 || Number(p.net_kills || 0) > 0);
+      const hasSoccerSignatures = rawSport.includes('SOCCER') || rawSport.includes('FOOTBALL') || allFilenames.includes('soccer') || allFilenames.includes('football') || rawPlayers.some((p: any) => Number(p.goals || 0) > 0 || Number(p.saves || 0) > 0);
 
       if (hasPickleSignatures) {
         const matched = sportsList.find((s) => s.toUpperCase().includes('PICKLE')) || 'Pickleball';
+        setSportCategory(matched);
+      } else if (hasBadmintonSignatures) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('BADM')) || 'Badminton';
+        setSportCategory(matched);
+      } else if (hasSoccerSignatures) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('SOCCER') || s.toUpperCase().includes('FOOTBALL')) || 'Soccer';
         setSportCategory(matched);
       } else if (hasVballStats || rawSport.includes('VOLLEY')) {
         const matched = sportsList.find((s) => s.toUpperCase().includes('VOLLEY')) || 'Volleyball';
