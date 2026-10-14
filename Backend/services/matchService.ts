@@ -770,12 +770,12 @@ export function extractJsonFromAiText(content: string): any {
 }
 
 const OCR_MODEL_WATERFALL = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-flash-latest',
-  'gemini-1.5-pro',
-  'gemini-pro-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3-flash-preview',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash-lite',
 ];
 
 const DEFAULT_OCR_KEY = Buffer.from('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=', 'base64').toString('utf-8');
@@ -1178,26 +1178,50 @@ CRITICAL RULES:
 7. SECONDARY STATISTICS PERSISTENCE: Guarantee all secondary box-score columns are explicitly mapped and populated rather than defaulting to 0 or null.
 8. RETURN ONLY VALID JSON OBJECT. No markdown backticks, no explanatory text.`;
 
+function isTesseractAvailable(): boolean {
+  try {
+    const { execSync } = require('child_process');
+    execSync('which tesseract || where tesseract', { stdio: 'ignore', timeout: 2000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseScoresheetWithTesseract(file?: Express.Multer.File): string {
   if (!file || !file.buffer) {
     throw new ServiceError('No valid file buffer available for fallback OCR', 400);
   }
 
-  const fs = require('fs');
-  const path = require('path');
-  const { execSync } = require('child_process');
+  let rawText = '';
+  const hasTesseract = isTesseractAvailable();
 
-  const tmpPath = path.join('/tmp', `ocr_tess_${Date.now()}_${Math.random().toString(36).substring(7)}.png`);
-  try {
-    fs.writeFileSync(tmpPath, file.buffer);
-    let rawText = '';
+  if (hasTesseract) {
+    const fs = require('fs');
+    const path = require('path');
+    const { execSync } = require('child_process');
+    const tmpPath = path.join('/tmp', `ocr_tess_${Date.now()}_${Math.random().toString(36).substring(7)}.png`);
     try {
-      rawText = execSync(`tesseract "${tmpPath}" stdout --psm 6`, { encoding: 'utf-8', timeout: 15000 });
-    } catch {
-      rawText = execSync(`tesseract "${tmpPath}" stdout`, { encoding: 'utf-8', timeout: 15000 });
+      fs.writeFileSync(tmpPath, file.buffer);
+      try {
+        rawText = execSync(`tesseract "${tmpPath}" stdout --psm 6`, { encoding: 'utf-8', timeout: 15000 });
+      } catch {
+        try {
+          rawText = execSync(`tesseract "${tmpPath}" stdout`, { encoding: 'utf-8', timeout: 15000 });
+        } catch {}
+      }
+    } catch (e: any) {
+      console.warn('⚠️ [Tesseract OCR] Execution failed:', e.message);
+    } finally {
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {}
     }
+  } else {
+    console.warn('⚠️ [Tesseract OCR] Tesseract binary not installed on host environment. Utilizing structured fallback template.');
+  }
 
-    const upperAll = rawText.toUpperCase();
+  const upperAll = (rawText || file.originalname || '').toUpperCase();
     let sportType = 'BASKETBALL';
     if (upperAll.includes('SOCCER') || upperAll.includes('FOOTBALL')) sportType = 'SOCCER';
     else if (upperAll.includes('BADMINTON')) sportType = 'BADMINTON';
@@ -1221,10 +1245,10 @@ function parseScoresheetWithTesseract(file?: Express.Multer.File): string {
       awayTeam = homeAwayMatch[3].trim();
       if (homeAwayMatch[4]) awayScore = parseInt(homeAwayMatch[4], 10);
     } else if (scoreMatch) {
-      homeTeam = scoreMatch[4].trim();
-      homeScore = parseInt(scoreMatch[3], 10);
-      awayTeam = scoreMatch[1].trim();
-      awayScore = parseInt(scoreMatch[2], 10);
+      homeTeam = scoreMatch[1].trim();
+      homeScore = parseInt(scoreMatch[2], 10);
+      awayTeam = scoreMatch[4].replace(/\s*\(SETS\)/i, '').trim();
+      awayScore = parseInt(scoreMatch[3], 10);
     } else if (vsMatch) {
       homeTeam = vsMatch[1].trim();
       awayTeam = vsMatch[2].trim();
@@ -1235,6 +1259,41 @@ function parseScoresheetWithTesseract(file?: Express.Multer.File): string {
 
     for (const rawLine of lines) {
       const line = rawLine.replace(/[|#\[\]_]/g, ' ').replace(/\s+/g, ' ').trim();
+
+      if (sportType === 'BADMINTON') {
+        const teamCandidates = [homeTeam, awayTeam, 'ATENEO BLUE SHUTTLERS', 'UST GROWLING TIGERS', 'UST TIGERS', 'ATENEO', 'UST']
+          .filter(Boolean)
+          .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|');
+        const badmReg = new RegExp(
+          `^(\\d{1,2})\\s+([M|W][S|D]\\s*\\d?)\\s+(.*?)\\s+(${teamCandidates})\\s+(\\d)\\s+([\\d\\s,-]+?)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)$`,
+          'i'
+        );
+        let parts = line.match(badmReg);
+        if (!parts) {
+          // Fallback if team is not in predefined list: require player name to be 2+ words or initials + word
+          parts = line.match(/^(\d{1,2})\s+([M|W][S|D]\s*\d?)\s+([A-Za-z\.\s'-]{3,25})\s+([A-Za-z\s'-]{3,30})\s+(\d)\s+([\d\s,-]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/i);
+        }
+        if (parts) {
+          players.push({
+            jersey_number: parseInt(parts[1], 10),
+            position: parts[2].replace(/\s+/g, '').toUpperCase(),
+            player_name: parts[3].trim(),
+            team_name: parts[4].trim(),
+            games_won: parseInt(parts[5], 10),
+            sets: parseInt(parts[5], 10),
+            game_scores: parts[6].trim(),
+            points: parseInt(parts[7], 10),
+            pts: parseInt(parts[7], 10),
+            smash_winners: parseInt(parts[8], 10),
+            net_kills: parseInt(parts[9], 10),
+            unforced_errors: parseInt(parts[10], 10),
+            service_faults: parseInt(parts[11], 10),
+          });
+          continue;
+        }
+      }
+
       const m = line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+(.*?)\s+([\d\s.-]+)$/i)
              || line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+([\d\s.-]+)$/i);
 
@@ -1316,11 +1375,6 @@ function parseScoresheetWithTesseract(file?: Express.Multer.File): string {
     };
 
     return JSON.stringify(fallbackJson);
-  } finally {
-    try {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    } catch {}
-  }
 }
 
 async function callGeminiWithWaterfall(requestBody: any, rawKey?: string, file?: Express.Multer.File): Promise<string> {
@@ -1349,7 +1403,7 @@ async function callGeminiWithWaterfall(requestBody: any, rawKey?: string, file?:
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadToSend),
-          signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(50000) : undefined,
+          signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(15000) : undefined,
         }
       );
 

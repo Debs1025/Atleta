@@ -130,6 +130,15 @@ export const STAT_ALIAS_MAP: Record<string, string[]> = {
   placement_rank: ['rank', 'place'],
   rank: ['placement_rank', 'place'],
   wind: ['wind_gauge'],
+  // Badminton / Racket Sports
+  smash_winners: ['smashes', 'smash', 'smash_winner'],
+  smashes: ['smash_winners', 'smash'],
+  net_kills: ['net_kill'],
+  unforced_errors: ['errors', 'unforced_error', 'err'],
+  service_faults: ['faults', 'service_fault', 'fault'],
+  games_won: ['sets', 'sets_won', 'games'],
+  game_scores: ['game_score', 'scores'],
+  smash_win_pct: ['smash_pct', 'smash_percentage', 'smash_win_percentage'],
 };
 
 /**
@@ -355,12 +364,13 @@ export function resolveSportColumns(
       });
     } else if (norm.includes('BADM')) {
       [
-        { key: 'pts', label: 'POINTS', isNumeric: true },
-        { key: 'games_won', label: 'GAMES', isNumeric: true },
+        { key: 'games_won', label: 'SETS', isNumeric: true },
+        { key: 'game_scores', label: 'GAME SCORES', isNumeric: false },
+        { key: 'pts', label: 'TOTAL PTS', isNumeric: true },
         { key: 'smash_winners', label: 'SMASHES', isNumeric: true },
         { key: 'net_kills', label: 'NET KILLS', isNumeric: true },
-        { key: 'service_faults', label: 'FAULTS', isNumeric: true },
         { key: 'unforced_errors', label: 'ERRORS', isNumeric: true },
+        { key: 'service_faults', label: 'FAULTS', isNumeric: true },
       ].forEach((c) => {
         addedKeys.add(c.key);
         cols.push(c);
@@ -427,12 +437,13 @@ export function resolveSportColumns(
   ]);
 
   const CROSS_SPORT_KEYS: Record<string, Set<string>> = {
-    basketball: new Set(['kills', 'attack_errors', 'attack_attempts', 'hitting_pct', 'service_aces', 'service_errors', 'reception_errors', 'digs', 'block_solos', 'block_assists', 'block_points', 'sets_played', 'goals', 'shots', 'shots_on_target', 'saves', 'tackles']),
-    volleyball: new Set(['goals', 'shots', 'shots_on_target', 'saves', 'tackles', 'fg_made', 'fg_attempted', 'three_made', 'three_attempted', 'ft_made', 'ft_attempted', 'fg_pct', 'three_p_pct', 'ft_pct']),
-    soccer: new Set(['kills', 'attack_errors', 'attack_attempts', 'hitting_pct', 'service_aces', 'digs', 'fg_made', 'fg_attempted', 'three_made', 'three_attempted', 'ft_made', 'ft_attempted', 'fg_pct', 'three_p_pct', 'ft_pct']),
+    basketball: new Set(['kills', 'attack_errors', 'attack_attempts', 'hitting_pct', 'service_aces', 'service_errors', 'reception_errors', 'digs', 'block_solos', 'block_assists', 'block_points', 'sets_played', 'goals', 'shots', 'shots_on_target', 'saves', 'tackles', 'smash_winners', 'net_kills']),
+    volleyball: new Set(['goals', 'shots', 'shots_on_target', 'saves', 'tackles', 'fg_made', 'fg_attempted', 'three_made', 'three_attempted', 'ft_made', 'ft_attempted', 'fg_pct', 'three_p_pct', 'ft_pct', 'smash_winners', 'net_kills']),
+    soccer: new Set(['kills', 'attack_errors', 'attack_attempts', 'hitting_pct', 'service_aces', 'digs', 'fg_made', 'fg_attempted', 'three_made', 'three_attempted', 'ft_made', 'ft_attempted', 'fg_pct', 'three_p_pct', 'ft_pct', 'smash_winners', 'net_kills']),
+    badminton: new Set(['kills', 'attack_errors', 'attack_attempts', 'hitting_pct', 'digs', 'goals', 'shots', 'shots_on_target', 'saves', 'tackles', 'fg_made', 'fg_attempted', 'three_made', 'three_attempted', 'ft_made', 'ft_attempted', 'fg_pct', 'three_p_pct', 'ft_pct', 'reb', 'rebounds', 'assists', 'ast', 'blocks', 'blk', 'turnovers', 'to', 'tov', 'fgm', 'fga', '3pm', '3pa', 'ftm', 'fta', 'steals', 'stl', 'fouls', 'pf']),
   };
 
-  const ignoredForSport = isBasketball ? CROSS_SPORT_KEYS.basketball : isVolleyball ? CROSS_SPORT_KEYS.volleyball : isSoccer ? CROSS_SPORT_KEYS.soccer : null;
+  const ignoredForSport = isBasketball ? CROSS_SPORT_KEYS.basketball : isVolleyball ? CROSS_SPORT_KEYS.volleyball : isSoccer ? CROSS_SPORT_KEYS.soccer : norm.includes('BADM') ? CROSS_SPORT_KEYS.badminton : null;
 
   // Check if key or any of its aliases is already added
   const isKeyOrAliasAdded = (key: string): boolean => {
@@ -492,10 +503,11 @@ export function calculateDynamicMatchScore(
   const norm = (sportType || '').trim().toUpperCase();
   const isVolleyball = norm.includes('VOLLEY');
   const isSoccer = norm.includes('SOCCER') || norm.includes('FOOTBALL');
+  const isBadminton = norm.includes('BADM');
   const isIndividual = norm.includes('SWIM') || norm.includes('TRACK') || norm.includes('FIELD') || norm.includes('RUN') || norm.includes('ATHLETIC');
 
   const customUnit = typeof scoringRules?.primary_score_unit === 'string' ? scoringRules.primary_score_unit : undefined;
-  const scoreUnit = customUnit || (isVolleyball ? 'SETS' : isSoccer ? 'GOALS' : isIndividual ? 'PTS' : 'PTS');
+  const scoreUnit = customUnit || (isVolleyball ? 'SETS' : isBadminton ? 'SETS' : isSoccer ? 'GOALS' : isIndividual ? 'PTS' : 'PTS');
 
   const homeAthletes = athletes.filter((a) => (a.team_name || '').toUpperCase() === homeTeamName.toUpperCase());
   const awayAthletes = athletes.filter((a) => (a.team_name || '').toUpperCase() === awayTeamName.toUpperCase());
@@ -529,6 +541,17 @@ export function calculateDynamicMatchScore(
       homeScore: homeTotal > 0 ? homeTotal : homeAthletes.length,
       awayScore: awayTotal > 0 ? awayTotal : awayAthletes.length,
       scoreUnit,
+    };
+  }
+
+  if (isBadminton) {
+    // In badminton matches/ties, score is measured in SETS / MATCHES WON (e.g. 3 - 1 or 2 - 0 / 2 - 1)
+    const homeSets = homeAthletes.reduce((sum, a) => sum + parseRobustStatNum(getMetricValue(a, 'games_won', getMetricValue(a, 'sets', 0)), 'games_won'), 0);
+    const awaySets = awayAthletes.reduce((sum, a) => sum + parseRobustStatNum(getMetricValue(a, 'games_won', getMetricValue(a, 'sets', 0)), 'games_won'), 0);
+    return {
+      homeScore: homeSets,
+      awayScore: awaySets,
+      scoreUnit: 'SETS',
     };
   }
 

@@ -461,6 +461,7 @@ export const CreateMatch: React.FC = () => {
   const normalizedSportUpper = activeSportCategory.toUpperCase();
   const isVolleyball = normalizedSportUpper.includes('VOLLEY');
   const isSoccer = normalizedSportUpper.includes('SOCCER') || normalizedSportUpper.includes('FOOTBALL');
+  const isBadminton = normalizedSportUpper.includes('BADM');
   const isIndividualSport =
     normalizedSportUpper.includes('TRACK') ||
     normalizedSportUpper.includes('SWIM') ||
@@ -545,6 +546,37 @@ export const CreateMatch: React.FC = () => {
           primary: `${totalMatchPoints} PTS`,
           secondary: undefined,
           num: totalMatchPoints,
+        };
+      }
+
+      if (isBadminton) {
+        let setsWon = roster.reduce((s, p) => s + Number(p.games_won || p.sets || p.sets_played || 0), 0);
+        let totalRallyPoints = roster.reduce((s, p) => s + Number(p.pts || p.points || 0), 0);
+
+        if (found && found.score !== undefined && !isNaN(Number(found.score))) {
+          const rawNum = Number(found.score);
+          if (rawNum <= 7) {
+            setsWon = rawNum;
+          } else {
+            totalRallyPoints = rawNum;
+          }
+        }
+
+        if (setsWon === 0 && ocrFinalScoreStr) {
+          const setMatch = ocrFinalScoreStr.match(/(\d+)\s*[-:]\s*(\d+)/);
+          if (setMatch) {
+            const homeSets = parseInt(setMatch[1], 10);
+            const awaySets = parseInt(setMatch[2], 10);
+            if (homeSets <= 7 && awaySets <= 7) {
+              setsWon = isHome ? homeSets : awaySets;
+            }
+          }
+        }
+
+        return {
+          primary: `${setsWon} SETS`,
+          secondary: totalRallyPoints > 0 ? `${totalRallyPoints} TOTAL PTS` : undefined,
+          num: setsWon,
         };
       }
 
@@ -1150,7 +1182,17 @@ export const CreateMatch: React.FC = () => {
 
           const defaultPos = isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G';
 
+          const smashWinners = Number(p.smash_winners ?? p.smashes ?? 0);
+          const netKills = Number(p.net_kills ?? 0);
+          const unforcedErrors = Number(p.unforced_errors ?? p.errors ?? 0);
+          const serviceFaults = Number(p.service_faults ?? p.faults ?? 0);
+          const gamesWon = Number(p.games_won ?? p.sets ?? 0);
+          const gameScores = String(p.game_scores || '');
+          const smashWinPct = p.smash_win_pct || (smashWinners > 0 ? `${Math.min(100, Math.round((smashWinners / (smashWinners + unforcedErrors || 1)) * 100))}%` : '0.0%');
+
           const row: BoxScoreRow = {
+            ...p,
+            ...(p.stats || {}),
             jersey_no: jersey,
             player_name: fullName,
             position: p.position || p.pos || defaultPos,
@@ -1175,6 +1217,15 @@ export const CreateMatch: React.FC = () => {
             shots_on_target,
             saves,
             tackles,
+            // Badminton & Racquet sports
+            smash_winners: smashWinners,
+            net_kills: netKills,
+            unforced_errors: unforcedErrors,
+            service_faults: serviceFaults,
+            smash_win_pct: smashWinPct,
+            games_won: gamesWon,
+            game_scores: gameScores,
+            sets: gamesWon,
           };
 
           if (isHome) {
