@@ -29,7 +29,14 @@ import {
   getCachedData,
   getSports,
 } from '../../api/client';
-import type { AuthUser, MatchAuditDetail, BoxScoreRow, RaceResultRow } from '../../api/types';
+import type { AuthUser, MatchAuditDetail, BoxScoreRow, RaceResultRow, SportConfiguration } from '../../api/types';
+import {
+  resolveSportColumns,
+  getMetricValue,
+  setMetricValue,
+  parseRobustStatNum,
+  type SportColumnDef,
+} from '../../api/sportSchema';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
@@ -53,14 +60,14 @@ const buildCreateSportsList = (rawSports?: any[]): string[] => {
     }
   });
 
-  ['Basketball', 'Track & Field', 'Swimming'].forEach((def) => {
+  ['Basketball', 'Volleyball', 'Track & Field', 'Swimming', 'Pickleball', 'Soccer', 'Badminton'].forEach((def) => {
     const norm = normalizeSportKey(def);
     if (!seen.has(norm)) {
       seen.add(norm);
       sports.push(def);
     }
   });
-  return sports.length > 0 ? sports : ['Basketball', 'Track & Field', 'Swimming'];
+  return sports.length > 0 ? sports : ['Basketball', 'Volleyball', 'Track & Field', 'Swimming', 'Pickleball'];
 };
 
 export interface ParsedMatchItem {
@@ -401,6 +408,7 @@ export const CreateMatch: React.FC = () => {
   const [gameName, setGameName] = useState('');
   const [sportCategory, setSportCategory] = useState('Basketball');
   const [sportsList, setSportsList] = useState<string[]>(() => buildCreateSportsList());
+  const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
@@ -453,13 +461,28 @@ export const CreateMatch: React.FC = () => {
   const normalizedSportUpper = activeSportCategory.toUpperCase();
   const isVolleyball = normalizedSportUpper.includes('VOLLEY');
   const isSoccer = normalizedSportUpper.includes('SOCCER') || normalizedSportUpper.includes('FOOTBALL');
+  const isBadminton = normalizedSportUpper.includes('BADM');
   const isIndividualSport =
     normalizedSportUpper.includes('TRACK') ||
     normalizedSportUpper.includes('SWIM') ||
     normalizedSportUpper.includes('FIELD') ||
     normalizedSportUpper.includes('ATHLETIC') ||
     normalizedSportUpper.includes('TIME');
-  const isBasketball = !isVolleyball && !isSoccer && !isIndividualSport;
+
+  const activeSportConfig = useMemo<SportConfiguration | null>(() => {
+    const norm = activeSportCategory.trim().toUpperCase();
+    return configuredSports.find(
+      (s) =>
+        s.sport_name.trim().toUpperCase() === norm ||
+        s.short_identifier.trim().toUpperCase() === norm ||
+        norm.includes(s.sport_name.trim().toUpperCase()) ||
+        s.sport_name.trim().toUpperCase().includes(norm)
+    ) || null;
+  }, [configuredSports, activeSportCategory]);
+
+  const dynamicSportColumns = useMemo<SportColumnDef[]>(() => {
+    return resolveSportColumns(activeSportCategory, activeSportConfig, [...homeRoster, ...awayRoster]);
+  }, [activeSportCategory, activeSportConfig, homeRoster, awayRoster]);
 
   // Dynamic Scoreboard State (from OCR extraction and live edits)
   const [ocrDetectedTeamScores, setOcrDetectedTeamScores] = useState<{ team: string; score: number }[]>([]);
@@ -523,6 +546,37 @@ export const CreateMatch: React.FC = () => {
           primary: `${totalMatchPoints} PTS`,
           secondary: undefined,
           num: totalMatchPoints,
+        };
+      }
+
+      if (isBadminton) {
+        let setsWon = roster.reduce((s, p) => s + Number(p.games_won || p.sets || p.sets_played || 0), 0);
+        let totalRallyPoints = roster.reduce((s, p) => s + Number(p.pts || p.points || 0), 0);
+
+        if (found && found.score !== undefined && !isNaN(Number(found.score))) {
+          const rawNum = Number(found.score);
+          if (rawNum <= 7) {
+            setsWon = rawNum;
+          } else {
+            totalRallyPoints = rawNum;
+          }
+        }
+
+        if (setsWon === 0 && ocrFinalScoreStr) {
+          const setMatch = ocrFinalScoreStr.match(/(\d+)\s*[-:]\s*(\d+)/);
+          if (setMatch) {
+            const homeSets = parseInt(setMatch[1], 10);
+            const awaySets = parseInt(setMatch[2], 10);
+            if (homeSets <= 7 && awaySets <= 7) {
+              setsWon = isHome ? homeSets : awaySets;
+            }
+          }
+        }
+
+        return {
+          primary: `${setsWon} SETS`,
+          secondary: totalRallyPoints > 0 ? `${totalRallyPoints} TOTAL PTS` : undefined,
+          num: setsWon,
         };
       }
 
@@ -609,6 +663,7 @@ export const CreateMatch: React.FC = () => {
     getSports().then((res) => {
       if (res) {
         const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+        setConfiguredSports(list);
         setSportsList(buildCreateSportsList(list));
       }
     }).catch(() => {});
@@ -704,6 +759,13 @@ export const CreateMatch: React.FC = () => {
     }
 
     const primaryFile = inputFiles[0];
+    setHomeRoster([]);
+    setAwayRoster([]);
+    setRaceResults([]);
+    setParsedMatches([]);
+    setOcrDetectedTeamScores([]);
+    setOcrFinalScoreStr(null);
+
     setSelectedFile(primaryFile);
     setSelectedFiles(inputFiles);
     try {
@@ -764,11 +826,13 @@ export const CreateMatch: React.FC = () => {
       ).toUpperCase();
 
       const allFilenames = inputFiles.map((f) => f.name.toLowerCase()).join(' ');
-      if (allFilenames.includes('volley')) rawSport = 'VOLLEYBALL';
+      if (allFilenames.includes('pickle')) rawSport = 'PICKLEBALL';
+      else if (allFilenames.includes('badm')) rawSport = 'BADMINTON';
+      else if (allFilenames.includes('soccer') || allFilenames.includes('football')) rawSport = 'SOCCER';
+      else if (allFilenames.includes('volley')) rawSport = 'VOLLEYBALL';
       else if (allFilenames.includes('swim')) rawSport = 'SWIMMING';
       else if (allFilenames.includes('track') || allFilenames.includes('field') || allFilenames.includes('run')) rawSport = 'TRACK AND FIELD';
-      else if (allFilenames.includes('pickle')) rawSport = 'PICKLEBALL';
-      else if (allFilenames.includes('bball') || allFilenames.includes('basket')) rawSport = 'BASKETBALL';
+      else if (allFilenames.includes('bball') || allFilenames.includes('basket') || allFilenames.includes('camarines') || allFilenames.includes('celtics')) rawSport = 'BASKETBALL';
 
       if (rawSport) {
         const norm = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -796,21 +860,15 @@ export const CreateMatch: React.FC = () => {
         activeSport.toLowerCase().includes('swim') ||
         activeSport.toLowerCase().includes('field');
 
-      // 1. Gather all players across root player_summary or by summing across sub-matches/pages
+      // 1. Gather all players across sub-matches or root player_summary
       let rawPlayers: any[] = [];
-      if (Array.isArray(ocrRes?.player_summary) && ocrRes.player_summary.length > 0) {
-        // Backend multi-scoresheet engine already summed stats across scoresheets
-        rawPlayers = [...ocrRes.player_summary];
-      } else if (Array.isArray(ocrRes?.parsed_tables?.player_summary) && ocrRes.parsed_tables.player_summary.length > 0) {
-        rawPlayers = [...ocrRes.parsed_tables.player_summary];
-      } else {
-        // Fallback: Sum stats from sheet 1 and sheet 2 for each player
-        const subMatches = Array.isArray(ocrRes?.matches) ? ocrRes.matches : (Array.isArray(ocrRes?.pages) ? ocrRes.pages : []);
+      if (subMatches.length > 1) {
+        // Multi-scoresheet scan: iterate through pages with intelligent cumulative deduplication
         subMatches.forEach((m: any) => {
           const mPlayers = Array.isArray(m?.player_summary)
             ? m.player_summary
             : (Array.isArray(m?.parsed_tables?.player_summary) ? m.parsed_tables.player_summary : []);
-          
+
           mPlayers.forEach((incoming: any) => {
             const incJersey = incoming.jersey_number ?? incoming.number;
             const incName = String(incoming.player_name || incoming.name || '').trim().toUpperCase();
@@ -829,70 +887,124 @@ export const CreateMatch: React.FC = () => {
 
             if (existingIdx !== -1) {
               const cur = rawPlayers[existingIdx];
+              // Intelligent cumulative check: If incoming sheet's points and attempts are already >= existing,
+              // take incoming cumulative final numbers rather than erroneously re-adding
+              const curPts = Number(cur.points ?? cur.pts ?? 0);
+              const incPts = Number(incoming.points ?? incoming.pts ?? 0);
+              const curFga = Number(cur.fg_attempted ?? cur.fga ?? 0);
+              const incFga = Number(incoming.fg_attempted ?? incoming.fga ?? 0);
+              const isCumulative = (incPts >= curPts && incFga >= curFga && incPts > 0) || (incPts > 0 && curPts === 0);
+
               rawPlayers[existingIdx] = {
                 ...cur,
-                points: Number(cur.points ?? cur.pts ?? 0) + Number(incoming.points ?? incoming.pts ?? 0),
-                pts: Number(cur.points ?? cur.pts ?? 0) + Number(incoming.points ?? incoming.pts ?? 0),
-                rebounds: Number(cur.rebounds ?? cur.reb ?? 0) + Number(incoming.rebounds ?? incoming.reb ?? 0),
-                reb: Number(cur.rebounds ?? cur.reb ?? 0) + Number(incoming.rebounds ?? incoming.reb ?? 0),
-                assists: Number(cur.assists ?? cur.ast ?? 0) + Number(incoming.assists ?? incoming.ast ?? 0),
-                ast: Number(cur.assists ?? cur.ast ?? 0) + Number(incoming.assists ?? incoming.ast ?? 0),
-                steals: Number(cur.steals ?? cur.stl ?? 0) + Number(incoming.steals ?? incoming.stl ?? 0),
-                stl: Number(cur.steals ?? cur.stl ?? 0) + Number(incoming.steals ?? incoming.stl ?? 0),
-                blocks: Number(cur.blocks ?? cur.blk ?? 0) + Number(incoming.blocks ?? incoming.blk ?? 0),
-                blk: Number(cur.blocks ?? cur.blk ?? 0) + Number(incoming.blocks ?? incoming.blk ?? 0),
-                turnovers: Number(cur.turnovers ?? cur.to ?? 0) + Number(incoming.turnovers ?? incoming.to ?? 0),
-                to: Number(cur.turnovers ?? cur.to ?? 0) + Number(incoming.turnovers ?? incoming.to ?? 0),
-                minutes: Number(cur.minutes ?? cur.min ?? 0) + Number(incoming.minutes ?? incoming.min ?? 0),
-                min: Number(cur.minutes ?? cur.min ?? 0) + Number(incoming.minutes ?? incoming.min ?? 0),
-                fg_made: Number(cur.fg_made ?? 0) + Number(incoming.fg_made ?? 0),
-                fgm: Number(cur.fgm ?? cur.fg_made ?? 0) + Number(incoming.fgm ?? incoming.fg_made ?? 0),
-                fg_attempted: Number(cur.fg_attempted ?? 0) + Number(incoming.fg_attempted ?? 0),
-                fga: Number(cur.fga ?? cur.fg_attempted ?? 0) + Number(incoming.fga ?? incoming.fg_attempted ?? 0),
-                three_made: Number(cur.three_made ?? 0) + Number(incoming.three_made ?? 0),
-                three_attempted: Number(cur.three_attempted ?? 0) + Number(incoming.three_attempted ?? 0),
-                ft_made: Number(cur.ft_made ?? 0) + Number(incoming.ft_made ?? 0),
-                ftm: Number(cur.ftm ?? cur.ft_made ?? 0) + Number(incoming.ftm ?? incoming.ft_made ?? 0),
-                ft_attempted: Number(cur.ft_attempted ?? 0) + Number(incoming.ft_attempted ?? 0),
-                fta: Number(cur.fta ?? cur.ft_attempted ?? 0) + Number(incoming.fta ?? incoming.ft_attempted ?? 0),
-                kills: Number(cur.kills ?? 0) + Number(incoming.kills ?? 0),
-                attack_errors: Number(cur.attack_errors ?? 0) + Number(incoming.attack_errors ?? 0),
-                attack_attempts: Number(cur.attack_attempts ?? 0) + Number(incoming.attack_attempts ?? 0),
-                digs: Number(cur.digs ?? 0) + Number(incoming.digs ?? 0),
-                service_aces: Number(cur.service_aces ?? 0) + Number(incoming.service_aces ?? 0),
-                goals: Number(cur.goals ?? 0) + Number(incoming.goals ?? 0),
-                shots: Number(cur.shots ?? 0) + Number(incoming.shots ?? 0),
-                saves: Number(cur.saves ?? 0) + Number(incoming.saves ?? 0),
-                tackles: Number(cur.tackles ?? 0) + Number(incoming.tackles ?? 0),
+                ...incoming,
+                points: isCumulative ? incPts : (curPts + incPts),
+                pts: isCumulative ? incPts : (curPts + incPts),
+                rebounds: isCumulative ? Number(incoming.rebounds ?? incoming.reb ?? 0) : (Number(cur.rebounds ?? cur.reb ?? 0) + Number(incoming.rebounds ?? incoming.reb ?? 0)),
+                reb: isCumulative ? Number(incoming.reb ?? incoming.rebounds ?? 0) : (Number(cur.reb ?? cur.rebounds ?? 0) + Number(incoming.reb ?? incoming.rebounds ?? 0)),
+                assists: isCumulative ? Number(incoming.assists ?? incoming.ast ?? 0) : (Number(cur.assists ?? cur.ast ?? 0) + Number(incoming.assists ?? incoming.ast ?? 0)),
+                ast: isCumulative ? Number(incoming.ast ?? incoming.assists ?? 0) : (Number(cur.ast ?? cur.assists ?? 0) + Number(incoming.ast ?? incoming.assists ?? 0)),
+                steals: isCumulative ? Number(incoming.steals ?? incoming.stl ?? 0) : (Number(cur.steals ?? cur.stl ?? 0) + Number(incoming.steals ?? incoming.stl ?? 0)),
+                stl: isCumulative ? Number(incoming.stl ?? incoming.steals ?? 0) : (Number(cur.stl ?? cur.steals ?? 0) + Number(incoming.stl ?? incoming.steals ?? 0)),
+                blocks: isCumulative ? Number(incoming.blocks ?? incoming.blk ?? 0) : (Number(cur.blocks ?? cur.blk ?? 0) + Number(incoming.blocks ?? incoming.blk ?? 0)),
+                blk: isCumulative ? Number(incoming.blk ?? incoming.blocks ?? 0) : (Number(cur.blk ?? cur.blocks ?? 0) + Number(incoming.blk ?? incoming.blocks ?? 0)),
+                turnovers: isCumulative ? Number(incoming.turnovers ?? incoming.to ?? 0) : (Number(cur.turnovers ?? cur.to ?? 0) + Number(incoming.turnovers ?? incoming.to ?? 0)),
+                to: isCumulative ? Number(incoming.to ?? incoming.turnovers ?? 0) : (Number(cur.to ?? cur.turnovers ?? 0) + Number(incoming.to ?? incoming.turnovers ?? 0)),
+                minutes: isCumulative ? Number(incoming.minutes ?? incoming.min ?? 0) : (Number(cur.minutes ?? cur.min ?? 0) + Number(incoming.minutes ?? incoming.min ?? 0)),
+                min: isCumulative ? Number(incoming.min ?? incoming.minutes ?? 0) : (Number(cur.min ?? cur.minutes ?? 0) + Number(incoming.min ?? incoming.minutes ?? 0)),
+                fg_made: isCumulative ? Number(incoming.fg_made ?? incoming.fgm ?? 0) : (Number(cur.fg_made ?? 0) + Number(incoming.fg_made ?? 0)),
+                fgm: isCumulative ? Number(incoming.fgm ?? incoming.fg_made ?? 0) : (Number(cur.fgm ?? cur.fg_made ?? 0) + Number(incoming.fgm ?? incoming.fg_made ?? 0)),
+                fg_attempted: isCumulative ? incFga : (curFga + incFga),
+                fga: isCumulative ? incFga : (curFga + incFga),
+                three_made: isCumulative ? Number(incoming.three_made ?? 0) : (Number(cur.three_made ?? 0) + Number(incoming.three_made ?? 0)),
+                three_attempted: isCumulative ? Number(incoming.three_attempted ?? 0) : (Number(cur.three_attempted ?? 0) + Number(incoming.three_attempted ?? 0)),
+                ft_made: isCumulative ? Number(incoming.ft_made ?? incoming.ftm ?? 0) : (Number(cur.ft_made ?? 0) + Number(incoming.ft_made ?? 0)),
+                ftm: isCumulative ? Number(incoming.ftm ?? incoming.ft_made ?? 0) : (Number(cur.ftm ?? cur.ft_made ?? 0) + Number(incoming.ftm ?? incoming.ft_made ?? 0)),
+                ft_attempted: isCumulative ? Number(incoming.ft_attempted ?? incoming.fta ?? 0) : (Number(cur.ft_attempted ?? 0) + Number(incoming.ft_attempted ?? 0)),
+                fta: isCumulative ? Number(incoming.fta ?? incoming.ft_attempted ?? 0) : (Number(cur.fta ?? cur.ft_attempted ?? 0) + Number(incoming.fta ?? incoming.ft_attempted ?? 0)),
+                kills: isCumulative ? Number(incoming.kills ?? 0) : (Number(cur.kills ?? 0) + Number(incoming.kills ?? 0)),
+                attack_errors: isCumulative ? Number(incoming.attack_errors ?? 0) : (Number(cur.attack_errors ?? 0) + Number(incoming.attack_errors ?? 0)),
+                attack_attempts: isCumulative ? Number(incoming.attack_attempts ?? 0) : (Number(cur.attack_attempts ?? 0) + Number(incoming.attack_attempts ?? 0)),
+                digs: isCumulative ? Number(incoming.digs ?? 0) : (Number(cur.digs ?? 0) + Number(incoming.digs ?? 0)),
+                service_aces: isCumulative ? Number(incoming.service_aces ?? 0) : (Number(cur.service_aces ?? 0) + Number(incoming.service_aces ?? 0)),
+                goals: isCumulative ? Number(incoming.goals ?? 0) : (Number(cur.goals ?? 0) + Number(incoming.goals ?? 0)),
+                shots: isCumulative ? Number(incoming.shots ?? 0) : (Number(cur.shots ?? 0) + Number(incoming.shots ?? 0)),
+                saves: isCumulative ? Number(incoming.saves ?? 0) : (Number(cur.saves ?? 0) + Number(incoming.saves ?? 0)),
+                tackles: isCumulative ? Number(incoming.tackles ?? 0) : (Number(cur.tackles ?? 0) + Number(incoming.tackles ?? 0)),
               };
             } else {
               rawPlayers.push({ ...incoming });
             }
           });
         });
+      } else if (Array.isArray(ocrRes?.player_summary) && ocrRes.player_summary.length > 0) {
+        rawPlayers = [...ocrRes.player_summary];
+      } else if (Array.isArray(ocrRes?.parsed_tables?.player_summary) && ocrRes.parsed_tables.player_summary.length > 0) {
+        rawPlayers = [...ocrRes.parsed_tables.player_summary];
       }
 
       // Check attribute signatures to refine sport detection
-      const hasVballStats = rawPlayers.some((p: any) => Number(p.kills || 0) > 0 || Number(p.digs || 0) > 0 || Number(p.service_aces || 0) > 0);
-      const hasSwimTimes = rawPlayers.some((p: any) => p.finish_time || p.stroke_count || p.split_time);
-      const hasTrackMarks = rawPlayers.some((p: any) => p.distance_m || (p.event && (String(p.event).toLowerCase().includes('m ') || String(p.event).toLowerCase().includes('relay') || String(p.event).toLowerCase().includes('dash'))));
-      if (hasVballStats && !activeSport.toLowerCase().includes('volley')) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('VOLLEY'));
-        if (matched) setSportCategory(matched);
-      } else if (hasSwimTimes && !activeSport.toLowerCase().includes('swim')) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('SWIM'));
-        if (matched) setSportCategory(matched);
-      } else if (hasTrackMarks && !activeSport.toLowerCase().includes('track')) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('TRACK') || s.toUpperCase().includes('RUN'));
-        if (matched) setSportCategory(matched);
+      const hasVballStats = rawPlayers.some((p: any) => Number(p.kills || 0) > 0 || Number(p.digs || 0) > 0 || Number(p.block_points || 0) > 0);
+      const hasSwimSignatures = rawPlayers.some((p: any) => {
+        const ev = String(p.event || p.event_name || '').toLowerCase();
+        return Boolean(p.stroke_count) || ev.includes('free') || ev.includes('stroke') || ev.includes('medley') || ev.includes('fly') || ev.includes('swim');
+      });
+      const hasTrackSignatures = rawPlayers.some((p: any) => {
+        const ev = String(p.event || p.event_name || '').toLowerCase();
+        return Boolean(p.distance_m) || Boolean(p.wind) || ev.includes('jump') || ev.includes('dash') || ev.includes('hurdle') || ev.includes('relay') || ev.includes('track');
+      });
+      const hasPickleSignatures = rawSport.includes('PICKLE') || allFilenames.includes('pickle');
+      const hasBadmintonSignatures = rawSport.includes('BADM') || allFilenames.includes('badm') || rawPlayers.some((p: any) => Number(p.smash_winners || 0) > 0 || Number(p.net_kills || 0) > 0);
+      const hasSoccerSignatures = rawSport.includes('SOCCER') || rawSport.includes('FOOTBALL') || allFilenames.includes('soccer') || allFilenames.includes('football') || rawPlayers.some((p: any) => Number(p.goals || 0) > 0 || Number(p.saves || 0) > 0);
+
+      if (hasPickleSignatures) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('PICKLE')) || 'Pickleball';
+        setSportCategory(matched);
+      } else if (hasBadmintonSignatures) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('BADM')) || 'Badminton';
+        setSportCategory(matched);
+      } else if (hasSoccerSignatures) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('SOCCER') || s.toUpperCase().includes('FOOTBALL')) || 'Soccer';
+        setSportCategory(matched);
+      } else if (hasVballStats || rawSport.includes('VOLLEY')) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('VOLLEY')) || 'Volleyball';
+        setSportCategory(matched);
+      } else if (hasSwimSignatures || rawSport.includes('SWIM')) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('SWIM')) || 'Swimming';
+        setSportCategory(matched);
+      } else if (hasTrackSignatures || rawSport.includes('TRACK') || rawSport.includes('FIELD')) {
+        const matched = sportsList.find((s) => s.toUpperCase().includes('TRACK') || s.toUpperCase().includes('FIELD')) || 'Track & Field';
+        setSportCategory(matched);
       }
 
       // 2. Dynamic Team Names Extraction
-      const teamScoresArr: any[] = Array.isArray(ocrRes?.team_scores)
-        ? ocrRes.team_scores
-        : Array.isArray(ocrRes?.parsed_tables?.team_scores)
-        ? ocrRes.parsed_tables.team_scores
-        : [];
+      let teamScoresArr: any[] = [];
+      if (subMatches.length > 1 && isContinuation) {
+        const teamScoreMap = new Map<string, { team: string; score: number; is_home?: boolean }>();
+        subMatches.forEach((m: any) => {
+          const mScores = Array.isArray(m?.team_scores) ? m.team_scores : (Array.isArray(m?.parsed_tables?.team_scores) ? m.parsed_tables.team_scores : []);
+          mScores.forEach((ts: any) => {
+            const tName = String(ts.team || ts.team_name || '').trim().toUpperCase();
+            if (!tName) return;
+            const incScore = Number(ts.score || 0);
+            if (!teamScoreMap.has(tName)) {
+              teamScoreMap.set(tName, { team: tName, score: incScore, is_home: ts.is_home });
+            } else {
+              const cur = teamScoreMap.get(tName)!;
+              const isCum = incScore >= cur.score && incScore > 0;
+              cur.score = isCum ? incScore : (cur.score + incScore);
+              if (ts.is_home !== undefined) cur.is_home = ts.is_home;
+            }
+          });
+        });
+        teamScoresArr = Array.from(teamScoreMap.values());
+      } else {
+        teamScoresArr = Array.isArray(ocrRes?.team_scores)
+          ? ocrRes.team_scores
+          : Array.isArray(ocrRes?.parsed_tables?.team_scores)
+          ? ocrRes.parsed_tables.team_scores
+          : [];
+      }
 
       if (teamScoresArr.length > 0) {
         setOcrDetectedTeamScores(
@@ -902,7 +1014,15 @@ export const CreateMatch: React.FC = () => {
           }))
         );
       }
-      if (ocrRes?.match_info?.final_score) {
+
+      if (subMatches.length > 1 && isContinuation) {
+        const lastFinalScore = subMatches[subMatches.length - 1]?.match_info?.final_score || subMatches[subMatches.length - 1]?.final_score;
+        if (lastFinalScore) {
+          setOcrFinalScoreStr(String(lastFinalScore).trim());
+        } else if (teamScoresArr.length >= 2) {
+          setOcrFinalScoreStr(`${teamScoresArr[0].score} - ${teamScoresArr[1].score}`);
+        }
+      } else if (ocrRes?.match_info?.final_score) {
         setOcrFinalScoreStr(String(ocrRes.match_info.final_score).trim());
       }
 
@@ -1062,7 +1182,17 @@ export const CreateMatch: React.FC = () => {
 
           const defaultPos = isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G';
 
+          const smashWinners = Number(p.smash_winners ?? p.smashes ?? 0);
+          const netKills = Number(p.net_kills ?? 0);
+          const unforcedErrors = Number(p.unforced_errors ?? p.errors ?? 0);
+          const serviceFaults = Number(p.service_faults ?? p.faults ?? 0);
+          const gamesWon = Number(p.games_won ?? p.sets ?? 0);
+          const gameScores = String(p.game_scores || '');
+          const smashWinPct = p.smash_win_pct || (smashWinners > 0 ? `${Math.min(100, Math.round((smashWinners / (smashWinners + unforcedErrors || 1)) * 100))}%` : '0.0%');
+
           const row: BoxScoreRow = {
+            ...p,
+            ...(p.stats || {}),
             jersey_no: jersey,
             player_name: fullName,
             position: p.position || p.pos || defaultPos,
@@ -1087,6 +1217,15 @@ export const CreateMatch: React.FC = () => {
             shots_on_target,
             saves,
             tackles,
+            // Badminton & Racquet sports
+            smash_winners: smashWinners,
+            net_kills: netKills,
+            unforced_errors: unforcedErrors,
+            service_faults: serviceFaults,
+            smash_win_pct: smashWinPct,
+            games_won: gamesWon,
+            game_scores: gameScores,
+            sets: gamesWon,
           };
 
           if (isHome) {
@@ -1144,14 +1283,18 @@ export const CreateMatch: React.FC = () => {
   };
 
   // Live editable table helpers
-  const updateBasketballStat = (team: 'home' | 'away', idx: number, field: keyof BoxScoreRow, value: any) => {
+  const updateBasketballStat = (team: 'home' | 'away', idx: number, field: any, value: any) => {
     if (team === 'home') {
       const updated = [...homeRoster];
-      updated[idx] = { ...updated[idx], [field]: value };
+      const row = { ...updated[idx] };
+      setMetricValue(row, field, value);
+      updated[idx] = row;
       setHomeRoster(updated);
     } else {
       const updated = [...awayRoster];
-      updated[idx] = { ...updated[idx], [field]: value };
+      const row = { ...updated[idx] };
+      setMetricValue(row, field, value);
+      updated[idx] = row;
       setAwayRoster(updated);
     }
   };
@@ -1331,106 +1474,119 @@ export const CreateMatch: React.FC = () => {
 
       // Map live edited stats into payload
       homeRoster.forEach((p, idx) => {
+        const completeStats: Record<string, any> = {
+          ...(p.stats || {}),
+        };
+        dynamicSportColumns.forEach((col) => {
+          const val = getMetricValue(p, col.key);
+          if (val !== undefined && val !== null && val !== '') {
+            completeStats[col.key] = val;
+          }
+        });
+
         playerStatsPayload.push({
-          athlete_id: `ath_home_${idx + 1}`,
+          athlete_id: p.athlete_id || `ath_home_${idx + 1}`,
           player_name: p.player_name,
           team_name: finalHome,
           jersey_number: Number(p.jersey_no) || idx + 1,
           position: p.position || (isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G'),
-          pts: Number(p.pts || 0),
-          ast: Number(p.ast || 0),
-          reb: Number(p.reb || 0),
-          stl: Number(p.stl || 0),
-          blk: Number(p.blk || 0),
-          min: Number(p.minutes || 0),
+          pts: parseRobustStatNum(completeStats.pts ?? completeStats.points ?? p.pts ?? 0, 'pts'),
+          ast: parseRobustStatNum(completeStats.ast ?? completeStats.assists ?? p.ast ?? 0, 'ast'),
+          reb: parseRobustStatNum(completeStats.reb ?? completeStats.rebounds ?? p.reb ?? 0, 'reb'),
+          stl: parseRobustStatNum(completeStats.stl ?? completeStats.steals ?? p.stl ?? 0, 'stl'),
+          blk: parseRobustStatNum(completeStats.blk ?? completeStats.blocks ?? p.blk ?? 0, 'blk'),
+          to: parseRobustStatNum(completeStats.to ?? completeStats.turnovers ?? p.to ?? 0, 'to'),
+          fouls: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+          pf: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+          oreb: parseRobustStatNum(completeStats.oreb ?? completeStats.offensive_rebounds ?? p.oreb ?? 0, 'oreb'),
+          dreb: parseRobustStatNum(completeStats.dreb ?? completeStats.defensive_rebounds ?? p.dreb ?? 0, 'dreb'),
+          min: parseRobustStatNum(completeStats.min ?? completeStats.minutes ?? p.minutes ?? 0, 'min'),
+          fg_made: parseRobustStatNum(completeStats.fg_made ?? p.fg_made ?? 0, 'fg_made'),
+          fg_attempted: parseRobustStatNum(completeStats.fg_attempted ?? p.fg_attempted ?? 0, 'fg_attempted'),
+          three_made: parseRobustStatNum(completeStats.three_made ?? p.three_made ?? 0, 'three_made'),
+          three_attempted: parseRobustStatNum(completeStats.three_attempted ?? p.three_attempted ?? 0, 'three_attempted'),
+          ft_made: parseRobustStatNum(completeStats.ft_made ?? p.ft_made ?? 0, 'ft_made'),
+          ft_attempted: parseRobustStatNum(completeStats.ft_attempted ?? p.ft_attempted ?? 0, 'ft_attempted'),
           fg_pct: p.fg_pct,
-          kills: Number(p.kills || 0),
-          attack_errors: Number(p.attack_errors || 0),
-          attack_attempts: Number(p.attack_attempts || 0),
+          three_p_pct: p.three_p_pct,
+          ft_pct: p.ft_pct,
+          kills: parseRobustStatNum(completeStats.kills ?? p.kills ?? 0, 'kills'),
+          attack_errors: parseRobustStatNum(completeStats.attack_errors ?? p.attack_errors ?? 0, 'attack_errors'),
+          attack_attempts: parseRobustStatNum(completeStats.attack_attempts ?? p.attack_attempts ?? 0, 'attack_attempts'),
           hitting_pct: p.hitting_pct,
-          service_aces: Number(p.service_aces || 0),
-          digs: Number(p.digs || 0),
-          block_points: Number(p.block_points || p.blk || 0),
-          goals: Number(p.goals || 0),
-          shots: Number(p.shots || 0),
-          shots_on_target: Number(p.shots_on_target || 0),
-          saves: Number(p.saves || 0),
-          tackles: Number(p.tackles || 0),
-          stats: {
-            points: Number(p.pts || 0),
-            rebounds: Number(p.reb || 0),
-            assists: Number(p.ast || 0),
-            steals: Number(p.stl || 0),
-            blocks: Number(p.blk || 0),
-            fg_pct: p.fg_pct,
-            three_p_pct: p.three_p_pct,
-            ft_pct: p.ft_pct,
-            kills: Number(p.kills || 0),
-            attack_errors: Number(p.attack_errors || 0),
-            attack_attempts: Number(p.attack_attempts || 0),
-            hitting_pct: p.hitting_pct,
-            service_aces: Number(p.service_aces || 0),
-            digs: Number(p.digs || 0),
-            block_points: Number(p.block_points || p.blk || 0),
-            goals: Number(p.goals || 0),
-            shots: Number(p.shots || 0),
-            shots_on_target: Number(p.shots_on_target || 0),
-            saves: Number(p.saves || 0),
-            tackles: Number(p.tackles || 0),
-          },
+          service_aces: parseRobustStatNum(completeStats.service_aces ?? p.service_aces ?? 0, 'service_aces'),
+          service_errors: parseRobustStatNum(completeStats.service_errors ?? p.service_errors ?? 0, 'service_errors'),
+          reception_errors: parseRobustStatNum(completeStats.reception_errors ?? p.reception_errors ?? 0, 'reception_errors'),
+          digs: parseRobustStatNum(completeStats.digs ?? p.digs ?? 0, 'digs'),
+          block_points: parseRobustStatNum(completeStats.block_points ?? p.block_points ?? 0, 'block_points'),
+          sets_played: parseRobustStatNum(completeStats.sets_played ?? p.sets_played ?? 0, 'sets_played'),
+          goals: parseRobustStatNum(completeStats.goals ?? p.goals ?? 0, 'goals'),
+          shots: parseRobustStatNum(completeStats.shots ?? p.shots ?? 0, 'shots'),
+          shots_on_target: parseRobustStatNum(completeStats.shots_on_target ?? p.shots_on_target ?? 0, 'shots_on_target'),
+          saves: parseRobustStatNum(completeStats.saves ?? p.saves ?? 0, 'saves'),
+          tackles: parseRobustStatNum(completeStats.tackles ?? p.tackles ?? 0, 'tackles'),
+          stats: completeStats,
         });
       });
 
       awayRoster.forEach((p, idx) => {
+        const completeStats: Record<string, any> = {
+          ...(p.stats || {}),
+        };
+        dynamicSportColumns.forEach((col) => {
+          const val = getMetricValue(p, col.key);
+          if (val !== undefined && val !== null && val !== '') {
+            completeStats[col.key] = val;
+          }
+        });
+
         playerStatsPayload.push({
-          athlete_id: `ath_away_${idx + 1}`,
+          athlete_id: p.athlete_id || `ath_away_${idx + 1}`,
           player_name: p.player_name,
           team_name: finalAway,
           jersey_number: Number(p.jersey_no) || idx + 1,
           position: p.position || (isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G'),
-          pts: Number(p.pts || 0),
-          ast: Number(p.ast || 0),
-          reb: Number(p.reb || 0),
-          stl: Number(p.stl || 0),
-          blk: Number(p.blk || 0),
-          min: Number(p.minutes || 0),
+          pts: parseRobustStatNum(completeStats.pts ?? completeStats.points ?? p.pts ?? 0, 'pts'),
+          ast: parseRobustStatNum(completeStats.ast ?? completeStats.assists ?? p.ast ?? 0, 'ast'),
+          reb: parseRobustStatNum(completeStats.reb ?? completeStats.rebounds ?? p.reb ?? 0, 'reb'),
+          stl: parseRobustStatNum(completeStats.stl ?? completeStats.steals ?? p.stl ?? 0, 'stl'),
+          blk: parseRobustStatNum(completeStats.blk ?? completeStats.blocks ?? p.blk ?? 0, 'blk'),
+          to: parseRobustStatNum(completeStats.to ?? completeStats.turnovers ?? p.to ?? 0, 'to'),
+          fouls: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+          pf: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+          oreb: parseRobustStatNum(completeStats.oreb ?? completeStats.offensive_rebounds ?? p.oreb ?? 0, 'oreb'),
+          dreb: parseRobustStatNum(completeStats.dreb ?? completeStats.defensive_rebounds ?? p.dreb ?? 0, 'dreb'),
+          min: parseRobustStatNum(completeStats.min ?? completeStats.minutes ?? p.minutes ?? 0, 'min'),
+          fg_made: parseRobustStatNum(completeStats.fg_made ?? p.fg_made ?? 0, 'fg_made'),
+          fg_attempted: parseRobustStatNum(completeStats.fg_attempted ?? p.fg_attempted ?? 0, 'fg_attempted'),
+          three_made: parseRobustStatNum(completeStats.three_made ?? p.three_made ?? 0, 'three_made'),
+          three_attempted: parseRobustStatNum(completeStats.three_attempted ?? p.three_attempted ?? 0, 'three_attempted'),
+          ft_made: parseRobustStatNum(completeStats.ft_made ?? p.ft_made ?? 0, 'ft_made'),
+          ft_attempted: parseRobustStatNum(completeStats.ft_attempted ?? p.ft_attempted ?? 0, 'ft_attempted'),
           fg_pct: p.fg_pct,
-          kills: Number(p.kills || 0),
-          attack_errors: Number(p.attack_errors || 0),
-          attack_attempts: Number(p.attack_attempts || 0),
+          three_p_pct: p.three_p_pct,
+          ft_pct: p.ft_pct,
+          kills: parseRobustStatNum(completeStats.kills ?? p.kills ?? 0, 'kills'),
+          attack_errors: parseRobustStatNum(completeStats.attack_errors ?? p.attack_errors ?? 0, 'attack_errors'),
+          attack_attempts: parseRobustStatNum(completeStats.attack_attempts ?? p.attack_attempts ?? 0, 'attack_attempts'),
           hitting_pct: p.hitting_pct,
-          service_aces: Number(p.service_aces || 0),
-          digs: Number(p.digs || 0),
-          block_points: Number(p.block_points || p.blk || 0),
-          goals: Number(p.goals || 0),
-          shots: Number(p.shots || 0),
-          shots_on_target: Number(p.shots_on_target || 0),
-          saves: Number(p.saves || 0),
-          tackles: Number(p.tackles || 0),
-          stats: {
-            points: Number(p.pts || 0),
-            rebounds: Number(p.reb || 0),
-            assists: Number(p.ast || 0),
-            steals: Number(p.stl || 0),
-            blocks: Number(p.blk || 0),
-            fg_pct: p.fg_pct,
-            three_p_pct: p.three_p_pct,
-            ft_pct: p.ft_pct,
-            kills: Number(p.kills || 0),
-            attack_errors: Number(p.attack_errors || 0),
-            attack_attempts: Number(p.attack_attempts || 0),
-            hitting_pct: p.hitting_pct,
-            service_aces: Number(p.service_aces || 0),
-            digs: Number(p.digs || 0),
-            block_points: Number(p.block_points || p.blk || 0),
-            goals: Number(p.goals || 0),
-            shots: Number(p.shots || 0),
-            shots_on_target: Number(p.shots_on_target || 0),
-            saves: Number(p.saves || 0),
-            tackles: Number(p.tackles || 0),
-          },
+          service_aces: parseRobustStatNum(completeStats.service_aces ?? p.service_aces ?? 0, 'service_aces'),
+          service_errors: parseRobustStatNum(completeStats.service_errors ?? p.service_errors ?? 0, 'service_errors'),
+          reception_errors: parseRobustStatNum(completeStats.reception_errors ?? p.reception_errors ?? 0, 'reception_errors'),
+          digs: parseRobustStatNum(completeStats.digs ?? p.digs ?? 0, 'digs'),
+          block_points: parseRobustStatNum(completeStats.block_points ?? p.block_points ?? 0, 'block_points'),
+          sets_played: parseRobustStatNum(completeStats.sets_played ?? p.sets_played ?? 0, 'sets_played'),
+          goals: parseRobustStatNum(completeStats.goals ?? p.goals ?? 0, 'goals'),
+          shots: parseRobustStatNum(completeStats.shots ?? p.shots ?? 0, 'shots'),
+          shots_on_target: parseRobustStatNum(completeStats.shots_on_target ?? p.shots_on_target ?? 0, 'shots_on_target'),
+          saves: parseRobustStatNum(completeStats.saves ?? p.saves ?? 0, 'saves'),
+          tackles: parseRobustStatNum(completeStats.tackles ?? p.tackles ?? 0, 'tackles'),
+          stats: completeStats,
         });
       });
+
+      const homeRosterIds = homeRoster.map((r, i) => r.athlete_id || `ath_home_${i + 1}`);
+      const awayRosterIds = awayRoster.map((r, i) => r.athlete_id || `ath_away_${i + 1}`);
 
       // Dispatch fast match creation with pre-uploaded scoresheet and verified stats
       const createdMatch = await createOfficialMatch({
@@ -1445,8 +1601,14 @@ export const CreateMatch: React.FC = () => {
         participating_teams: participating,
         game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
-        scoresheet_url: scoresheetUrl,
+        scoresheet_url: scoresheetUrl || '',
+        scoresheetUrl: scoresheetUrl || '',
+        roster_athletes: homeRosterIds,
+        rosterAthletes: homeRosterIds,
+        away_roster_athletes: awayRosterIds,
+        awayRosterAthletes: awayRosterIds,
         player_stats: playerStatsPayload,
+        playerStats: playerStatsPayload,
         notes: notes.trim(),
         home_score: homeDynamicScore.num,
         away_score: awayDynamicScore.num,
@@ -1586,37 +1748,9 @@ export const CreateMatch: React.FC = () => {
 
   // Render Box Score Table for Team Ball Sports
   const renderTeamBoxScoreTable = (teamType: 'home' | 'away', teamName: string, roster: BoxScoreRow[]) => {
-    // Basketball totals
     const totalPts = roster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
-    const totalReb = roster.reduce((a, b) => a + (Number(b.reb) || 0), 0);
-    const totalAst = roster.reduce((a, b) => a + (Number(b.ast) || 0), 0);
-    const totalStl = roster.reduce((a, b) => a + (Number(b.stl) || 0), 0);
-    const totalBlk = roster.reduce((a, b) => a + (Number(b.blk) || 0), 0);
-
-    const validFgPcts = roster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
-    const totalFgPct = validFgPcts.length > 0 ? `${(validFgPcts.reduce((a, b) => a + b, 0) / validFgPcts.length).toFixed(1)}%` : '0.0%';
-
-    const validThreePcts = roster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
-    const totalThreePct = validThreePcts.length > 0 ? `${(validThreePcts.reduce((a, b) => a + b, 0) / validThreePcts.length).toFixed(1)}%` : '0.0%';
-
-    const validFtPcts = roster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
-    const totalFtPct = validFtPcts.length > 0 ? `${(validFtPcts.reduce((a, b) => a + b, 0) / validFtPcts.length).toFixed(1)}%` : '0.0%';
-
-    // Volleyball totals
-    const totalKills = roster.reduce((a, b) => a + (Number(b.kills) || 0), 0);
-    const totalAtkErr = roster.reduce((a, b) => a + (Number(b.attack_errors) || 0), 0);
-    const totalAttempts = roster.reduce((a, b) => a + (Number(b.attack_attempts) || 0), 0);
-    const teamHitPct = totalAttempts > 0 ? ((totalKills - totalAtkErr) / totalAttempts).toFixed(3) : '.000';
-    const totalAces = roster.reduce((a, b) => a + (Number(b.service_aces) || 0), 0);
-    const totalDigs = roster.reduce((a, b) => a + (Number(b.digs) || 0), 0);
     const totalVolleyPts = roster.reduce((a, b) => a + (Number(b.pts || (b.kills || 0) + (b.service_aces || 0) + (b.blk || 0)) || 0), 0);
-
-    // Soccer totals
     const totalGoals = roster.reduce((a, b) => a + (Number(b.goals ?? b.pts) || 0), 0);
-    const totalShots = roster.reduce((a, b) => a + (Number(b.shots) || 0), 0);
-    const totalSot = roster.reduce((a, b) => a + (Number(b.shots_on_target) || 0), 0);
-    const totalSaves = roster.reduce((a, b) => a + (Number(b.saves) || 0), 0);
-    const totalTackles = roster.reduce((a, b) => a + (Number(b.tackles) || 0), 0);
 
     return (
       <div style={styles.tableSection}>
@@ -1634,59 +1768,17 @@ export const CreateMatch: React.FC = () => {
         <div style={styles.statsTableFrame}>
           <table style={styles.statsTable}>
             <thead>
-              {/* Volleyball Headers */}
-              {isVolleyball && (
-                <tr>
-                  <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
-                  <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ POS ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ KILLS ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ ATK ERR ]</th>
-                  <th style={{ ...styles.statTh, width: '65px' }}>[ ATTEMPTS ]</th>
-                  <th style={{ ...styles.statTh, width: '65px' }}>[ HIT % ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ AST ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ ACES ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ DIGS ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ BLK ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ PTS ]</th>
-                  <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
-                </tr>
-              )}
-
-              {/* Soccer Headers */}
-              {isSoccer && (
-                <tr>
-                  <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
-                  <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ POS ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ MIN ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ GOALS ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ AST ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ SHOTS ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ SOT ]</th>
-                  <th style={{ ...styles.statTh, width: '50px' }}>[ SAVES ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ TACKLES ]</th>
-                  <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
-                </tr>
-              )}
-
-              {/* Basketball / Default Headers */}
-              {isBasketball && (
-                <tr>
-                  <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
-                  <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ MIN ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ PTS ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ REB ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ AST ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ STL ]</th>
-                  <th style={{ ...styles.statTh, width: '55px' }}>[ BLK ]</th>
-                  <th style={{ ...styles.statTh, width: '65px' }}>[ FG% ]</th>
-                  <th style={{ ...styles.statTh, width: '65px' }}>[ 3P% ]</th>
-                  <th style={{ ...styles.statTh, width: '65px' }}>[ FT% ]</th>
-                  <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
-                </tr>
-              )}
+              <tr>
+                <th style={{ ...styles.statTh, width: '45px' }}>[ # ]</th>
+                <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ PLAYER NAME ]</th>
+                <th style={{ ...styles.statTh, width: '50px' }}>[ POS ]</th>
+                {dynamicSportColumns.map((col) => (
+                  <th key={col.key} style={{ ...styles.statTh, width: col.isNumeric ? '55px' : '65px' }}>
+                    [ {col.label} ]
+                  </th>
+                ))}
+                <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
+              </tr>
             </thead>
             <tbody>
               {roster.length > 0 ? (
@@ -1708,240 +1800,31 @@ export const CreateMatch: React.FC = () => {
                         style={styles.statInputName}
                       />
                     </td>
+                    <td style={styles.statTd}>
+                      <input
+                        type="text"
+                        value={row.position || (isVolleyball ? 'OH' : isSoccer ? 'FWD' : 'G')}
+                        onChange={(e) => updateBasketballStat(teamType, idx, 'position', e.target.value)}
+                        style={styles.statInput}
+                      />
+                    </td>
 
-                    {/* Volleyball Data Cells */}
-                    {isVolleyball && (
-                      <>
-                        <td style={styles.statTd}>
+                    {dynamicSportColumns.map((col) => {
+                      const val = getMetricValue(row, col.key);
+                      return (
+                        <td key={col.key} style={styles.statTd}>
                           <input
-                            type="text"
-                            value={row.position || 'OH'}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'position', e.target.value)}
+                            type={col.isNumeric ? 'number' : 'text'}
+                            value={val !== undefined && val !== null ? val : (col.isNumeric ? 0 : '')}
+                            onChange={(e) => {
+                              const v = col.isNumeric ? parseRobustStatNum(e.target.value, col.key) : e.target.value;
+                              updateBasketballStat(teamType, idx, col.key, v);
+                            }}
                             style={styles.statInput}
                           />
                         </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.kills ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'kills', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.attack_errors ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'attack_errors', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.attack_attempts ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'attack_attempts', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.hitting_pct || '.000'}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'hitting_pct', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.ast ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.service_aces ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'service_aces', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.digs ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'digs', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.blk ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.pts ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                      </>
-                    )}
-
-                    {/* Soccer Data Cells */}
-                    {isSoccer && (
-                      <>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.position || 'FWD'}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'position', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.minutes ?? '0'}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.goals ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'goals', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.ast ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.shots ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'shots', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.shots_on_target ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'shots_on_target', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.saves ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'saves', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.tackles ?? 0}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'tackles', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                      </>
-                    )}
-
-                    {/* Basketball Data Cells */}
-                    {isBasketball && (
-                      <>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.minutes}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.pts}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.reb}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'reb', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.ast}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.stl}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'stl', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="number"
-                            value={row.blk}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.fg_pct}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'fg_pct', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.three_p_pct}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'three_p_pct', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                        <td style={styles.statTd}>
-                          <input
-                            type="text"
-                            value={row.ft_pct}
-                            onChange={(e) => updateBasketballStat(teamType, idx, 'ft_pct', e.target.value)}
-                            style={styles.statInput}
-                          />
-                        </td>
-                      </>
-                    )}
+                      );
+                    })}
 
                     <td style={{ ...styles.statTd, borderRight: 'none', textAlign: 'center' }}>
                       <button
@@ -1957,7 +1840,7 @@ export const CreateMatch: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={13} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
+                  <td colSpan={dynamicSportColumns.length + 4} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
                     No player roster rows extracted. Click below to add players manually.
                   </td>
                 </tr>
@@ -1967,49 +1850,26 @@ export const CreateMatch: React.FC = () => {
               <tr style={styles.statTotalsTr}>
                 <td style={styles.statTotalsTd}></td>
                 <td style={{ ...styles.statTotalsTd, textAlign: 'left', paddingLeft: '12px' }}>TEAM TOTALS</td>
-
-                {isVolleyball && (
-                  <>
-                    <td style={styles.statTotalsTd}>-</td>
-                    <td style={styles.statTotalsTd}>{totalKills}</td>
-                    <td style={styles.statTotalsTd}>{totalAtkErr}</td>
-                    <td style={styles.statTotalsTd}>{totalAttempts}</td>
-                    <td style={styles.statTotalsTd}>{teamHitPct}</td>
-                    <td style={styles.statTotalsTd}>{totalAst}</td>
-                    <td style={styles.statTotalsTd}>{totalAces}</td>
-                    <td style={styles.statTotalsTd}>{totalDigs}</td>
-                    <td style={styles.statTotalsTd}>{totalBlk}</td>
-                    <td style={styles.statTotalsTd}>{totalVolleyPts}</td>
-                  </>
-                )}
-
-                {isSoccer && (
-                  <>
-                    <td style={styles.statTotalsTd}>-</td>
-                    <td style={styles.statTotalsTd}>-</td>
-                    <td style={styles.statTotalsTd}>{totalGoals}</td>
-                    <td style={styles.statTotalsTd}>{totalAst}</td>
-                    <td style={styles.statTotalsTd}>{totalShots}</td>
-                    <td style={styles.statTotalsTd}>{totalSot}</td>
-                    <td style={styles.statTotalsTd}>{totalSaves}</td>
-                    <td style={styles.statTotalsTd}>{totalTackles}</td>
-                  </>
-                )}
-
-                {isBasketball && (
-                  <>
-                    <td style={styles.statTotalsTd}>-</td>
-                    <td style={styles.statTotalsTd}>{totalPts}</td>
-                    <td style={styles.statTotalsTd}>{totalReb}</td>
-                    <td style={styles.statTotalsTd}>{totalAst}</td>
-                    <td style={styles.statTotalsTd}>{totalStl}</td>
-                    <td style={styles.statTotalsTd}>{totalBlk}</td>
-                    <td style={styles.statTotalsTd}>{totalFgPct}</td>
-                    <td style={styles.statTotalsTd}>{totalThreePct}</td>
-                    <td style={styles.statTotalsTd}>{totalFtPct}</td>
-                  </>
-                )}
-
+                <td style={styles.statTotalsTd}>-</td>
+                {dynamicSportColumns.map((col) => {
+                  if (col.isNumeric) {
+                    const total = roster.reduce((sum, r) => {
+                      const val = getMetricValue(r, col.key);
+                      const num = typeof val === 'number' ? val : parseFloat(val);
+                      return sum + (isNaN(num) ? 0 : num);
+                    }, 0);
+                    return (
+                      <td key={col.key} style={styles.statTotalsTd}>
+                        {Number.isInteger(total) ? total : total.toFixed(1)}
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={col.key} style={styles.statTotalsTd}>
+                      -
+                    </td>
+                  );
+                })}
                 <td style={{ ...styles.statTotalsTd, borderRight: 'none' }}></td>
               </tr>
             </tbody>
