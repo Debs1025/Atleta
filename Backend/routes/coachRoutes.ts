@@ -10,6 +10,7 @@ import {
   updateCoachProfileHandler,
   changeCoachPasswordHandler,
   getCoachAthletesHandler,
+  resubmitCoachCredentialsHandler,
 } from '../controllers/coachInquiryController';
 import { getScoutingAthleteProfileController } from '../controllers/scoutingController';
 import { postSrpeLog, getAthleteWorkloadHandler } from '../controllers/workloadController';
@@ -28,6 +29,10 @@ router.post('/register', authRateLimiter, upload.single('professional_documents'
 router.post('/coach', authRateLimiter, upload.single('professional_documents'), registerCoach);
 router.post('/', authRateLimiter, upload.single('professional_documents'), registerCoach);
 router.post('/login', authRateLimiter, loginUser);
+
+// Coach Re-Application & Credential Resubmission
+router.post('/resubmit-credentials', upload.any(), resubmitCoachCredentialsHandler);
+router.post('/reapply', upload.any(), resubmitCoachCredentialsHandler);
 
 // Clean Token-Based Routes (No Coach ID required)
 router.get('/me', authenticate, getCoachProfileHandler);

@@ -323,6 +323,7 @@ export interface AdminCoachQueueItem {
   full_name: string;
   first_name?: string;
   last_name?: string;
+  email?: string;
   sport_type?: string;
   years_of_experience?: number;
   current_institution?: string;
@@ -330,6 +331,7 @@ export interface AdminCoachQueueItem {
   professional_documents?: string[];
   account_status: string;
   status?: string;
+  rejection_reason?: string;
   created_at: string;
   date_uploaded?: string;
 }
@@ -338,6 +340,31 @@ export interface AdminCoachQueueResponse {
   message?: string;
   total_pending: number;
   queue: AdminCoachQueueItem[];
+}
+
+export interface AdminOfficialQueueItem {
+  official_id: string;
+  user_id: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  organization_name?: string;
+  organization?: string;
+  official_license_number?: string;
+  assigned_tournaments?: string[];
+  account_status: string;
+  status: string;
+  is_approved: boolean;
+  rejection_reason?: string;
+  created_at: string;
+}
+
+export interface AdminOfficialQueueResponse {
+  message?: string;
+  total_pending: number;
+  total_officials?: number;
+  queue: AdminOfficialQueueItem[];
 }
 
 export type MeasurementCategory =

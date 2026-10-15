@@ -8,6 +8,9 @@ import {
   getCoachQueueHandler,
   approveCoachHandler,
   rejectCoachHandler,
+  getOfficialsQueueHandler,
+  approveOfficialHandler,
+  rejectOfficialHandler,
 } from '../controllers/adminController';
 
 const router = Router();
@@ -25,6 +28,12 @@ router.get('/coaches/queue', requireSystemAdmin, getCoachQueueHandler);
 router.get('/coach-queue', requireSystemAdmin, getCoachQueueHandler);
 router.post('/coaches/:coachId/approve', requireSystemAdmin, approveCoachHandler);
 router.post('/coaches/:coachId/reject', requireSystemAdmin, rejectCoachHandler);
+
+// Official Sign-Up Review & Approval Queue
+router.get('/officials/queue', requireSystemAdmin, getOfficialsQueueHandler);
+router.get('/official-queue', requireSystemAdmin, getOfficialsQueueHandler);
+router.post('/officials/:officialId/approve', requireSystemAdmin, approveOfficialHandler);
+router.post('/officials/:officialId/reject', requireSystemAdmin, rejectOfficialHandler);
 
 export default router;
 

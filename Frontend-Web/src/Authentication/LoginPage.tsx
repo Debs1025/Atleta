@@ -8,6 +8,7 @@ import {
   getAdminCoachQueue,
   warmOfficialAppCache,
 } from '../api/client';
+import { CoachReapplicationModal } from './CoachReapplicationModal';
 import { styles } from './styles/LoginPage';
 
 export const LoginPage: React.FC = () => {
@@ -19,6 +20,8 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState<boolean>(() => Boolean(getStoredToken()));
   const [err, setErr] = useState<string | null>(null);
+  const [showReapplyModal, setShowReapplyModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
     if (getStoredToken()) {
@@ -68,6 +71,14 @@ export const LoginPage: React.FC = () => {
         setErr('Account does not exist.');
       } else {
         setErr(msg || 'Authentication failed.');
+      }
+
+      if (
+        msg.toLowerCase().includes('declined') ||
+        msg.toLowerCase().includes('rejected') ||
+        msg.toLowerCase().includes('credential')
+      ) {
+        setRejectionReason(msg);
       }
     } finally {
       setLoading(false);
@@ -162,7 +173,31 @@ export const LoginPage: React.FC = () => {
         <h1 style={styles.title}>LOG IN YOUR ACCOUNT</h1>
 
         <div className="resp-card" style={styles.card}>
-          {err && <div style={styles.error}>{err}</div>}
+          {err && (
+            <div style={styles.error}>
+              <div>{err}</div>
+              {(rejectionReason || err.toLowerCase().includes('declined') || err.toLowerCase().includes('rejected') || err.toLowerCase().includes('credential')) && (
+                <button
+                  type="button"
+                  onClick={() => setShowReapplyModal(true)}
+                  style={{
+                    marginTop: '8px',
+                    backgroundColor: '#0B132B',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '2px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'block',
+                  }}
+                >
+                  RESUBMIT COACH ACCREDITATION CREDENTIALS →
+                </button>
+              )}
+            </div>
+          )}
 
           <form onSubmit={onLogin} style={styles.form}>
             <div style={styles.field}>
@@ -220,6 +255,24 @@ export const LoginPage: React.FC = () => {
             <button type="submit" disabled={loading} className="btn-primary" style={styles.submitBtn}>
               {loading ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> : 'LOGIN →'}
             </button>
+
+            <div style={{ marginTop: '14px', textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowReapplyModal(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748B',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                Declined coach application? Click here to resubmit verification credentials.
+              </button>
+            </div>
           </form>
 
           <div style={styles.securityBox}>
@@ -245,6 +298,18 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {showReapplyModal && (
+        <CoachReapplicationModal
+          coachEmail={email}
+          rejectionReason={rejectionReason}
+          onClose={() => setShowReapplyModal(false)}
+          onSuccess={() => {
+            setErr(null);
+            alert('Your updated credentials have been submitted for administrator review. Your status is now Pending.');
+          }}
+        />
+      )}
     </div>
   );
 };

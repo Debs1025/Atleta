@@ -11,6 +11,7 @@ import {
 } from '../models/userModel';
 import { sendPasswordResetEmailService } from './emailService';
 import { hashPassword, verifyPassword, sanitizeUser, sanitizeProfile } from '../utils/passwordUtils';
+import { ServiceError } from '../validators/matchValidator';
 
 const googleOAuthClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_ANDROID_CLIENT_ID || '203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com'
@@ -175,7 +176,10 @@ export async function registerUserService(
     password_hash: passwordHash,
     contact_number,
     role: firestoreRole,
-    account_status: firestoreRole === 'Coach' ? 'Pending' : 'Active',
+    account_status: (firestoreRole === 'Coach' || firestoreRole === 'Official') ? 'Pending' : 'Active',
+    status: (firestoreRole === 'Coach' || firestoreRole === 'Official') ? 'pending' : 'active',
+    is_approved: !(firestoreRole === 'Coach' || firestoreRole === 'Official'),
+    isApproved: !(firestoreRole === 'Coach' || firestoreRole === 'Official'),
     created_at: now,
     updated_at: now,
   };
@@ -369,6 +373,10 @@ export async function registerUserService(
     userData.assigned_tournaments = assignedTournaments;
     userData.tournament_affiliation = orgName;
     userData.certification_status = 'Pending';
+    userData.account_status = 'Pending';
+    userData.status = 'pending';
+    userData.is_approved = false;
+    userData.isApproved = false;
     userData.is_active = true;
 
     // Complete research paper data dictionary for Official_Profiles table
@@ -378,6 +386,10 @@ export async function registerUserService(
     profileData.official_license_number = licenseNumber;
     profileData.assigned_tournaments = assignedTournaments;
     profileData.certification_status = 'Pending';
+    profileData.account_status = 'Pending';
+    profileData.status = 'pending';
+    profileData.is_approved = false;
+    profileData.isApproved = false;
     profileData.is_active = true;
     profileData.avatar_url = userData.avatar_url || null;
     profileData.profile_image = userData.avatar_url || null;
@@ -577,6 +589,30 @@ export async function loginUserService(email: string, password: string) {
   const canonicalUid = userDoc!.id;
   const userData = (userDoc as any).data()!;
   const role = userData.role as UserRole;
+  const roleStr = String(role || '').toLowerCase();
+  const isAdmin = roleStr.includes('admin');
+
+  // Official Sign-Up Approval Gate: Intercept login if not approved by system admin
+  if (!isAdmin && roleStr.includes('official')) {
+    const rawStatus = String(
+      userData.account_status ||
+      userData.status ||
+      userData.certification_status ||
+      ''
+    ).toLowerCase().trim();
+
+    const isApprovedFlag = userData.is_approved === true || userData.isApproved === true;
+    const isApprovedStatus = rawStatus === 'approved' || rawStatus === 'active' || rawStatus === 'verified';
+
+    if (!isApprovedFlag && !isApprovedStatus) {
+      if (rawStatus === 'rejected' || rawStatus === 'declined') {
+        const reason = userData.rejection_reason ? `: ${userData.rejection_reason}` : '.';
+        throw new ServiceError(`Your official account application was declined by the system administrator${reason}`, 403);
+      }
+      throw new ServiceError('Your official account is pending system admin approval.', 403);
+    }
+  }
+
   const token = generateToken(canonicalUid, userData.email, role);
 
   return {
@@ -586,6 +622,11 @@ export async function loginUserService(email: string, password: string) {
       last_name: userData.last_name,
       email: userData.email,
       role,
+      account_status: userData.account_status,
+      status: userData.status,
+      is_approved: userData.is_approved,
+      isApproved: userData.isApproved,
+      rejection_reason: userData.rejection_reason || null,
     }),
     token,
     firebase_id_token: firebaseIdToken,

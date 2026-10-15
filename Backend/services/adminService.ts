@@ -351,20 +351,29 @@ export async function loginAdminService(
 /**
  * Retrieve pending coach verification applications and uploaded document links.
  */
-export async function getPendingCoachQueueService() {
+export async function getPendingCoachQueueService(filterStatus?: string) {
   const snapshot = await db.collection('Coach_Profiles').get();
 
-  const pendingCoaches: any[] = [];
+  const coaches: any[] = [];
   const userIds: string[] = [];
   const seenUserIds = new Set<string>();
 
   snapshot.docs.forEach((doc) => {
     const data = doc.data();
-    const status = data.account_status || 'Pending';
-    const effectiveUserId = data.user_id || doc.id;
-    if (status === 'Pending' && !seenUserIds.has(effectiveUserId)) {
+    const effectiveStatus = data.account_status || data.status || 'Pending';
+    const effectiveUserId = data.user_id || doc.id.replace(/^coach_/, '');
+
+    if (filterStatus && effectiveStatus.toLowerCase() !== filterStatus.toLowerCase()) {
+      return;
+    }
+
+    if (!seenUserIds.has(effectiveUserId)) {
       seenUserIds.add(effectiveUserId);
-      pendingCoaches.push({
+      const isApproved = effectiveStatus.toLowerCase() === 'active' || effectiveStatus.toLowerCase() === 'approved';
+      const isRejected = effectiveStatus.toLowerCase() === 'rejected';
+      const displayStatus = isApproved ? 'VERIFIED' : (isRejected ? 'REJECTED' : 'PENDING');
+
+      coaches.push({
         coach_id: data.coach_id || (doc.id.startsWith('coach_') ? doc.id : `coach_${doc.id}`),
         user_id: effectiveUserId,
         first_name: data.first_name || '',
@@ -373,9 +382,13 @@ export async function getPendingCoachQueueService() {
         sport_type: data.sport_type || 'Unassigned',
         years_of_experience: data.years_of_experience || 0,
         current_institution: data.current_institution || 'N/A',
+        institutional_affiliation: data.current_institution || data.institutional_affiliation || 'N/A',
         professional_documents: data.professional_documents || [],
-        account_status: 'Pending',
+        account_status: effectiveStatus,
+        status: displayStatus,
+        rejection_reason: data.rejection_reason || '',
         created_at: data.created_at || new Date().toISOString(),
+        date_uploaded: data.date_uploaded || data.created_at || new Date().toISOString(),
       });
       if (effectiveUserId) userIds.push(effectiveUserId);
     }
@@ -392,16 +405,25 @@ export async function getPendingCoachQueueService() {
       }
     });
 
-    pendingCoaches.forEach((coach) => {
+    coaches.forEach((coach) => {
       const uData = userMap.get(coach.user_id);
       if (uData) {
         coach.email = uData.email || '';
         coach.full_name = coach.full_name || `${uData.first_name || ''} ${uData.last_name || ''}`.trim();
+        if (uData.account_status) {
+          coach.account_status = uData.account_status;
+          const isApp = coach.account_status.toLowerCase() === 'active' || coach.account_status.toLowerCase() === 'approved';
+          const isRej = coach.account_status.toLowerCase() === 'rejected';
+          coach.status = isApp ? 'VERIFIED' : (isRej ? 'REJECTED' : 'PENDING');
+        }
+        if (uData.rejection_reason) {
+          coach.rejection_reason = uData.rejection_reason;
+        }
       }
     });
   }
 
-  return pendingCoaches;
+  return coaches;
 }
 
 /**
@@ -432,9 +454,18 @@ export async function approveCoachService(adminId: string, coachIdParam: string)
   // Perform atomic batch update to update account_status to "Active" across Coach_Profiles and Users
   const batch = db.batch();
 
-  batch.set(coachRef, { account_status: 'Active', updated_at: now }, { merge: true });
-  batch.set(rawCoachRef, { account_status: 'Active', updated_at: now }, { merge: true });
-  batch.set(userRef, { account_status: 'Active', updated_at: now }, { merge: true });
+  const coachApprovalUpdates = {
+    account_status: 'Active',
+    status: 'VERIFIED',
+    is_approved: true,
+    isApproved: true,
+    rejection_reason: null,
+    updated_at: now,
+  };
+
+  batch.set(coachRef, coachApprovalUpdates, { merge: true });
+  batch.set(rawCoachRef, coachApprovalUpdates, { merge: true });
+  batch.set(userRef, coachApprovalUpdates, { merge: true });
 
   // Write Admin_Audit_Logs record for accreditation decision
   const auditLogId = crypto.randomUUID();
@@ -463,6 +494,8 @@ export async function approveCoachService(adminId: string, coachIdParam: string)
     message: 'Coach account approved and activated successfully.',
     coach_id: canonicalCoachId,
     account_status: 'Active',
+    status: 'VERIFIED',
+    is_approved: true,
     audit_log_id: auditLogId,
   };
 }
@@ -497,11 +530,21 @@ export async function rejectCoachService(adminId: string, coachIdParam: string, 
   const now = new Date();
 
   // Perform atomic batch update to update account_status to "Rejected" across Coach_Profiles and Users
+  // Preserves user account record, strictly updating status and recording rejection reason
   const batch = db.batch();
 
-  batch.set(coachRef, { account_status: 'Rejected', updated_at: now }, { merge: true });
-  batch.set(rawCoachRef, { account_status: 'Rejected', updated_at: now }, { merge: true });
-  batch.set(userRef, { account_status: 'Rejected', updated_at: now }, { merge: true });
+  const coachRejectionUpdates = {
+    account_status: 'Rejected',
+    status: 'REJECTED',
+    is_approved: false,
+    isApproved: false,
+    rejection_reason: reason,
+    updated_at: now,
+  };
+
+  batch.set(coachRef, coachRejectionUpdates, { merge: true });
+  batch.set(rawCoachRef, coachRejectionUpdates, { merge: true });
+  batch.set(userRef, coachRejectionUpdates, { merge: true });
 
   // Write Admin_Audit_Logs record with rejection reason
   const auditLogId = crypto.randomUUID();
@@ -524,13 +567,215 @@ export async function rejectCoachService(adminId: string, coachIdParam: string, 
     recipient_id: userId,
     type: 'SYSTEM',
     title: 'Coach Accreditation Application Declined',
-    message: `Your coach accreditation application was declined. Reason: ${reason}`,
+    message: `Your coach accreditation application was declined. Reason: ${reason}. You may upload updated verification documents to re-apply.`,
   }).catch((err) => console.error('Failed to send coach rejection notification:', err));
 
   return {
     message: 'Coach application declined.',
     coach_id: canonicalCoachId,
     account_status: 'Rejected',
+    status: 'REJECTED',
+    is_approved: false,
+    rejection_reason: reason,
+    audit_log_id: auditLogId,
+  };
+}
+
+/**
+ * Retrieve all registered tournament officials for admin review and approval queue.
+ */
+export async function getOfficialsQueueService() {
+  const [profilesSnap, usersSnap] = await Promise.all([
+    db.collection('Official_Profiles').get(),
+    db.collection('Users').where('role', '==', 'Official').get().catch(() => ({ docs: [] } as any)),
+  ]);
+
+  const officialsMap = new Map<string, any>();
+  const normalizeUid = (id: string) => id.replace(/^off_|^official_/, '');
+
+  usersSnap.docs.forEach((doc: any) => {
+    const data = doc.data();
+    const uid = doc.id;
+    const rawStatus = String(data.account_status || data.status || data.certification_status || 'Pending');
+    const isApproved = data.is_approved === true || data.isApproved === true || rawStatus.toLowerCase() === 'active' || rawStatus.toLowerCase() === 'approved';
+    const isRejected = rawStatus.toLowerCase() === 'rejected' || rawStatus.toLowerCase() === 'declined';
+    const displayStatus = isApproved ? 'Approved' : (isRejected ? 'Rejected' : 'Pending');
+
+    officialsMap.set(normalizeUid(uid), {
+      official_id: `off_${uid}`,
+      user_id: uid,
+      first_name: data.first_name || '',
+      last_name: data.last_name || '',
+      full_name: data.full_name || data.full_legal_name || `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Tournament Official',
+      email: data.email || '',
+      organization_name: data.organization_name || data.organization || data.tournament_affiliation || 'N/A',
+      official_license_number: data.official_license_number || 'N/A',
+      assigned_tournaments: Array.isArray(data.assigned_tournaments) ? data.assigned_tournaments : [],
+      account_status: rawStatus,
+      status: displayStatus,
+      is_approved: isApproved,
+      rejection_reason: data.rejection_reason || '',
+      created_at: data.created_at || new Date().toISOString(),
+    });
+  });
+
+  profilesSnap.docs.forEach((doc: any) => {
+    const data = doc.data();
+    const rawUid = data.user_id || doc.id.replace(/^off_|^official_/, '');
+    const cleanUid = normalizeUid(rawUid);
+    const existing = officialsMap.get(cleanUid) || {};
+
+    const rawStatus = String(data.account_status || data.status || data.certification_status || existing.account_status || 'Pending');
+    const isApproved = data.is_approved === true || data.isApproved === true || existing.is_approved === true || rawStatus.toLowerCase() === 'active' || rawStatus.toLowerCase() === 'approved';
+    const isRejected = rawStatus.toLowerCase() === 'rejected' || rawStatus.toLowerCase() === 'declined';
+    const displayStatus = isApproved ? 'Approved' : (isRejected ? 'Rejected' : 'Pending');
+
+    officialsMap.set(cleanUid, {
+      ...existing,
+      official_id: data.official_id || existing.official_id || (doc.id.startsWith('off_') ? doc.id : `off_${doc.id}`),
+      user_id: rawUid || existing.user_id || doc.id,
+      organization_name: data.organization_name || existing.organization_name || 'N/A',
+      official_license_number: data.official_license_number || existing.official_license_number || 'N/A',
+      assigned_tournaments: (Array.isArray(data.assigned_tournaments) && data.assigned_tournaments.length > 0)
+        ? data.assigned_tournaments
+        : (existing.assigned_tournaments || []),
+      account_status: rawStatus,
+      status: displayStatus,
+      is_approved: isApproved,
+      rejection_reason: data.rejection_reason || existing.rejection_reason || '',
+      created_at: data.created_at || existing.created_at || new Date().toISOString(),
+    });
+  });
+
+  return Array.from(officialsMap.values());
+}
+
+/**
+ * Approve an official's sign-up request, allowing them to log in.
+ */
+export async function approveOfficialService(adminId: string, officialIdParam: string) {
+  const cleanId = officialIdParam.replace(/^off_|^official_/, '');
+  const canonicalOfficialId = `off_${cleanId}`;
+
+  const offProfileRef = db.collection('Official_Profiles').doc(canonicalOfficialId);
+  const rawProfileRef = db.collection('Official_Profiles').doc(cleanId);
+  const userRef = db.collection('Users').doc(cleanId);
+
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    const offSnap = await offProfileRef.get();
+    if (!offSnap.exists) {
+      const qSnap = await db.collection('Official_Profiles').where('official_id', '==', officialIdParam).limit(1).get();
+      if (qSnap.empty) {
+        throw new ServiceError(`Official account '${officialIdParam}' not found.`, 404);
+      }
+    }
+  }
+
+  const now = new Date();
+  const batch = db.batch();
+
+  const updates = {
+    account_status: 'Active',
+    status: 'approved',
+    is_approved: true,
+    isApproved: true,
+    certification_status: 'Approved',
+    rejection_reason: null,
+    updated_at: now,
+  };
+
+  batch.set(userRef, updates, { merge: true });
+  batch.set(offProfileRef, updates, { merge: true });
+  batch.set(rawProfileRef, updates, { merge: true });
+
+  const auditLogId = crypto.randomUUID();
+  const auditRef = db.collection('Admin_Audit_Logs').doc(auditLogId);
+  batch.set(auditRef, {
+    audit_log_id: auditLogId,
+    admin_id: adminId,
+    official_id: canonicalOfficialId,
+    user_id: cleanId,
+    action: 'OFFICIAL_APPROVED',
+    timestamp: now.toISOString(),
+  });
+
+  await batch.commit();
+
+  createNotification({
+    recipient_id: cleanId,
+    type: 'SYSTEM',
+    title: 'Official Account Approved',
+    message: 'Your official account has been approved by the system administrator. You may now log in to the tournament platform.',
+  }).catch(() => null);
+
+  return {
+    message: 'Official account approved successfully.',
+    official_id: canonicalOfficialId,
+    user_id: cleanId,
+    account_status: 'Active',
+    status: 'approved',
+    is_approved: true,
+    audit_log_id: auditLogId,
+  };
+}
+
+/**
+ * Reject an official's sign-up request with a reason.
+ */
+export async function rejectOfficialService(adminId: string, officialIdParam: string, reason: string = 'Application does not meet platform criteria.') {
+  const cleanId = officialIdParam.replace(/^off_|^official_/, '');
+  const canonicalOfficialId = `off_${cleanId}`;
+
+  const offProfileRef = db.collection('Official_Profiles').doc(canonicalOfficialId);
+  const rawProfileRef = db.collection('Official_Profiles').doc(cleanId);
+  const userRef = db.collection('Users').doc(cleanId);
+
+  const now = new Date();
+  const batch = db.batch();
+
+  const updates = {
+    account_status: 'Rejected',
+    status: 'rejected',
+    is_approved: false,
+    isApproved: false,
+    certification_status: 'Rejected',
+    rejection_reason: reason,
+    updated_at: now,
+  };
+
+  batch.set(userRef, updates, { merge: true });
+  batch.set(offProfileRef, updates, { merge: true });
+  batch.set(rawProfileRef, updates, { merge: true });
+
+  const auditLogId = crypto.randomUUID();
+  const auditRef = db.collection('Admin_Audit_Logs').doc(auditLogId);
+  batch.set(auditRef, {
+    audit_log_id: auditLogId,
+    admin_id: adminId,
+    official_id: canonicalOfficialId,
+    user_id: cleanId,
+    action: 'OFFICIAL_REJECTED',
+    rejection_reason: reason,
+    timestamp: now.toISOString(),
+  });
+
+  await batch.commit();
+
+  createNotification({
+    recipient_id: cleanId,
+    type: 'SYSTEM',
+    title: 'Official Application Declined',
+    message: `Your official account application was declined by the system administrator. Reason: ${reason}`,
+  }).catch(() => null);
+
+  return {
+    message: 'Official account application declined.',
+    official_id: canonicalOfficialId,
+    user_id: cleanId,
+    account_status: 'Rejected',
+    status: 'rejected',
+    is_approved: false,
     rejection_reason: reason,
     audit_log_id: auditLogId,
   };

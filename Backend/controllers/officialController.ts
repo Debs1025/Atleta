@@ -61,17 +61,16 @@ export async function loginOfficialHandler(req: AuthRequest, res: Response): Pro
       ...result,
     });
   } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     if (
       error.code === 'auth/invalid-credential' ||
       error.code === 'auth/wrong-password' ||
-      error.code === 'auth/user-not-found' ||
-      (error instanceof ServiceError && error.statusCode === 403)
+      error.code === 'auth/user-not-found'
     ) {
       res.status(401).json({ error: 'Invalid email or password.' });
-      return;
-    }
-    if (error instanceof ServiceError) {
-      res.status(error.statusCode).json({ error: error.message });
       return;
     }
     console.error('Login official error:', error);

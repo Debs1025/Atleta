@@ -15,6 +15,7 @@ import {
   updateCoachSettings,
   updateCoachProfile,
   changeCoachPassword,
+  resubmitCoachCredentials,
 } from '../services/coachSettingsService';
 import { getCoachManagedAthletes } from '../services/teamService';
 
@@ -244,6 +245,60 @@ export async function getCoachManagedAthletesHandler(req: AuthRequest, res: Resp
     });
   } catch (error: any) {
     console.error('getCoachManagedAthletesHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function resubmitCoachCredentialsHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = (req.body || {}) as Record<string, any>;
+    const userId = req.user?.uid || body.user_id || body.userId;
+    const coachId = body.coach_id || body.coachId || (userId ? `coach_${userId}` : undefined);
+    const email = body.email;
+
+    let documents: string[] = [];
+    if (Array.isArray(body.professional_documents)) {
+      documents.push(...body.professional_documents);
+    }
+    if (Array.isArray(body.documents)) {
+      documents.push(...body.documents);
+    }
+    if (typeof body.document_url === 'string' && body.document_url.trim()) {
+      documents.push(body.document_url.trim());
+    }
+    if (typeof body.professional_documents === 'string' && body.professional_documents.trim()) {
+      try {
+        const parsed = JSON.parse(body.professional_documents);
+        if (Array.isArray(parsed)) documents.push(...parsed);
+        else documents.push(body.professional_documents.trim());
+      } catch {
+        documents.push(body.professional_documents.trim());
+      }
+    }
+
+    const files = (req as any).files as Express.Multer.File[] | undefined;
+    const singleFile = (req as any).file as Express.Multer.File | undefined;
+    if (Array.isArray(files)) {
+      files.forEach((f) => documents.push(f.originalname));
+    } else if (singleFile) {
+      documents.push(singleFile.originalname);
+    }
+
+    documents = Array.from(new Set(documents.filter((d) => typeof d === 'string' && d.trim().length > 0)));
+
+    const result = await resubmitCoachCredentials(
+      { coach_id: coachId, user_id: userId, email },
+      documents,
+      body.notes || body.resubmission_notes
+    );
+
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error.statusCode) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('resubmitCoachCredentialsHandler error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

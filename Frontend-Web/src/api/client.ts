@@ -11,6 +11,7 @@ import type {
   CreateMatchPayload,
   AdminLoginPayload,
   AdminCoachQueueResponse,
+  AdminOfficialQueueResponse,
   SportConfiguration,
   SportsListResponse,
   CreateSportPayload,
@@ -289,10 +290,17 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
         data = await handleResponse<AuthResponse>(res);
       } else {
         const errJson = await res.json().catch(() => ({}));
-        lastError = new Error(errJson.error || errJson.message || `Login failed (${res.status})`);
+        const errMsg = errJson.error || errJson.message || `Login failed (${res.status})`;
+        lastError = new Error(errMsg);
+        if (res.status === 403) {
+          throw lastError;
+        }
       }
     } catch (err: any) {
       lastError = err;
+      if (err?.message && (err.message.includes('pending') || err.message.includes('declined') || err.message.includes('approval'))) {
+        throw err;
+      }
     }
   }
 
@@ -320,8 +328,17 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
       });
       if (userRes.ok) {
         data = await handleResponse<AuthResponse>(userRes);
+      } else {
+        const errJson = await userRes.json().catch(() => ({}));
+        if (userRes.status === 403) {
+          throw new Error(errJson.error || errJson.message || 'Access denied.');
+        }
       }
-    } catch { }
+    } catch (err: any) {
+      if (err?.message && (err.message.includes('pending') || err.message.includes('declined') || err.message.includes('approval'))) {
+        throw err;
+      }
+    }
   }
 
   if (data && data.token && data.user) {
@@ -409,6 +426,87 @@ export const rejectCoachAccreditation = async (coachId: string, reason: string):
     },
     body: JSON.stringify({ rejection_reason: reason }),
     signal: AbortSignal.timeout(7000),
+  });
+  const data = await handleResponse<any>(res);
+  invalidateCache('admin_coach_queue');
+  return data;
+};
+
+export const getAdminOfficialQueue = async (forceRefresh = false): Promise<AdminOfficialQueueResponse> => {
+  const cached = getCachedData<AdminOfficialQueueResponse>('admin_official_queue');
+  if (cached && !forceRefresh) return cached;
+
+  const token = getStoredToken();
+  if (!token) return { total_pending: 0, queue: [] };
+
+  try {
+    const res = await fetch(`${BASE_URL}/admin/officials/queue`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (res.ok) {
+      const data = await handleResponse<AdminOfficialQueueResponse>(res);
+      setCachedData('admin_official_queue', data);
+      return data;
+    }
+  } catch { }
+
+  return cached || { total_pending: 0, queue: [] };
+};
+
+export const approveOfficialRegistration = async (officialId: string): Promise<any> => {
+  const token = getStoredToken();
+  const cleanId = officialId.replace(/^off_|^official_/, '');
+  const res = await fetch(`${BASE_URL}/admin/officials/${cleanId}/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    signal: AbortSignal.timeout(7000),
+  });
+  const data = await handleResponse<any>(res);
+  invalidateCache('admin_official_queue');
+  return data;
+};
+
+export const rejectOfficialRegistration = async (officialId: string, reason: string): Promise<any> => {
+  const token = getStoredToken();
+  const cleanId = officialId.replace(/^off_|^official_/, '');
+  const res = await fetch(`${BASE_URL}/admin/officials/${cleanId}/reject`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ rejection_reason: reason }),
+    signal: AbortSignal.timeout(7000),
+  });
+  const data = await handleResponse<any>(res);
+  invalidateCache('admin_official_queue');
+  return data;
+};
+
+export const resubmitCoachCredentials = async (payload: {
+  coach_id?: string;
+  user_id?: string;
+  email?: string;
+  documents?: string[];
+  professional_documents?: string[];
+  notes?: string;
+}): Promise<any> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/coaches/resubmit-credentials`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10000),
   });
   const data = await handleResponse<any>(res);
   invalidateCache('admin_coach_queue');

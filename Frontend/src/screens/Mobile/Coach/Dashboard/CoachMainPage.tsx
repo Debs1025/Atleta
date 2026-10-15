@@ -5,6 +5,7 @@ import {
   Platform,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   ActivityIndicator,
@@ -236,6 +237,57 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+
+  // Accreditation Gate State
+  const [accountStatus, setAccountStatus] = useState<string>("Active");
+  const [rejectionReason, setRejectionReason] = useState<string>("");
+  const [reapplyDocUrl, setReapplyDocUrl] = useState<string>("");
+  const [reapplyDocList, setReapplyDocList] = useState<string[]>([]);
+  const [reapplyNotes, setReapplyNotes] = useState<string>("");
+  const [isReapplying, setIsReapplying] = useState<boolean>(false);
+  const [reapplyFeedback, setReapplyFeedback] = useState<string | null>(null);
+
+  const handleResubmitCredentials = async () => {
+    const docs = [...reapplyDocList];
+    if (reapplyDocUrl.trim() && !docs.includes(reapplyDocUrl.trim())) {
+      docs.push(reapplyDocUrl.trim());
+    }
+    if (docs.length === 0) {
+      Alert.alert("Documents Required", "Please provide at least one replacement credential document.");
+      return;
+    }
+    try {
+      setIsReapplying(true);
+      setReapplyFeedback(null);
+      const token = await getStoredAuthToken();
+      const res = await fetch(`${API_BASE}/coaches/resubmit-credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          coach_id: coach.coach_id || coachProfile.coach_id,
+          user_id: coach.user_id || coachProfile.user_id,
+          email: coach.email || coachProfile.email,
+          documents: docs,
+          professional_documents: docs,
+          notes: reapplyNotes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Resubmission failed");
+      }
+      setAccountStatus("Pending");
+      setReapplyFeedback("Replacement credentials submitted successfully. Your account is now pending admin review.");
+      Alert.alert("Credentials Submitted", "Your updated accreditation documents have been submitted to the administrator for review.");
+    } catch (err: any) {
+      Alert.alert("Submission Error", err?.message || "Failed to submit replacement credentials.");
+    } finally {
+      setIsReapplying(false);
+    }
+  };
 
 const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   athlete_id: "",
@@ -1029,6 +1081,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             };
             updatedProfileSnapshot = updatedProfileState;
             setCoachProfile(updatedProfileState);
+
+            const currentAccStatus = String(effectiveProfile?.account_status || effectiveProfile?.status || "Active");
+            setAccountStatus(currentAccStatus);
+            if (effectiveProfile?.rejection_reason) {
+              setRejectionReason(effectiveProfile.rejection_reason);
+            }
           }
 
           const rawAthletesList: any[] = allHandledAthletes;
@@ -1658,6 +1716,101 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       }
     }
   }, []);
+
+  if (accountStatus.toLowerCase() === "rejected") {
+    return (
+      <View style={[styles.container, { backgroundColor: "#0B132B", justifyContent: "center", alignItems: "center", padding: 24 }]}>
+        <StatusBar style="light" />
+        <View style={{ backgroundColor: "#FFFFFF", borderRadius: 8, padding: 24, width: "100%", maxWidth: 420 }}>
+          <View style={{ alignItems: "center", marginBottom: 16 }}>
+            <Ionicons name="alert-circle" size={48} color="#DC2626" />
+            <Text style={{ fontSize: 16, fontWeight: "900", color: "#0B132B", marginTop: 8, textAlign: "center" }}>
+              ACCREDITATION APPLICATION DECLINED
+            </Text>
+          </View>
+
+          <View style={{ backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FCA5A5", borderRadius: 4, padding: 12, marginBottom: 16 }}>
+            <Text style={{ fontSize: 12, fontWeight: "800", color: "#DC2626", marginBottom: 4 }}>
+              REASON FOR DECLINE:
+            </Text>
+            <Text style={{ fontSize: 13, color: "#7F1D1D" }}>
+              {rejectionReason || "Verification credentials provided were invalid or unconfirmed."}
+            </Text>
+          </View>
+
+          <Text style={{ fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 18 }}>
+            Your coach profile and user account record are preserved. Dashboard access is restricted until valid credentials are submitted and verified by the system administrator.
+          </Text>
+
+          {reapplyFeedback && (
+            <View style={{ backgroundColor: "#F0FDF4", borderWidth: 1, borderColor: "#86EFAC", borderRadius: 4, padding: 10, marginBottom: 12 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#166534" }}>{reapplyFeedback}</Text>
+            </View>
+          )}
+
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{ fontSize: 11, fontWeight: "800", color: "#0B132B", marginBottom: 6 }}>
+              CREDENTIAL / CERTIFICATE LINK:
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput
+                value={reapplyDocUrl}
+                onChangeText={setReapplyDocUrl}
+                placeholder="https://... or certificate ID"
+                style={{ flex: 1, borderWidth: 1, borderColor: "#CBD5E1", borderRadius: 4, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12 }}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  if (reapplyDocUrl.trim()) {
+                    setReapplyDocList((prev) => [...prev, reapplyDocUrl.trim()]);
+                    setReapplyDocUrl("");
+                  }
+                }}
+                style={{ backgroundColor: "#0B132B", paddingHorizontal: 12, justifyContent: "center", borderRadius: 4 }}
+              >
+                <Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "800" }}>ADD</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {reapplyDocList.length > 0 && (
+            <View style={{ marginBottom: 12 }}>
+              {reapplyDocList.map((d, i) => (
+                <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 4 }}>
+                  <Text style={{ fontSize: 12, color: "#0B132B", flex: 1 }} numberOfLines={1}>{d}</Text>
+                  <TouchableOpacity onPress={() => setReapplyDocList((prev) => prev.filter((_, idx) => idx !== i))}>
+                    <Text style={{ color: "#DC2626", fontSize: 12, fontWeight: "700", marginLeft: 8 }}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={handleResubmitCredentials}
+            disabled={isReapplying}
+            style={{ backgroundColor: "#0B132B", borderRadius: 4, paddingVertical: 12, alignItems: "center", marginTop: 8 }}
+          >
+            {isReapplying ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: 13, letterSpacing: 0.5 }}>
+                RESUBMIT CREDENTIALS FOR APPROVAL
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onLogout}
+            style={{ marginTop: 14, alignItems: "center" }}
+          >
+            <Text style={{ color: "#64748B", fontSize: 12, fontWeight: "700" }}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

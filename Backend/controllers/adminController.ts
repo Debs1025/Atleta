@@ -6,6 +6,9 @@ import {
   getPendingCoachQueueService,
   approveCoachService,
   rejectCoachService,
+  getOfficialsQueueService,
+  approveOfficialService,
+  rejectOfficialService,
 } from '../services/adminService';
 import { ServiceError } from '../validators/matchValidator';
 import { AdminAuthRequest } from '../middlewares/adminMiddleware';
@@ -120,6 +123,61 @@ export async function rejectCoachHandler(req: AdminAuthRequest, res: Response): 
       return;
     }
     console.error('rejectCoachHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function getOfficialsQueueHandler(req: AdminAuthRequest, res: Response): Promise<void> {
+  try {
+    const queue = await getOfficialsQueueService();
+    const pendingCount = queue.filter((o) => !o.is_approved && o.status !== 'Approved' && o.status !== 'Active').length;
+    res.status(200).json({
+      message: 'Official approval queue retrieved successfully.',
+      total_pending: pendingCount,
+      total_officials: queue.length,
+      queue,
+    });
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('getOfficialsQueueHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function approveOfficialHandler(req: AdminAuthRequest, res: Response): Promise<void> {
+  const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
+  const officialIdParam = Array.isArray(req.params.officialId) ? req.params.officialId[0] : req.params.officialId;
+
+  try {
+    const result = await approveOfficialService(adminId, officialIdParam);
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('approveOfficialHandler error:', error);
+    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+  }
+}
+
+export async function rejectOfficialHandler(req: AdminAuthRequest, res: Response): Promise<void> {
+  const adminId = req.adminUser?.uid || req.user?.uid || 'admin_default';
+  const officialIdParam = Array.isArray(req.params.officialId) ? req.params.officialId[0] : req.params.officialId;
+  const { rejection_reason } = req.body || {};
+
+  try {
+    const result = await rejectOfficialService(adminId, officialIdParam, rejection_reason);
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('rejectOfficialHandler error:', error);
     res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
   }
 }

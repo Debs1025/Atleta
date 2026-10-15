@@ -9,6 +9,7 @@ import {
   validateChangePassword,
 } from '../validators/userValidator';
 import { validateRegisterCoach } from '../validators/coachValidator';
+import { ServiceError } from '../validators/matchValidator';
 import {
   registerUserService,
   registerCoachService,
@@ -126,6 +127,10 @@ export async function loginUser(req: AuthRequest, res: Response): Promise<void> 
       });
     } catch {}
 
+    if (error instanceof ServiceError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     if (
       error.code === 'auth/invalid-credential' ||
       error.code === 'auth/wrong-password' ||

@@ -88,9 +88,9 @@ export const SignupPage: React.FC = () => {
               <div style={styles.succCircle}>
                 <CheckCircle2 style={{ width: 32, height: 32 }} />
               </div>
-              <h2 style={styles.succTitle}>ACCOUNT CREATED SUCCESSFULLY</h2>
+              <h2 style={styles.succTitle}>REGISTRATION SUBMITTED — PENDING APPROVAL</h2>
               <p style={styles.succMsg}>
-                Your tournament official credentials have been registered. Please log in with your email and password to access the portal.
+                Your tournament official application has been received and is currently pending system administrator review. Once verified and approved, you will be authorized to log in to the official portal.
               </p>
               <div style={styles.succRedirect}>
                 Redirecting to login in {countdown} second{countdown === 1 ? '' : 's'}...

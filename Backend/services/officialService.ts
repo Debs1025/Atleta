@@ -95,6 +95,10 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
     official_license_number: licenseNumber,
     assigned_tournaments: assignedTournaments,
     certification_status: 'Pending',
+    account_status: 'Pending',
+    status: 'pending',
+    is_approved: false,
+    isApproved: false,
     is_active: true,
     created_at: now,
     updated_at: now,
@@ -108,6 +112,10 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
     official_license_number: licenseNumber,
     assigned_tournaments: assignedTournaments,
     certification_status: 'Pending',
+    account_status: 'Pending',
+    status: 'pending',
+    is_approved: false,
+    isApproved: false,
     is_active: true,
     created_at: now,
     updated_at: now,
@@ -223,6 +231,28 @@ export async function loginOfficialService(email: string, password: string) {
 
   const rawRole = String(userData.role || '').trim();
   const isAdmin = rawRole.toLowerCase().includes('admin');
+
+  // Official Sign-Up Approval Gate: System admin approval is required before logging in
+  if (!isAdmin) {
+    const rawStatus = String(
+      userData.account_status ||
+      userData.status ||
+      userData.certification_status ||
+      ''
+    ).toLowerCase().trim();
+
+    const isApprovedFlag = userData.is_approved === true || userData.isApproved === true;
+    const isApprovedStatus = rawStatus === 'approved' || rawStatus === 'active' || rawStatus === 'verified';
+
+    if (!isApprovedFlag && !isApprovedStatus) {
+      if (rawStatus === 'rejected' || rawStatus === 'declined') {
+        const reason = userData.rejection_reason ? `: ${userData.rejection_reason}` : '.';
+        throw new ServiceError(`Your official account application was declined by the system administrator${reason}`, 403);
+      }
+      throw new ServiceError('Your official account is pending system admin approval.', 403);
+    }
+  }
+
   const actualRole = isAdmin ? 'SystemAdmin' : (userData.role || 'Official');
   const token = isAdmin
     ? generateElevatedAdminToken(uid, userData.email, 'SystemAdmin', Number(userData.clearance_level || 4), userData.department_code || 'SYS_ADMIN')

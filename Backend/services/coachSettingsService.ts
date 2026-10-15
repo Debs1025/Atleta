@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import { db, auth } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { CoachSettings } from '../models/userModel';
 import { hashPassword, verifyPassword } from '../utils/passwordUtils';
+import { createNotification } from './notificationService';
 
 export class ServiceError extends Error {
   statusCode: number;
@@ -198,6 +200,35 @@ export async function updateCoachProfile(
     );
     coachUpdates.professional_documents = validProDocs;
     userUpdates.professional_documents = validProDocs;
+
+    // Check if status should reset to Pending upon fresh document upload
+    if (validProDocs.length > 0) {
+      const existingUserSnap = await db.collection('Users').doc(rawUserId).get();
+      const existingStatus = String(existingUserSnap.data()?.account_status || existingUserSnap.data()?.status || '').toLowerCase();
+      if (existingStatus === 'rejected' || existingStatus === 'declined' || existingStatus === 'pending') {
+        userUpdates.account_status = 'Pending';
+        userUpdates.status = 'PENDING';
+        userUpdates.is_approved = false;
+        userUpdates.isApproved = false;
+        userUpdates.rejection_reason = null;
+        userUpdates.date_uploaded = now.toISOString();
+
+        coachUpdates.account_status = 'Pending';
+        coachUpdates.status = 'PENDING';
+        coachUpdates.is_approved = false;
+        coachUpdates.isApproved = false;
+        coachUpdates.rejection_reason = null;
+        coachUpdates.date_uploaded = now.toISOString();
+
+        const coachName = userUpdates.full_name || existingUserSnap.data()?.full_name || 'A coach';
+        createNotification({
+          recipient_id: 'admin',
+          type: 'SYSTEM',
+          title: 'Coach Re-Application Submitted',
+          message: `${coachName} has resubmitted their credentials for review.`,
+        }).catch(() => null);
+      }
+    }
   }
 
   // Patch canonical Coach_Profiles document and raw doc if exists
@@ -226,6 +257,106 @@ export async function updateCoachProfile(
     ...coachData,
     coach_id: canonicalCoachId,
     user_id: rawUserId,
+  };
+}
+
+/**
+ * Explicit coach credential resubmission workflow.
+ * Automatically resets a rejected coach back to pending, clears the rejection reason,
+ * updates documents, and notifies the system admin.
+ */
+export async function resubmitCoachCredentials(
+  identifier: { coach_id?: string; user_id?: string; email?: string },
+  documents: string[],
+  notes?: string
+) {
+  const now = new Date();
+  let userId = identifier.user_id ? identifier.user_id.replace(/^coach_/, '') : '';
+  let coachId = identifier.coach_id || '';
+
+  if (!userId && !coachId && identifier.email) {
+    const cleanEmail = identifier.email.trim().toLowerCase();
+    const uSnap = await db.collection('Users').where('email', '==', cleanEmail).limit(1).get();
+    if (!uSnap.empty) {
+      userId = uSnap.docs[0].id;
+    }
+  }
+
+  if (!userId && coachId) {
+    userId = coachId.replace(/^coach_/, '');
+  }
+
+  if (!userId) {
+    throw new ServiceError('User or coach identification required for credential resubmission.', 400);
+  }
+
+  const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${userId}`;
+  const validDocs = (documents || []).filter((d) => typeof d === 'string' && d.trim().length > 0);
+
+  if (validDocs.length === 0) {
+    throw new ServiceError('At least one verification document is required.', 400);
+  }
+
+  const resetUpdates: Record<string, any> = {
+    account_status: 'Pending',
+    status: 'PENDING',
+    is_approved: false,
+    isApproved: false,
+    rejection_reason: null,
+    professional_documents: validDocs,
+    date_uploaded: now.toISOString(),
+    resubmission_notes: notes || null,
+    updated_at: now,
+  };
+
+  const userRef = db.collection('Users').doc(userId);
+  const coachRef = db.collection('Coach_Profiles').doc(canonicalCoachId);
+  const rawCoachRef = db.collection('Coach_Profiles').doc(userId);
+
+  const batch = db.batch();
+  batch.set(userRef, resetUpdates, { merge: true });
+  batch.set(coachRef, resetUpdates, { merge: true });
+  batch.set(rawCoachRef, resetUpdates, { merge: true });
+
+  const auditLogId = crypto.randomUUID();
+  const auditRef = db.collection('Admin_Audit_Logs').doc(auditLogId);
+  batch.set(auditRef, {
+    audit_log_id: auditLogId,
+    coach_id: canonicalCoachId,
+    user_id: userId,
+    action: 'COACH_CREDENTIALS_RESUBMITTED',
+    documents: validDocs,
+    notes: notes || '',
+    timestamp: now.toISOString(),
+  });
+
+  await batch.commit();
+
+  try {
+    const { invalidateCoachProfileCache } = require('./coachInquiryService');
+    invalidateCoachProfileCache(coachId);
+    invalidateCoachProfileCache(userId);
+    invalidateCoachProfileCache(canonicalCoachId);
+  } catch {}
+
+  const userSnap = await userRef.get();
+  const coachName = userSnap.data()?.full_name || userSnap.data()?.first_name || 'A coach';
+
+  createNotification({
+    recipient_id: 'admin',
+    type: 'SYSTEM',
+    title: 'Coach Re-Application Submitted',
+    message: `${coachName} has resubmitted updated credentials for review.`,
+  }).catch(() => null);
+
+  return {
+    message: 'Credentials resubmitted successfully. Your account status is now Pending admin review.',
+    coach_id: canonicalCoachId,
+    user_id: userId,
+    account_status: 'Pending',
+    status: 'PENDING',
+    is_approved: false,
+    professional_documents: validDocs,
   };
 }
 
