@@ -7,6 +7,8 @@ import {
   StatusBar,
   ActivityIndicator,
   Modal,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -283,6 +285,26 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
                 </>
               )}
             </TouchableOpacity>
+
+            {/* View / Download Shared Physical Scoresheet File from Official */}
+            {Boolean(match.scoresheet_url) && (
+              <TouchableOpacity
+                style={[styles.primaryButton, { backgroundColor: '#10B981', marginTop: 10 }]}
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (match.scoresheet_url) {
+                    Linking.openURL(match.scoresheet_url).catch(() => {
+                      Alert.alert('Scoresheet', 'Unable to open scoresheet link: ' + match.scoresheet_url);
+                    });
+                  }
+                }}
+              >
+                <Ionicons name="eye-outline" size={20} color="#070D19" />
+                <Text style={[styles.primaryButtonText, { color: '#070D19', fontWeight: '800' }]}>
+                  VIEW / DOWNLOAD SHARED SCORESHEET
+                </Text>
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <>

@@ -2492,5 +2492,52 @@ export const getAthleteProfileForOfficial = async (athleteId: string): Promise<a
   return null;
 };
 
+// ─── SCORESHEET REQUEST & FULFILLMENT PIPELINE ────────────────────────────
+
+export const fulfillScoresheetRequest = async (
+  requestId: string,
+  file: File,
+  matchId?: string
+): Promise<{ request: any; scoresheetUrl: string }> => {
+  const token = getStoredToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('scoresheet', file);
+  if (matchId) formData.append('matchId', matchId);
+
+  const cleanReqId = requestId.replace(/^notif_/, '');
+  const res = await fetch(`${BASE_URL}/scoresheets/requests/${cleanReqId}/fulfill`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const data = await handleResponse<{ request: any; scoresheetUrl: string }>(res);
+  storeReadNotificationId(requestId);
+  storeReadNotificationId(`req_${cleanReqId}`);
+  invalidateCache();
+  return data;
+};
+
+export const getScoresheetRequests = async (): Promise<any[]> => {
+  const token = getStoredToken();
+  try {
+    const res = await fetch(`${BASE_URL}/scoresheets/requests`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.requests || [];
+    }
+  } catch { }
+  return [];
+};
+
 // Re-export OCR and Scoresheet Scanning API functions
 export * from './ocr';

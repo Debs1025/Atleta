@@ -8,6 +8,7 @@ import {
   ScrollView,
   Text,
   View,
+  Linking,
 } from "react-native";
 import styles from "./styles/Notification";
 import { StatusBar } from "expo-status-bar";
@@ -16,13 +17,16 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
 
-export type NotificationType = "RECRUITMENT_INQUIRY" | "ACTION_REQUIRED";
+export type NotificationType = "RECRUITMENT_INQUIRY" | "ACTION_REQUIRED" | "SCORESHEET_SHARED";
 
 export interface NotificationItem {
   id: string;
   type: NotificationType;
   date_group: string; // e.g. "TODAY"
   timestamp_relative?: string; // e.g. "5h ago"
+  scoresheet_url?: string;
+  match_id?: string;
+  match_name?: string;
   read_status: boolean;
   sender?: {
     name: string;
@@ -214,21 +218,26 @@ export function NotificationPage({
               ? rawNotifCoach
               : (n.sender_name || fallbackInquiry?.coach_name || "Coach");
 
+            const isScoresheet = n.type === "SCORESHEET_SHARED" || Boolean(n.scoresheet_url || n.scoresheetUrl || rawTitle.includes("scoresheet"));
+
             items.push({
               id: notifId,
-              type: isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
+              type: isScoresheet ? "SCORESHEET_SHARED" : isRecruitment ? "RECRUITMENT_INQUIRY" : "ACTION_REQUIRED",
               date_group: "TODAY",
               timestamp_relative: formatRelativeTime(n.created_at),
               read_status: Boolean(n.is_read || n.read_status || isAcceptedNotif || isDeclinedNotif),
+              scoresheet_url: n.scoresheet_url || n.scoresheetUrl || undefined,
+              match_id: n.match_id || n.matchId || undefined,
+              match_name: n.match_name || n.matchName || undefined,
               sender: isRecruitment ? {
                 name: notifCoachName,
                 role_category: `${n.metadata?.sport_type || "Recruitment"} Inquiry`,
               } : undefined,
-              title: n.title || (isRecruitment ? `Recruitment Inquiry from Coach ${notifCoachName}` : "Action Required"),
-              message_body: n.message || n.message_body || (isRecruitment ? `Coach ${notifCoachName} sent you a recruitment inquiry.` : ""),
+              title: n.title || (isScoresheet ? "Official Scoresheet Available" : isRecruitment ? `Recruitment Inquiry from Coach ${notifCoachName}` : "Action Required"),
+              message_body: n.message || n.message_body || (isScoresheet ? "Tournament Official has shared the verified scoresheet for this match." : isRecruitment ? `Coach ${notifCoachName} sent you a recruitment inquiry.` : ""),
               highlighted_text: n.action_url ? "Document Verification" : undefined,
-              action_label: isRecruitment ? (mappedStatus === "ACCEPTED" ? "Inquiry Accepted ✓" : mappedStatus === "DECLINED" ? "Inquiry Declined" : "View Inquiry") : "Upload Now ->",
-              document_details: !isRecruitment ? {
+              action_label: isScoresheet ? "View / Download Scoresheet" : isRecruitment ? (mappedStatus === "ACCEPTED" ? "Inquiry Accepted ✓" : mappedStatus === "DECLINED" ? "Inquiry Declined" : "View Inquiry") : "Upload Now ->",
+              document_details: !isRecruitment && !isScoresheet ? {
                 document_name: "Eligibility Document",
                 required_type: "ELIGIBILITY",
                 is_uploaded: false,
@@ -671,6 +680,67 @@ export function NotificationPage({
                           />
                         )}
                       </Pressable>
+                    </View>
+                  );
+                }
+
+                if (item.type === "SCORESHEET_SHARED") {
+                  return (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.cardContainer,
+                        isUnread && styles.cardContainerUnread,
+                      ]}
+                    >
+                      <View style={styles.cardHeaderRow}>
+                        <View style={[styles.actionIconContainer, { backgroundColor: "rgba(16, 185, 129, 0.15)", borderRadius: 12, padding: 6 }]}>
+                          <Ionicons name="document-text" size={24} color="#10B981" />
+                        </View>
+                        <View style={styles.headerTextContainer}>
+                          <Text style={[styles.actionRequiredTitle, { color: "#FFFFFF" }]}>{item.title}</Text>
+                          <Text style={{ color: "#10B981", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                            SCORESHEET VERIFIED & READY ✓
+                          </Text>
+                        </View>
+                        {item.timestamp_relative && (
+                          <Text style={styles.timestampText}>
+                            {item.timestamp_relative}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.cardBodyContainer}>
+                        <Text style={styles.cardBodyText}>{item.message_body}</Text>
+                      </View>
+
+                      {item.scoresheet_url && (
+                        <Pressable
+                          style={[
+                            styles.inquiryActionButton,
+                            {
+                              backgroundColor: "#10B981",
+                              marginTop: 10,
+                              flexDirection: "row",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              gap: 6,
+                            },
+                          ]}
+                          onPress={() => {
+                            if (item.scoresheet_url) {
+                              Linking.openURL(item.scoresheet_url).catch(() => {
+                                Alert.alert("Scoresheet", "Unable to open link: " + item.scoresheet_url);
+                              });
+                            }
+                          }}
+                        >
+                          <Ionicons name="eye-outline" size={16} color="#080F21" />
+                          <Text style={[styles.inquiryActionText, { color: "#080F21", fontWeight: "800" }]}>
+                            View / Download Scoresheet
+                          </Text>
+                        </Pressable>
+                      )}
                     </View>
                   );
                 }

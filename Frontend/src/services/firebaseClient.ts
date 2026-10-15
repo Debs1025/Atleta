@@ -1183,4 +1183,159 @@ export async function toggleFirestoreNetwork(online: boolean): Promise<void> {
   }
 }
 
+// ─── SCORESHEET REQUEST PIPELINE (FIRESTORE SYNC) ──────────────────────────
+
+export interface ScoresheetRequestRecord {
+  id: string;
+  requestId: string;
+  coachId: string;
+  coachName: string;
+  teamId: string;
+  matchId: string;
+  matchName: string;
+  sportType?: string;
+  status: 'pending' | 'fulfilled';
+  createdAt: any;
+  updatedAt?: any;
+  scoresheetUrl?: string;
+  scoresheet_url?: string;
+  fulfilledAt?: string;
+  fulfilledByOfficialName?: string;
+}
+
+/**
+ * Creates a scoresheet request directly in Firestore `scoresheetRequests` collection,
+ * and simultaneously informs the backend API.
+ */
+export async function submitScoresheetRequestOfflineFirst(payload: {
+  matchId: string;
+  matchName?: string;
+  teamId?: string;
+  coachId?: string;
+  coachName?: string;
+  sportType?: string;
+}): Promise<ScoresheetRequestRecord> {
+  const matchId = String(payload.matchId || '');
+  const coachId = String(payload.coachId || 'coach_default');
+  const coachName = String(payload.coachName || 'Coach');
+  const teamId = String(payload.teamId || 'team_default');
+  const matchName = String(payload.matchName || `Match ${matchId}`);
+  const sportType = String(payload.sportType || 'BASKETBALL');
+
+  const requestId = `req_${matchId}_${coachId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const now = new Date().toISOString();
+
+  const docData: ScoresheetRequestRecord = {
+    id: requestId,
+    requestId,
+    coachId,
+    coachName,
+    teamId,
+    matchId,
+    matchName,
+    sportType,
+    status: 'pending',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // 1. Write directly to Firestore `scoresheetRequests` collection (persists offline via persistentLocalCache)
+  try {
+    const reqDocRef = doc(db, 'scoresheetRequests', requestId);
+    await setDoc(reqDocRef, {
+      ...docData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  } catch (fsErr) {
+    console.warn('[ScoresheetRequest] Direct Firestore write warning:', fsErr);
+  }
+
+  // 2. Also update Match_Logs doc locally / in Firestore
+  try {
+    const matchDocRef = doc(db, 'Match_Logs', matchId);
+    await setDoc(matchDocRef, {
+      audit_status: 'PENDING REQUEST',
+      verification_status: 'Pending',
+      scoresheet_request_status: 'pending',
+    }, { merge: true });
+  } catch (_) {}
+
+  // 3. Inform Backend API asynchronously
+  try {
+    const token = await getStoredAuthToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    await fetch(`${API_BASE}/scoresheets/request`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(docData),
+    }).catch(() => {
+      return fetch(`${API_BASE}/matches/${matchId}/audit-request`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(docData),
+      });
+    });
+  } catch (_) {}
+
+  return docData;
+}
+
+/**
+ * Real-time listener for coach's scoresheet requests. Emits updates whenever
+ * an official uploads a scoresheet and fulfills the request.
+ */
+export function listenToCoachScoresheetRequests(
+  coachId: string,
+  onUpdate: (requests: ScoresheetRequestRecord[]) => void
+): () => void {
+  if (!coachId) return () => {};
+
+  const cleanCoachId = coachId.replace(/^coach_/, '');
+  const possibleIds = [coachId, cleanCoachId, `coach_${cleanCoachId}`];
+
+  try {
+    const q = query(
+      collection(db, 'scoresheetRequests'),
+      where('coachId', 'in', possibleIds)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const results: ScoresheetRequestRecord[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data();
+        results.push({
+          id: d.id,
+          requestId: d.id,
+          coachId: data.coachId,
+          coachName: data.coachName,
+          teamId: data.teamId,
+          matchId: data.matchId,
+          matchName: data.matchName,
+          sportType: data.sportType,
+          status: data.status,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+          scoresheetUrl: data.scoresheetUrl || data.scoresheet_url,
+          scoresheet_url: data.scoresheet_url || data.scoresheetUrl,
+          fulfilledAt: data.fulfilledAt,
+          fulfilledByOfficialName: data.fulfilledByOfficialName,
+        });
+      });
+      onUpdate(results);
+    }, (err) => {
+      console.warn('[ScoresheetRequests] onSnapshot error:', err);
+    });
+
+    return unsubscribe;
+  } catch (e) {
+    console.warn('[ScoresheetRequests] Setup listener failed:', e);
+    return () => {};
+  }
+}
+
 export default app;

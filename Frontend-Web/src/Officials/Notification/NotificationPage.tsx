@@ -1,13 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CornerUpLeft, ArrowRight, Loader2 } from 'lucide-react';
+import {
+  CornerUpLeft,
+  ArrowRight,
+  Loader2,
+  Upload,
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  AlertCircle,
+} from 'lucide-react';
 import {
   getStoredToken,
   getStoredUser,
   getCachedData,
   getMe,
+  fulfillScoresheetRequest,
 } from '../../api/client';
-import type { AuthUser } from '../../api/types';
+import type { AuthUser, OfficialNotificationItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { useNotifications } from './useNotifications';
@@ -23,8 +33,15 @@ export const NotificationPage: React.FC = () => {
   const {
     notifications,
     loading,
+    refresh,
     markSingleRead,
   } = useNotifications();
+
+  // File Upload State for Fulfilling Requests
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [successNotifId, setSuccessNotifId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   useEffect(() => {
     if (!getStoredToken()) {
@@ -49,6 +66,34 @@ export const NotificationPage: React.FC = () => {
     }
   };
 
+  const handleFileUpload = async (notif: OfficialNotificationItem, file: File) => {
+    const notifId = notif.notification_id;
+    const reqId = notif.request_id || notif.reference_id || notifId.replace(/^req_/, '');
+    const matchId = notif.match_id || notif.reference_id || reqId;
+
+    try {
+      setUploadingId(notifId);
+      setUploadError(null);
+      setSuccessNotifId(null);
+
+      await fulfillScoresheetRequest(reqId, file, matchId);
+
+      // Auto-mark notification as read on the official side
+      markSingleRead(notifId);
+      setSuccessNotifId(notifId);
+
+      // Refresh list to pull updated fulfilled state
+      setTimeout(() => {
+        refresh();
+      }, 500);
+    } catch (err: any) {
+      console.error('Scoresheet fulfillment failed:', err);
+      setUploadError(err?.message || 'Failed to upload and share scoresheet.');
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
   const filteredNotifications = [...notifications]
     .sort((a, b) => {
       const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
@@ -56,7 +101,12 @@ export const NotificationPage: React.FC = () => {
       return timeB - timeA;
     })
     .filter((n) => {
-      const isAudit = n.type === 'AUDIT_REQUEST' || n.title.toLowerCase().includes('audit') || n.title.toLowerCase().includes('stats');
+      const isAudit =
+        n.type === 'AUDIT_REQUEST' ||
+        n.type === 'SCORESHEET_REQUEST' ||
+        n.title.toLowerCase().includes('audit') ||
+        n.title.toLowerCase().includes('scoresheet') ||
+        n.title.toLowerCase().includes('stats');
       if (activeTab === 'AUDIT') return isAudit;
       if (activeTab === 'SCHEDULE') return !isAudit;
       return true;
@@ -79,7 +129,7 @@ export const NotificationPage: React.FC = () => {
             <div style={styles.titleGroup}>
               <h1 style={styles.pageTitle}>NOTIFICATION</h1>
               <p style={styles.pageSubtitle}>
-                Comprehensive notification for audit requests, and match timeline updates.
+                Comprehensive notification queue for coach scoresheet requests, audit verifications, and match timeline updates.
               </p>
             </div>
 
@@ -93,6 +143,25 @@ export const NotificationPage: React.FC = () => {
               <CornerUpLeft style={{ width: 16, height: 16 }} />
             </button>
           </div>
+
+          {uploadError && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid #EF4444',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              color: '#F87171',
+              fontSize: '13px',
+              fontWeight: 600,
+            }}>
+              <AlertCircle style={{ width: 18, height: 18, flexShrink: 0 }} />
+              <span>{uploadError}</span>
+            </div>
+          )}
 
           {/* Filter Bar & Action Buttons */}
           <div style={styles.filterBar}>
@@ -118,7 +187,7 @@ export const NotificationPage: React.FC = () => {
                   ...(activeTab === 'AUDIT' ? styles.tabBtnActive : {}),
                 }}
               >
-                AUDIT REQUESTS
+                SCORESHEET REQUESTS
               </button>
 
               <button
@@ -146,7 +215,7 @@ export const NotificationPage: React.FC = () => {
                 NO NOTIFICATION LOGS FOUND
               </h4>
               <p style={{ margin: 0, fontSize: '12px' }}>
-                There are currently no active audit requests or match timeline logs for this filter.
+                There are currently no active scoresheet requests or match timeline logs for this filter.
               </p>
             </div>
           ) : (
@@ -154,14 +223,19 @@ export const NotificationPage: React.FC = () => {
               {filteredNotifications.map((notif) => {
                 const isAudit =
                   notif.type === 'AUDIT_REQUEST' ||
+                  notif.type === 'SCORESHEET_REQUEST' ||
                   notif.title.toLowerCase().includes('audit') ||
+                  notif.title.toLowerCase().includes('scoresheet') ||
                   notif.title.toLowerCase().includes('stats');
                 const isRead = Boolean(notif.is_read);
 
                 if (isAudit) {
-                  const coachName = notif.requested_by_coach || notif.requested_by || 'N/A';
-                  const matchContext = notif.match_context || notif.title || 'GENERAL MATCH AUDIT';
+                  const coachName = notif.requested_by_coach || notif.requested_by || 'Assigned Coach';
+                  const matchContext = notif.match_context || notif.match_name || notif.title || 'Official Match';
                   const sportDiscipline = notif.sport_discipline || notif.sport || 'GENERAL';
+                  const isUploadingThis = uploadingId === notif.notification_id;
+                  const isFulfilled = notif.status === 'fulfilled' || Boolean(notif.scoresheet_url);
+                  const isSuccess = successNotifId === notif.notification_id;
 
                   return (
                     <div
@@ -169,12 +243,45 @@ export const NotificationPage: React.FC = () => {
                       style={{
                         ...styles.auditCard,
                         ...(isRead ? styles.auditCardRead : {}),
+                        borderColor: isSuccess ? '#10B981' : isRead ? '#E2E8F0' : '#00C8FF',
+                        borderWidth: isSuccess ? '2px' : '1px',
                       }}
                     >
                       <div style={styles.cardTopLine}>
-                        <h3 style={isRead ? styles.auditCardTitleRead : styles.auditCardTitle}>
-                          AUDIT REQUEST: {notif.title.toUpperCase()}
-                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h3 style={isRead ? styles.auditCardTitleRead : styles.auditCardTitle}>
+                            SCORESHEET REQUEST: {notif.title.toUpperCase()}
+                          </h3>
+                          {isFulfilled ? (
+                            <span style={{
+                              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10B981',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #10B981',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}>
+                              <CheckCircle2 style={{ width: 12, height: 12 }} />
+                              FULFILLED & SHARED
+                            </span>
+                          ) : (
+                            <span style={{
+                              backgroundColor: 'rgba(0, 200, 255, 0.15)',
+                              color: '#00C8FF',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #00C8FF',
+                            }}>
+                              PENDING UPLOAD
+                            </span>
+                          )}
+                        </div>
                         <span style={styles.cardTimestamp}>
                           {formatUtcDateTime(notif.created_at)}
                         </span>
@@ -197,18 +304,115 @@ export const NotificationPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!notif.is_read) markSingleRead(notif.notification_id);
-                          navigate('/dashboard');
+                      {/* Hidden File Input for Direct Scoresheet Upload */}
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        style={{ display: 'none' }}
+                        ref={(el) => {
+                          fileInputRefs.current[notif.notification_id] = el;
                         }}
-                        className="hover-btn-outline"
-                        style={isRead ? styles.auditActionBtnRead : styles.auditActionBtn}
-                      >
-                        <span>REVIEW & ATTACH SCORESHEET</span>
-                        <ArrowRight style={{ width: 14, height: 14 }} />
-                      </button>
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleFileUpload(notif, file);
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+
+                      {/* Actions Row */}
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {/* Direct Upload & Share Button */}
+                        <button
+                          type="button"
+                          disabled={isUploadingThis}
+                          onClick={() => {
+                            fileInputRefs.current[notif.notification_id]?.click();
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            backgroundColor: isFulfilled ? '#0F172A' : '#00C8FF',
+                            color: isFulfilled ? '#94A3B8' : '#080F21',
+                            border: isFulfilled ? '1px solid #334155' : 'none',
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            cursor: isUploadingThis ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {isUploadingThis ? (
+                            <>
+                              <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+                              <span>UPLOADING TO STORAGE & SHARING...</span>
+                            </>
+                          ) : isFulfilled ? (
+                            <>
+                              <Upload style={{ width: 14, height: 14 }} />
+                              <span>REPLACE / RE-UPLOAD SCORESHEET</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload style={{ width: 14, height: 14 }} />
+                              <span>UPLOAD & SHARE SCORESHEET</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* View Shared File Link */}
+                        {notif.scoresheet_url && (
+                          <a
+                            href={notif.scoresheet_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              color: '#10B981',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              textDecoration: 'none',
+                              padding: '8px 12px',
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                              borderRadius: '6px',
+                              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                            }}
+                          >
+                            <FileText style={{ width: 14, height: 14 }} />
+                            <span>VIEW SHARED SCORESHEET</span>
+                            <ExternalLink style={{ width: 12, height: 12 }} />
+                          </a>
+                        )}
+
+                        {/* Secondary Button to Match Details */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!notif.is_read) markSingleRead(notif.notification_id);
+                            const cleanMatchId = (notif.match_id || notif.reference_id || '').replace(/^#/, '');
+                            if (cleanMatchId) {
+                              navigate(`/matches/${cleanMatchId}/scoresheet`);
+                            } else {
+                              navigate('/dashboard');
+                            }
+                          }}
+                          className="hover-btn-outline"
+                          style={{
+                            ...styles.auditActionBtn,
+                            ...(isRead ? styles.auditActionBtnRead : {}),
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                          }}
+                        >
+                          <span>VIEW MATCH IN DASHBOARD</span>
+                          <ArrowRight style={{ width: 14, height: 14 }} />
+                        </button>
+                      </div>
                     </div>
                   );
                 }

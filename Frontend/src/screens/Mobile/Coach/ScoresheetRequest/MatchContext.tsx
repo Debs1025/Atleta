@@ -6,7 +6,13 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { requestAuthenticatedJson, API_BASE } from '../../Authentication/authShared';
-import { getMatchesOfflineFirst, saveMatchOfflineFirst, deleteMatchOfflineFirst } from '../../../../services/firebaseClient';
+import {
+  getMatchesOfflineFirst,
+  saveMatchOfflineFirst,
+  deleteMatchOfflineFirst,
+  submitScoresheetRequestOfflineFirst,
+  getCoachProfileOfflineFirst,
+} from '../../../../services/firebaseClient';
 
 export type AuditStatus = 'NOT REQUESTED' | 'PENDING REQUEST' | 'REQUEST GRANTED';
 
@@ -45,6 +51,7 @@ export interface OfficialMatchRecord {
   is_certified: boolean;
   home_score?: number;
   away_score?: number;
+  scoresheet_url?: string;
   box_score_summary?: PlayerBoxScoreMetric[];
   coach_notes?: string[];
 }
@@ -198,6 +205,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             is_certified: auditStatus === 'REQUEST GRANTED' || !!m.is_certified,
             home_score: hScore,
             away_score: aScore,
+            scoresheet_url: m.scoresheet_url || m.scoresheetUrl || undefined,
             box_score_summary: boxSummary.length > 0 ? boxSummary : undefined,
             coach_notes: Array.isArray(m.coach_notes) ? m.coach_notes : (m.notes ? [m.notes] : []),
           };
@@ -276,7 +284,26 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       coach_notes: targetMatch?.coach_notes,
     };
 
-    // 2. Transmit to deployed backend via authenticated request or direct fetch
+    // 2. Write directly to Firestore scoresheetRequests collection
+    try {
+      const coachProfile = await getCoachProfileOfflineFirst().catch(() => null);
+      const cId = coachProfile?.coach_id || coachProfile?.user_id || 'coach_default';
+      const cName = coachProfile?.full_name || (coachProfile?.first_name ? `${coachProfile.first_name} ${coachProfile.last_name || ''}`.trim() : null) || 'Coach';
+      const mName = targetMatch ? `${targetMatch.home_team_name} vs. ${targetMatch.away_team_name}` : `Match ${matchId}`;
+
+      await submitScoresheetRequestOfflineFirst({
+        matchId,
+        matchName: mName,
+        teamId: targetMatch?.team_id || 'team_default',
+        coachId: cId,
+        coachName: cName,
+        sportType: targetMatch?.sport_type || 'BASKETBALL',
+      });
+    } catch (fsErr) {
+      console.warn('[ScoresheetRequest] submitScoresheetRequestOfflineFirst warning:', fsErr);
+    }
+
+    // 3. Transmit to deployed backend via authenticated request or direct fetch
     try {
       await requestAuthenticatedJson(`/matches/${matchId}/audit-request`, 'POST', payload);
     } catch (err: any) {
@@ -291,7 +318,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    // 3. Persist updated status in local cache
+    // 4. Persist updated status in local cache
     try {
       if (targetMatch) {
         await saveMatchOfflineFirst({

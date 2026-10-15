@@ -92,6 +92,25 @@ export async function submitAuditRequest(
     timestamp: now,
   });
 
+  // Synchronize scoresheetRequests collection
+  const matchTitle = matchData.matchName || matchData.game_name || `${matchData.home_team_name || 'Home'} vs ${matchData.away_team_name || 'Away'}`;
+  const reqDocId = `req_${matchId}_${coachId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  batch.set(db.collection('scoresheetRequests').doc(reqDocId), {
+    id: reqDocId,
+    requestId: reqDocId,
+    coachId,
+    coachName: fallbackMatchData?.coach_name || fallbackMatchData?.coachName || 'Coach',
+    teamId: matchData.team_id || 'team_default',
+    matchId,
+    matchName: matchTitle,
+    sportType: matchData.sport_type || 'BASKETBALL',
+    status: 'pending',
+    createdAt: now,
+    updatedAt: now,
+    is_read_by_official: false,
+    is_read_by_coach: true,
+  }, { merge: true });
+
   await batch.commit();
 
   return auditData;

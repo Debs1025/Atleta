@@ -181,14 +181,16 @@ export async function getOfficialNotifications(officialId: string): Promise<Offi
   const rawUid = officialId.replace(/^off_/, '');
   const canonicalOfficialId = officialId.startsWith('off_') ? officialId : `off_${officialId}`;
 
-  const [snap1, snap2, snap3] = await Promise.all([
-    db.collection('Notifications').where('recipient_id', 'in', [officialId, rawUid, canonicalOfficialId]).get(),
-    db.collection('Notifications').where('user_id', 'in', [officialId, rawUid, canonicalOfficialId]).get(),
-    db.collection('Notifications').where('official_id', '==', officialId).get(),
+  const [snap1, snap2, snap3, snapOfficialNotifs, snapScoresheetRequests] = await Promise.all([
+    db.collection('Notifications').where('recipient_id', 'in', [officialId, rawUid, canonicalOfficialId]).get().catch(() => ({ forEach: () => {} } as any)),
+    db.collection('Notifications').where('user_id', 'in', [officialId, rawUid, canonicalOfficialId]).get().catch(() => ({ forEach: () => {} } as any)),
+    db.collection('Notifications').where('official_id', '==', officialId).get().catch(() => ({ forEach: () => {} } as any)),
+    db.collection('Official_Notifications').limit(50).get().catch(() => ({ forEach: () => {} } as any)),
+    db.collection('scoresheetRequests').limit(50).get().catch(() => ({ forEach: () => {} } as any)),
   ]);
 
   const seenIds = new Set<string>();
-  const notifications: OfficialNotification[] = [];
+  const notifications: any[] = [];
 
   const processDoc = (doc: any) => {
     if (seenIds.has(doc.id)) return;
@@ -200,15 +202,52 @@ export async function getOfficialNotifications(officialId: string): Promise<Offi
       type: data.type || 'OFFICIAL_ALERT',
       title: data.title || 'Notification',
       message: data.message || '',
-      reference_id: data.reference_id || null,
-      is_read: data.is_read || false,
-      created_at: data.created_at || new Date().toISOString(),
+      reference_id: data.reference_id || data.request_id || data.match_id || null,
+      request_id: data.request_id || null,
+      match_id: data.match_id || null,
+      requested_by_coach: data.requested_by_coach || data.coach_name || undefined,
+      match_context: data.match_context || data.match_name || undefined,
+      sport_discipline: data.sport_discipline || data.sport || undefined,
+      is_read: Boolean(data.is_read),
+      created_at: data.created_at || data.timestamp || new Date().toISOString(),
     });
   };
 
   snap1.forEach(processDoc);
   snap2.forEach(processDoc);
   snap3.forEach(processDoc);
+  snapOfficialNotifs.forEach(processDoc);
+
+  // Surface scoresheetRequests documents into notifications
+  snapScoresheetRequests.forEach((doc: any) => {
+    const data = doc.data();
+    const reqId = data.id || doc.id;
+    const notifKey = `req_${reqId}`;
+    if (seenIds.has(notifKey)) return;
+    seenIds.add(notifKey);
+
+    const isFulfilled = data.status === 'fulfilled';
+    notifications.push({
+      notification_id: notifKey,
+      request_id: reqId,
+      official_id: officialId,
+      type: 'SCORESHEET_REQUEST',
+      title: `Scoresheet Request: ${data.matchName || 'Match'}`,
+      message: `${data.coachName || 'Coach'} requested the official scoresheet for ${data.matchName || 'match'}.`,
+      reference_id: data.matchId || null,
+      match_id: data.matchId || null,
+      match_name: data.matchName || null,
+      requested_by_coach: data.coachName || 'Coach',
+      coach_id: data.coachId || null,
+      team_id: data.teamId || null,
+      match_context: data.matchName || 'Official Match',
+      sport_discipline: data.sportType || 'BASKETBALL',
+      scoresheet_url: data.scoresheetUrl || data.scoresheet_url || null,
+      status: data.status || 'pending',
+      is_read: Boolean(data.is_read_by_official || isFulfilled),
+      created_at: data.createdAt || data.created_at || new Date().toISOString(),
+    });
+  });
 
   // Sort chronologically descending
   return notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

@@ -538,17 +538,49 @@ export async function certifyValidationService(
     auditData.requested_by ||
     matchData.logged_by_coach_id;
 
+  const finalScoresheetUrl = dto.scoresheet_url || matchData.scoresheet_url || '';
+
+  // Synchronize scoresheetRequests collection to 'fulfilled'
+  try {
+    const targetMatchId = matchData.match_id || cleanId;
+    const reqSnap = await db.collection('scoresheetRequests')
+      .where('matchId', '==', targetMatchId)
+      .get()
+      .catch(() => null);
+    if (reqSnap && !reqSnap.empty) {
+      reqSnap.forEach((d) => {
+        batch.set(d.ref, {
+          status: 'fulfilled',
+          scoresheetUrl: finalScoresheetUrl,
+          scoresheet_url: finalScoresheetUrl,
+          fulfilledAt: now,
+          fulfilledByOfficialId: officialId,
+          is_read_by_official: true,
+          updatedAt: now,
+        }, { merge: true });
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to update scoresheetRequests in certifyValidationService:', err);
+  }
+
   if (targetCoachId) {
     const notifId = `notif_${crypto.randomUUID()}`;
     const cleanCoachId = targetCoachId.replace(/^coach_/, "");
+    const matchName = matchData.matchName || matchData.game_name || `${matchData.home_team_name || "Match"} vs ${matchData.away_team_name || "Opponent"}`;
     batch.set(db.collection("Notifications").doc(notifId), {
       notification_id: notifId,
       user_id: targetCoachId,
       recipient_id: targetCoachId,
-      title: "Scoresheet Request Granted",
-      message: `Tournament Officials have approved and certified the scoresheet for ${matchData.home_team_name || "Match"} vs ${matchData.away_team_name || "Opponent"}.`,
-      type: "AUDIT_GRANTED",
+      title: `Scoresheet Available: ${matchName}`,
+      message: `Tournament Officials have certified and shared the official scoresheet for ${matchName}. Tap to view or download.`,
+      type: "SCORESHEET_SHARED",
       match_id: matchData.match_id || cleanId,
+      matchId: matchData.match_id || cleanId,
+      match_name: matchName,
+      scoresheet_url: finalScoresheetUrl,
+      scoresheetUrl: finalScoresheetUrl,
+      action_label: "View / Download Scoresheet",
       is_read: false,
       read_status: false,
       created_at: now,
@@ -560,10 +592,15 @@ export async function certifyValidationService(
         notification_id: altNotifId,
         user_id: cleanCoachId,
         recipient_id: cleanCoachId,
-        title: "Scoresheet Request Granted",
-        message: `Tournament Officials have approved and certified the scoresheet for ${matchData.home_team_name || "Match"} vs ${matchData.away_team_name || "Opponent"}.`,
-        type: "AUDIT_GRANTED",
+        title: `Scoresheet Available: ${matchName}`,
+        message: `Tournament Officials have certified and shared the official scoresheet for ${matchName}. Tap to view or download.`,
+        type: "SCORESHEET_SHARED",
         match_id: matchData.match_id || cleanId,
+        matchId: matchData.match_id || cleanId,
+        match_name: matchName,
+        scoresheet_url: finalScoresheetUrl,
+        scoresheetUrl: finalScoresheetUrl,
+        action_label: "View / Download Scoresheet",
         is_read: false,
         read_status: false,
         created_at: now,

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import styles from "./styles/CoachMainPage";
 import { StatusBar } from "expo-status-bar";
@@ -63,6 +64,7 @@ import {
   getCoachProfileOfflineFirst,
   saveTeamOfflineFirst,
   deleteTeamOfflineFirst,
+  listenToCoachScoresheetRequests,
 } from "../../../../services/firebaseClient";
 import { calculatePlayerRating } from "../Performance/performanceUtils";
 
@@ -1181,6 +1183,61 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       clearInterval(notifInterval);
     };
   }, []);
+
+  // Real-time listener for coach's scoresheet requests (updates when tournament official fulfills and uploads)
+  useEffect(() => {
+    const coachId = coach?.coach_id || coach?.user_id;
+    if (!coachId) return;
+
+    const unsubscribe = listenToCoachScoresheetRequests(coachId, (requests) => {
+      if (!requests || requests.length === 0) return;
+
+      setNotificationsList((prevList) => {
+        const updated = [...prevList];
+
+        requests.forEach((req) => {
+          const notifId = `req_${req.id}`;
+          const isFulfilled = req.status === "fulfilled";
+          const matchTitle = req.matchName || `Match ${req.matchId}`;
+
+          const item = {
+            id: notifId,
+            notification_id: notifId,
+            type: "SCORESHEET_SHARED",
+            title: isFulfilled ? `Scoresheet Shared: ${matchTitle}` : `Scoresheet Requested: ${matchTitle}`,
+            message_body: isFulfilled
+              ? `Tournament Official has verified and uploaded the scoresheet for ${matchTitle}. Tap below to view or download.`
+              : `Your scoresheet request for ${matchTitle} has been submitted to tournament officials.`,
+            message: isFulfilled
+              ? `Tournament Official has verified and uploaded the scoresheet for ${matchTitle}. Tap below to view or download.`
+              : `Your scoresheet request for ${matchTitle} has been submitted to tournament officials.`,
+            match_id: req.matchId,
+            matchName: matchTitle,
+            scoresheet_url: req.scoresheetUrl || req.scoresheet_url,
+            scoresheetUrl: req.scoresheetUrl || req.scoresheet_url,
+            status: isFulfilled ? "FULFILLED" : "PENDING",
+            is_read: !isFulfilled,
+            created_at: req.fulfilledAt || req.createdAt || new Date().toISOString(),
+          };
+
+          const existIdx = updated.findIndex(
+            (n: any) => (n.notification_id === notifId || n.id === notifId)
+          );
+          if (existIdx >= 0) {
+            updated[existIdx] = { ...updated[existIdx], ...item };
+          } else {
+            updated.unshift(item);
+          }
+        });
+
+        const unreadCount = updated.filter((n: any) => !n.is_read && n.status !== "READ").length;
+        setUnreadNotifCount(unreadCount);
+        return updated;
+      });
+    });
+
+    return () => unsubscribe();
+  }, [coach?.coach_id, coach?.user_id]);
 
   // Current Selected Team
   const currentTeam = useMemo(
@@ -2768,7 +2825,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     const isDeclined = titleLower.includes("declined") || bodyLower.includes("declined") || notif.status === "DECLINED" || notif.offer_status === "DECLINED" || notif.inquiry_status === "DECLINED";
                     const isSentByCoach = notif.is_sender === true || notif.sender_role === "Coach" || titleLower.includes("sent") || bodyLower.includes("you sent") || notif.initiated_by === coach?.coach_id || notif.initiated_by === coach?.user_id;
 
-                    const isActionableRecruitment = Boolean(inquiryId || (notif.type === "RECRUITMENT_INQUIRY" && !notif.id?.startsWith("notif_"))) && !isAccepted && !isDeclined && !isSentByCoach && notif.actionable !== false;
+                    const isScoresheetShared = notif.type === "SCORESHEET_SHARED" || Boolean(notif.scoresheet_url || notif.scoresheetUrl);
+                    const hasScoresheetUrl = Boolean(notif.scoresheet_url || notif.scoresheetUrl);
+
+                    const isActionableRecruitment = Boolean(inquiryId || (notif.type === "RECRUITMENT_INQUIRY" && !notif.id?.startsWith("notif_"))) && !isAccepted && !isDeclined && !isSentByCoach && !isScoresheetShared && notif.actionable !== false;
 
                     return (
                       <TouchableOpacity
@@ -2827,7 +2887,76 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                               <Text style={{ color: "#38BDF8", fontSize: 10, fontWeight: "800" }}>INQUIRY SENT</Text>
                             </View>
                           )}
+                          {isScoresheetShared && (
+                            <View style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#10B981" }}>
+                              <Text style={{ color: "#10B981", fontSize: 10, fontWeight: "800" }}>SCORESHEET READY ✓</Text>
+                            </View>
+                          )}
                         </View>
+
+                        {hasScoresheetUrl && (
+                          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                            <TouchableOpacity
+                              style={{
+                                flex: 1,
+                                backgroundColor: "#10B981",
+                                paddingVertical: 8,
+                                borderRadius: 8,
+                                alignItems: "center",
+                                flexDirection: "row",
+                                justifyContent: "center",
+                                gap: 6,
+                              }}
+                              onPress={() => {
+                                const url = notif.scoresheet_url || notif.scoresheetUrl;
+                                if (url) {
+                                  Linking.openURL(url).catch(() => {
+                                    Alert.alert("Scoresheet", "Unable to open scoresheet link: " + url);
+                                  });
+                                }
+                              }}
+                            >
+                              <Ionicons name="document-text" size={14} color="#080F21" />
+                              <Text style={{ color: "#080F21", fontWeight: "800", fontSize: 12 }}>VIEW / DOWNLOAD</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={{
+                                flex: 1,
+                                backgroundColor: "#1E293B",
+                                borderWidth: 1,
+                                borderColor: "#334155",
+                                paddingVertical: 8,
+                                borderRadius: 8,
+                                alignItems: "center",
+                                flexDirection: "row",
+                                justifyContent: "center",
+                                gap: 6,
+                              }}
+                              onPress={async () => {
+                                try {
+                                  const matchId = notif.match_id || notif.matchId || `match_${Date.now()}`;
+                                  const matchName = notif.matchName || notif.match_name || "Official Match";
+                                  const scoresheetUrl = notif.scoresheet_url || notif.scoresheetUrl;
+                                  await saveMatchOfflineFirst({
+                                    match_id: matchId,
+                                    matchName,
+                                    game_name: matchName,
+                                    scoresheet_url: scoresheetUrl,
+                                    scoresheetUrl,
+                                    audit_status: "REQUEST GRANTED",
+                                    is_certified: true,
+                                  });
+                                  Alert.alert("Import Successful", `Official match record for "${matchName}" has been synchronized to your team records!`);
+                                } catch (e: any) {
+                                  Alert.alert("Import Notice", "Match records are synchronized.");
+                                }
+                              }}
+                            >
+                              <Ionicons name="cloud-download-outline" size={14} color="#00C8FF" />
+                              <Text style={{ color: "#00C8FF", fontWeight: "800", fontSize: 12 }}>SYNC RECORDS</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
 
                         {isActionableRecruitment && (
                           <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
