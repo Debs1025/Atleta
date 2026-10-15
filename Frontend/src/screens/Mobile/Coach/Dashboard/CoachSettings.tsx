@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   ScrollView,
   Switch,
@@ -10,9 +12,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CoachSettingsData, DEFAULT_COACH_SETTINGS } from "../DataTypes";
-import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { requestAuthenticatedJson, getStoredAuthToken } from "../../Authentication/authShared";
+import { db } from "../../../../services/firebaseClient";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import styles from "./styles/CoachSettings";
+
+export const COACH_SETTINGS_STORAGE_KEY = "@atleta_coach_settings_preferences";
 
 export interface CoachSettingsProps {
   settings?: CoachSettingsData;
@@ -62,6 +69,26 @@ const PasswordInputField = ({
   </>
 );
 
+// Resolve current authenticated coach UID from token or settings
+const resolveCurrentCoachUid = async (settingsCoachId?: string): Promise<string> => {
+  if (settingsCoachId && settingsCoachId !== "coach_erick_001") {
+    return String(settingsCoachId).replace(/^coach_/, "");
+  }
+  try {
+    const token = await getStoredAuthToken();
+    if (token && token.includes(".")) {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = typeof atob === "function" ? atob(base64) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(base64, "base64").toString("utf-8") : "");
+      if (decoded) {
+        const payload = JSON.parse(decoded);
+        return String(payload.uid || payload.user_id || payload.sub || "").replace(/^coach_/, "");
+      }
+    }
+  } catch (_) {}
+  return "";
+};
+
 // API Request: update coach settings & preferences (PUT /api/coach/settings)
 export function CoachSettings({
   settings = DEFAULT_COACH_SETTINGS,
@@ -77,6 +104,83 @@ export function CoachSettings({
 
   // Local Reactive Client State
   const [settingsState, setSettingsState] = useState<CoachSettingsData>(settings);
+  const [philosophyInput, setPhilosophyInput] = useState<string>(
+    settings.coachingPhilosophy || settings.coaching_philosophy || ""
+  );
+  const [isSavingPhilosophy, setIsSavingPhilosophy] = useState(false);
+
+  // Load persisted settings & philosophy on mount: Firestore first, then scoped cache
+  useEffect(() => {
+    let isMounted = true;
+    const loadSettings = async () => {
+      try {
+        const cleanUid = await resolveCurrentCoachUid(settings.coach_id);
+        const scopedKey = cleanUid ? `@atleta_coach_settings_${cleanUid}` : COACH_SETTINGS_STORAGE_KEY;
+
+        // 1. Fetch live from Firestore first based on user UID
+        let liveSettings: Partial<CoachSettingsData> | null = null;
+        let livePhilosophy = "";
+        if (cleanUid) {
+          try {
+            const canonicalId = `coach_${cleanUid}`;
+            const [cDoc1, cDoc2, uDoc] = await Promise.all([
+              getDoc(doc(db, "Coach_Profiles", canonicalId)).catch(() => null),
+              getDoc(doc(db, "Coach_Profiles", cleanUid)).catch(() => null),
+              getDoc(doc(db, "Users", cleanUid)).catch(() => null),
+            ]);
+            const coachData = (cDoc1 && cDoc1.exists()) ? cDoc1.data() : (cDoc2 && cDoc2.exists()) ? cDoc2.data() : null;
+            const userData = (uDoc && uDoc.exists()) ? uDoc.data() : null;
+            const merged = { ...(userData || {}), ...(coachData || {}) };
+
+            if (merged.settings) {
+              liveSettings = merged.settings;
+            }
+            livePhilosophy = merged.coachingPhilosophy || merged.coaching_philosophy || merged.philosophy || "";
+          } catch (fsErr) {
+            console.warn("Firestore live settings fetch notice:", fsErr);
+          }
+        }
+
+        if (liveSettings || livePhilosophy) {
+          if (isMounted) {
+            setSettingsState((prev) => {
+              const updated = {
+                ...prev,
+                ...(liveSettings || {}),
+                coachingPhilosophy: livePhilosophy || prev.coachingPhilosophy || "",
+                coaching_philosophy: livePhilosophy || prev.coaching_philosophy || "",
+              };
+              if (cleanUid) {
+                AsyncStorage.setItem(scopedKey, JSON.stringify(updated)).catch(() => null);
+              }
+              return updated;
+            });
+            if (livePhilosophy) {
+              setPhilosophyInput(livePhilosophy);
+            }
+          }
+          return;
+        }
+
+        // 2. Scoped local cache fallback
+        const stored = await AsyncStorage.getItem(scopedKey);
+        if (stored && isMounted) {
+          try {
+            const parsed = JSON.parse(stored);
+            setSettingsState((prev) => ({ ...prev, ...parsed }));
+            if (parsed.coachingPhilosophy || parsed.coaching_philosophy) {
+              setPhilosophyInput(parsed.coachingPhilosophy || parsed.coaching_philosophy);
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    };
+
+    loadSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [settings.coach_id]);
 
   // Modals & Passwords State
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -93,11 +197,40 @@ export function CoachSettings({
   const [showConfirmSec, setShowConfirmSec] = useState(true);
   const [passwordError, setPasswordError] = useState("");
 
-  // Update Setting Helper with live backend sync
+  // Update Setting Helper with user-scoped storage & Firestore-first persistence
   const updateSetting = async (key: keyof CoachSettingsData, value: any) => {
     const updated = { ...settingsState, [key]: value, updated_at: new Date().toISOString() };
     setSettingsState(updated);
     if (onUpdateSettings) onUpdateSettings(updated);
+
+    const cleanUid = await resolveCurrentCoachUid(settings.coach_id);
+    const scopedKey = cleanUid ? `@atleta_coach_settings_${cleanUid}` : COACH_SETTINGS_STORAGE_KEY;
+
+    try {
+      await AsyncStorage.setItem(scopedKey, JSON.stringify(updated));
+    } catch (storeErr) {
+      console.warn("Settings storage error:", storeErr);
+    }
+
+    // Direct Firestore write scoped strictly to this coach's documents
+    if (cleanUid) {
+      const canonicalId = `coach_${cleanUid}`;
+      const firestoreSettingsPayload = {
+        settings: {
+          data_sync_preference: updated.data_sync_preference,
+          game_log_updates: updated.game_log_updates,
+          recruitment_inquiries: updated.recruitment_inquiries,
+          updated_at: updated.updated_at,
+        },
+        data_sync_preference: updated.data_sync_preference,
+        updated_at: updated.updated_at,
+      };
+      await Promise.all([
+        setDoc(doc(db, "Coach_Profiles", canonicalId), firestoreSettingsPayload, { merge: true }).catch(() => null),
+        setDoc(doc(db, "Coach_Profiles", cleanUid), firestoreSettingsPayload, { merge: true }).catch(() => null),
+        setDoc(doc(db, "Users", cleanUid), firestoreSettingsPayload, { merge: true }).catch(() => null),
+      ]);
+    }
 
     try {
       await requestAuthenticatedJson("/coaches/me/settings", "PATCH", {
@@ -109,6 +242,53 @@ export function CoachSettings({
       });
     } catch (err) {
       console.warn("Settings sync error:", err);
+    }
+  };
+
+  // Coaching Philosophy Save Handler
+  const handleSavePhilosophy = async () => {
+    setIsSavingPhilosophy(true);
+    const trimmed = philosophyInput.trim();
+    try {
+      const cleanUid = await resolveCurrentCoachUid(settings.coach_id);
+      const canonicalId = cleanUid ? `coach_${cleanUid}` : "";
+      const philosophyPayload = {
+        coachingPhilosophy: trimmed,
+        coaching_philosophy: trimmed,
+        philosophy: trimmed,
+        quote: trimmed,
+        updated_at: new Date().toISOString(),
+      };
+
+      // 1. Direct Firestore write
+      if (cleanUid) {
+        await Promise.all([
+          setDoc(doc(db, "Coach_Profiles", canonicalId), philosophyPayload, { merge: true }).catch(() => null),
+          setDoc(doc(db, "Coach_Profiles", cleanUid), philosophyPayload, { merge: true }).catch(() => null),
+          setDoc(doc(db, "Users", cleanUid), philosophyPayload, { merge: true }).catch(() => null),
+        ]);
+      }
+
+      // 2. User-scoped cache update
+      const scopedKey = cleanUid ? `@atleta_coach_settings_${cleanUid}` : COACH_SETTINGS_STORAGE_KEY;
+      const updated = {
+        ...settingsState,
+        coachingPhilosophy: trimmed,
+        coaching_philosophy: trimmed,
+      };
+      setSettingsState(updated);
+      if (onUpdateSettings) onUpdateSettings(updated);
+      await AsyncStorage.setItem(scopedKey, JSON.stringify(updated)).catch(() => null);
+
+      // 3. API background sync
+      requestAuthenticatedJson("/coaches/me/profile", "PATCH", philosophyPayload).catch(() => null);
+
+      Alert.alert("Coaching Philosophy Saved", "Your coaching philosophy has been successfully updated and will be displayed to athletes.");
+    } catch (err: any) {
+      console.warn("Save philosophy error:", err);
+      Alert.alert("Error", "Could not save coaching philosophy. Please try again.");
+    } finally {
+      setIsSavingPhilosophy(false);
     }
   };
 
@@ -200,6 +380,59 @@ export function CoachSettings({
               trackColor={{ false: "#1E293B", true: "#00C8FF" }}
               thumbColor="#FFFFFF"
             />
+          </View>
+        </View>
+
+        {/* COACHING PHILOSOPHY */}
+        <Text style={styles.sectionLabel}>COACHING PHILOSOPHY</Text>
+        <View style={styles.cardBox}>
+          <View style={{ padding: 16 }}>
+            <Text style={[styles.itemSubtext, { marginBottom: 10, color: "#94A3B8" }]}>
+              Define your coaching philosophy and player expectations. This statement is displayed on your athlete-facing coach preview profile card.
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: "#0F172A",
+                borderColor: "#334155",
+                borderWidth: 1,
+                borderRadius: 8,
+                color: "#F8FAFC",
+                padding: 12,
+                minHeight: 88,
+                textAlignVertical: "top",
+                fontSize: 14,
+              }}
+              placeholder="e.g. Relentless effort, high athletic IQ, and character on and off the court."
+              placeholderTextColor="#64748B"
+              multiline
+              numberOfLines={4}
+              value={philosophyInput}
+              onChangeText={setPhilosophyInput}
+            />
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#00C8FF",
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                marginTop: 12,
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+              }}
+              onPress={handleSavePhilosophy}
+              disabled={isSavingPhilosophy}
+              activeOpacity={0.8}
+            >
+              {isSavingPhilosophy ? (
+                <ActivityIndicator size="small" color="#080F21" style={{ marginRight: 6 }} />
+              ) : (
+                <Ionicons name="checkmark-done" size={18} color="#080F21" style={{ marginRight: 6 }} />
+              )}
+              <Text style={{ color: "#080F21", fontWeight: "700", fontSize: 13, letterSpacing: 0.5 }}>
+                {isSavingPhilosophy ? "SAVING..." : "SAVE PHILOSOPHY"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 

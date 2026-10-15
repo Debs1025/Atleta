@@ -1,12 +1,25 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/CoachProfile";
 import { CoachProfileSchema } from "../Teams/Teams";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { db } from "../../../../services/firebaseClient";
+import { doc, getDoc } from "firebase/firestore";
 
 export type CoachProfileData = CoachProfileSchema;
+
+const getSportIconName = (name: string): keyof typeof Ionicons.glyphMap => {
+  const s = (name || "").toLowerCase();
+  if (s.includes("basket")) return "basketball-outline";
+  if (s.includes("swim") || s.includes("water") || s.includes("pool")) return "water-outline";
+  if (s.includes("track") || s.includes("run") || s.includes("sprint") || s.includes("field")) return "walk-outline";
+  if (s.includes("volley")) return "tennisball-outline";
+  if (s.includes("pickle") || s.includes("tennis") || s.includes("paddle")) return "tennisball-outline";
+  if (s.includes("fitness") || s.includes("strength") || s.includes("conditioning")) return "fitness-outline";
+  return "trophy-outline";
+};
 
 interface CoachProfileProps {
   coachId?: string;
@@ -20,7 +33,7 @@ export function CoachProfileScreen({
   onBack,
 }: CoachProfileProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [coachData, setCoachData] = useState<CoachProfileData | null>(propCoachData || null);
   const [loading, setLoading] = useState<boolean>(!propCoachData);
 
@@ -39,28 +52,57 @@ export function CoachProfileScreen({
         const path = coachId ? `/coaches/${coachId}` : "/coaches/me";
         const res: any = await requestAuthenticatedJson(path).catch(() => null);
 
-        if (isMounted && res) {
-          const c = res.profile || res.coach || res;
+        let c: any = res?.profile || res?.coach || res || {};
+
+        // Query Firestore live to ensure up-to-date coaching philosophy and profile data
+        if (coachId) {
+          try {
+            const rawCid = String(coachId).replace(/^coach_/, "");
+            const canonicalCid = String(coachId).startsWith("coach_") ? coachId : `coach_${rawCid}`;
+            const [cDoc1, cDoc2, uDoc] = await Promise.all([
+              getDoc(doc(db, "Coach_Profiles", canonicalCid)).catch(() => null),
+              getDoc(doc(db, "Coach_Profiles", rawCid)).catch(() => null),
+              getDoc(doc(db, "Users", rawCid)).catch(() => null),
+            ]);
+            const fsData = (cDoc1 && cDoc1.exists()) ? cDoc1.data() : (cDoc2 && cDoc2.exists()) ? cDoc2.data() : (uDoc && uDoc.exists()) ? uDoc.data() : null;
+            if (fsData) {
+              c = { ...c, ...fsData };
+            }
+          } catch (fsErr) {
+            console.warn("Firestore live coach fetch note:", fsErr);
+          }
+        }
+
+        if (isMounted && (c.full_name || c.first_name || c.coach_id || coachId)) {
           const firstName = c.first_name || "";
           const lastName = c.last_name || "";
           const derivedName = `${firstName} ${lastName}`.trim();
           const rawFullName = c.full_name || derivedName || "";
           const resolvedFullName = (rawFullName && rawFullName.trim().toLowerCase() !== "coach") ? rawFullName : (derivedName || "Coach Profile");
           const inst = c.current_institution || c.institution || "Athletic Program";
-          const sport = (c.sport_type || "Sports").toUpperCase();
+          const sport = (c.sport_type || c.sports_focus || "Sports").toUpperCase();
+          const avatarUrl = c.avatar_url || c.profile_image || c.profile_picture || c.photo_url || "";
+          const resolvedPhilosophy = c.coachingPhilosophy || c.coaching_philosophy || c.philosophy || c.bio || "Not specified";
 
           const mapped: CoachProfileData = {
             coach_id: c.coach_id || coachId || "",
             full_name: resolvedFullName.toUpperCase(),
             institution: inst,
             role_title: c.role_title || `${sport} HEAD COACH`,
+            avatar_url: avatarUrl,
             tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
             years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
-            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
-            success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
-            recruits_placed: c.recruits_placed || "",
-            philosophy: c.philosophy || c.bio || "Not specified",
-            quote: c.quote || "Not specified",
+            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0
+              ? c.specialties
+              : Array.isArray(c.core_specialties) && c.core_specialties.length > 0
+              ? c.core_specialties
+              : Array.isArray(c.sports_handled) && c.sports_handled.length > 0
+              ? c.sports_handled
+              : c.sport_type
+              ? [c.sport_type]
+              : ["Basketball"],
+            philosophy: resolvedPhilosophy,
+            quote: c.quote || resolvedPhilosophy || "Not specified",
             certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
             contact_info: {
               email: c.email || c.contact_info?.email || "Not specified",
@@ -117,8 +159,16 @@ export function CoachProfileScreen({
           {/* Profile Header Block */}
           <View style={styles.profileHeaderBlock}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatarBox}>
-                <Ionicons name="person-outline" size={48} color="#64748B" />
+              <View style={[styles.avatarBox, { overflow: "hidden" }]}>
+                {coachData.avatar_url ? (
+                  <Image
+                    source={{ uri: coachData.avatar_url }}
+                    style={{ width: "100%", height: "100%", borderRadius: 20 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons name="person-outline" size={48} color="#64748B" />
+                )}
               </View>
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={20} color="#38BDF8" />
@@ -159,45 +209,10 @@ export function CoachProfileScreen({
           {/* Metric Cards Stack */}
           <View style={styles.metricCardStack}>
             {/* Card 1: Experience */}
-            <View style={styles.metricCardCenter}>
+            <View style={[styles.metricCardCenter, { width: "100%" }]}>
               <Text style={styles.metricCardLabel}>EXPERIENCE</Text>
               <Text style={styles.metricBigValue}>{coachData.years_experience}</Text>
               <Text style={styles.metricSubtext}>Years of Elite Coaching</Text>
-            </View>
-
-            {/* Card 2: Core Specialties */}
-            <View style={styles.metricCard}>
-              <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
-              <View style={styles.specialtiesList}>
-                {coachData.core_specialties.length === 0 ? (
-                  <Text style={{ color: "#94A3B8", fontSize: 13, marginTop: 4 }}>No specialties specified</Text>
-                ) : (
-                  coachData.core_specialties.map((item, idx) => (
-                    <View key={idx} style={styles.specialtyItemCard}>
-                      <Ionicons
-                        name={
-                          idx === 0
-                            ? "basketball-outline"
-                            : idx === 1
-                            ? "fitness-outline"
-                            : "body-outline"
-                        }
-                        size={16}
-                        color="#38BDF8"
-                        style={styles.specialtyIcon}
-                      />
-                      <Text style={styles.specialtyText}>{item}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
-            </View>
-
-            {/* Card 3: Success Rate */}
-            <View style={styles.metricCardCenter}>
-              <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
-              <Text style={styles.metricBigValue}>{coachData.success_rate}</Text>
-              {coachData.recruits_placed ? <Text style={styles.metricSubtext}>{coachData.recruits_placed}</Text> : null}
             </View>
           </View>
 

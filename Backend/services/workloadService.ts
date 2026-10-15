@@ -84,25 +84,7 @@ export async function logSrpeEntry(params: {
     created_at: now,
   };
 
-  // Clean undefined properties before Firestore write
-  const cleanEntry = Object.fromEntries(
-    Object.entries(entry).filter(([_, v]) => v !== undefined)
-  );
-
-  // 1. Save entry to Workload_Analysis collection
-  await db.collection('Workload_Analysis').doc(workloadId).set(cleanEntry);
-
-  // 2. Fetch coach target and existing profile from Athlete_Profiles or Users
-  let profileDoc = await db.collection('Athlete_Profiles').doc(canonicalAthleteId).get();
-  if (!profileDoc.exists) {
-    profileDoc = await db.collection('Athlete_Profiles').doc(rawUid).get();
-  }
-  const profileData = profileDoc.exists ? profileDoc.data()! : {};
-  const coachTarget = profileData.workload_target || {};
-  const targetEffort = Number(coachTarget.target_7day_effort_pts || profileData.workload_analytics?.target_7day_effort_pts || 0);
-  const targetIntensity = coachTarget.target_intensity ? Number(coachTarget.target_intensity) : Number(profileData.workload_analytics?.target_intensity || 0);
-
-  // 3. Fetch all entries to compute live aggregate metrics
+  // 1. Fetch all previous entries to compute rolling metrics
   const snapshot = await db
     .collection('Workload_Analysis')
     .where('athlete_id', 'in', [canonicalAthleteId, rawUid, params.athlete_id])
@@ -113,7 +95,7 @@ export async function logSrpeEntry(params: {
     entries.push(doc.data() as WorkloadEntry);
   });
 
-  const sortedEntries = [...entries].sort(
+  const sortedEntries = [...entries, entry].sort(
     (a, b) => new Date(b.entry_date || b.created_at).getTime() - new Date(a.entry_date || a.created_at).getTime()
   );
 
@@ -129,6 +111,30 @@ export async function logSrpeEntry(params: {
   const std7d = loads7d.length > 0 ? stddev(loads7d) : 0;
   const routineScore = std7d > 0 ? round(mean7d / std7d) : (loads7d.length > 0 ? 1.0 : 0);
   const bodyStress = Math.round(acuteLoadSum * routineScore);
+
+  entry.short_term_load = acuteLoadSum;
+  entry.long_term_load = chronicLoadAvg;
+  entry.injury_risk_index = acwrRatio;
+  entry.monotony_score = routineScore;
+  entry.strain_score = bodyStress;
+
+  // Clean undefined properties before Firestore write
+  const cleanEntry = Object.fromEntries(
+    Object.entries(entry).filter(([_, v]) => v !== undefined)
+  );
+
+  // Save full entry to Workload_Analysis collection matching research paper schema
+  await db.collection('Workload_Analysis').doc(workloadId).set(cleanEntry);
+
+  // 2. Fetch coach target and existing profile from Athlete_Profiles or Users
+  let profileDoc = await db.collection('Athlete_Profiles').doc(canonicalAthleteId).get();
+  if (!profileDoc.exists) {
+    profileDoc = await db.collection('Athlete_Profiles').doc(rawUid).get();
+  }
+  const profileData = profileDoc.exists ? profileDoc.data()! : {};
+  const coachTarget = profileData.workload_target || {};
+  const targetEffort = Number(coachTarget.target_7day_effort_pts || profileData.workload_analytics?.target_7day_effort_pts || 0);
+  const targetIntensity = coachTarget.target_intensity ? Number(coachTarget.target_intensity) : Number(profileData.workload_analytics?.target_intensity || 0);
 
   const weeklyLogs = sortedEntries.slice(0, 7).map((e) => ({
     date: e.entry_date || 'DAY',

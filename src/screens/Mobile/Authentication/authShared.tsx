@@ -43,21 +43,61 @@ const runtime = globalThis as typeof globalThis & {
 const isExpoExecution = Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Constants.appOwnership === "expo";
 const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost || (Constants as any)?.manifest?.debuggerHost || "";
 const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
+const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
 
-// If testing via Expo Tunnel on a physical phone, 10.0.2.2 is unreachable, so use Vercel directly for instant sub-second responses
-const LOCAL_DEV_API = isTunnel
-  ? "https://atleta-backend.vercel.app"
-  : Platform.OS === "android"
-  ? "http://10.0.2.2:5000"
-  : "http://localhost:5000";
+const CLOUD_PROD_API = "https://atleta-backend.vercel.app/api/v1";
+const envApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "").trim().replace(/\/+$/, "");
+const configuredApi = envApi
+  ? (envApi.endsWith("/api/v1") ? envApi : `${envApi}/api/v1`)
+  : CLOUD_PROD_API;
 
-const rawApiBase = __DEV__
-  ? (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || LOCAL_DEV_API).trim().replace(/\/+$/, "")
-  : (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "https://atleta-backend.vercel.app").trim().replace(/\/+$/, "");
+const rawDevApi = `http://${hostIp}:5000`;
+const CANDIDATE_DEV_API = `${rawDevApi}/api/v1`;
 
-export const API_BASE = rawApiBase.endsWith("/api/v1")
-  ? rawApiBase
-  : `${rawApiBase}/api/v1`;
+// If in production/EAS build, strictly use configuredApi or CLOUD_PROD_API
+let activeApiBase = !__DEV__ ? configuredApi : (isTunnel ? configuredApi : CANDIDATE_DEV_API);
+export let API_BASE = activeApiBase;
+
+let hasProbedApi = false;
+export async function getActiveApiBase(): Promise<string> {
+  if (hasProbedApi) return activeApiBase;
+  hasProbedApi = true;
+
+  if (!__DEV__) {
+    activeApiBase = configuredApi;
+    API_BASE = configuredApi;
+    return configuredApi;
+  }
+
+  if (isTunnel) {
+    activeApiBase = configuredApi;
+    API_BASE = configuredApi;
+    return configuredApi;
+  }
+
+  // Quick 1000ms probe to check if local development server is reachable
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const probeRes = await fetch(`${CANDIDATE_DEV_API}/sports`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    if (probeRes.ok || probeRes.status === 401 || probeRes.status === 404) {
+      activeApiBase = CANDIDATE_DEV_API;
+      API_BASE = CANDIDATE_DEV_API;
+      return activeApiBase;
+    }
+  } catch (_) {
+    // Local dev unreachable - immediately switch to Configured / Cloud Prod API
+  } finally {
+    clearTimeout(timer);
+  }
+
+  activeApiBase = configuredApi;
+  API_BASE = configuredApi;
+  return activeApiBase;
+}
 
 export const AUTH_TOKEN_KEY = (
   runtime.process?.env?.EXPO_PUBLIC_AUTH_TOKEN_KEY ||
@@ -70,7 +110,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 6000;
+const REQUEST_TIMEOUT_MS = 8000;
 
 // Types
 export type BannerTone = "error" | "success" | "info";
@@ -92,13 +132,22 @@ export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long.")
   .regex(/[A-Z]/, "Password must include at least 1 uppercase letter.")
-  .regex(/[@$!%*?&]/, "Password must include at least 1 special symbol (@$!%*?&).");
+  .regex(/[^a-zA-Z0-9]/, "Password must include at least 1 special symbol (e.g. !@#$%^&*).");
 
-export const contactSchema = z
-  .string()
-  .trim()
-  .min(1, "Contact number is required.")
-  .regex(/^09\d{9}$/, "Contact number must be 11 digits starting (09xxxxxxxxx).");
+export const contactSchema = z.preprocess(
+  (val) => {
+    if (typeof val !== "string") return val;
+    let cleaned = val.replace(/[\s\-_()]/g, "");
+    if (cleaned.startsWith("+63")) cleaned = "0" + cleaned.slice(3);
+    else if (cleaned.startsWith("63") && cleaned.length === 12) cleaned = "0" + cleaned.slice(2);
+    return cleaned;
+  },
+  z
+    .string()
+    .trim()
+    .min(1, "Contact number is required.")
+    .regex(/^09\d{9}$/, "Contact number must be 11 digits starting with 09 (e.g. 09123456789).")
+);
 
 export const athleteSignupSchema = z.object({
   role: z.literal("athlete"),
@@ -128,7 +177,10 @@ export const coachSignupSchema = z.object({
   password: passwordSchema,
   contact_number: contactSchema,
   certification_license_num: z.string().trim().max(100, "License number is too long.").optional().or(z.literal("")),
-  years_of_experience: z.coerce.number({ invalid_type_error: "Years of experience is required." }).int().min(0).max(60),
+  years_of_experience: z.preprocess(
+    (val) => (val === "" || val === null || val === undefined ? 0 : Number(val)),
+    z.number().int().min(0, "Years of experience must be at least 0.").max(60, "Years of experience cannot exceed 60.")
+  ),
   current_institution: z.string().trim().min(1, "Current institution is required.").max(255, "Current institution is too long."),
   regional_affiliation: z.string().trim().min(1, "Regional affiliation is required.").max(255, "Regional affiliation is too long."),
   national_sports_league: z.string().trim().max(255, "League name is too long.").optional().or(z.literal("")),
@@ -199,17 +251,29 @@ export function getAuthErrorMessage(error: unknown, fallback: string) {
 
 // This lets users to stay logged in when reopenning the app
 export async function storeAuthToken(token: string) {
+  clearAuthMicroCache();
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
 }
 
 // This keeps the role of the user when reopening the app
 export async function storeAuthRole(role: AuthRole) {
+  clearAuthMicroCache();
   await SecureStore.setItemAsync(AUTH_ROLE_KEY, role);
 }
 
 export async function getStoredAuthRole(): Promise<AuthRole | null> {
-  const role = await SecureStore.getItemAsync(AUTH_ROLE_KEY).catch(() => null);
-  return role === "coach" || role === "athlete" ? role : null;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const role = await Promise.race([
+      SecureStore.getItemAsync(AUTH_ROLE_KEY).catch(() => null),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), 1500);
+      }),
+    ]);
+    return role === "coach" || role === "athlete" ? role : null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 export function extractAuthToken(payload: Record<string, unknown>) {
@@ -245,23 +309,21 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
 
 async function fetchApi(path: string, options: RequestInit) {
   let response: Response | undefined;
-  const primaryUrl = `${API_BASE}${path}`;
+  const baseUrl = await getActiveApiBase();
+  const primaryUrl = `${baseUrl}${path}`;
+
   try {
     response = await withRequestTimeout((signal) =>
       fetch(primaryUrl, { ...options, signal })
     );
   } catch (err) {
-    const candidates = [
-      primaryUrl.includes("10.0.2.2:5000") ? primaryUrl.replace("10.0.2.2:5000", "localhost:5000") : null,
-      `https://atleta-backend.vercel.app/api/v1${path}`,
-    ].filter((u): u is string => Boolean(u) && u !== primaryUrl);
-
-    for (const fallbackUrl of candidates) {
+    if (baseUrl !== CLOUD_PROD_API) {
+      activeApiBase = CLOUD_PROD_API;
+      API_BASE = CLOUD_PROD_API;
       try {
         response = await withRequestTimeout((signal) =>
-          fetch(fallbackUrl, { ...options, signal })
+          fetch(`${CLOUD_PROD_API}${path}`, { ...options, signal })
         );
-        if (response) break;
       } catch (_) {}
     }
 
@@ -296,6 +358,11 @@ export async function getStoredAuthToken(): Promise<string | null> {
 const inFlightGetRequests = new Map<string, Promise<any>>();
 const getResponseMicroCache = new Map<string, { data: any; timestamp: number }>();
 const MICRO_CACHE_TTL_MS = 15000; // 15s microcache to eliminate redundant duplicate queries across screens
+
+export function clearAuthMicroCache() {
+  getResponseMicroCache.clear();
+  inFlightGetRequests.clear();
+}
 
 // Handles authenticated JSON requests with Authorization Bearer header
 export async function requestAuthenticatedJson(path: string, method: string = "GET", body?: unknown) {
@@ -711,9 +778,19 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
     Constants.appOwnership === "expo" ||
     Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-  const googleClientId = (runtime.process?.env?.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? "").trim();
+  const googleClientId = (
+    runtime.process?.env?.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+    (Platform.OS === "android" ? runtime.process?.env?.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID : undefined) ||
+    (Platform.OS === "ios" ? runtime.process?.env?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID : undefined) ||
+    ""
+  ).trim();
   const fallbackGoogleClientId = "203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com";
   const webClientId = googleClientId || fallbackGoogleClientId;
+
+  const rawScheme = Constants.expoConfig?.scheme;
+  const appScheme = typeof rawScheme === "string"
+    ? rawScheme
+    : (Array.isArray(rawScheme) && rawScheme.length > 0 ? rawScheme[0] : "com.anonymous.atleta");
 
   const expoOwner =
     Constants.expoConfig?.owner ||
@@ -788,11 +865,11 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
       };
     }
   } else {
-    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: "atleta" });
+    const standaloneRedirectUri = customRedirectUri || "https://atleta-v1.firebaseapp.com/__/auth/handler";
 
     const googleAuthParams = new URLSearchParams({
       client_id: webClientId,
-      redirect_uri: schemeRedirectUri,
+      redirect_uri: standaloneRedirectUri,
       response_type: "id_token token",
       scope: "openid profile email",
       state,
@@ -803,7 +880,7 @@ export async function promptGoogleOAuthAsync(): Promise<GoogleAuthResult> {
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${googleAuthParams.toString()}`;
 
     try {
-      const browserResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, schemeRedirectUri);
+      const browserResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, standaloneRedirectUri);
 
       if (browserResult.type === "success" && browserResult.url) {
         const parsed = extractTokensFromUrl(browserResult.url);
@@ -845,13 +922,16 @@ export async function promptFacebookOAuthAsync(): Promise<FacebookAuthResult> {
     Constants.appOwnership === "expo" ||
     Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-  const facebookAppId = (runtime.process?.env?.EXPO_PUBLIC_FACEBOOK_APP_ID ?? "").trim();
-  if (!facebookAppId) {
-    return {
-      type: "error",
-      error: "Facebook App ID is not configured."
-    };
-  }
+  const rawScheme = Constants.expoConfig?.scheme;
+  const appScheme = typeof rawScheme === "string"
+    ? rawScheme
+    : (Array.isArray(rawScheme) && rawScheme.length > 0 ? rawScheme[0] : "com.anonymous.atleta");
+
+  const facebookAppId = (
+    runtime.process?.env?.EXPO_PUBLIC_FACEBOOK_APP_ID ||
+    (Constants.expoConfig as any)?.facebookAppId ||
+    "1478346524097898"
+  ).trim();
 
   const expoOwner =
     Constants.expoConfig?.owner ||
@@ -927,7 +1007,7 @@ export async function promptFacebookOAuthAsync(): Promise<FacebookAuthResult> {
       };
     }
   } else {
-    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: "atleta" });
+    const schemeRedirectUri = AuthSession.makeRedirectUri({ scheme: appScheme });
 
     const fbAuthParams = new URLSearchParams({
       client_id: facebookAppId,

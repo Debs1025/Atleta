@@ -194,11 +194,18 @@ export function CategoryPickerModal({
           </Text>
 
           <View style={styles.categoryListGroup}>
-            {categoriesList.map((item) => {
-              const isSelected = item === category;
+            {Array.from(
+              new Map(
+                (categoriesList || []).map((c) => {
+                  const norm = String(c).trim().toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ");
+                  return [norm, c];
+                })
+              ).values()
+            ).map((item, idx) => {
+              const isSelected = item === category || (String(item).replace(/&/g, "AND").toUpperCase() === String(category || "").replace(/&/g, "AND").toUpperCase());
               return (
                 <Pressable
-                  key={item}
+                  key={`${item}_${idx}`}
                   style={[
                     styles.categoryOptionCard,
                     isSelected && styles.categoryOptionCardSelected,

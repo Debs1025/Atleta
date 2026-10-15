@@ -18,6 +18,8 @@ import {
   disableNetwork,
   serverTimestamp,
   setLogLevel,
+  deleteDoc,
+  updateDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
@@ -75,7 +77,10 @@ try {
   }
 }
 
+import { getStorage, FirebaseStorage } from "firebase/storage";
+
 export const db: Firestore = dbInstance;
+export const storage: FirebaseStorage = getStorage(app);
 
 const OFFLINE_MATCHES_CACHE_KEY = "atleta_offline_matches_cache";
 const OFFLINE_ATHLETES_CACHE_KEY = "atleta_offline_athletes_cache";
@@ -89,9 +94,22 @@ const OFFLINE_TEAMS_CACHE_KEY = "atleta_offline_teams_cache";
  */
 export async function saveMatchOfflineFirst(payload: any): Promise<{ success: boolean; match_id: string; offline: boolean }> {
   const matchId = payload.match_id || `match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const playerStatsList = payload.playerStats || payload.player_stats || [];
+  const rosterAthletesList = payload.rosterAthletes || payload.roster_athletes || [];
+  const awayRosterAthletesList = payload.awayRosterAthletes || payload.away_roster_athletes || [];
+  const scoresheetUrlVal = payload.scoresheetUrl || payload.scoresheet_url || "";
+
   const cleanPayload = {
     ...payload,
     match_id: matchId,
+    playerStats: playerStatsList,
+    player_stats: playerStatsList,
+    rosterAthletes: rosterAthletesList,
+    roster_athletes: rosterAthletesList,
+    awayRosterAthletes: awayRosterAthletesList,
+    away_roster_athletes: awayRosterAthletesList,
+    scoresheetUrl: scoresheetUrlVal,
+    scoresheet_url: scoresheetUrlVal,
     synced_offline: true,
     updated_at: new Date().toISOString(),
     created_at: payload.created_at || payload.match_date || new Date().toISOString(),
@@ -125,24 +143,36 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   // 2b. Update local athletes cache and Firestore with new aggregate stats
   try {
     const existingAthletesRaw = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
-    if (existingAthletesRaw && Array.isArray(payload.player_stats)) {
-      let athletesList: any[] = JSON.parse(existingAthletesRaw);
-      payload.player_stats.forEach((ps: any) => {
+    let athletesList: any[] = existingAthletesRaw ? JSON.parse(existingAthletesRaw) : [];
+
+    const pStats = Array.isArray(cleanPayload.playerStats) ? cleanPayload.playerStats : [];
+    if (pStats.length > 0) {
+      for (const ps of pStats) {
+        const athId = ps.athlete_id || ps.user_id || ps.id || "";
+        const cleanAthId = String(athId).replace(/^ath_/, "");
+        const canonicalAthId = athId.startsWith("ath_") ? athId : `ath_${athId}`;
+
+        const newPts = Number(ps.pts ?? ps.stats?.points ?? ps.stats?.pts ?? ps.points ?? 0);
+        const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? ps.stats?.reb ?? ps.rebounds ?? 0);
+        const newAst = Number(ps.ast ?? ps.stats?.assists ?? ps.stats?.ast ?? ps.assists ?? 0);
+        const newStl = Number(ps.stl ?? ps.stats?.steals ?? ps.stats?.stl ?? ps.steals ?? 0);
+        const newPf = Number(ps.pf ?? ps.stats?.fouls ?? ps.stats?.pf ?? ps.fouls ?? 0);
+        const newTo = Number(ps.to ?? ps.stats?.turnovers ?? ps.stats?.to ?? ps.turnovers ?? 0);
+
         const idx = athletesList.findIndex(
           (a) =>
-            (ps.athlete_id && (a.athlete_id === ps.athlete_id || a.user_id === ps.athlete_id || a.id === ps.athlete_id)) ||
+            (athId && (a.athlete_id === athId || a.user_id === athId || a.id === athId || a.athlete_id === canonicalAthId || a.user_id === cleanAthId)) ||
             (ps.player_name && a.full_name && a.full_name.toLowerCase() === ps.player_name.toLowerCase())
         );
+
+        let updatedAthProfile: any = null;
+
         if (idx >= 0) {
           const ath = athletesList[idx];
           const prevGp = Number(ath.averages?.games_played ?? ath.stats?.games_played ?? (Number(ath.averages?.ppg || ath.pts || 0) > 0 ? 1 : 0));
           const prevPpg = Number(ath.averages?.ppg ?? ath.stats?.ppg ?? ath.pts ?? 0);
           const prevRpg = Number(ath.averages?.rpg ?? ath.stats?.rpg ?? ath.reb ?? 0);
           const prevApg = Number(ath.averages?.apg ?? ath.stats?.apg ?? ath.ast ?? 0);
-
-          const newPts = Number(ps.pts ?? ps.stats?.points ?? 0);
-          const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? 0);
-          const newAst = Number(ps.ast ?? ps.stats?.assists ?? 0);
 
           const newGp = prevGp + 1;
           const newPpg = Math.round(((prevPpg * prevGp + newPts) / newGp) * 10) / 10;
@@ -182,17 +212,91 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
             rating_score: newRating,
             scoring_trends_last_10: newTrends,
           };
-
-          // Also attempt update on Firestore Athlete_Profiles
-          const athId = ps.athlete_id || ath.athlete_id || ath.user_id;
-          if (athId) {
-            try {
-              const athDocRef = doc(db, "Athlete_Profiles", athId);
-              setDoc(athDocRef, athletesList[idx], { merge: true }).catch(() => null);
-            } catch (_) {}
-          }
+          updatedAthProfile = athletesList[idx];
+        } else if (athId) {
+          const newPer = Math.round(newPts * 1.2 + newReb * 1.0 + newAst * 1.5);
+          const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPts * 3.5)));
+          updatedAthProfile = {
+            athlete_id: athId,
+            full_name: ps.player_name || ps.name || "Athlete",
+            averages: {
+              ppg: newPts,
+              rpg: newReb,
+              apg: newAst,
+              games_played: 1,
+              per_score: newPer,
+              wins: payload.game_result === "WIN" ? 1 : 0,
+            },
+            stats: {
+              ppg: newPts,
+              rpg: newReb,
+              apg: newAst,
+              games_played: 1,
+              per: newPer,
+              points: newPts,
+              rebounds: newReb,
+              assists: newAst,
+            },
+            pts: newPts,
+            reb: newReb,
+            ast: newAst,
+            rating_score: newRating,
+            scoring_trends_last_10: [newPts],
+          };
+          athletesList.push(updatedAthProfile);
         }
-      });
+
+        // Commit player career totals to Firestore Athlete_Profiles
+        if (athId && updatedAthProfile) {
+          try {
+            await Promise.all([
+              setDoc(doc(db, "Athlete_Profiles", canonicalAthId), updatedAthProfile, { merge: true }).catch(() => null),
+              setDoc(doc(db, "Athlete_Profiles", cleanAthId), updatedAthProfile, { merge: true }).catch(() => null),
+            ]);
+          } catch (_) {}
+        }
+
+        // Commit player match metric to Performance_Metrics collection
+        if (athId) {
+          try {
+            const metricId = `metric_${matchId}_${cleanAthId}`;
+            const rawStats = ps.stats || ps.sport_stats || ps.custom_stats || {};
+            const metricDoc = {
+              metric_id: metricId,
+              match_id: matchId,
+              athlete_id: canonicalAthId,
+              player_name: ps.player_name || ps.name || "Athlete",
+              team_name: cleanPayload.home_team_name,
+              sport_category: cleanPayload.sport_type,
+              points: newPts,
+              pts: newPts,
+              rebounds: newReb,
+              reb: newReb,
+              assists: newAst,
+              ast: newAst,
+              steals: newStl,
+              stl: newStl,
+              fouls: newPf,
+              pf: newPf,
+              turnovers: newTo,
+              to: newTo,
+              ...rawStats,
+              sport_stats: rawStats,
+              stats: rawStats,
+              timestamp: cleanPayload.created_at,
+              created_at: cleanPayload.created_at,
+            };
+            await setDoc(doc(db, "Performance_Metrics", metricId), metricDoc, { merge: true }).catch(() => null);
+
+            // Commit to player's match history sub-collection
+            await Promise.all([
+              setDoc(doc(db, "Athlete_Profiles", canonicalAthId, "match_history", matchId), metricDoc, { merge: true }).catch(() => null),
+              setDoc(doc(db, "Athlete_Profiles", cleanAthId, "match_history", matchId), metricDoc, { merge: true }).catch(() => null),
+            ]);
+          } catch (_) {}
+        }
+      }
+
       await AsyncStorage.setItem(OFFLINE_ATHLETES_CACHE_KEY, JSON.stringify(athletesList));
       athletesMemoryCache = athletesList;
       athletesLastFetched = Date.now();
@@ -228,6 +332,115 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   };
 }
 
+export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean> {
+  const cleanId = String(matchId).replace(/^#/, '').trim();
+  const idVariants = Array.from(new Set([matchId, cleanId, `match_${cleanId}`])).filter(Boolean);
+
+  // 1. Direct Firestore document deletion
+  try {
+    for (const v of idVariants) {
+      await Promise.all([
+        deleteDoc(doc(db, "Match_Logs", v)).catch(() => null),
+        deleteDoc(doc(db, "Matches", v)).catch(() => null),
+        deleteDoc(doc(db, "Official_Schedules", v)).catch(() => null),
+        deleteDoc(doc(db, "Official_Audits", v)).catch(() => null),
+      ]);
+    }
+  } catch (err) {
+    console.warn("deleteMatchOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache purge
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
+    if (cached) {
+      const parsed: any[] = JSON.parse(cached);
+      const filtered = parsed.filter((m) => {
+        const id = m.match_id || m.id;
+        return !idVariants.includes(id);
+      });
+      await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(filtered));
+      matchesMemoryCache = filtered;
+      matchesLastFetched = Date.now();
+    }
+  } catch (cacheErr) {
+    console.warn("deleteMatchOfflineFirst cache error:", cacheErr);
+  }
+
+  // 3. REST API deletion
+  try {
+    const token = await getStoredAuthToken();
+    await fetch(`${API_BASE}/matches/${cleanId}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).catch(() => null);
+  } catch (_) {}
+
+  return true;
+}
+
+export async function saveTeamOfflineFirst(teamPayload: any): Promise<boolean> {
+  const teamId = teamPayload.team_id || teamPayload.id || `team_${Date.now()}`;
+  const cleanPayload = {
+    ...teamPayload,
+    team_id: teamId,
+    id: teamId,
+    updated_at: new Date().toISOString(),
+  };
+
+  // 1. Firestore commit
+  try {
+    await setDoc(doc(db, "Teams", teamId), cleanPayload, { merge: true });
+  } catch (err) {
+    console.warn("saveTeamOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache commit
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_TEAMS_CACHE_KEY);
+    const existing: any[] = cached ? JSON.parse(cached) : [];
+    const filtered = existing.filter((t) => (t.team_id || t.id) !== teamId);
+    filtered.unshift(cleanPayload);
+    await AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(filtered));
+    teamsMemoryCache = filtered;
+    teamsLastFetched = Date.now();
+  } catch (cacheErr) {
+    console.warn("saveTeamOfflineFirst cache error:", cacheErr);
+  }
+
+  return true;
+}
+
+export async function deleteTeamOfflineFirst(teamId: string): Promise<boolean> {
+  const cleanId = String(teamId).trim();
+
+  // 1. Firestore deletion
+  try {
+    await deleteDoc(doc(db, "Teams", cleanId)).catch(() => null);
+  } catch (err) {
+    console.warn("deleteTeamOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache purge
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_TEAMS_CACHE_KEY);
+    if (cached) {
+      const existing: any[] = JSON.parse(cached);
+      const filtered = existing.filter((t) => (t.team_id || t.id) !== cleanId);
+      await AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(filtered));
+      teamsMemoryCache = filtered;
+      teamsLastFetched = Date.now();
+    }
+  } catch (cacheErr) {
+    console.warn("deleteTeamOfflineFirst cache error:", cacheErr);
+  }
+
+  return true;
+}
+
 // In-memory cache variables for instant sub-second responses (0-10ms)
 let sportsMemoryCache: any[] | null = null;
 let sportsLastFetched = 0;
@@ -244,18 +457,37 @@ let teamsLastFetched = 0;
 const MEMORY_CACHE_TTL_MS = 2 * 60 * 1000; // 2m cache validity before background revalidation
 const SPORTS_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000; // 10m cache validity for sports config catalog
 
-async function quickFetchJson(url: string, headers: any, timeoutMs: number = 1800): Promise<any> {
+export function clearFirebaseClientCaches() {
+  sportsMemoryCache = null;
+  sportsLastFetched = 0;
+  athletesMemoryCache = null;
+  athletesLastFetched = 0;
+  matchesMemoryCache = null;
+  matchesLastFetched = 0;
+  teamsMemoryCache = null;
+  teamsLastFetched = 0;
+  AsyncStorage.removeItem(OFFLINE_SPORTS_CACHE_KEY).catch(() => null);
+}
+
+async function quickFetchJson(url: string, headers: any, timeoutMs: number = 6000): Promise<any> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { headers, signal: controller.signal });
-    if (!res.ok) return null;
-    return await res.json().catch(() => null);
+    if (res.ok) return await res.json().catch(() => null);
   } catch (_) {
+    if (!url.includes("atleta-backend.vercel.app")) {
+      try {
+        const cloudUrl = url.replace(/http:\/\/[^/]+(?:\/api\/v1)?/, "https://atleta-backend.vercel.app/api/v1");
+        const cloudRes = await fetch(cloudUrl, { headers, signal: controller.signal });
+        if (cloudRes.ok) return await cloudRes.json().catch(() => null);
+      } catch (_) {}
+    }
     return null;
   } finally {
     clearTimeout(id);
   }
+  return null;
 }
 
 async function revalidateAthletesInBackground(): Promise<void> {
@@ -264,7 +496,7 @@ async function revalidateAthletesInBackground(): Promise<void> {
     const data = await quickFetchJson(`${API_BASE}/coaches/athletes`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 2500);
+    }, 6000);
 
     const list = Array.isArray(data?.athletes) ? data.athletes : Array.isArray(data) ? data : [];
     if (list.length > 0) {
@@ -359,7 +591,7 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
     const data = await quickFetchJson(`${API_BASE}/coaches/athletes`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 1800);
+    }, 6000);
 
     const list = Array.isArray(data?.athletes) ? data.athletes : Array.isArray(data) ? data : [];
     if (list.length > 0) {
@@ -390,32 +622,13 @@ export async function getAthletesOfflineFirst(sportCategory?: string): Promise<a
  * Fetch dynamic sports list with offline support.
  * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
-export async function getSportsOfflineFirst(): Promise<any[]> {
-  // 1. Instant Memory Cache (0ms)
-  if (sportsMemoryCache && sportsMemoryCache.length > 0) {
-    if (Date.now() - sportsLastFetched > SPORTS_MEMORY_CACHE_TTL_MS) {
-      revalidateSportsInBackground().catch(() => null);
-    }
+export async function getSportsOfflineFirst(forceRefresh: boolean = false): Promise<any[]> {
+  // 1. If not forcing refresh and memory cache is fresh (<30s), return it
+  if (!forceRefresh && sportsMemoryCache && sportsMemoryCache.length > 0 && Date.now() - sportsLastFetched < 30000) {
     return sportsMemoryCache;
   }
 
-  // 2. Fast Local AsyncStorage Cache (<10ms)
-  try {
-    const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        sportsMemoryCache = parsed;
-        sportsLastFetched = Date.now();
-        if (Date.now() - sportsLastFetched > SPORTS_MEMORY_CACHE_TTL_MS) {
-          revalidateSportsInBackground().catch(() => null);
-        }
-        return parsed;
-      }
-    }
-  } catch (_) {}
-
-  // 3. Fast Network Fetch with Timeout (6.0s max to handle serverless cold-starts)
+  // 2. Network Fetch with Snappy Timeout (6.0s)
   try {
     const token = await getStoredAuthToken();
     const data = await quickFetchJson(`${API_BASE}/sports`, {
@@ -429,31 +642,49 @@ export async function getSportsOfflineFirst(): Promise<any[]> {
       ? data
       : [];
     if (list.length > 0) {
-      sportsMemoryCache = list;
+      const activeList = list.filter((s: any) => s.is_active !== false && s.active !== false);
+      sportsMemoryCache = activeList;
       sportsLastFetched = Date.now();
-      AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
-      return list;
+      AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(activeList)).catch(() => null);
+      return activeList;
     }
   } catch (_) {}
 
-  // Fallback 1: Firestore persistent local/remote cache
+  // 3. Firestore persistent local/remote query
   try {
     let snap = await getDocs(collection(db, "Sports_Configurations"));
     if (snap.empty) {
       snap = await getDocs(collection(db, "sports_configurations"));
     }
     if (!snap.empty) {
-      const list = snap.docs.map((d) => ({
-        sport_id: d.id,
-        ...d.data(),
-      }));
-      sportsMemoryCache = list;
-      sportsLastFetched = Date.now();
-      return list;
+      const list = snap.docs
+        .map((d) => ({
+          sport_id: d.id,
+          ...d.data(),
+        }))
+        .filter((s: any) => s.is_active !== false && s.active !== false);
+      if (list.length > 0) {
+        sportsMemoryCache = list;
+        sportsLastFetched = Date.now();
+        AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+        return list;
+      }
     }
-  } catch (fsErr) {
-    // ignore offline warning
-  }
+  } catch (_) {}
+
+  // 4. Offline Fallback: Local AsyncStorage Cache
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const activeList = parsed.filter((s: any) => s.is_active !== false && s.active !== false);
+        sportsMemoryCache = activeList;
+        sportsLastFetched = Date.now();
+        return activeList;
+      }
+    }
+  } catch (_) {}
 
   return [];
 }
@@ -491,7 +722,7 @@ export async function getMatchesOfflineFirst(): Promise<any[]> {
     const data = await quickFetchJson(`${API_BASE}/matches`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 1800);
+    }, 6000);
 
     const list = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
     if (list.length > 0) {
@@ -625,49 +856,67 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
 const OFFLINE_COACH_PROFILE_CACHE_KEY = "atleta_offline_coach_profile_cache";
 
 /**
+ * Validates whether a cached profile belongs to the specified coach UID.
+ */
+function isMatchingCoachProfile(profile: any, targetUid: string): boolean {
+  if (!profile || typeof profile !== "object") return false;
+  const cleanTarget = (targetUid || "").replace(/^coach_/, "").trim().toLowerCase();
+  if (!cleanTarget) return false;
+  const pUid = String(profile.user_id || profile.uid || "").replace(/^coach_/, "").trim().toLowerCase();
+  const pCoachId = String(profile.coach_id || "").replace(/^coach_/, "").trim().toLowerCase();
+  return Boolean((pUid && pUid === cleanTarget) || (pCoachId && pCoachId === cleanTarget));
+}
+
+/**
  * Fetch individual coach profile with Firestore + storage offline fallback.
+ * Strictly scoped to the requested or authenticated coach; never leaks another coach's cache.
  */
 export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promise<any | null> {
-  // 1. Try REST API with snappy timeout
+  // Resolve UID from argument or active token
+  let uid = coachIdOrUid || "";
+  let tokenEmail = "";
   try {
     const token = await getStoredAuthToken();
-    const data = await quickFetchJson(`${API_BASE}/coaches/profile`, {
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 2000);
-    if (data && (data.full_name || data.user_id || data.coach_id)) {
-      await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
-      return data;
+    if (token && token.includes(".")) {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = safeBase64Decode(base64);
+      const payload = JSON.parse(decoded);
+      if (!uid) {
+        uid = payload.uid || payload.user_id || payload.sub || "";
+      }
+      tokenEmail = payload.email || "";
     }
   } catch (_) {}
 
-  // 2. Resolve UID from token or argument
-  let uid = coachIdOrUid || "";
-  if (!uid) {
-    try {
-      const token = await getStoredAuthToken();
-      if (token && token.includes(".")) {
-        const base64Url = token.split(".")[1];
-        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const decoded = safeBase64Decode(base64);
-        const payload = JSON.parse(decoded);
-        uid = payload.uid || payload.user_id || payload.sub || "";
-      }
-    } catch (_) {}
-  }
+  const rawUid = uid.replace(/^coach_/, "").trim();
+  const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
 
-  if (!uid) {
-    try {
-      const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY);
-      if (cached) return JSON.parse(cached);
-    } catch (_) {}
+  // 1. Try REST API with snappy timeout
+  try {
+    const token = await getStoredAuthToken();
+    const endpoint = coachIdOrUid && coachIdOrUid !== uid && coachIdOrUid !== rawUid
+      ? `${API_BASE}/coaches/${coachIdOrUid}/profile`
+      : `${API_BASE}/coaches/profile`;
+
+    const data = await quickFetchJson(endpoint, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 2000);
+
+    if (data && (data.full_name || data.user_id || data.coach_id)) {
+      if (!rawUid || isMatchingCoachProfile(data, rawUid)) {
+        await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
+        return data;
+      }
+    }
+  } catch (_) {}
+
+  if (!rawUid) {
     return null;
   }
 
-  const rawUid = uid.replace(/^coach_/, "");
-  const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
-
-  // 3. Direct Firestore lookups across Coach_Profiles and Users collections
+  // 2. Direct Firestore lookups across Coach_Profiles and Users collections
   try {
     const [cDoc1, cDoc2, uDoc, teamsSnap, matchesSnap] = await Promise.all([
       getDoc(doc(db, "Coach_Profiles", canonicalCoachId)).catch(() => null),
@@ -681,14 +930,24 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
     const uData: Record<string, any> = (uDoc && uDoc.exists()) ? uDoc.data() : {};
 
     if (Object.keys(cData).length === 0 && Object.keys(uData).length === 0) {
+      // Check cached profile only if it belongs to this exact user
       const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (isMatchingCoachProfile(parsed, rawUid)) return parsed;
+        } catch (_) {}
+        // Stale cache from another coach - purge it immediately
+        await AsyncStorage.removeItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
+      }
       return null;
     }
 
-    const firstName = uData?.first_name || cData?.first_name || "Coach";
+    const emailFallbackName = (uData?.email || tokenEmail || "").split("@")[0] || "";
+    const defaultName = emailFallbackName ? (emailFallbackName.charAt(0).toUpperCase() + emailFallbackName.slice(1)) : "Coach";
+    const firstName = uData?.first_name || cData?.first_name || defaultName;
     const lastName = uData?.last_name || cData?.last_name || "";
-    const fullName = uData?.full_name || cData?.full_name || `${firstName} ${lastName}`.trim();
+    const fullName = uData?.full_name || cData?.full_name || (firstName !== "Coach" ? `${firstName} ${lastName}`.trim() : "Coach");
     const sportType = cData?.sport_type || uData?.sport_type || "Basketball";
     const avatarUrl = uData?.avatar_url || uData?.profile_image || cData?.avatar_url || cData?.profile_image || null;
     const institution = uData?.current_institution || cData?.current_institution || "";
@@ -755,7 +1014,7 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
       first_name: firstName,
       last_name: lastName,
       full_name: fullName,
-      email: uData?.email || cData?.email || "",
+      email: uData?.email || cData?.email || tokenEmail || "",
       contact_number: uData?.contact_number || cData?.contact_number || "",
       sport_type: sportType,
       sports_focus: sportType.toUpperCase(),
@@ -779,7 +1038,13 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
   } catch (fsErr) {
     console.warn("Firestore coach profile fetch error:", fsErr);
     const cached = await AsyncStorage.getItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (isMatchingCoachProfile(parsed, rawUid)) return parsed;
+      } catch (_) {}
+      await AsyncStorage.removeItem(OFFLINE_COACH_PROFILE_CACHE_KEY).catch(() => null);
+    }
   }
 
   return null;
@@ -869,8 +1134,6 @@ export async function getTeamsOfflineFirst(): Promise<any[]> {
       nameMap.set('coach_001', 'Erick Nathaniel De Belen');
       nameMap.set('coach_usr_coach_001', 'Coach Nash Racela');
       nameMap.set('usr_coach_001', 'Coach Nash Racela');
-      nameMap.set('v5XWfDqgsYTFPx7xEWnBsssNcH83', 'Gerard Francis Pelonio');
-      nameMap.set('coach_v5XWfDqgsYTFPx7xEWnBsssNcH83', 'Gerard Francis Pelonio');
       nameMap.set('t358EW07qTaKPJLiFHNSClaLqXJ3', 'Coach Carter');
       nameMap.set('coach_t358EW07qTaKPJLiFHNSClaLqXJ3', 'Coach Carter');
 

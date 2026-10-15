@@ -7,6 +7,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import styles from "./styles/AthleteProfilePage";
@@ -14,7 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
 import { AthleteProfile, EligibleDocument } from "../Dashboard/HomeAnalyticsPage";
+import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
 import {
   WorkloadWarningModal,
   AddDocumentModal,
@@ -22,9 +25,10 @@ import {
   LogoutConfirmModal,
   DatePickerModal,
 } from "./AthleteProfileModals";
-import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
-import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
-import { getSportsOfflineFirst, db } from "../../../../services/firebaseClient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { requestAuthenticatedJson, requestMultipart, getStoredAuthToken } from "../../Authentication/authShared";
+import { getSportsOfflineFirst, db, storage } from "../../../../services/firebaseClient";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { doc, setDoc } from "firebase/firestore";
 
 export interface DailySessionLog {
@@ -53,7 +57,6 @@ const DEFAULT_CATEGORIES: Array<AthleteProfile["category"]> = [
   "VOLLEYBALL",
   "TRACK AND FIELD",
   "SWIMMING",
-  "PICKLEBALL",
 ];
 
 const DEFAULT_WORKLOAD_DATA: WorkloadAnalyticsData = {
@@ -195,13 +198,13 @@ export function AthleteProfilePage({
         sports.forEach((s: any) => {
           const raw = String(s.sport_name || s.name || s.id || "").trim();
           if (!raw) return;
-          const upper = raw.toUpperCase();
+          const upper = raw.toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ");
           if (seen.has(upper)) return;
           seen.add(upper);
           mapped.push(upper);
         });
         if (profile.category) {
-          const pNorm = profile.category.toUpperCase().trim();
+          const pNorm = profile.category.toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ");
           if (!seen.has(pNorm)) {
             seen.add(pNorm);
             mapped.push(pNorm);
@@ -239,7 +242,27 @@ export function AthleteProfilePage({
     setWeightKg(profile.weight_kg);
     setWingspanCm(profile.wingspan_cm);
     setAvatarUri(profile.avatar_url || (profile as any).avatar_uri);
-    setDocuments(normalizeDocuments(profile.eligible_documents || (profile as any).documents));
+
+    const norm = normalizeDocuments(profile.eligible_documents || (profile as any).documents);
+    const hasUploadedInProfile = norm.some((d) => d.status === "UPLOADED" || d.fileUri);
+    if (hasUploadedInProfile) {
+      setDocuments(norm);
+    } else {
+      const athleteUid = profile.athlete_id || (profile as any).user_id || (profile as any).id;
+      const cleanId = athleteUid ? String(athleteUid).replace(/^ath_/, "") : "";
+      AsyncStorage.getItem(`atleta_offline_eligible_docs_${cleanId}`)
+        .then((cachedStr) => {
+          if (cachedStr) {
+            const parsed = JSON.parse(cachedStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setDocuments(normalizeDocuments(parsed));
+              return;
+            }
+          }
+          setDocuments(norm);
+        })
+        .catch(() => setDocuments(norm));
+    }
   }, [profile, isEditing]);
 
   // UI state
@@ -247,6 +270,7 @@ export function AthleteProfilePage({
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [docsDrawerOpen, setDocsDrawerOpen] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Add Document 
   const [showAddDocModal, setShowAddDocModal] = useState(false);
@@ -407,36 +431,28 @@ export function AthleteProfilePage({
   // Handler to pick/upload avatar image
   const handlePickAvatarImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission Denied", "Permission to access media library is required to select a profile picture.");
-        return;
-      }
+      try {
+        await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+      } catch {}
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const pickedAsset = result.assets[0];
-        let finalDataUri = pickedAsset.uri;
 
-        if (pickedAsset.base64) {
-          const mime = pickedAsset.mimeType || "image/jpeg";
-          finalDataUri = `data:${mime};base64,${pickedAsset.base64}`;
-        } else {
-          try {
-            const b64 = await FileSystem.readAsStringAsync(pickedAsset.uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            finalDataUri = `data:image/jpeg;base64,${b64}`;
-          } catch {}
-        }
+        // Compress and resize to 300x300 square using ImageManipulator (~30KB clean payload)
+        const manipResult = await ImageManipulator.manipulateAsync(
+          pickedAsset.uri,
+          [{ resize: { width: 300, height: 300 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
 
+        const finalDataUri = `data:image/jpeg;base64,${manipResult.base64}`;
         setAvatarUri(finalDataUri);
 
         const updated: AthleteProfile = {
@@ -491,24 +507,112 @@ export function AthleteProfilePage({
     }
   };
 
+  // Helper to strip undefined values so Firestore setDoc never rejects them
+  const sanitizeForFirestore = (val: any): any => {
+    if (val === undefined || val === null) return null;
+    if (Array.isArray(val)) {
+      return val.map(sanitizeForFirestore).filter((v) => v !== undefined);
+    }
+    if (typeof val === "object" && !(val instanceof Date)) {
+      const res: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) {
+          const cleaned = sanitizeForFirestore(v);
+          if (cleaned !== undefined) {
+            res[k] = cleaned;
+          }
+        }
+      }
+      return res;
+    }
+    return val;
+  };
+
   // Helper to persist documents across Firestore and parent state
   const syncDocumentsToStorage = async (updatedDocs: EligibleDocument[]) => {
     try {
-      const athleteUid = profile.athlete_id || (profile as any).user_id;
+      let athleteUid = profile.athlete_id || (profile as any).user_id || (profile as any).id;
+      if (!athleteUid || athleteUid === "ath_me") {
+        try {
+          const token = await getStoredAuthToken();
+          if (token && token.includes(".")) {
+            const base64Url = token.split(".")[1];
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            const decoded = typeof atob === "function" ? atob(base64) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(base64, "base64").toString("utf-8") : "");
+            const payload = JSON.parse(decoded);
+            athleteUid = payload.uid || payload.user_id || payload.sub || "";
+          }
+        } catch (_) {}
+      }
+
       if (athleteUid) {
         const cleanId = String(athleteUid).replace(/^ath_/, "");
         const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
-        const docPayload = {
+        const docPayload = sanitizeForFirestore({
           eligible_documents: updatedDocs,
           documents: updatedDocs,
           updated_at: new Date().toISOString(),
-        };
+        });
+
+        // 1. Direct AsyncStorage cache for instant retrieval on refresh
         await Promise.all([
-          setDoc(doc(db, "Athlete_Profiles", canonicalId), docPayload, { merge: true }).catch(() => null),
-          setDoc(doc(db, "Athlete_Profiles", cleanId), docPayload, { merge: true }).catch(() => null),
+          AsyncStorage.setItem(`atleta_offline_eligible_docs_${cleanId}`, JSON.stringify(updatedDocs)).catch(() => null),
+          AsyncStorage.setItem(`atleta_offline_eligible_docs_${canonicalId}`, JSON.stringify(updatedDocs)).catch(() => null),
+          AsyncStorage.setItem("atleta_offline_eligible_docs_me", JSON.stringify(updatedDocs)).catch(() => null),
         ]);
+
+        // 2. Direct Firestore writes
+        try {
+          await Promise.all([
+            setDoc(doc(db, "Athlete_Profiles", canonicalId), docPayload, { merge: true }).catch(() => null),
+            setDoc(doc(db, "Athlete_Profiles", cleanId), docPayload, { merge: true }).catch(() => null),
+            setDoc(doc(db, "Users", cleanId), sanitizeForFirestore({ eligible_documents: updatedDocs, updated_at: new Date().toISOString() }), { merge: true }).catch(() => null),
+          ]);
+        } catch (fErr) {
+          console.warn("syncDocumentsToStorage setDoc notice:", fErr);
+        }
       }
     } catch (_) {}
+  };
+
+  // Helper to reliably convert file URI to uploadable Blob or Uint8Array
+  const convertUriToBlobOrBytes = async (uri: string): Promise<Blob | Uint8Array> => {
+    try {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      if (blob && (blob.size > 0 || (blob as any)._data)) {
+        return blob;
+      }
+    } catch (_) {}
+
+    try {
+      const b64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      if (b64) {
+        const binaryStr = (globalThis as any).atob
+          ? (globalThis as any).atob(b64)
+          : (globalThis as any).Buffer
+          ? (globalThis as any).Buffer.from(b64, "base64").toString("binary")
+          : "";
+        if (binaryStr) {
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          return bytes;
+        }
+      }
+    } catch (_) {}
+
+    return new Promise<Blob>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = () => resolve(xhr.response);
+      xhr.onerror = () => reject(new TypeError("Blob conversion failed"));
+      xhr.responseType = "blob";
+      xhr.open("GET", uri, true);
+      xhr.send(null);
+    });
   };
 
   // Handler to replace/upload existing document file
@@ -542,12 +646,28 @@ export function AthleteProfilePage({
           }
         }
 
+        let persistentUri = asset.uri;
+        try {
+          const athleteUid = profile.athlete_id || (profile as any).user_id || "athlete";
+          const cleanId = String(athleteUid).replace(/^ath_/, "");
+          const fileData = await convertUriToBlobOrBytes(asset.uri);
+          const fileExt = asset.name?.split(".").pop() || (isPdf ? "pdf" : "jpg");
+          const safeName = (asset.name || `${docType}.${fileExt}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+          const storagePath = `documents/${cleanId}/${Date.now()}_${safeName}`;
+          const storageRef = ref(storage, storagePath);
+          await uploadBytesResumable(storageRef, fileData as any, { contentType: mime });
+          const dlUrl = await getDownloadURL(storageRef);
+          if (dlUrl) persistentUri = dlUrl;
+        } catch (storageErr) {
+          console.warn("Storage upload notice:", storageErr);
+        }
+
         const updatedDocs = (documents || []).map((doc) =>
           doc.id === docId
             ? {
                 ...doc,
                 fileName: asset.name,
-                fileUri: asset.uri,
+                fileUri: persistentUri,
                 status: "UPLOADED" as const,
                 uploadedAt: new Date().toLocaleDateString("en-US", {
                   month: "short",
@@ -626,12 +746,31 @@ export function AthleteProfilePage({
     const isPdf = newDocAsset?.name?.toLowerCase().endsWith(".pdf");
     const mime = isPdf ? "application/pdf" : "image/jpeg";
 
+    let persistentUri = newDocAsset?.uri;
+    if (newDocAsset?.uri) {
+      try {
+        const athleteUid = profile.athlete_id || (profile as any).user_id || "athlete";
+        const cleanId = String(athleteUid).replace(/^ath_/, "");
+        const fileData = await convertUriToBlobOrBytes(newDocAsset.uri);
+        const fileExt = newDocAsset.name?.split(".").pop() || (isPdf ? "pdf" : "jpg");
+        const cleanType = newDocTitle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+        const safeName = (newDocAsset.name || `${cleanType}.${fileExt}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storagePath = `documents/${cleanId}/${Date.now()}_${safeName}`;
+        const storageRef = ref(storage, storagePath);
+        await uploadBytesResumable(storageRef, fileData as any, { contentType: mime });
+        const dlUrl = await getDownloadURL(storageRef);
+        if (dlUrl) persistentUri = dlUrl;
+      } catch (storageErr) {
+        console.warn("Modal storage upload notice:", storageErr);
+      }
+    }
+
     const newDoc: EligibleDocument = {
       id: `doc_${Date.now()}`,
       title: newDocTitle.trim(),
       category: "OTHER",
       fileName: newDocAsset?.name,
-      fileUri: newDocAsset?.uri,
+      fileUri: persistentUri,
       status: newDocAsset ? "UPLOADED" : "PENDING",
       uploadedAt: newDocAsset
         ? new Date().toLocaleDateString("en-US", {
@@ -742,6 +881,15 @@ export function AthleteProfilePage({
 
   // API Request: save profile updates (PATCH /api/v1/athletes/profile)
   const handleSave = async () => {
+    if (!firstName.trim()) {
+      Alert.alert("Validation Error", "First name is required. Please enter your first name.");
+      return;
+    }
+    if (!lastName.trim()) {
+      Alert.alert("Validation Error", "Last name is required. Please enter your last name.");
+      return;
+    }
+
     const parsedHeight = Number(heightCm);
     const parsedWeight = Number(weightKg);
     const parsedWingspan = Number(wingspanCm);
@@ -754,8 +902,8 @@ export function AthleteProfilePage({
 
     const updated: AthleteProfile = {
       ...profile,
-      first_name: firstName,
-      last_name: lastName,
+      first_name: firstName.trim().toUpperCase(),
+      last_name: lastName.trim().toUpperCase(),
       birthdate: safeBirthdate,
       gender: gender,
       province: province,
@@ -766,15 +914,84 @@ export function AthleteProfilePage({
       avatar_url: avatarUri,
       eligible_documents: documents,
     };
-    onUpdateProfile(updated);
-    setIsEditing(false);
-    setSaveSuccessMsg(true);
-    setTimeout(() => setSaveSuccessMsg(false), 2500);
+
+    setIsSavingProfile(true);
 
     try {
-      await requestAuthenticatedJson("/athletes/profile", "PATCH", {
-        first_name: firstName,
-        last_name: lastName,
+      // 1. Synchronize to Firestore Athlete_Profiles & Users document
+      let athleteUid = profile.athlete_id || (profile as any).user_id;
+      if (!athleteUid) {
+        try {
+          const token = await getStoredAuthToken();
+          if (token && token.includes(".")) {
+            const parts = token.split(".");
+            const decodedStr = (globalThis as any).atob ? (globalThis as any).atob(parts[1]) : "";
+            if (decodedStr) {
+              const parsed = JSON.parse(decodedStr);
+              athleteUid = parsed.uid || parsed.user_id || "";
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (athleteUid) {
+        const cleanId = String(athleteUid).replace(/^ath_/, "");
+        const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+        const firestorePayload = sanitizeForFirestore({
+          first_name: firstName.trim().toUpperCase(),
+          last_name: lastName.trim().toUpperCase(),
+          full_name: `${firstName.trim()} ${lastName.trim()}`.toUpperCase(),
+          birthdate: safeBirthdate,
+          gender: gender || "",
+          province: province || "",
+          category: category || "BASKETBALL",
+          position: category || "BASKETBALL",
+          height_cm: safeHeight,
+          weight_kg: safeWeight,
+          wingspan_cm: safeWingspan,
+          avatar_url: avatarUri || "",
+          eligible_documents: documents || [],
+          documents: documents || [],
+          updated_at: new Date().toISOString(),
+        });
+
+        const userPayload = sanitizeForFirestore({
+          first_name: firstName.trim().toUpperCase(),
+          last_name: lastName.trim().toUpperCase(),
+          full_name: `${firstName.trim()} ${lastName.trim()}`.toUpperCase(),
+          avatar_url: avatarUri || "",
+          profile_image: avatarUri || "",
+          updated_at: new Date().toISOString(),
+        });
+
+        try {
+          await Promise.all([
+            setDoc(doc(db, "Athlete_Profiles", canonicalId), firestorePayload, { merge: true }).catch(() => null),
+            setDoc(doc(db, "Athlete_Profiles", cleanId), firestorePayload, { merge: true }).catch(() => null),
+            setDoc(doc(db, "Users", cleanId), userPayload, { merge: true }).catch(() => null),
+          ]);
+        } catch (fErr) {
+          console.warn("AthleteProfilePage handleSave Firestore notice:", fErr);
+        }
+      }
+
+      // 2. Persist to AsyncStorage immediately
+      await AsyncStorage.setItem("atleta_offline_athlete_profile_cache", JSON.stringify(updated)).catch(() => null);
+
+      // 3. Update active parent state and toggle editing mode
+      try {
+        onUpdateProfile(updated);
+      } catch (parentErr) {
+        console.warn("onUpdateProfile notice:", parentErr);
+      }
+      setIsEditing(false);
+      setSaveSuccessMsg(true);
+      setTimeout(() => setSaveSuccessMsg(false), 2500);
+
+      // 4. Background sync to backend REST API
+      requestAuthenticatedJson("/athletes/profile", "PATCH", {
+        first_name: firstName.trim().toUpperCase(),
+        last_name: lastName.trim().toUpperCase(),
         height_cm: safeHeight,
         weight_kg: safeWeight,
         wingspan_cm: safeWingspan,
@@ -784,9 +1001,15 @@ export function AthleteProfilePage({
         province: province,
         birthdate: safeBirthdate,
         avatar_url: avatarUri,
-      });
-    } catch (e) {
-      // Non-blocking background sync catch
+        eligible_documents: documents,
+      }).catch(() => null);
+
+      Alert.alert("Profile Updated", "Your athlete credentials and profile details have been saved successfully.");
+    } catch (saveErr) {
+      console.warn("Athlete profile save error:", saveErr);
+      Alert.alert("Save Error", "Failed to save profile changes. Please try again.");
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -1459,19 +1682,18 @@ export function AthleteProfilePage({
                         </View>
 
                         {/* Delete Button */}
-                        {(documents || []).length > 1 && (
-                          <Pressable
-                            style={styles.deleteDocButton}
-                            onPress={() => {
-                              const updatedDocs = (documents || []).filter((d) => d.id !== doc.id);
-                              setDocuments(updatedDocs);
-                              onUpdateProfile({ ...profile, eligible_documents: updatedDocs });
-                              syncDocumentsToStorage(updatedDocs);
-                            }}
-                          >
-                            <Ionicons name="trash-outline" size={15} color="#FF4D4D" />
-                          </Pressable>
-                        )}
+                        <Pressable
+                          style={styles.deleteDocButton}
+                          onPress={() => {
+                            const updatedDocs = (documents || []).filter((d) => d.id !== doc.id);
+                            setDocuments(updatedDocs);
+                            onUpdateProfile({ ...profile, eligible_documents: updatedDocs });
+                            syncDocumentsToStorage(updatedDocs);
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#FF4D4D" />
+                        </Pressable>
                       </View>
 
                       {/* File Detail Row */}
@@ -1694,14 +1916,32 @@ export function AthleteProfilePage({
         <View style={styles.actionButtonsGroup}>
           {isEditing ? (
             <>
-              <Pressable style={styles.updateButton} onPress={handleSave}>
-                <Ionicons name="checkmark-circle-outline" size={18} color="#080F21" style={{ marginRight: 6 }} />
-                <Text style={styles.updateButtonText}>SAVE ATHLETE PROFILE</Text>
-              </Pressable>
+              <TouchableOpacity
+                style={[styles.updateButton, isSavingProfile && { opacity: 0.7 }]}
+                onPress={handleSave}
+                disabled={isSavingProfile}
+                activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                {isSavingProfile ? (
+                  <ActivityIndicator size="small" color="#080F21" style={{ marginRight: 6 }} />
+                ) : (
+                  <Ionicons name="checkmark-circle-outline" size={18} color="#080F21" style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.updateButtonText}>
+                  {isSavingProfile ? "SAVING PROFILE..." : "SAVE ATHLETE PROFILE"}
+                </Text>
+              </TouchableOpacity>
 
-              <Pressable style={styles.cancelButton} onPress={handleCancelEdit}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleCancelEdit}
+                disabled={isSavingProfile}
+                activeOpacity={0.8}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Text style={styles.cancelButtonText}>CANCEL EDITING</Text>
-              </Pressable>
+              </TouchableOpacity>
             </>
           ) : (
             <>

@@ -92,7 +92,7 @@ export function MyTeamsPage({
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerTopPadding + 56, paddingBottom: 120 },
+          { paddingTop: headerTopPadding + 74, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -119,44 +119,72 @@ export function MyTeamsPage({
           )}
         </View>
 
-        {/* Managed Teams List Cards */}
-        <View style={{ gap: 16 }}>
-          {filteredTeams.map((team) => (
-            <TouchableOpacity
-              key={team.team_id}
-              style={styles.teamCard}
-              onPress={() => onSelectTeam(team)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.sportBadge}>
-                <Text style={styles.sportBadgeText}>{team.sport_type}</Text>
-              </View>
-
-              <View style={styles.cardBodyRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.teamName}>{team.team_name}</Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Ionicons name="people-outline" size={16} color="#64748B" />
-                    <Text style={styles.playerCountText}>
-                      {`${team.roster_list ? team.roster_list.length : ((team as any).athlete_count || 0)} ${(team.roster_list ? team.roster_list.length : ((team as any).athlete_count || 0)) === 1 ? "Player" : "Players"}`}
-                    </Text>
-                  </View>
+        {/* Managed Teams List Cards or Empty State */}
+        {filteredTeams.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <View style={styles.emptyStateIconCircle}>
+              <Ionicons name="shield-outline" size={32} color="#60A5FA" />
+            </View>
+            <Text style={styles.emptyStateTitle}>
+              {searchQuery.trim() ? "NO MATCHING TEAMS" : "NO TEAMS CREATED YET"}
+            </Text>
+            <Text style={styles.emptyStateText}>
+              {searchQuery.trim()
+                ? `No teams match "${searchQuery}". Try a different search term or create a new team.`
+                : "You haven't created or been assigned any teams yet. Create your first team to begin organizing your roster, lineups, and match tracking."}
+            </Text>
+            {!searchQuery.trim() && (
+              <TouchableOpacity
+                style={styles.emptyStateCta}
+                onPress={() => setShowCreateTeam(true)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add" size={18} color="#FFFFFF" />
+                <Text style={styles.emptyStateCtaText}>CREATE FIRST TEAM</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={{ gap: 16 }}>
+            {filteredTeams.map((team) => (
+              <TouchableOpacity
+                key={team.team_id}
+                style={styles.teamCard}
+                onPress={() => onSelectTeam(team)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.sportBadge}>
+                  <Text style={styles.sportBadgeText}>{team.sport_type}</Text>
                 </View>
 
-                <Ionicons name="chevron-forward" size={20} color="#64748B" />
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <View style={styles.cardBodyRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.teamName}>{team.team_name}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Ionicons name="people-outline" size={16} color="#64748B" />
+                      <Text style={styles.playerCountText}>
+                        {`${team.roster_list ? team.roster_list.length : ((team as any).athlete_count || 0)} ${(team.roster_list ? team.roster_list.length : ((team as any).athlete_count || 0)) === 1 ? "Player" : "Players"}`}
+                      </Text>
+                    </View>
+                  </View>
 
-        {/* CREATE NEW TEAM + BUTTON */}
-        <TouchableOpacity
-          style={styles.createTeamCtaButton}
-          onPress={() => setShowCreateTeam(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.createTeamCtaText}>CREATE NEW TEAM +</Text>
-        </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={20} color="#64748B" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* CREATE NEW TEAM + BUTTON (shown when teams already exist) */}
+        {filteredTeams.length > 0 && (
+          <TouchableOpacity
+            style={styles.createTeamCtaButton}
+            onPress={() => setShowCreateTeam(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.createTeamCtaText}>CREATE NEW TEAM +</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Create Team Flow Modal */}

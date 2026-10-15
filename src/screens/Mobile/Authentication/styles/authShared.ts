@@ -4,18 +4,21 @@ export const authScreenStyles = StyleSheet.create({
   content: {
     flexGrow: 1,
     backgroundColor: "#070D19",
-    paddingBottom: 40
+    paddingBottom: 24
   },
   shell: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 72
+    paddingTop: 56,
+    paddingBottom: 20,
+    justifyContent: "space-between"
   },
   brand: {
     color: "#FFFFFF",
     fontSize: 26,
     fontWeight: "900",
-    letterSpacing: 2
+    letterSpacing: 2,
+    includeFontPadding: false
   },
   rule: {
     height: 0
@@ -23,7 +26,7 @@ export const authScreenStyles = StyleSheet.create({
   dividerRow: {
     alignItems: "center",
     flexDirection: "row",
-    marginTop: 32,
+    marginTop: 28,
     marginBottom: 20
   },
   divider: {
@@ -37,16 +40,19 @@ export const authScreenStyles = StyleSheet.create({
     fontWeight: "700",
     marginHorizontal: 16,
     textTransform: "uppercase",
-    letterSpacing: 1
+    letterSpacing: 1.5,
+    includeFontPadding: false
   },
   spacer: {
     height: 14
   },
   footer: {
     color: "#94A3B8",
-    fontSize: 15,
-    marginTop: 32,
-    textAlign: "center"
+    fontSize: 14,
+    marginTop: 36,
+    marginBottom: 12,
+    textAlign: "center",
+    includeFontPadding: false
   },
   footerLink: {
     color: "#00C8FF",
@@ -96,13 +102,16 @@ export const fieldStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 8,
-    letterSpacing: 0.2
+    letterSpacing: 0.2,
+    includeFontPadding: false
   },
   input: {
     color: "#FFFFFF",
     fontSize: 15,
-    minHeight: 52,
+    height: 54,
     paddingHorizontal: 16,
+    paddingVertical: 0,
+    includeFontPadding: false,
     flex: 1,
     backgroundColor: "transparent"
   },
@@ -113,7 +122,7 @@ export const fieldStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     flexDirection: "row",
-    minHeight: 52,
+    height: 54,
     overflow: "hidden"
   },
   inputWithAccessory: {
@@ -124,9 +133,9 @@ export const fieldStyles = StyleSheet.create({
   },
   rightAccessory: {
     alignItems: "center",
-    alignSelf: "stretch",
+    height: "100%",
     justifyContent: "center",
-    paddingHorizontal: 14
+    paddingHorizontal: 16
   },
   helperText: {
     color: "#64748B",
@@ -167,7 +176,7 @@ export const buttonStyles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 12,
     justifyContent: "center",
-    minHeight: 52,
+    height: 54,
     paddingHorizontal: 20
   },
   contentRow: {
@@ -177,7 +186,7 @@ export const buttonStyles = StyleSheet.create({
   },
   icon: {
     height: 20,
-    marginRight: 10,
+    marginRight: 12,
     resizeMode: "contain",
     width: 20
   },
@@ -207,20 +216,23 @@ export const buttonStyles = StyleSheet.create({
     color: "#070D19",
     fontSize: 15,
     fontWeight: "900",
-    letterSpacing: 1,
-    textTransform: "uppercase"
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    includeFontPadding: false
   },
   secondaryText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     textTransform: "none",
-    letterSpacing: 0.2
+    letterSpacing: 0.3,
+    includeFontPadding: false
   },
   ghostText: {
     color: "#00C8FF",
     fontSize: 14,
-    fontWeight: "700"
+    fontWeight: "700",
+    includeFontPadding: false
   }
 });
 
@@ -257,19 +269,21 @@ export const pillStyles = StyleSheet.create({
 
 export const titleStyles = StyleSheet.create({
   wrap: {
-    marginBottom: 38
+    marginBottom: 24
   },
   title: {
     color: "#FFFFFF",
     fontSize: 28,
     fontWeight: "900",
     letterSpacing: -0.3,
-    marginBottom: 6
+    marginBottom: 6,
+    includeFontPadding: false
   },
   subtitle: {
     color: "#94A3B8",
     fontSize: 14,
-    lineHeight: 21
+    lineHeight: 20,
+    includeFontPadding: false
   }
 });
 

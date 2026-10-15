@@ -36,7 +36,7 @@ import { AtletaNavbar } from "../Components/AtletaNavbar";
 import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 import { CoachProfile } from "../Profile/CoachProfile";
 import { CoachEditProfile } from "../Profile/CoachEditProfile";
-import { CoachProfileState, DEFAULT_COACH_PROFILE } from "../DataTypes";
+import { CoachProfileState, DEFAULT_COACH_PROFILE, CoachSettingsData, DEFAULT_COACH_SETTINGS } from "../DataTypes";
 import { OCRlogging } from "./OCRlogging";
 import { OCRoutput, RawOCRDetectedData } from "./OCRoutput";
 import { CreateLogScreen } from "../MultiLogging/createLog";
@@ -54,7 +54,16 @@ import { MatchHistory } from "../Performance/matchHistory";
 import { TrackfieldMatchResult } from "../Performance/trackfieldMatchResult";
 import { SwimmingMatchResult } from "../Performance/swimmingMatchResult";
 import { BasketballMatchResult } from "../Performance/basketballMatchResult";
-import { getMatchesOfflineFirst, getAthletesOfflineFirst, getSportsOfflineFirst, getCoachProfileOfflineFirst } from "../../../../services/firebaseClient";
+import {
+  getMatchesOfflineFirst,
+  saveMatchOfflineFirst,
+  getAthletesOfflineFirst,
+  getSportsOfflineFirst,
+  getCoachProfileOfflineFirst,
+  saveTeamOfflineFirst,
+  deleteTeamOfflineFirst,
+} from "../../../../services/firebaseClient";
+import { calculatePlayerRating } from "../Performance/performanceUtils";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -129,10 +138,21 @@ const PlayerRowItem = React.memo(
                   ? fallbackSport.toUpperCase()
                   : player.position;
 
+    const playerTeamName = (player as any).team_name;
+
     return (
       <View style={[styles.playerRow, !isLast && styles.playerRowBorder]}>
         <View style={styles.playerTextContainer}>
-          <Text style={styles.playerName}>{player.full_name}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+            <Text style={styles.playerName}>{player.full_name}</Text>
+            {Boolean(playerTeamName && playerTeamName !== "Unassigned" && playerTeamName !== "Unassigned / No Team") && (
+              <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>
+                  {(playerTeamName || "").toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.playerSubtitle}>
             {formattedPos} • #{player.jersey_number}
           </Text>
@@ -268,18 +288,26 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   const [matchHistoryList, setMatchHistoryList] = useState<MatchHistoryItem[]>([]);
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
+  const [coachSettingsData, setCoachSettingsData] = useState<CoachSettingsData>(DEFAULT_COACH_SETTINGS);
 
   // Helper function to dynamically compute performance profile from real metrics
   const computeAthletePerformance = (a: any, matchesList: MatchHistoryItem[] = matchHistoryList): AthletePerformanceProfile => {
     const athleteName = (a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || "").toLowerCase();
-    const athleteId = a.athlete_id || a.user_id;
+    const rawAthId = String(a.athlete_id || a.user_id || a.id || "").toLowerCase();
+    const cleanAthId = rawAthId.replace(/^ath_/, "");
+
+    const isMatchingPlayerStat = (ps: any) => {
+      if (!ps) return false;
+      const rawPsId = String(ps.athlete_id || ps.user_id || ps.id || "").toLowerCase();
+      const cleanPsId = rawPsId.replace(/^ath_/, "");
+      if (cleanAthId && cleanPsId && cleanAthId === cleanPsId) return true;
+      const psName = (ps.player_name || ps.name || ps.athlete_name || ps.full_name || "").toLowerCase().trim();
+      if (athleteName && psName && athleteName === psName) return true;
+      return false;
+    };
 
     const matchingMatches = (matchesList || []).filter((m) =>
-      m.player_stats?.some(
-        (ps: any) =>
-          (ps.name && athleteName && ps.name.toLowerCase() === athleteName) ||
-          (ps.athlete_id && athleteId && ps.athlete_id === athleteId)
-      )
+      m.player_stats?.some(isMatchingPlayerStat)
     );
 
     let matchPts = 0;
@@ -289,16 +317,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     let matchTrends: number[] = [];
 
     matchingMatches.forEach((m) => {
-      const ps = m.player_stats?.find(
-        (p: any) =>
-          (p.name && athleteName && p.name.toLowerCase() === athleteName) ||
-          (p.athlete_id && athleteId && p.athlete_id === athleteId)
-      );
+      const ps = m.player_stats?.find(isMatchingPlayerStat);
       if (ps) {
-        const pts = Number(ps.pts || 0);
+        const rawPs = ps as any;
+        const pts = Number(rawPs.pts || rawPs.stats?.points || rawPs.stats?.pts || 0);
         matchPts += pts;
-        matchReb += Number(ps.reb || 0);
-        matchAst += Number(ps.ast || 0);
+        matchReb += Number(rawPs.reb || rawPs.stats?.rebounds || rawPs.stats?.reb || 0);
+        matchAst += Number(rawPs.ast || rawPs.stats?.assists || rawPs.stats?.ast || 0);
         matchTrends.push(pts);
       }
     });
@@ -341,16 +366,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       per = Math.round((ppg * 1.2 + rpg * 1.0 + apg * 1.5) * 10) / 10;
     }
 
-    // Calculate dynamic rating score derived from PER / PPG / verified metrics
-    let rating = Number(a.rating_score || a.rating || 0);
-    if (!rating) {
-      if (per > 0) {
-        rating = Math.min(99, Math.max(60, Math.round(per * 2.8)));
-      } else if (ppg > 0) {
-        rating = Math.min(99, Math.max(60, Math.round(ppg * 3.5)));
-      } else {
-        rating = 0;
-      }
+    // Calculate dynamic rating score accurately derived from player stats
+    const dynamicRating = calculatePlayerRating({
+      ...a,
+      averages: { ...a.averages, ppg, rpg, apg, games_played: gp, wins, per_score: per },
+      stats: { ...a.stats, ppg, rpg, apg, games_played: gp, wins, per_score: per },
+    });
+    let rating = dynamicRating || Number(a.rating_score || a.rating || 0);
+    if (rating === 85 || rating === 75) {
+      rating = dynamicRating || 0;
     }
 
     const phys = a.physical_profile || a.physical_attributes || {};
@@ -432,12 +456,53 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     };
   };
 
-  // Instant cache hydration on mount (<10ms)
+  // Instant cache hydration on mount (<10ms) scoped to authenticated coach
   useEffect(() => {
-    AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY)
-      .then((raw) => {
+    (async () => {
+      try {
+        const token = await getStoredAuthToken();
+        let currentUid = "";
+        let currentEmail = "";
+        if (token && token.includes(".")) {
+          try {
+            const base64Url = token.split(".")[1];
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            let decoded = "";
+            if (typeof atob === "function") {
+              decoded = atob(base64);
+            } else {
+              const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+              let str = base64.replace(/=+$/, "");
+              let output = "";
+              for (let bc = 0, bs = 0, buffer: any, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+                buffer = chars.indexOf(buffer);
+              }
+              decoded = output;
+            }
+            const payload = JSON.parse(decoded);
+            currentUid = String(payload.uid || payload.user_id || payload.sub || "").replace(/^coach_/, "").toLowerCase();
+            currentEmail = String(payload.email || "").toLowerCase();
+          } catch {}
+        }
+
+        const raw = await AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY);
         if (raw) {
           const cached = JSON.parse(raw);
+          const cachedCoachId = String(cached.coach?.user_id || cached.coach?.coach_id || "").replace(/^coach_/, "").toLowerCase();
+          const cachedEmail = String(cached.coach?.email || "").toLowerCase();
+
+          // Only hydrate if the cache strictly matches the currently authenticated coach
+          const isSameCoach = Boolean(
+            (currentUid && cachedCoachId && currentUid === cachedCoachId) ||
+            (currentEmail && cachedEmail && currentEmail === cachedEmail)
+          );
+
+          if (!isSameCoach) {
+            // Stale cache from another coach session - discard immediately
+            await AsyncStorage.removeItem(COACH_DASHBOARD_CACHE_KEY).catch(() => null);
+            return;
+          }
+
           if (cached.coach) setCoach(cached.coach);
           if (cached.coachProfile) setCoachProfile(cached.coachProfile);
           if (Array.isArray(cached.teams) && cached.teams.length > 0) {
@@ -462,9 +527,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           if (Array.isArray(cached.dynamicSports) && cached.dynamicSports.length > 0) {
             setDynamicSports(cached.dynamicSports);
           }
+
+          // Instantly dismiss loading screen if any cached data is available (<10ms)
+          if (cached.coach || cached.coachProfile || (Array.isArray(cached.teams) && cached.teams.length > 0)) {
+            setIsDashboardLoading(false);
+          }
         }
-      })
-      .catch(() => null);
+      } catch {}
+    })();
   }, []);
 
   // Live Backend Data Fetching on Mount
@@ -476,38 +546,45 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const [
           profileRes,
           teamsRes,
-          allTeamsRes,
           syncRes,
           matchesRes,
           coachAthletesRes,
           notifsRes,
+          sportsRes,
           offlineMatches,
           offlineAthletes,
-          sportsRes,
           offlineProfileRes,
-        ]: [any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
+        ]: [any, any, any, any, any, any, any, any, any, any] = await Promise.all([
           requestAuthenticatedJson("/coaches/profile").catch(() => null),
           requestAuthenticatedJson("/teams").catch(() => null),
-          requestAuthenticatedJson("/teams?all=true").catch(() => null),
           requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
           requestAuthenticatedJson("/matches").catch(() => null),
           requestAuthenticatedJson("/coaches/athletes").catch(() => null),
           requestAuthenticatedJson("/notifications").catch(() => null),
+          getSportsOfflineFirst().catch(() => []),
           getMatchesOfflineFirst().catch(() => []),
           getAthletesOfflineFirst().catch(() => []),
-          getSportsOfflineFirst().catch(() => []),
           getCoachProfileOfflineFirst().catch(() => null),
         ]);
 
+        const allTeamsRes: any = null;
+
         if (isMounted) {
-          // Process Notifications
+          // Process Notifications (deduplicated by unique notification ID)
           const rawNotifs: any[] = Array.isArray(notifsRes?.notifications)
             ? notifsRes.notifications
             : Array.isArray(notifsRes)
             ? notifsRes
             : [];
-          setNotificationsList(rawNotifs);
-          const unreadCount = rawNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
+          const seenNotifIds = new Set<string>();
+          const dedupedNotifs = rawNotifs.filter((n: any) => {
+            const nId = String(n.notification_id || n.id || `${n.created_at}_${n.title}`);
+            if (seenNotifIds.has(nId)) return false;
+            seenNotifIds.add(nId);
+            return true;
+          });
+          setNotificationsList(dedupedNotifs);
+          const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
 
           const rawMatchList = (matchesRes?.matches && Array.isArray(matchesRes.matches) && matchesRes.matches.length > 0)
@@ -516,11 +593,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             ? syncRes.scheduled_matches
             : [];
 
-          const rawCombined = [...(rawMatchList || [])];
+          const isDeletedMatch = (m: any) => {
+            if (!m) return true;
+            if (m.deleted === true || m.is_deleted === true) return true;
+            const s = String(m.status || m.audit_status || m.verification_status || "").toUpperCase();
+            return s === "DELETED" || s === "REVOKED" || s === "CANCELLED";
+          };
+          const rawCombined = [...(rawMatchList || [])].filter((m) => !isDeletedMatch(m));
           if (Array.isArray(offlineMatches)) {
             offlineMatches.forEach((om: any) => {
               const omId = om.match_id || om.id;
-              if (omId && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {
+              if (omId && !isDeletedMatch(om) && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {
                 rawCombined.unshift(om);
               }
             });
@@ -565,23 +648,88 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             setMatchHistoryList([]);
           }
 
-          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes) && coachAthletesRes.athletes.length > 0
+          let tokenUid = "";
+          let tokenEmail = "";
+          try {
+            const token = await getStoredAuthToken();
+            if (token && token.includes(".")) {
+              const base64Url = token.split(".")[1];
+              const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+              let decoded = "";
+              if (typeof atob === "function") {
+                decoded = atob(base64);
+              } else {
+                const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+                let str = base64.replace(/=+$/, "");
+                let output = "";
+                for (let bc = 0, bs = 0, buffer: any, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+                  buffer = chars.indexOf(buffer);
+                }
+                decoded = output;
+              }
+              const payload = JSON.parse(decoded);
+              tokenUid = String(payload.uid || payload.user_id || payload.sub || "").replace(/^coach_/, "").toLowerCase();
+              tokenEmail = String(payload.email || "").toLowerCase();
+            }
+          } catch {}
+
+          const isCoachMatch = (p: any) => {
+            if (!p || typeof p !== "object") return false;
+            const pUid = String(p.user_id || p.uid || p.coach_id || "").replace(/^coach_/, "").toLowerCase();
+            const pEmail = String(p.email || "").toLowerCase();
+            if (tokenUid && pUid && pUid === tokenUid) return true;
+            if (tokenEmail && pEmail && pEmail === tokenEmail) return true;
+            return !tokenUid && !tokenEmail;
+          };
+
+          const validProfileRes = isCoachMatch(profileRes) ? profileRes : null;
+          const validOfflineProfileRes = isCoachMatch(offlineProfileRes) ? offlineProfileRes : null;
+
+          if (offlineProfileRes && !validOfflineProfileRes) {
+            AsyncStorage.removeItem("atleta_offline_coach_profile_cache").catch(() => null);
+          }
+
+          const currentCoachId = tokenUid
+            ? (tokenUid.startsWith("coach_") ? tokenUid : `coach_${tokenUid}`)
+            : (validProfileRes?.coach_id || validProfileRes?.user_id || validOfflineProfileRes?.coach_id || coach?.coach_id || "");
+          const cleanEffectiveCoachId = String(currentCoachId).replace(/^coach_/, "").toLowerCase();
+
+          const isOwnedByCoach = (ath: any) => {
+            if (!cleanEffectiveCoachId) return false;
+            const athCoachId = String(ath.coach_id || ath.coach_scout_id || ath.recruited_by_coach_id || ath.added_by_coach_id || ath.recruited_by || "").replace(/^coach_/, "").toLowerCase();
+            return Boolean(athCoachId && athCoachId === cleanEffectiveCoachId);
+          };
+
+          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)
             ? coachAthletesRes.athletes
-            : Array.isArray(syncRes?.handled_athletes) && syncRes.handled_athletes.length > 0
-            ? syncRes.handled_athletes
-            : Array.isArray(offlineAthletes)
-            ? offlineAthletes
+            : Array.isArray(syncRes?.handled_athletes)
+            ? syncRes.handled_athletes.filter(isOwnedByCoach)
+            : (Array.isArray(offlineAthletes) ? offlineAthletes.filter(isOwnedByCoach) : []);
+
+          // Strictly scope teams to the coach's authenticated account (never fall back to global allTeamsRes)
+          const incomingCoachTeams: any[] = Array.isArray(teamsRes)
+            ? teamsRes
+            : Array.isArray(teamsRes?.teams)
+            ? teamsRes.teams
             : [];
 
-          const rawTeamsList: any[] = Array.isArray(teamsRes) && teamsRes.length > 0
-            ? teamsRes
-            : Array.isArray(teamsRes?.teams) && teamsRes.teams.length > 0
-            ? teamsRes.teams
-            : Array.isArray(allTeamsRes) && allTeamsRes.length > 0
-            ? allTeamsRes
-            : Array.isArray(allTeamsRes?.teams) && allTeamsRes.teams.length > 0
-            ? allTeamsRes.teams
-            : [];
+          const managedTeamIdsList = new Set<string>([
+            ...(Array.isArray(validProfileRes?.teams_managed) ? validProfileRes.teams_managed : []),
+            ...(Array.isArray(validOfflineProfileRes?.teams_managed) ? validOfflineProfileRes.teams_managed : []),
+            ...(Array.isArray((coachProfile as any)?.teams_managed) ? (coachProfile as any).teams_managed : []),
+          ].map((id: any) => String(id).toLowerCase()));
+
+          const rawTeamsList: any[] = incomingCoachTeams.filter((t: any) => {
+            if (!cleanEffectiveCoachId) return false;
+            const teamIdStr = String(t.team_id || "").toLowerCase();
+            if (teamIdStr && managedTeamIdsList.has(teamIdStr)) return true;
+            const teamCoachId = String(t.coach_id || t.coach_scout_id || "").replace(/^coach_/, "").toLowerCase();
+            if (teamCoachId) return teamCoachId === cleanEffectiveCoachId;
+            if (Array.isArray(t.coaching_staff)) {
+              return t.coaching_staff.some((cs: string) => String(cs).replace(/^coach_/, "").toLowerCase() === cleanEffectiveCoachId);
+            }
+            return false;
+          });
 
           const normalizeId = (id?: string) => (id || '').replace(/^ath_/, '').trim();
 
@@ -603,10 +751,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           }
           if (Array.isArray(offlineAthletes)) {
             offlineAthletes.forEach((oa: any) => {
-              const k = normalizeId(oa.athlete_id || oa.user_id);
-              if (k) {
-                const prev = richCoachAthletesMap.get(k) || {};
-                richCoachAthletesMap.set(k, { ...prev, ...oa });
+              if (isOwnedByCoach(oa)) {
+                const k = normalizeId(oa.athlete_id || oa.user_id);
+                if (k) {
+                  const prev = richCoachAthletesMap.get(k) || {};
+                  richCoachAthletesMap.set(k, { ...prev, ...oa });
+                }
               }
             });
           }
@@ -650,7 +800,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 birthdate: athObj.birthdate || rich.birthdate,
                 province: athObj.province || rich.province,
                 location: athObj.location || rich.location,
-                rating_score: Number(athObj.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                rating_score: calculatePlayerRating(rich) || calculatePlayerRating(athObj) || Number(athObj.rating_score || rich.rating_score || 0),
                 biometrics: athObj.biometrics || rich.biometrics || undefined,
                 radar_competencies: athObj.radar_competencies || rich.radar_competencies || undefined,
                 physical_profile: athObj.physical_profile || rich.physical_profile || athObj.physical_attributes || rich.physical_attributes,
@@ -668,7 +818,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             rawCoachAthletes.forEach((ha: any) => {
               const k = normalizeId(ha.athlete_id || ha.user_id);
               if (!k || rosterSeen.has(k)) return;
-              const matchesTeam = (ha.team_id && ha.team_id === t.team_id) || (ha.team_name && t.team_name && ha.team_name.toLowerCase() === t.team_name.toLowerCase());
+              const matchesTeam =
+                (ha.team_id && ha.team_id === t.team_id) ||
+                (ha.team_name && t.team_name && ha.team_name.toLowerCase().includes(t.team_name.toLowerCase())) ||
+                (Array.isArray(ha.team_ids) && ha.team_ids.includes(t.team_id)) ||
+                (Array.isArray(ha.teams) && ha.teams.some((tm: any) => tm.team_id === t.team_id || (tm.team_name && t.team_name && tm.team_name.toLowerCase() === t.team_name.toLowerCase())));
               if (matchesTeam) {
                 rosterSeen.add(k);
                 const rich = richCoachAthletesMap.get(k) || {};
@@ -690,7 +844,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   birthdate: ha.birthdate || rich.birthdate,
                   province: ha.province || rich.province,
                   location: ha.location || rich.location,
-                  rating_score: Number(ha.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                  rating_score: calculatePlayerRating(rich) || calculatePlayerRating(ha) || Number(ha.rating_score || rich.rating_score || 0),
                   biometrics: ha.biometrics || rich.biometrics || undefined,
                   radar_competencies: ha.radar_competencies || rich.radar_competencies || undefined,
                   physical_profile: ha.physical_profile || rich.physical_profile || ha.physical_attributes || rich.physical_attributes,
@@ -756,7 +910,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 jersey_number: ha.jersey_number !== null && ha.jersey_number !== undefined ? String(ha.jersey_number) : (rich.jersey_number !== null && rich.jersey_number !== undefined ? String(rich.jersey_number) : '0'),
                 is_eligibility_verified: Boolean(ha.is_eligibility_verified ?? rich.is_eligibility_verified),
                 avatar_url: ha.avatar_url || rich.avatar_url || undefined,
-                rating_score: Number(ha.rating_score || rich.rating_score || (rich.averages?.ppg ? Math.round(Number(rich.averages.ppg) * 3.5) : 85)),
+                rating_score: calculatePlayerRating(rich) || calculatePlayerRating(ha) || Number(ha.rating_score || rich.rating_score || 0),
                 biometrics: ha.biometrics || rich.biometrics || undefined,
                 radar_competencies: ha.radar_competencies || rich.radar_competencies || undefined,
                 physical_profile: ha.physical_profile || rich.physical_profile || ha.physical_attributes || rich.physical_attributes,
@@ -773,8 +927,35 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const seenMap = new Map<string, any>();
           for (const a of [...coachTeamAthletes, ...unassignedCoachAthletes]) {
             const k = normalizeId(a.athlete_id || a.user_id);
-            if (k && !seenMap.has(k)) {
-              seenMap.set(k, a);
+            if (k) {
+              if (!seenMap.has(k)) {
+                seenMap.set(k, {
+                  ...a,
+                  team_ids: a.team_id ? [a.team_id] : (a.team_ids || []),
+                  team_names: a.team_name ? [a.team_name] : (a.team_names || []),
+                  teams: a.team_id ? [{ team_id: a.team_id, team_name: a.team_name }] : (a.teams || []),
+                });
+              } else {
+                const existing = seenMap.get(k);
+                const existingTeamIds: string[] = existing.team_ids || (existing.team_id ? [existing.team_id] : []);
+                const existingTeamNames: string[] = existing.team_names || (existing.team_name ? [existing.team_name] : []);
+                const newTeamId = a.team_id;
+                const newTeamName = a.team_name;
+                const mergedTeamIds = Array.from(new Set([...existingTeamIds, ...(a.team_ids || (newTeamId ? [newTeamId] : []))].filter(Boolean)));
+                const mergedTeamNames = Array.from(new Set([...existingTeamNames, ...(a.team_names || (newTeamName ? [newTeamName] : []))].filter(Boolean)));
+                seenMap.set(k, {
+                  ...existing,
+                  ...a,
+                  team_id: existing.team_id || newTeamId,
+                  team_ids: mergedTeamIds,
+                  team_names: mergedTeamNames,
+                  team_name: mergedTeamNames.join(" • "),
+                  teams: [
+                    ...(existing.teams || []),
+                    ...(newTeamId && !(existing.teams || []).some((tm: any) => tm.team_id === newTeamId) ? [{ team_id: newTeamId, team_name: newTeamName }] : []),
+                  ],
+                });
+              }
             }
           }
           const allHandledAthletes = Array.from(seenMap.values());
@@ -783,12 +964,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           let updatedCoachSnapshot: UserCoach | null = null;
           let updatedProfileSnapshot: CoachProfileState | null = null;
 
-          const effectiveProfile = profileRes || offlineProfileRes;
-          if (effectiveProfile) {
-            const firstName = effectiveProfile.first_name || offlineProfileRes?.first_name || coach.first_name || "Coach";
-            const lastName = effectiveProfile.last_name || offlineProfileRes?.last_name || coach.last_name || "";
-            const fullName = effectiveProfile.full_name || offlineProfileRes?.full_name || `${firstName} ${lastName}`.trim();
-            const rawSport = (effectiveProfile.sport_type || effectiveProfile.sports_focus || offlineProfileRes?.sport_type || "BASKETBALL").toUpperCase();
+          const effectiveProfile = validProfileRes || validOfflineProfileRes;
+          if (effectiveProfile || tokenUid || tokenEmail) {
+            const fallbackEmailName = (tokenEmail || effectiveProfile?.email || coach.email || "").split("@")[0];
+            const fallbackName = fallbackEmailName ? (fallbackEmailName.charAt(0).toUpperCase() + fallbackEmailName.slice(1)) : "Coach";
+            const firstName = effectiveProfile?.first_name || fallbackName;
+            const lastName = effectiveProfile?.last_name || "";
+            const fullName = effectiveProfile?.full_name || (firstName !== "Coach" ? `${firstName} ${lastName}`.trim() : "Coach");
+            const rawSport = (effectiveProfile?.sport_type || effectiveProfile?.sports_focus || "BASKETBALL").toUpperCase();
             const sportFocus: CoachProfileState["sports_focus"] =
               rawSport.includes("SWIM")
                 ? "SWIMMING"
@@ -797,24 +980,22 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 : rawSport;
 
             const resolvedAvatar =
-              profileRes?.avatar_url ||
-              (profileRes as any)?.profile_image ||
-              offlineProfileRes?.avatar_url ||
-              offlineProfileRes?.profile_image ||
-              coach.avatar_url ||
-              coachProfile.avatar_url ||
+              validProfileRes?.avatar_url ||
+              (validProfileRes as any)?.profile_image ||
+              validOfflineProfileRes?.avatar_url ||
+              validOfflineProfileRes?.profile_image ||
               "";
 
             const updatedCoach: UserCoach = {
-              user_id: effectiveProfile.user_id || offlineProfileRes?.user_id || coach.user_id || "",
+              user_id: effectiveProfile?.user_id || tokenUid || coach.user_id || "",
               first_name: firstName,
               last_name: lastName,
-              email: effectiveProfile.email || offlineProfileRes?.email || coach.email || "",
-              contact_number: effectiveProfile.contact_number || offlineProfileRes?.contact_number || coach.contact_number || "",
+              email: effectiveProfile?.email || tokenEmail || coach.email || "",
+              contact_number: effectiveProfile?.contact_number || coach.contact_number || "",
               role: "Coach",
-              coach_id: effectiveProfile.coach_id || effectiveProfile.user_id || offlineProfileRes?.coach_id || coach.coach_id || "",
-              current_institution: effectiveProfile.current_institution || offlineProfileRes?.current_institution || coach.current_institution || "",
-              athlete_managed: effectiveProfile.athlete_managed || offlineProfileRes?.athlete_managed || coach.athlete_managed || [],
+              coach_id: currentCoachId || (tokenUid ? `coach_${tokenUid}` : coach.coach_id || ""),
+              current_institution: effectiveProfile?.current_institution || "University Athletics",
+              athlete_managed: effectiveProfile?.athlete_managed || [],
               avatar_url: resolvedAvatar,
             };
             updatedCoachSnapshot = updatedCoach;
@@ -831,18 +1012,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               role_title: `${sportFocus} COACH`,
               sports_focus: sportFocus,
               avatar_url: resolvedAvatar,
-              current_institution: effectiveProfile.current_institution || offlineProfileRes?.current_institution || "",
-              regional_affiliation: effectiveProfile.regional_affiliation || offlineProfileRes?.regional_affiliation || "",
-              national_sports_league: effectiveProfile.national_sports_league || offlineProfileRes?.national_sports_league || "",
+              current_institution: effectiveProfile?.current_institution || "University Athletics",
+              regional_affiliation: effectiveProfile?.regional_affiliation || "",
+              national_sports_league: effectiveProfile?.national_sports_league || "",
               regional_affiliations: {
-                association_name: effectiveProfile.regional_affiliation || effectiveProfile.national_sports_league || offlineProfileRes?.regional_affiliation || "",
-                office_name: effectiveProfile.current_institution || offlineProfileRes?.current_institution || "",
+                association_name: effectiveProfile?.regional_affiliation || effectiveProfile?.national_sports_league || "National Sports League",
+                office_name: effectiveProfile?.current_institution || "University Athletics",
               },
-              credentials: effectiveProfile.credentials || effectiveProfile.certifications || offlineProfileRes?.credentials || offlineProfileRes?.certifications || [],
-              uploaded_documents: effectiveProfile.uploaded_documents || offlineProfileRes?.uploaded_documents || [],
+              credentials: effectiveProfile?.credentials || effectiveProfile?.certifications || [],
+              uploaded_documents: effectiveProfile?.uploaded_documents || [],
               system_statistics: {
                 total_athletes: allHandledAthletes.length,
-                metric_logs: effectiveProfile.metric_logs || offlineProfileRes?.metric_logs || 0,
+                metric_logs: effectiveProfile?.metric_logs || effectiveProfile?.system_statistics?.metric_logs || 0,
               },
               last_updated: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }).toUpperCase(),
             };
@@ -923,8 +1104,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             : Array.isArray(notifsRes)
             ? notifsRes
             : [];
-          setNotificationsList(rawNotifs);
-          const unreadCount = rawNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
+          const seenNotifIds = new Set<string>();
+          const dedupedNotifs = rawNotifs.filter((n: any) => {
+            const nId = String(n.notification_id || n.id || `${n.created_at}_${n.title}`);
+            if (seenNotifIds.has(nId)) return false;
+            seenNotifIds.add(nId);
+            return true;
+          });
+          setNotificationsList(dedupedNotifs);
+          const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
         }
       } catch {}
@@ -962,6 +1150,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     );
 
     try {
+      await saveTeamOfflineFirst({ team_id: teamId, team_name: newName });
       await requestAuthenticatedJson(`/teams/${teamId}`, "PATCH", { team_name: newName });
     } catch (err) {
       console.warn("Backend update team name error:", err);
@@ -978,6 +1167,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       );
 
       try {
+        await saveTeamOfflineFirst({ team_id: teamId, ...updates });
         await requestAuthenticatedJson(`/teams/${teamId}`, "PATCH", updates);
       } catch (err) {
         console.warn("Backend update team details error:", err);
@@ -1175,6 +1365,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       setTeams((prev) => [created, ...prev]);
       setSelectedTeamId(tempId);
       setActiveView("manage_team");
+      saveTeamOfflineFirst(created).catch(() => null);
 
       try {
         const res: any = await requestAuthenticatedJson("/teams", "POST", {
@@ -1191,8 +1382,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const newTeamId = createdTeam?.team_id ? String(createdTeam.team_id) : res?.team_id ? String(res.team_id) : undefined;
         if (newTeamId) {
           created.team_id = newTeamId;
-          setTeams((prev) => prev.map((t) => (t.team_id === tempId ? { ...t, ...createdTeam, team_id: newTeamId } : t)));
+          const mergedTeam = { ...created, ...createdTeam, team_id: newTeamId };
+          setTeams((prev) => prev.map((t) => (t.team_id === tempId ? mergedTeam : t)));
           setSelectedTeamId(newTeamId);
+          await saveTeamOfflineFirst(mergedTeam);
         }
       } catch (err) {
         console.warn("Backend team creation sync:", err);
@@ -1225,7 +1418,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const rawUid = athId.startsWith("ath_") ? athId.replace("ath_", "") : athId;
     const athName = (selectedPerfAthlete.full_name || "").toLowerCase().trim();
 
-    return coachMatches.filter((m: any) => {
+    const candidateMatches = matchHistoryList && matchHistoryList.length > 0 ? matchHistoryList : coachMatches;
+
+    return candidateMatches.filter((m: any) => {
       // 1. Direct athlete_id match
       if (m.athlete_id && (String(m.athlete_id) === athId || String(m.athlete_id) === rawUid)) return true;
       // 2. athlete_ids array
@@ -1233,24 +1428,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       // 3. participants array
       if (Array.isArray(m.participants) && m.participants.some((p: any) => {
         const pId = typeof p === "string" ? p : p.athlete_id || p.id || p.uid;
-        const pName = (p.full_name || p.name || "").toLowerCase().trim();
+        const pName = (p.full_name || p.name || p.athlete_name || "").toLowerCase().trim();
         return (athId && pId === athId) || (rawUid && pId === rawUid) || (athName && pName === athName);
       })) return true;
       // 4. player_stats array
       if (Array.isArray(m.player_stats) && m.player_stats.some((ps: any) => {
         const psId = ps.athlete_id || ps.id || ps.uid;
-        const psName = (ps.athlete_name || ps.full_name || ps.name || "").toLowerCase().trim();
+        const psName = (ps.player_name || ps.athlete_name || ps.full_name || ps.name || "").toLowerCase().trim();
         return (athId && psId === athId) || (rawUid && psId === rawUid) || (athName && psName === athName);
       })) return true;
       // 5. roster array
       if (Array.isArray(m.roster) && m.roster.some((r: any) => {
         const rId = typeof r === "string" ? r : r.athlete_id || r.id;
-        const rName = (r.full_name || r.name || "").toLowerCase().trim();
+        const rName = (r.full_name || r.name || r.athlete_name || "").toLowerCase().trim();
         return (athId && rId === athId) || (rawUid && rId === rawUid) || (athName && rName === athName);
       })) return true;
       return false;
     });
-  }, [coachMatches, selectedPerfAthlete]);
+  }, [matchHistoryList, coachMatches, selectedPerfAthlete]);
 
   const handleSelectTab = useCallback((tab: NavigationTab) => {
     setActiveTab(tab);
@@ -1276,10 +1471,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     setActiveView("athlete_portfolio");
   }, [perfAthletes, activeView, matchHistoryList]);
 
-  const handleDeleteTeam = useCallback((teamId: string) => {
+  const handleDeleteTeam = useCallback(async (teamId: string) => {
     setTeams((prev) => prev.filter((t) => t.team_id !== teamId));
     setActiveView("teams_list");
     setActiveTab("Teams");
+    try {
+      await deleteTeamOfflineFirst(teamId);
+      await requestAuthenticatedJson(`/teams/${teamId}`, "DELETE").catch(() => null);
+    } catch (err) {
+      console.warn("Delete team sync error:", err);
+    }
   }, []);
 
   const handleMatchSaveCompleted = useCallback((savedPayload?: any) => {
@@ -1508,6 +1709,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* SCREEN 5: COACH SETTINGS PAGE */}
       {activeView === "settings" && (
         <CoachSettings
+          settings={coachSettingsData}
+          onUpdateSettings={setCoachSettingsData}
           onBack={() => setActiveView("dashboard")}
           onLogout={onLogout}
         />
@@ -1576,11 +1779,20 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               away_score: oppPts,
               entries_count: finalData.athlete_overview.length,
               player_stats: finalData.athlete_overview.map((p) => ({
+                ...p,
                 name: p.player_name,
+                player_name: p.player_name,
                 team: p.team_name,
+                team_name: p.team_name,
                 pts: Number(p.pts || 0),
                 ast: Number(p.ast || 0),
                 reb: Number(p.reb || 0),
+                stl: Number(p.stl || 0),
+                blk: Number(p.blk || 0),
+                pf: Number(p.fouls || p.pf || 0),
+                to: Number(p.to || 0),
+                min: Number(p.min || 0),
+                stats: { ...p },
               })),
               leaderboard_entries: finalData.athlete_overview.map((p, idx) => ({
                 rank: idx + 1,
@@ -1593,41 +1805,194 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
             setMatchHistoryList((prev) => [newMatchItem, ...prev]);
 
-            // Persist match and player stats to Firestore collections (Match_Logs & Performance_Metrics)
+            // Update roster athletes state with the confirmed OCR performance stats (strictly for owned roster athletes)
+            setAthletesPool((prev: RosterAthlete[]) => {
+              const updated = [...prev];
+              finalData.athlete_overview.forEach((stat) => {
+                const existingIndex = updated.findIndex(
+                  (a) =>
+                    (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
+                    a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
+                );
+                if (existingIndex >= 0) {
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    jersey_number: String(stat.jersey_number || updated[existingIndex].jersey_number),
+                  };
+                }
+              });
+              return updated;
+            });
+
+            // Update Performance page athletes list strictly for coach's active roster
+            setPerfAthletes((prev: AthletePerformanceProfile[]) => {
+              const updated = [...prev];
+              finalData.athlete_overview.forEach((stat) => {
+                const isRosterPlayer = athletesPool.some(
+                  (a) =>
+                    (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
+                    a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
+                );
+                if (!isRosterPlayer) return;
+
+                const existingIndex = updated.findIndex(
+                  (a) =>
+                    (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
+                    a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
+                );
+                const gamePts = Number(stat.pts || 0);
+                const gameAst = Number(stat.ast || 0);
+                const gameReb = Number(stat.reb || 0);
+
+                if (existingIndex >= 0) {
+                  const curr = updated[existingIndex];
+                  const prevGames = Number(curr.averages?.games_played || 1);
+                  const newGames = prevGames + 1;
+                  const prevPpg = Number(curr.averages?.ppg || gamePts);
+                  const prevApg = Number(curr.averages?.apg || gameAst);
+                  const prevRpg = Number(curr.averages?.rpg || gameReb);
+
+                  const newPpg = Number(((prevPpg * prevGames + gamePts) / newGames).toFixed(1));
+                  const newApg = Number(((prevApg * prevGames + gameAst) / newGames).toFixed(1));
+                  const newRpg = Number(((prevRpg * prevGames + gameReb) / newGames).toFixed(1));
+
+                  const prevTrends = Array.isArray(curr.scoring_trends_last_10) ? curr.scoring_trends_last_10 : [prevPpg];
+                  const newTrends = [...prevTrends, gamePts].slice(-10);
+
+                  const newRating = Math.min(99, Math.max(75, Math.round(70 + (newPpg * 0.5) + (newApg * 0.8) + (newRpg * 0.6))));
+
+                  updated[existingIndex] = {
+                    ...curr,
+                    team_name: stat.team_name || curr.team_name,
+                    rating_score: newRating,
+                    averages: {
+                      ...curr.averages,
+                      ppg: newPpg,
+                      apg: newApg,
+                      rpg: newRpg,
+                      games_played: newGames,
+                    },
+                    scoring_trends_last_10: newTrends,
+                  };
+                }
+              });
+              return updated;
+            });
+
+            setTeams((prev: Team[]) =>
+              prev.map((t: Team) => ({
+                ...t,
+                roster_list: t.roster_list.map((p: RosterAthlete) => {
+                  const matchedStat = finalData.athlete_overview.find(
+                    (s) => s.player_name.toLowerCase() === p.full_name.toLowerCase()
+                  );
+                  if (matchedStat) {
+                    return {
+                      ...p,
+                      event_distance: matchedStat.time ? matchedStat.time : p.event_distance,
+                    };
+                  }
+                  return p;
+                }),
+              }))
+            );
+
+            // Immediately redirect straight back to Home/Dashboard view without waiting for network
+            setActiveTab("Home");
+            setActiveView("dashboard");
+
+            // Asynchronous background task: Persist match and player stats to Firestore / Backend silently
+            (async () => {
             try {
               const token = await getStoredAuthToken();
               const idempotencyKey = `ocr_match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
               
+              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Team";
+              const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
+              const scoresheetUrlVal = finalData.scoresheetUrl || finalData.scoresheet_url || "";
+
+              const homeRosterAthletes = finalData.athlete_overview
+                .filter((p) => (p.team_name || "").toUpperCase() === resolvedTeamName.toUpperCase())
+                .map((p, idx) => {
+                  const found = athletesPool.find((a) => a.full_name.toLowerCase() === p.player_name.toLowerCase());
+                  return found?.athlete_id || p.athlete_id || `ath_ocr_home_${idx + 1}`;
+                });
+
+              const awayRosterAthletes = finalData.athlete_overview
+                .filter((p) => (p.team_name || "").toUpperCase() !== resolvedTeamName.toUpperCase())
+                .map((p, idx) => {
+                  const found = athletesPool.find((a) => a.full_name.toLowerCase() === p.player_name.toLowerCase());
+                  return found?.athlete_id || p.athlete_id || `ath_ocr_away_${idx + 1}`;
+                });
+
               const playerStatsPayload = finalData.athlete_overview.map((p, idx) => {
                 const found = athletesPool.find(
                   (a) => a.full_name.toLowerCase() === p.player_name.toLowerCase()
                 );
-                const athleteId = found?.athlete_id || `ath_ocr_${idx + 1}`;
+                const athleteId = found?.athlete_id || p.athlete_id || `ath_ocr_${idx + 1}`;
+                
+                // Preserve all secondary stats verbatim from OCR without math approximations or dropping
+                const rawStats = {
+                  ...p,
+                  points: Number(p.pts ?? p.points ?? 0),
+                  pts: Number(p.pts ?? p.points ?? 0),
+                  assists: Number(p.ast ?? p.assists ?? 0),
+                  ast: Number(p.ast ?? p.assists ?? 0),
+                  rebounds: Number(p.reb ?? p.rebounds ?? 0),
+                  reb: Number(p.reb ?? p.rebounds ?? 0),
+                  steals: Number(p.stl ?? p.steals ?? 0),
+                  stl: Number(p.stl ?? p.steals ?? 0),
+                  blocks: Number(p.blk ?? p.blocks ?? 0),
+                  blk: Number(p.blk ?? p.blocks ?? 0),
+                  turnovers: Number(p.to ?? p.turnovers ?? 0),
+                  to: Number(p.to ?? p.turnovers ?? 0),
+                  fouls: Number(p.fouls ?? p.pf ?? 0),
+                  pf: Number(p.fouls ?? p.pf ?? 0),
+                  minutes: Number(p.min ?? p.minutes ?? 0),
+                  min: Number(p.min ?? p.minutes ?? 0),
+                  fg_made: Number(p.fg_made ?? 0),
+                  fg_attempted: Number(p.fg_attempted ?? 0),
+                  three_made: Number(p.three_made ?? 0),
+                  three_attempted: Number(p.three_attempted ?? 0),
+                  ft_made: Number(p.ft_made ?? 0),
+                  ft_attempted: Number(p.ft_attempted ?? 0),
+                  kills: Number(p.kills ?? 0),
+                  attack_errors: Number(p.attack_errors ?? 0),
+                  attack_attempts: Number(p.attack_attempts ?? 0),
+                  digs: Number(p.digs ?? 0),
+                  service_aces: Number(p.service_aces ?? 0),
+                  goals: Number(p.goals ?? 0),
+                  saves: Number(p.saves ?? 0),
+                  shots: Number(p.shots ?? 0),
+                  shots_on_target: Number(p.shots_on_target ?? 0),
+                  tackles: Number(p.tackles ?? 0),
+                  finish_time: String(p.finish_time || p.time || ""),
+                  split_times: String(p.split || p.split_times || ""),
+                };
+
                 return {
+                  ...rawStats,
                   athlete_id: athleteId,
                   player_name: p.player_name,
                   team_name: p.team_name,
-                  stats: {
-                    points: Number(p.pts || 0),
-                    assists: Number(p.ast || 0),
-                    turnovers: Number(p.to || 0),
-                    rebounds: Number(p.reb || 0),
-                    steals: Number(p.stl || 0),
-                    blocks: Number(p.blk || 0),
-                    fouls: 0,
-                    minutes: Number(p.min || 0),
-                    fg_made: Math.round(Number(p.pts || 0) * 0.4),
-                    fg_attempted: Math.max(1, Math.round(Number(p.pts || 0) * 0.8)),
-                    ft_made: Math.round(Number(p.pts || 0) * 0.2),
-                    ft_attempted: Math.max(1, Math.round(Number(p.pts || 0) * 0.3)),
-                  },
+                  jersey_number: p.jersey_number,
+                  position: p.position,
+                  pts: rawStats.points,
+                  reb: rawStats.rebounds,
+                  ast: rawStats.assists,
+                  stl: rawStats.steals,
+                  blk: rawStats.blocks,
+                  pf: rawStats.fouls,
+                  to: rawStats.turnovers,
+                  min: rawStats.minutes,
+                  stats: rawStats,
+                  sport_stats: rawStats,
+                  custom_stats: rawStats,
                 };
               });
 
-              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Team";
-              const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
-
               const matchPayload = {
+                match_id: newMatchItem.match_id,
                 team_id: teams[0]?.team_id || (teams[0] as any)?.id || "",
                 home_team_name: resolvedTeamName,
                 away_team_name: resolvedOpponentName,
@@ -1648,8 +2013,19 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 game_result: homePts >= oppPts ? "WIN" : "LOSS",
                 notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,
+                playerStats: playerStatsPayload,
+                roster_athletes: homeRosterAthletes,
+                rosterAthletes: homeRosterAthletes,
+                away_roster_athletes: awayRosterAthletes,
+                awayRosterAthletes: awayRosterAthletes,
+                scoresheet_url: scoresheetUrlVal,
+                scoresheetUrl: scoresheetUrlVal,
               };
 
+              // 1. Persist offline-first to Firestore & local storage
+              await saveMatchOfflineFirst(matchPayload).catch(() => null);
+
+              // 2. Transmit to backend REST API
               const saveRes = await fetch(`${API_BASE}/matches`, {
                 method: "POST",
                 headers: {
@@ -1701,152 +2077,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             } catch (saveErr) {
               console.warn("Could not persist match to Firestore:", saveErr);
             }
-
-            // Update roster athletes state with the confirmed OCR performance stats
-            setAthletesPool((prev: RosterAthlete[]) => {
-              const updated = [...prev];
-              finalData.athlete_overview.forEach((stat, idx) => {
-                const existingIndex = updated.findIndex(
-                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase()
-                );
-                if (existingIndex >= 0) {
-                  updated[existingIndex] = {
-                    ...updated[existingIndex],
-                    jersey_number: String(stat.jersey_number || updated[existingIndex].jersey_number),
-                  };
-                } else {
-                  updated.push({
-                    athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
-                    user_id: `usr_ocr_${idx + 1}`,
-                    full_name: stat.player_name,
-                    sport_type: (finalData.sport_type || "BASKETBALL") as any,
-                    position: "Guard",
-                    jersey_number: String(stat.jersey_number || idx + 1),
-                    is_eligibility_verified: true,
-                  });
-                }
-              });
-              return updated;
-            });
-
-            // Update Performance page athletes list with confirmed match player stats & averages
-            setPerfAthletes((prev: AthletePerformanceProfile[]) => {
-              const updated = [...prev];
-              finalData.athlete_overview.forEach((stat, idx) => {
-                const existingIndex = updated.findIndex(
-                  (a) => a.full_name.toLowerCase() === stat.player_name.toLowerCase() || a.athlete_id === stat.athlete_id
-                );
-                const gamePts = Number(stat.pts || 0);
-                const gameAst = Number(stat.ast || 0);
-                const gameReb = Number(stat.reb || 0);
-
-                if (existingIndex >= 0) {
-                  const curr = updated[existingIndex];
-                  const prevGames = Number(curr.averages?.games_played || 1);
-                  const newGames = prevGames + 1;
-                  const prevPpg = Number(curr.averages?.ppg || gamePts);
-                  const prevApg = Number(curr.averages?.apg || gameAst);
-                  const prevRpg = Number(curr.averages?.rpg || gameReb);
-
-                  const newPpg = Number(((prevPpg * prevGames + gamePts) / newGames).toFixed(1));
-                  const newApg = Number(((prevApg * prevGames + gameAst) / newGames).toFixed(1));
-                  const newRpg = Number(((prevRpg * prevGames + gameReb) / newGames).toFixed(1));
-
-                  const prevTrends = Array.isArray(curr.scoring_trends_last_10) ? curr.scoring_trends_last_10 : [prevPpg];
-                  const newTrends = [...prevTrends, gamePts].slice(-10);
-
-                  const newRating = Math.min(99, Math.max(75, Math.round(70 + (newPpg * 0.5) + (newApg * 0.8) + (newRpg * 0.6))));
-
-                  updated[existingIndex] = {
-                    ...curr,
-                    team_name: stat.team_name || curr.team_name,
-                    rating_score: newRating,
-                    averages: {
-                      ...curr.averages,
-                      ppg: newPpg,
-                      apg: newApg,
-                      rpg: newRpg,
-                      games_played: newGames,
-                    },
-                    scoring_trends_last_10: newTrends,
-                  };
-                } else {
-                  updated.push({
-                    athlete_id: stat.athlete_id || `ath_ocr_${idx + 1}`,
-                    user_id: `usr_ocr_${idx + 1}`,
-                    full_name: stat.player_name,
-                    birthdate: "",
-                    position_or_event: "Player",
-                    location_province: "",
-                    team_name: stat.team_name || finalData.team_name || "",
-                    rating_score: Math.min(99, Math.max(75, Math.round(70 + (gamePts * 0.5) + (gameAst * 0.8) + (gameReb * 0.6)))),
-                    sport_category: (finalData.sport_type || "BASKETBALL").toUpperCase() as any,
-                    biometrics: {
-                      height_ft: "-",
-                      weight_lbs: "-",
-                      wingspan_ft: "-",
-                      vertical_jump_in: "-",
-                    },
-                    averages: {
-                      ppg: gamePts,
-                      rpg: gameReb,
-                      apg: gameAst,
-                      per_score: 24,
-                      games_played: 1,
-                      wins: 1,
-                      fg_percentage: 50,
-                      three_pt_percentage: 35,
-                      ft_percentage: 75,
-                    },
-                    workload_analytics: {
-                      target_7day_effort_pts: 500,
-                      current_7day_acute_load: 420,
-                      current_28day_chronic_load: 400,
-                      calculated_acwr: 1.05,
-                      workout_score: 85,
-                      fatigue_meter: 25,
-                      routine_score: 85,
-                      body_stress_pts: 25,
-                    },
-                    radar_competencies: {
-                      speed: 80,
-                      power: 75,
-                      agility: 82,
-                      iq: 85,
-                      tech: 80,
-                    },
-                    scoring_trends_last_10: [gamePts, gamePts],
-                    eligibility_documents: {
-                      psa_verified: true,
-                      residency_verified: true,
-                    },
-                  });
-                }
-              });
-              return updated;
-            });
-
-            setTeams((prev: Team[]) =>
-              prev.map((t: Team) => ({
-                ...t,
-                roster_list: t.roster_list.map((p: RosterAthlete) => {
-                  const matchedStat = finalData.athlete_overview.find(
-                    (s) => s.player_name.toLowerCase() === p.full_name.toLowerCase()
-                  );
-                  if (matchedStat) {
-                    return {
-                      ...p,
-                      event_distance: matchedStat.time ? matchedStat.time : p.event_distance,
-                    };
-                  }
-                  return p;
-                }),
-              }))
-            );
-
-            // Navigate directly to the Performance screen so coach can inspect the updated PPG, APG, RPG
-            setActiveTab("Performance");
-            setActiveView("performance");
+            })();
           }}
         />
       )}
@@ -1858,7 +2089,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
-              { paddingTop: headerTopPadding + 56, paddingBottom: 150 },
+              { paddingTop: headerTopPadding + 76, paddingBottom: 150 },
             ]}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"

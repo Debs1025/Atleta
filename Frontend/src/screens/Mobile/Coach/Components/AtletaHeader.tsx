@@ -43,11 +43,13 @@ export function AtletaHeader({
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
-            style={styles.iconCircleButton}
+            style={[styles.iconCircleButton, styles.notificationCircleButton]}
             onPress={onNotificationPress}
             activeOpacity={0.8}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Notifications"
           >
-            <Ionicons name="notifications-outline" size={18} color="#FFFFFF" />
+            <Ionicons name="notifications-outline" size={19} color="#FFFFFF" />
             {unreadNotificationCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>
@@ -60,6 +62,8 @@ export function AtletaHeader({
             style={styles.iconCircleButton}
             onPress={onSettingsPress}
             activeOpacity={0.8}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Settings"
           >
             <Ionicons name="settings-outline" size={18} color="#FFFFFF" />
           </TouchableOpacity>
@@ -67,6 +71,7 @@ export function AtletaHeader({
             style={styles.profileCircleButton}
             onPress={onProfilePress}
             activeOpacity={0.8}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="Coach Profile"
           >
             {avatarUrl && !imageError ? (
@@ -117,7 +122,10 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 14,
+  },
+  notificationCircleButton: {
+    marginRight: 2,
   },
   iconCircleButton: {
     width: 38,

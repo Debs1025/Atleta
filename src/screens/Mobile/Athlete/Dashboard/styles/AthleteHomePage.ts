@@ -27,7 +27,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   notificationButton: {
-    padding: 6,
+    padding: 8,
+    marginRight: 2,
     position: "relative",
   },
   notificationIcon: {

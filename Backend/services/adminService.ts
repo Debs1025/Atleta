@@ -6,6 +6,7 @@ import { clientAuth } from '../utils/firebaseClient';
 import { RegisterAdminDto, LoginAdminDto, AdminProfile, User, CoachAccreditationAuditLog } from '../models/userModel';
 import { ServiceError } from '../validators/matchValidator';
 import { createNotification } from './notificationService';
+import { hashPassword, verifyPassword, sanitizeUser, sanitizeProfile } from '../utils/passwordUtils';
 
 export interface AdminAuditLog {
   log_id: string;
@@ -136,6 +137,8 @@ export async function registerAdminService(
   const departmentCode = data.department_code.trim();
   const institution = (data as any).institution || 'Ateneo de Naga University';
 
+  const passwordHash = hashPassword(data.password);
+
   // 3. Provision Users Entity - COMPLETE DATA (NO PREFIX)
   const userData: any = {
     user_id: uid,
@@ -143,7 +146,8 @@ export async function registerAdminService(
     first_name: firstName,
     last_name: lastName,
     email,
-    password: data.password,
+    password: passwordHash,
+    password_hash: passwordHash,
     role: 'SystemAdmin',
     institution,
     department_code: departmentCode,
@@ -195,8 +199,8 @@ export async function registerAdminService(
   const token = generateElevatedAdminToken(uid, email, 'SystemAdmin', clearanceLevel, departmentCode);
 
   return {
-    user: userData,
-    admin_profile: adminProfileData,
+    user: sanitizeUser(userData),
+    admin_profile: sanitizeProfile(adminProfileData),
     token,
   };
 }
@@ -232,7 +236,8 @@ export async function loginAdminService(
 
   // 2. Validate credentials with local hash/password check first, fallback to Firebase Client SDK
   let authenticated = false;
-  if (userData.password && userData.password === passwordInput) {
+  const storedPass = String(userData.password_hash || userData.password || '');
+  if (storedPass && verifyPassword(passwordInput, storedPass)) {
     authenticated = true;
   } else {
     try {
@@ -332,13 +337,13 @@ export async function loginAdminService(
   }).catch((err) => console.error('Async audit log error:', err));
 
   return {
-    user: {
+    user: sanitizeUser({
       user_id: uid,
       full_name: userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
       email: userData.email,
       role: 'SystemAdmin',
-    },
-    admin_profile: adminProfileData,
+    }),
+    admin_profile: sanitizeProfile(adminProfileData),
     token,
   };
 }

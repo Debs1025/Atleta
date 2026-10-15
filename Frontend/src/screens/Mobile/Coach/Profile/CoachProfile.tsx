@@ -304,14 +304,6 @@ export function CoachProfile({
               </View>
             </View>
 
-            {/* SPORTS FOCUS CARD */}
-            <View style={styles.cardContainer}>
-              <Text style={styles.cyanSubLabel}>SPORTS FOCUS</Text>
-              <View style={styles.sportsPillBadge}>
-                <Text style={styles.sportsPillText}>{profile.sports_focus}</Text>
-              </View>
-            </View>
-
             {/* CREDENTIALS CONTAINER */}
             <View style={styles.cardContainer}>
               <Text style={styles.credentialsHeading}>CREDENTIALS</Text>

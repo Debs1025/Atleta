@@ -11,43 +11,101 @@ interface InquiriesProps {
   onBack: () => void;
 }
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { db } from "../../../../services/firebaseClient";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { getStoredAuthToken } from "../../Authentication/authShared";
+
 export function InquiriesScreen({ inquiries: propInquiries, onBack }: InquiriesProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [inquiries, setInquiries] = useState<InquirySchema[]>(propInquiries || []);
-  const [loading, setLoading] = useState(!propInquiries);
+  const [loading, setLoading] = useState(!propInquiries || propInquiries.length === 0);
 
   useEffect(() => {
-    if (propInquiries && propInquiries.length > 0) {
-      setInquiries(propInquiries);
-      setLoading(false);
-      return;
-    }
-
     let isMounted = true;
+
+    // Load instantly from AsyncStorage offline cache
+    AsyncStorage.getItem("atleta_offline_inquiries_cache")
+      .then((cachedStr) => {
+        if (!isMounted || !cachedStr) return;
+        try {
+          const cached = JSON.parse(cachedStr);
+          if (Array.isArray(cached) && cached.length > 0) {
+            setInquiries(cached);
+            setLoading(false);
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
+
     const fetchInquiries = async () => {
       try {
-        setLoading(true);
         const res: any = await requestAuthenticatedJson("/inquiries").catch(() => null);
 
-        if (isMounted && res) {
-          const rawList = res.inquiries || (Array.isArray(res) ? res : []);
-          const mapped: InquirySchema[] = rawList.map((inq: any, idx: number) => {
-            const rawStatus = (inq.offer_status || "PENDING").toUpperCase();
+        let rawList = res?.inquiries || (Array.isArray(res) ? res : []);
+
+        // Fallback to Firestore Scouting_Registry / Inquiries if backend returns empty
+        if (!rawList || rawList.length === 0) {
+          try {
+            const token = await getStoredAuthToken();
+            let currentUserId = "";
+            if (token && token.includes(".")) {
+              const base64Url = token.split(".")[1];
+              const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+              const decoded = typeof atob === "function" ? atob(base64) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(base64, "base64").toString("utf-8") : "");
+              const payload = JSON.parse(decoded);
+              currentUserId = payload.uid || payload.user_id || payload.sub || "";
+            }
+            if (currentUserId) {
+              const cleanId = currentUserId.replace(/^ath_/, "");
+              const snap = await getDocs(
+                query(collection(db, "Scouting_Registry"), where("athlete_id", "in", [currentUserId, `ath_${cleanId}`, cleanId]))
+              ).catch(() => null);
+              if (snap && !snap.empty) {
+                rawList = snap.docs.map((d) => d.data());
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (isMounted) {
+          const mapped: InquirySchema[] = (rawList || []).map((inq: any, idx: number) => {
+            const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
             const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
             return {
               inquiry_id: inq.scout_id || inq.inquiry_id || `inq_${idx}`,
               coach_name: inq.coach_name || "Coach",
-              institution_sport: `${inq.current_institution || "Varsity"} • ${inq.sport_type || "Basketball"}`,
+              institution_sport: `${inq.current_institution || inq.institution || "Varsity"} • ${inq.sport_type || inq.role_title || "Basketball"}`,
               status: mappedStatus as any,
               updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
-              sub_note: inq.decline_reason || undefined,
+              sub_note: inq.decline_reason || inq.sub_note || undefined,
             };
           });
-          setInquiries(mapped);
+
+          // Merge with any existing offline cache items
+          const cachedStr = await AsyncStorage.getItem("atleta_offline_inquiries_cache").catch(() => null);
+          const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
+          const combinedMap = new Map<string, InquirySchema>();
+          
+          cachedItems.forEach((item) => {
+            if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
+          });
+          mapped.forEach((item) => {
+            if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
+          });
+
+          const finalList = Array.from(combinedMap.values());
+          if (finalList.length > 0) {
+            setInquiries(finalList);
+            await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(finalList)).catch(() => null);
+          } else if (mapped.length > 0) {
+            setInquiries(mapped);
+            await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(mapped)).catch(() => null);
+          }
         }
       } catch (err) {
-        if (isMounted) setInquiries([]);
+        // Fallback to cache on error
       } finally {
         if (isMounted) setLoading(false);
       }

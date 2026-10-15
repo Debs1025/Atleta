@@ -72,7 +72,13 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) + 70 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Media / Image Placeholder Box */}
         <View style={styles.imagePlaceholderBox}>
           {currentAthlete.avatar_url ? (

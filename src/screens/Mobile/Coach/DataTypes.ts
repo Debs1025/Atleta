@@ -30,6 +30,8 @@ export interface CoachProfileState {
     association_name: string;
     office_name: string;
   };
+  coaching_philosophy?: string;
+  coachingPhilosophy?: string;
   credentials: CredentialItem[];
   uploaded_documents: UploadedDocument[];
   system_statistics: {
@@ -119,6 +121,8 @@ export interface Team {
   coach_id: string;
   roster_list: RosterAthlete[];
   created_at: string;
+  timestamp?: string;
+  [key: string]: any;
 }
 
 export type NavigationTab = "Home" | "Teams" | "Discovery" | "Performance";
@@ -154,6 +158,8 @@ export interface CoachSettingsData {
   data_sync_preference: "Manual" | "Automatic";
   game_log_updates: boolean;
   recruitment_inquiries: boolean;
+  coaching_philosophy?: string;
+  coachingPhilosophy?: string;
   updated_at: string;
 }
 
@@ -163,6 +169,8 @@ export const DEFAULT_COACH_SETTINGS: CoachSettingsData = {
   data_sync_preference: "Manual",
   game_log_updates: true,
   recruitment_inquiries: true,
+  coaching_philosophy: "",
+  coachingPhilosophy: "",
   updated_at: "2026-08-07",
 };
 
@@ -255,6 +263,21 @@ export interface AthletePerformanceProfile {
     flip_turn_s?: string;
     swim_index_score?: number;
     podiums_count?: number;
+    // Volleyball specific
+    spike_kills?: number;
+    block_points?: number;
+    service_aces?: number;
+    digs?: number;
+    sets_played?: number;
+    attack_percentage?: number;
+    // Pickleball specific
+    points_scored?: number;
+    aces?: number;
+    dinks?: number;
+    unforced_errors?: number;
+    win_percentage?: number;
+    third_shot_drops?: number;
+    [key: string]: any;
   };
   radar_competencies: {
     speed: number;

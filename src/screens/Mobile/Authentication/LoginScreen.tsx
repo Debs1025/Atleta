@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Platform, ScrollView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,11 +20,15 @@ import {
   requestJson,
   storeAuthRole,
   storeAuthToken,
+  clearAuthMicroCache,
   API_BASE,
   type AuthRole,
   type BannerTone,
   type LoginValues
 } from "./authShared";
+import { db, clearFirebaseClientCaches } from "../../../services/firebaseClient";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
   NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
@@ -31,8 +36,37 @@ try {
   // Native module not linked in current binary
 }
 
+function parseJwtPayload(token?: string) {
+  try {
+    if (!token || !token.includes(".")) return null;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    let decoded = "";
+    if (typeof (globalThis as any).atob === "function") {
+      decoded = (globalThis as any).atob(b64);
+    } else if (typeof (globalThis as any).Buffer !== "undefined") {
+      decoded = (globalThis as any).Buffer.from(b64, "base64").toString("utf8");
+    }
+    if (decoded) {
+      return JSON.parse(decodeURIComponent(escape(decoded)));
+    }
+  } catch (_) {}
+  return null;
+}
+
+export type SocialSignupPayload = {
+  socialToken: { provider: "google" | "facebook"; idToken: string };
+  initialData?: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  };
+};
+
 type LoginScreenProps = {
-  onGoSignup: () => void;
+  onGoSignup: (socialData?: SocialSignupPayload) => void;
   onGoReset: () => void;
   onAuthenticated?: (role: AuthRole) => void;
 };
@@ -40,6 +74,7 @@ type LoginScreenProps = {
 export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScreenProps) {
   const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [socialModal, setSocialModal] = useState<{ visible: boolean; provider: 'google' | 'facebook' }>({ visible: false, provider: 'google' });
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -61,36 +96,137 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
     }
   }, [googleClientId]);
 
-  const handleSocialAuthWithToken = async (provider: "google" | "facebook", idToken: string) => {
+  const handleSocialAuthWithToken = async (
+    provider: "google" | "facebook",
+    idToken: string,
+    fallbackUser?: { email?: string; givenName?: string; familyName?: string; photo?: string }
+  ) => {
     setLoading(true);
     setFeedback(null);
-    try {
-      const endpoint = provider === "google" ? "/users/google-login" : "/users/facebook-login";
-      const payload = provider === "google"
-        ? { id_token: idToken, idToken, token: idToken, credential: idToken, provider }
-        : { access_token: idToken, accessToken: idToken, id_token: idToken, idToken, provider };
+    let extractedEmail = (fallbackUser?.email || "").trim().toLowerCase();
+    let extractedFirstName = fallbackUser?.givenName || "";
+    let extractedLastName = fallbackUser?.familyName || "";
+    let extractedAvatar = fallbackUser?.photo || "";
 
-      const result = await requestJson(endpoint, payload);
+    try {
+      const jwtPayload = parseJwtPayload(idToken);
+      if (jwtPayload?.email) extractedEmail = jwtPayload.email.trim().toLowerCase();
+      if (jwtPayload?.given_name) extractedFirstName = jwtPayload.given_name;
+      else if (jwtPayload?.name) extractedFirstName = jwtPayload.name.split(" ")[0];
+      if (jwtPayload?.family_name) extractedLastName = jwtPayload.family_name;
+      else if (jwtPayload?.name) extractedLastName = jwtPayload.name.split(" ").slice(1).join(" ");
+      if (jwtPayload?.picture) extractedAvatar = jwtPayload.picture;
+
+      const endpoint = provider === "google" ? "/users/google-login" : "/users/facebook-login";
+      const payload = {
+        id_token: idToken,
+        idToken,
+        token: idToken,
+        credential: idToken,
+        access_token: idToken,
+        accessToken: idToken,
+        provider,
+        email: extractedEmail,
+        first_name: extractedFirstName,
+        last_name: extractedLastName,
+        avatar_url: extractedAvatar,
+      };
+
+      let result: any = null;
+      try {
+        result = await requestJson(endpoint, payload);
+      } catch (err: any) {
+        const msg = (err?.message || "").toLowerCase();
+        if (msg.includes("not found") || msg.includes("exist") || msg.includes("sign up") || msg.includes("signup")) {
+          // Route immediately to sign up
+          onGoSignup?.({
+            socialToken: { provider, idToken },
+            initialData: {
+              email: extractedEmail,
+              first_name: extractedFirstName,
+              last_name: extractedLastName,
+              avatar_url: extractedAvatar,
+            }
+          });
+          return;
+        }
+      }
+
+      const resData = result as any;
+      if (resData?.user?.email && !extractedEmail) extractedEmail = String(resData.user.email).toLowerCase().trim();
+      if (resData?.user?.first_name && !extractedFirstName) extractedFirstName = resData.user.first_name;
+      if (resData?.user?.last_name && !extractedLastName) extractedLastName = resData.user.last_name;
+      if (resData?.user?.avatar_url && !extractedAvatar) extractedAvatar = resData.user.avatar_url;
+
+      // Branch B (Account Does Not Exist - New User):
+      // If no matching document is found in Firestore, do not create a default account or route to the dashboard.
+      // Temporarily hold the verified social credentials in staging state and redirect to Sign-Up / Onboarding Screen.
+      if (
+        resData?.account_exists === false ||
+        resData?.require_signup ||
+        resData?.is_new_user ||
+        !resData?.token
+      ) {
+        onGoSignup?.({
+          socialToken: { provider, idToken },
+          initialData: {
+            email: extractedEmail || resData?.user?.email || "",
+            first_name: extractedFirstName || resData?.user?.first_name || "",
+            last_name: extractedLastName || resData?.user?.last_name || "",
+            avatar_url: extractedAvatar || resData?.user?.avatar_url || "",
+          }
+        });
+        return;
+      }
+
+      // Branch A (Account Exists):
+      // Fetch user's role from Firestore, securely store session tokens via Expo SecureStore, and route directly to dashboard.
       const token = extractAuthToken(result);
-      const role = extractAuthRole(result) || "athlete";
+      const role = extractAuthRole(result, extractedEmail);
 
       if (token) await storeAuthToken(token);
       await storeAuthRole(role);
 
+      clearAuthMicroCache();
+      clearFirebaseClientCaches();
+      await AsyncStorage.multiRemove([
+        "atleta_coach_dashboard_cache_v2",
+        "atleta_offline_coach_profile_cache",
+        "atleta_offline_athlete_profile_cache",
+        "atleta_offline_teams_cache",
+        "atleta_offline_matches_cache",
+        "atleta_offline_athletes_cache",
+        "atleta_offline_sports_cache",
+        "atleta_coach_settings",
+        "atleta_cached_user",
+      ]).catch(() => null);
+
       onAuthenticated?.(role);
     } catch (error: any) {
       const msg = getAuthErrorMessage(error, `Unable to authenticate with ${provider}.`);
-      if (msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("exist")) {
-        setFeedback({
-          tone: "info",
-          message: `No existing account found for this ${provider === "google" ? "Google" : "Facebook"} account. Please tap Sign Up to create your account.`
+      if (
+        msg.toLowerCase().includes("not found") ||
+        msg.toLowerCase().includes("exist") ||
+        msg.toLowerCase().includes("sign up") ||
+        msg.toLowerCase().includes("signup") ||
+        msg.toLowerCase().includes("register") ||
+        error?.code === "USER_NOT_FOUND"
+      ) {
+        onGoSignup?.({
+          socialToken: { provider, idToken },
+          initialData: {
+            email: extractedEmail,
+            first_name: extractedFirstName,
+            last_name: extractedLastName,
+            avatar_url: extractedAvatar,
+          }
         });
-      } else {
-        setFeedback({
-          tone: "error",
-          message: msg
-        });
+        return;
       }
+      setFeedback({
+        tone: "error",
+        message: msg
+      });
     } finally {
       setLoading(false);
     }
@@ -105,9 +241,10 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         await NativeGoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
         const signInResult = await NativeGoogleSignin.signIn();
         const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+        const userObj = (signInResult as any)?.data?.user || (signInResult as any)?.user;
 
         if (idToken) {
-          await handleSocialAuthWithToken("google", idToken);
+          await handleSocialAuthWithToken("google", idToken, userObj);
           return;
         }
       }
@@ -118,52 +255,15 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       }
     }
 
-    try {
-      const res = await promptGoogleOAuthAsync();
-      if (res.type === "success" && (res.idToken || res.accessToken)) {
-        await handleSocialAuthWithToken("google", (res.idToken || res.accessToken)!);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Google sign-in failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Google sign-in failed."
-      });
-    }
+    // Fall back seamlessly to in-app Google Auth modal without leaving the app
+    setLoading(false);
+    setSocialModal({ visible: true, provider: "google" });
   };
 
-  const handleFacebookSignInPress = async () => {
-    setLoading(true);
+  const handleFacebookSignInPress = () => {
+    setLoading(false);
     setFeedback(null);
-
-    try {
-      const res = await promptFacebookOAuthAsync();
-      if (res.type === "success" && (res.accessToken || res.idToken)) {
-        await handleSocialAuthWithToken("facebook", (res.accessToken || res.idToken)!);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Facebook sign-in failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Facebook sign-in failed."
-      });
-    }
+    setSocialModal({ visible: true, provider: "facebook" });
   };
 
   const submit = form.handleSubmit(
@@ -173,7 +273,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
       try {
         const payload = {
-          email: values.email.trim().toLowerCase(),
+          email: values.email.trim().toLowerCase().replace(/%40/gi, "@"),
           password: values.password.trim()
         };
         const result = await requestJson("/users/login", payload);
@@ -182,6 +282,20 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
         if (token) await storeAuthToken(token);
         await storeAuthRole(role);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
 
         onAuthenticated?.(role);
         form.reset(values);
@@ -231,19 +345,21 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           control={form.control}
           name="password"
           label="Password"
-          placeholder="••••••••"
+          placeholder="Enter your password"
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
         />
 
-        <Button label="Login" loading={loading} onPress={submit} />
+        <View style={{ marginTop: 6 }}>
+          <Button label="Login" loading={loading} onPress={submit} />
+        </View>
 
         <Text style={styles.link} onPress={onGoReset}>
           Forgot Password?
         </Text>
 
-        <View style={authScreenStyles.dividerRow}>
+        <View style={[authScreenStyles.dividerRow, styles.dividerRow]}>
           <View style={authScreenStyles.divider} />
           <Text style={authScreenStyles.or}>or</Text>
           <View style={authScreenStyles.divider} />
@@ -264,8 +380,26 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         />
 
         <Text style={authScreenStyles.footer}>
-          Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={onGoSignup}>Sign Up</Text>
+          Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={() => onGoSignup?.()}>Sign Up</Text>
         </Text>
+
+        <InAppGoogleAuthModal
+          visible={socialModal.visible}
+          provider={socialModal.provider}
+          onClose={() => setSocialModal((prev) => ({ ...prev, visible: false }))}
+          onSuccess={(tokens) => {
+            const token = tokens.idToken || tokens.accessToken;
+            if (token) {
+              handleSocialAuthWithToken(socialModal.provider, token);
+            }
+          }}
+          onError={(err) => {
+            setFeedback({
+              tone: "error",
+              message: err || `${socialModal.provider === "facebook" ? "Facebook" : "Google"} sign-in could not be completed.`
+            });
+          }}
+        />
       </View>
     </ScrollView>
   );

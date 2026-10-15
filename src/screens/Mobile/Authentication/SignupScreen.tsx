@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as DocumentPicker from "expo-document-picker";
+import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
   NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
@@ -13,9 +16,12 @@ try {
 import {
   AuthHeader,
   authScreenStyles,
+  AUTH_TOKEN_KEY,
+  AUTH_ROLE_KEY,
   Banner,
   Button,
   Checkbox,
+  clearAuthMicroCache,
   FormField,
   FullScreenOverlay,
   getAuthErrorMessage,
@@ -42,11 +48,24 @@ import {
   type StoredUpload
 } from "./authShared";
 
+import { clearFirebaseClientCaches, getSportsOfflineFirst, db } from "../../../services/firebaseClient";
+import { collection, getDocs } from "firebase/firestore";
 import { DatePickerModal } from "../Athlete/Profile/AthleteProfileModals";
-import { getSportsOfflineFirst } from "../../../services/firebaseClient";
+
+export type InitialSocialData = {
+  socialToken: { provider: "google" | "facebook"; idToken: string };
+  initialData?: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  };
+};
 
 type SignupScreenProps = {
   onGoLogin: () => void;
+  initialSocialData?: InitialSocialData | null;
+  onAuthenticated?: (role: AuthRole) => void;
 };
 
 type ChoiceGroupProps = {
@@ -77,7 +96,7 @@ const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 const YEARS_LIST = Array.from({ length: 57 }, (_, i) => 1970 + i);
 
 const genderOptions = ["Male", "Female"] as const;
-const DEFAULT_SPORT_OPTIONS = ["Basketball", "Track and Field", "Swimming", "Volleyball", "Pickleball"];
+const DEFAULT_SPORT_OPTIONS = ["Basketball", "Track and Field", "Swimming", "Volleyball"];
 
 const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
   role: "athlete",
@@ -169,7 +188,7 @@ function ChoiceGroup({ label, placeholder = "Select an option", options, value, 
   );
 }
 
-export function SignupScreen({ onGoLogin }: SignupScreenProps) {
+export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: SignupScreenProps) {
   const [role, setRole] = useState<AuthRole>("athlete");
   const [step, setStep] = useState<AuthStep>(1);
   const [feedback, setFeedback] = useState<{ tone: BannerTone; message: string } | null>(null);
@@ -178,33 +197,84 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const [accountCreated, setAccountCreated] = useState(false);
 
   const [socialToken, setSocialToken] = useState<{ provider: "google" | "facebook"; idToken: string } | null>(null);
+  const [coachSport, setCoachSport] = useState<string>("");
   const [sportOptions, setSportOptions] = useState<string[]>(DEFAULT_SPORT_OPTIONS);
+  const socialProfileRef = useRef<{ first_name: string; last_name: string; email: string }>({
+    first_name: "",
+    last_name: "",
+    email: "",
+  });
+  const isFirstMount = useRef(true);
+
+  useEffect(() => {
+    if (initialSocialData?.socialToken) {
+      setSocialToken(initialSocialData.socialToken);
+      const fn = initialSocialData.initialData?.first_name || "";
+      const ln = initialSocialData.initialData?.last_name || "";
+      const em = initialSocialData.initialData?.email || "";
+      socialProfileRef.current = { first_name: fn, last_name: ln, email: em };
+
+      athleteForm.setValue("first_name", fn);
+      athleteForm.setValue("last_name", ln);
+      athleteForm.setValue("email", em);
+
+      coachForm.setValue("first_name", fn);
+      coachForm.setValue("last_name", ln);
+      coachForm.setValue("email", em);
+
+      setStep(1);
+      const providerLabel = initialSocialData.socialToken.provider === "google" ? "Google" : "Facebook";
+      setFeedback({
+        tone: "info",
+        message: `${providerLabel} connected! Select your role (Athlete or Coach) to continue.`
+      });
+    }
+  }, [initialSocialData]);
 
   useEffect(() => {
     let isMounted = true;
-    getSportsOfflineFirst()
-      .then((sports: any) => {
+    const fetchActiveSports = async () => {
+      try {
+        let sports: any[] = [];
+        try {
+          let snap = await getDocs(collection(db, "Sports_Configurations"));
+          if (snap.empty) {
+            snap = await getDocs(collection(db, "sports_configurations"));
+          }
+          if (!snap.empty) {
+            sports = snap.docs
+              .map((d) => ({ sport_id: d.id, ...d.data() }))
+              .filter((s: any) => s.is_active !== false && s.active !== false);
+          }
+        } catch (_) {}
+
+        if (sports.length === 0) {
+          sports = await getSportsOfflineFirst(true);
+        }
+
         if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
         const seen = new Set<string>();
         const mapped: string[] = [];
         sports.forEach((s: any) => {
           const raw = String(s.sport_name || s.name || s.id || '').trim();
           if (!raw) return;
-          const upper = raw.toUpperCase();
+          const upper = raw.toUpperCase().replace(/&/g, 'AND').replace(/\s+/g, ' ');
           if (seen.has(upper)) return;
           seen.add(upper);
           const label =
-            upper === 'TRACK AND FIELD' || upper === 'TRACK & FIELD'
+            upper === 'TRACK AND FIELD'
               ? 'Track and Field'
               : raw.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
           mapped.push(label);
         });
         if (mapped.length > 0) {
-          const merged = Array.from(new Set([...mapped, ...DEFAULT_SPORT_OPTIONS]));
-          setSportOptions(merged);
+          setSportOptions(mapped);
         }
-      })
-      .catch((err: any) => console.warn('Could not fetch dynamic sports for signup:', err));
+      } catch (err: any) {
+        console.warn('Could not fetch dynamic sports for signup:', err);
+      }
+    };
+    fetchActiveSports();
     return () => {
       isMounted = false;
     };
@@ -212,6 +282,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
   // Calendar Birthdate Picker modal state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [socialModal, setSocialModal] = useState<{ visible: boolean; provider: 'google' | 'facebook' }>({ visible: false, provider: 'google' });
   const [pickerYear, setPickerYear] = useState(2004);
   const [pickerMonth, setPickerMonth] = useState(9);
   const [calendarMode, setCalendarMode] = useState<"DAYS" | "MONTHS" | "YEARS">("DAYS");
@@ -280,11 +351,34 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
         await NativeGoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
         const signInResult = await NativeGoogleSignin.signIn();
         const idToken = (signInResult as any)?.data?.idToken || (signInResult as any)?.idToken;
+        const userObj = (signInResult as any)?.data?.user || (signInResult as any)?.user;
 
         if (idToken) {
+          const fn = userObj?.givenName || userObj?.name?.split(' ')[0] || "";
+          const ln = userObj?.familyName || userObj?.name?.split(' ').slice(1).join(' ') || "";
+          const em = userObj?.email || "";
+          if (fn || ln || em) {
+            socialProfileRef.current = {
+              first_name: fn || socialProfileRef.current.first_name,
+              last_name: ln || socialProfileRef.current.last_name,
+              email: em || socialProfileRef.current.email,
+            };
+            if (fn) {
+              athleteForm.setValue("first_name", fn);
+              coachForm.setValue("first_name", fn);
+            }
+            if (ln) {
+              athleteForm.setValue("last_name", ln);
+              coachForm.setValue("last_name", ln);
+            }
+            if (em) {
+              athleteForm.setValue("email", em);
+              coachForm.setValue("email", em);
+            }
+          }
           setSocialToken({ provider: "google", idToken });
-          setFeedback({ tone: "info", message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.` });
-          setStep(3);
+          setFeedback({ tone: "info", message: `Google account connected! Please confirm your credentials below to complete your ${role.toUpperCase()} account.` });
+          setStep(2);
           setLoading(false);
           return;
         }
@@ -296,66 +390,15 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       }
     }
 
-    try {
-      const res = await promptGoogleOAuthAsync();
-      if (res.type === "success" && (res.idToken || res.accessToken)) {
-        const token = (res.idToken || res.accessToken)!;
-        setSocialToken({ provider: "google", idToken: token });
-        setFeedback({
-          tone: "info",
-          message: `Google account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
-        });
-        setStep(3);
-        setLoading(false);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Google sign-up failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Google sign-up failed."
-      });
-    }
+    // Fall back smoothly to in-app Google Auth modal without leaving the app
+    setLoading(false);
+    setSocialModal({ visible: true, provider: "google" });
   };
 
-  const handleFacebookSignUpPress = async () => {
-    setLoading(true);
+  const handleFacebookSignUpPress = () => {
+    setLoading(false);
     setFeedback(null);
-
-    try {
-      const res = await promptFacebookOAuthAsync();
-      if (res.type === "success" && (res.accessToken || res.idToken)) {
-        const token = (res.accessToken || res.idToken)!;
-        setSocialToken({ provider: "facebook", idToken: token });
-        setFeedback({
-          tone: "info",
-          message: `Facebook account connected! Please fill in your profile details below to complete your ${role.toUpperCase()} account.`
-        });
-        setStep(3);
-        setLoading(false);
-      } else if (res.type === "error") {
-        setLoading(false);
-        setFeedback({
-          tone: "error",
-          message: res.error || "Facebook sign-up failed."
-        });
-      } else {
-        setLoading(false);
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setFeedback({
-        tone: "error",
-        message: e?.message || "Facebook sign-up failed."
-      });
-    }
+    setSocialModal({ visible: true, provider: "facebook" });
   };
 
   const athleteForm = useForm<AthleteSignupValues>({
@@ -374,20 +417,53 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
   const coachErrors = coachForm.formState.errors as Partial<Record<string, { message?: string }>>;
 
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     setFeedback(null);
-    setStep(1);
     setDocumentFile(null);
-    athleteForm.reset(DEFAULT_ATHLETE_VALUES);
-    coachForm.reset(DEFAULT_COACH_VALUES);
+    const sp = socialProfileRef.current;
+    const currentFirst = athleteForm.getValues("first_name") || coachForm.getValues("first_name") || sp.first_name || "";
+    const currentLast = athleteForm.getValues("last_name") || coachForm.getValues("last_name") || sp.last_name || "";
+    const currentEmail = athleteForm.getValues("email") || coachForm.getValues("email") || sp.email || "";
+    const currentContact = athleteForm.getValues("contact_number") || coachForm.getValues("contact_number") || "";
+
+    athleteForm.reset({
+      ...DEFAULT_ATHLETE_VALUES,
+      first_name: currentFirst,
+      last_name: currentLast,
+      email: currentEmail,
+      contact_number: currentContact,
+    });
+    coachForm.reset({
+      ...DEFAULT_COACH_VALUES,
+      first_name: currentFirst,
+      last_name: currentLast,
+      email: currentEmail,
+      contact_number: currentContact,
+    });
   }, [athleteForm, coachForm, role]);
 
   const goNext = async () => {
-    const fields = ["first_name", "last_name", "email", "password", "contact_number"] as const;
-    const valid = await activeForm.trigger(fields);
+    const fields = socialToken
+      ? (["first_name", "last_name", "email"] as const)
+      : (["first_name", "last_name", "email", "password", "contact_number"] as const);
+    const valid = await activeForm.trigger(fields as any);
     if (valid) {
+      setFeedback(null);
+      const currentValues = activeForm.getValues();
+      socialProfileRef.current = {
+        first_name: currentValues.first_name || socialProfileRef.current.first_name,
+        last_name: currentValues.last_name || socialProfileRef.current.last_name,
+        email: currentValues.email || socialProfileRef.current.email,
+      };
       setStep(3);
     } else {
-      setFeedback({ tone: "error", message: "Please fill in the required details before proceeding." });
+      const errs = activeForm.formState.errors as any;
+      const firstKey = fields.find((f) => errs[f]);
+      const msg = firstKey && errs[firstKey]?.message ? errs[firstKey].message : "Please fill in the required details before proceeding.";
+      setFeedback({ tone: "error", message: msg });
     }
   };
 
@@ -419,6 +495,27 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
     setFeedback({ tone: "success", message: `${nextDocument.name} attached.` });
   };
 
+  const onInvalid = (errors: any) => {
+    setLoading(false);
+    console.warn("Signup form validation errors:", errors);
+    const errorKeys = Object.keys(errors);
+    if (errorKeys.length === 0) return;
+
+    const step2Fields = ["first_name", "last_name", "email", "password", "contact_number"];
+    const hasStep2Error = errorKeys.some((k) => step2Fields.includes(k));
+
+    const firstKey = errorKeys[0];
+    const firstMsg = errors[firstKey]?.message || `Please check ${firstKey.replace(/_/g, " ")}.`;
+    setFeedback({
+      tone: "error",
+      message: firstMsg,
+    });
+
+    if (hasStep2Error) {
+      setStep(2);
+    }
+  };
+
   const submitAthlete = athleteForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
@@ -427,41 +524,144 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
       if (socialToken) {
         const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
         const { role: _r, ...restValues } = values;
-        await requestJson(endpoint, {
+        const result = await requestJson(endpoint, {
           id_token: socialToken.idToken,
           idToken: socialToken.idToken,
+          token: socialToken.idToken,
+          credential: socialToken.idToken,
           provider: socialToken.provider,
           role: "Athlete",
+          is_registration: true,
           ...restValues
         });
+        const token = extractAuthToken(result);
+        const savedRole = extractAuthRole(result) || "athlete";
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(savedRole);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
+        athleteForm.reset();
+        setSocialToken(null);
+
+        if (onAuthenticated && token) {
+          onAuthenticated(savedRole);
+          return;
+        } else {
+          setAccountCreated(true);
+        }
       } else {
-        await requestJson("/users/register", { ...values, role: "Athlete" });
+        const result = await requestJson("/users/register", { ...values, role: "Athlete" });
+        const token = extractAuthToken(result);
+        const savedRole = extractAuthRole(result) || "athlete";
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(savedRole);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
+        athleteForm.reset();
+        setSocialToken(null);
+
+        if (onAuthenticated && token) {
+          onAuthenticated(savedRole);
+          return;
+        } else {
+          setAccountCreated(true);
+        }
       }
-      setAccountCreated(true);
-      athleteForm.reset();
-      setSocialToken(null);
     } catch (error) {
       setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
     } finally {
       setLoading(false);
     }
-  });
+  }, onInvalid);
 
   const submitCoach = coachForm.handleSubmit(async (values) => {
     setLoading(true);
     setFeedback(null);
 
     try {
+      if (!coachSport) {
+        setFeedback({ tone: "error", message: "Please select your sport type." });
+        setLoading(false);
+        return;
+      }
       if (socialToken) {
         const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
         const { role: _r, ...restValues } = values;
-        await requestJson(endpoint, {
+        const result = await requestJson(endpoint, {
           id_token: socialToken.idToken,
           idToken: socialToken.idToken,
+          token: socialToken.idToken,
+          credential: socialToken.idToken,
           provider: socialToken.provider,
           role: "Coach",
+          is_registration: true,
+          sport_type: coachSport,
           ...restValues
         });
+        const token = extractAuthToken(result);
+        const savedRole = extractAuthRole(result) || "coach";
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(savedRole);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
+        coachForm.reset();
+        setDocumentFile(null);
+        setSocialToken(null);
+
+        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
+        } else {
+          setAccountCreated(true);
+        }
+        return;
       } else {
         const payload = {
           role: "Coach",
@@ -470,6 +670,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           email: values.email,
           password: values.password,
           contact_number: values.contact_number || undefined,
+          sport_type: coachSport,
           certification_license_num: values.certification_license_num || undefined,
           years_of_experience: Number(values.years_of_experience || 0),
           current_institution: values.current_institution,
@@ -478,18 +679,52 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           professional_documents: documentFile ? [documentFile.name || "coach_license.pdf"] : []
         };
 
-        await requestJson("/users/coach", payload);
+        const result = await requestJson("/users/coach", payload);
+        const token = extractAuthToken(result);
+        const savedRole = extractAuthRole(result) || "coach";
+        if (token) await storeAuthToken(token);
+        await storeAuthRole(savedRole);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
+        coachForm.reset();
+        setDocumentFile(null);
+        setSocialToken(null);
+
+        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
+        } else {
+          setAccountCreated(true);
+        }
+        return;
       }
-      setAccountCreated(true);
-      coachForm.reset();
-      setDocumentFile(null);
-      setSocialToken(null);
     } catch (error) {
       setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
     } finally {
       setLoading(false);
     }
-  });
+  }, onInvalid);
 
   const handleSocialSubmit = async () => {
     if (!socialToken) return;
@@ -524,24 +759,54 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           credential: currentToken,
           provider: socialToken.provider,
           role: "Athlete",
+          is_registration: true,
+          first_name: values.first_name || socialProfileRef.current.first_name,
+          last_name: values.last_name || socialProfileRef.current.last_name,
+          email: values.email || socialProfileRef.current.email,
+          contact_number: values.contact_number,
           birthdate: values.birthdate,
           gender: values.gender,
           province: values.province,
-          sport_type: values.sport_type
+          sport_type: values.sport_type,
+          terms_accepted: true,
         });
         const token = extractAuthToken(result);
         const savedRole = extractAuthRole(result) || "athlete";
         if (token) await storeAuthToken(token);
         await storeAuthRole(savedRole);
-        setAccountCreated(true);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
         athleteForm.reset();
         setSocialToken(null);
+
+        if (onAuthenticated) {
+          onAuthenticated(savedRole);
+        } else {
+          setAccountCreated(true);
+        }
       } catch (error) {
         setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
       } finally {
         setLoading(false);
       }
     } else {
+      if (!coachSport) {
+        setFeedback({ tone: "error", message: "Please select your sport type." });
+        return;
+      }
       const valid = await coachForm.trigger(["years_of_experience", "current_institution", "regional_affiliation", "terms_accepted"]);
       if (!valid) {
         setFeedback({ tone: "error", message: "Please fill in all required profile details." });
@@ -559,19 +824,56 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
           credential: currentToken,
           provider: socialToken.provider,
           role: "Coach",
+          is_registration: true,
+          first_name: values.first_name || socialProfileRef.current.first_name,
+          last_name: values.last_name || socialProfileRef.current.last_name,
+          email: values.email || socialProfileRef.current.email,
+          contact_number: values.contact_number,
+          sport_type: coachSport,
           certification_license_num: values.certification_license_num,
           years_of_experience: values.years_of_experience,
           current_institution: values.current_institution,
           regional_affiliation: values.regional_affiliation,
-          national_sports_league: values.national_sports_league
+          national_sports_league: values.national_sports_league,
+          terms_accepted: true,
         });
         const token = extractAuthToken(result);
         const savedRole = extractAuthRole(result) || "coach";
         if (token) await storeAuthToken(token);
         await storeAuthRole(savedRole);
-        setAccountCreated(true);
+
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        await AsyncStorage.multiRemove([
+          "atleta_coach_dashboard_cache_v2",
+          "atleta_offline_coach_profile_cache",
+          "atleta_offline_athlete_profile_cache",
+          "atleta_offline_teams_cache",
+          "atleta_offline_matches_cache",
+          "atleta_offline_athletes_cache",
+          "atleta_offline_sports_cache",
+          "atleta_coach_settings",
+          "atleta_cached_user",
+        ]).catch(() => null);
+
         coachForm.reset();
         setSocialToken(null);
+
+        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
+        } else {
+          setAccountCreated(true);
+        }
+        return;
       } catch (error) {
         setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
       } finally {
@@ -624,25 +926,29 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               <Text style={styles.helper}>The fields below will update automatically for the role you choose.</Text>
               <Button label="Continue" onPress={() => setStep(2)} />
 
-              <View style={authScreenStyles.dividerRow}>
-                <View style={authScreenStyles.divider} />
-                <Text style={authScreenStyles.or}>or</Text>
-                <View style={authScreenStyles.divider} />
-              </View>
+              {!socialToken ? (
+                <>
+                  <View style={authScreenStyles.dividerRow}>
+                    <View style={authScreenStyles.divider} />
+                    <Text style={authScreenStyles.or}>or</Text>
+                    <View style={authScreenStyles.divider} />
+                  </View>
 
-              <Button
-                label="Sign Up with Google"
-                variant="secondary"
-                icon={require("../../../assets/google.png")}
-                onPress={handleGoogleSignUpPress}
-              />
-              <View style={authScreenStyles.spacer} />
-              <Button
-                label="Sign Up with Facebook"
-                variant="secondary"
-                icon={require("../../../assets/facebook.png")}
-                onPress={handleFacebookSignUpPress}
-              />
+                  <Button
+                    label="Sign Up with Google"
+                    variant="secondary"
+                    icon={require("../../../assets/google.png")}
+                    onPress={handleGoogleSignUpPress}
+                  />
+                  <View style={authScreenStyles.spacer} />
+                  <Button
+                    label="Sign Up with Facebook"
+                    variant="secondary"
+                    icon={require("../../../assets/facebook.png")}
+                    onPress={handleFacebookSignUpPress}
+                  />
+                </>
+              ) : null}
             </View>
           ) : null}
 
@@ -651,7 +957,18 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               <FormField control={activeForm.control as never} name={"first_name" as never} label="First Name" placeholder="G. Francis" error={sharedErrors.first_name?.message} />
               <FormField control={activeForm.control as never} name={"last_name" as never} label="Last Name" placeholder="Pelonio" error={sharedErrors.last_name?.message} />
               <FormField control={activeForm.control as never} name={"email" as never} label="Email Address" placeholder="coach@gmail.com" autoCapitalize="none" keyboardType="email-address" error={sharedErrors.email?.message} />
-              <FormField control={activeForm.control as never} name={"password" as never} label="Password" placeholder="At least 8 chars" secureTextEntry error={sharedErrors.password?.message} />
+              {!socialToken ? (
+                <FormField control={activeForm.control as never} name={"password" as never} label="Password" placeholder="At least 8 chars" secureTextEntry error={sharedErrors.password?.message} />
+              ) : (
+                <View style={{ backgroundColor: "#0F172A", borderColor: "#1E293B", borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                  <Text style={{ color: "#38BDF8", fontSize: 13, fontWeight: "700" }}>
+                    {socialToken.provider === "google" ? "Google" : "Facebook"} Account Connected
+                  </Text>
+                  <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 4 }}>
+                    Authentication is secured by your social provider. Please confirm your credentials above before continuing.
+                  </Text>
+                </View>
+              )}
               <FormField control={activeForm.control as never} name={"contact_number" as never} label="Contact Number" placeholder="09XXXXXXXXX" keyboardType="phone-pad" error={sharedErrors.contact_number?.message} />
 
               <View style={styles.navRow}>
@@ -689,7 +1006,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               />
 
               <View style={styles.navRow}>
-                <Button label="Back" variant="ghost" onPress={() => setStep(socialToken ? 1 : 2)} />
+                <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
                 <View style={styles.navSpacer} />
                 <Button label="Sign Up" loading={loading} onPress={submit} />
               </View>
@@ -698,6 +1015,13 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
 
           {step === 3 && role === "coach" ? (
             <View>
+              <ChoiceGroup
+                label="Sport Coaching"
+                placeholder="Select Sport Type"
+                options={sportOptions}
+                value={coachSport}
+                onChange={setCoachSport}
+              />
               <FormField control={coachForm.control} name="certification_license_num" label="Certification License Number" placeholder="Optional" error={coachErrors.certification_license_num?.message} />
               <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
               <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="e.g. Ateneo de Naga University" error={coachErrors.current_institution?.message} />
@@ -719,7 +1043,7 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
               />
 
               <View style={styles.navRow}>
-                <Button label="Back" variant="ghost" onPress={() => setStep(socialToken ? 1 : 2)} />
+                <Button label="Back" variant="ghost" onPress={() => setStep(2)} />
                 <View style={styles.navSpacer} />
                 <Button label="Sign Up" loading={loading} onPress={submit} />
               </View>
@@ -749,6 +1073,70 @@ export function SignupScreen({ onGoLogin }: SignupScreenProps) {
         yearsList={YEARS_LIST}
         onPrevMonth={handlePrevMonth}
         onNextMonth={handleNextMonth}
+      />
+
+      <InAppGoogleAuthModal
+        visible={socialModal.visible}
+        provider={socialModal.provider}
+        onClose={() => setSocialModal((prev) => ({ ...prev, visible: false }))}
+        onSuccess={(tokens) => {
+          const token = tokens.idToken || tokens.accessToken;
+          if (token) {
+            try {
+              if (token.includes('.')) {
+                const parts = token.split('.');
+                if (parts.length === 3) {
+                  const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                  let decoded = '';
+                  if (typeof (globalThis as any).atob === 'function') {
+                    decoded = (globalThis as any).atob(b64);
+                  } else if (typeof (globalThis as any).Buffer !== 'undefined') {
+                    decoded = (globalThis as any).Buffer.from(b64, 'base64').toString('utf8');
+                  }
+                  if (decoded) {
+                    const payload = JSON.parse(decodeURIComponent(escape(decoded)));
+                    const fn = payload.given_name || payload.name?.split(' ')[0] || "";
+                    const ln = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || "";
+                    const em = payload.email || "";
+                    if (fn || ln || em) {
+                      socialProfileRef.current = {
+                        first_name: fn || socialProfileRef.current.first_name,
+                        last_name: ln || socialProfileRef.current.last_name,
+                        email: em || socialProfileRef.current.email,
+                      };
+                      if (fn) {
+                        athleteForm.setValue("first_name", fn);
+                        coachForm.setValue("first_name", fn);
+                      }
+                      if (ln) {
+                        athleteForm.setValue("last_name", ln);
+                        coachForm.setValue("last_name", ln);
+                      }
+                      if (em) {
+                        athleteForm.setValue("email", em);
+                        coachForm.setValue("email", em);
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (_) {
+              // Token parsing error handled gracefully
+            }
+            setSocialToken({ provider: socialModal.provider, idToken: token });
+            setFeedback({
+              tone: "info",
+              message: `${socialModal.provider === "facebook" ? "Facebook" : "Google"} account connected! Please confirm your credentials below to complete your ${role.toUpperCase()} account.`
+            });
+            setStep(2);
+          }
+        }}
+        onError={(err) => {
+          setFeedback({
+            tone: "error",
+            message: err || `${socialModal.provider === "facebook" ? "Facebook" : "Google"} sign-up failed.`
+          });
+        }}
       />
     </View>
   );

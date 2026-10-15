@@ -28,7 +28,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
   onUpdateWorkload,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 60) + 48;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const calculateDynamicPER = (avg: any): string => {
     if (typeof avg?.per_score === "number" && avg.per_score > 0) {
@@ -375,6 +375,142 @@ export const AllStats: React.FC<AllStatsProps> = ({
 
             <View style={styles.advancedTile}>
               <Text style={styles.advancedLabel}>MEET WINS</Text>
+              <Text style={styles.advancedValue}>
+                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                  ? String(athlete?.averages?.wins)
+                  : "0"}
+              </Text>
+            </View>
+          </>
+        ) : athlete.sport_category === "VOLLEYBALL" ? (
+          <>
+            <Text style={styles.sectionTitle}>AVERAGES</Text>
+            <View style={styles.averagesTopRow}>
+              <View style={styles.averagesTopCard}>
+                <Text style={styles.avgLabel}>KILLS</Text>
+                <Text style={styles.avgValueLarge}>
+                  {athlete?.averages?.spike_kills !== undefined && athlete?.averages?.spike_kills !== null
+                    ? String(athlete?.averages?.spike_kills)
+                    : "0"}
+                </Text>
+              </View>
+              <View style={styles.averagesTopCard}>
+                <Text style={styles.avgLabel}>BLOCKS</Text>
+                <Text style={styles.avgValueLarge}>
+                  {athlete?.averages?.block_points !== undefined && athlete?.averages?.block_points !== null
+                    ? String(athlete?.averages?.block_points)
+                    : "0"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.averagesBottomRow}>
+              <View style={styles.averagesSmallCard}>
+                <Text style={styles.avgLabel}>BLOCKS</Text>
+                <Text style={styles.avgValueSmall}>
+                  {athlete?.averages?.block_points !== undefined && athlete?.averages?.block_points !== null
+                    ? String(athlete?.averages?.block_points)
+                    : "0"}
+                </Text>
+              </View>
+              <View style={styles.averagesSmallCard}>
+                <Text style={styles.avgLabel}>ACES</Text>
+                <Text style={styles.avgValueSmall}>
+                  {athlete?.averages?.service_aces !== undefined && athlete?.averages?.service_aces !== null
+                    ? String(athlete?.averages?.service_aces)
+                    : "0"}
+                </Text>
+              </View>
+              <View style={styles.averagesSmallCard}>
+                <Text style={styles.avgLabel}>DIGS</Text>
+                <Text style={styles.avgValueSmall}>
+                  {athlete?.averages?.digs !== undefined && athlete?.averages?.digs !== null
+                    ? String(athlete?.averages?.digs)
+                    : "0"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+            <View style={styles.advancedTile}>
+              <Text style={styles.advancedLabel}>
+                VOLLEYBALL PERFORMANCE RATING (+-)
+              </Text>
+              <Text style={styles.advancedValue}>
+                {calculateDynamicPER(athlete?.averages)}
+              </Text>
+            </View>
+
+            <View style={styles.advancedTile}>
+              <Text style={styles.advancedLabel}>MATCH WINS</Text>
+              <Text style={styles.advancedValue}>
+                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                  ? String(athlete?.averages?.wins)
+                  : "0"}
+              </Text>
+            </View>
+          </>
+        ) : athlete.sport_category === "PICKLEBALL" ? (
+          <>
+            <Text style={styles.sectionTitle}>AVERAGES</Text>
+            <View style={styles.averagesTopRow}>
+              <View style={styles.averagesTopCard}>
+                <Text style={styles.avgLabel}>POINTS</Text>
+                <Text style={styles.avgValueLarge}>
+                  {athlete?.averages?.points_scored !== undefined && athlete?.averages?.points_scored !== null
+                    ? String(athlete?.averages?.points_scored)
+                    : "0"}
+                </Text>
+              </View>
+              <View style={styles.averagesTopCard}>
+                <Text style={styles.avgLabel}>ACES</Text>
+                <Text style={styles.avgValueLarge}>
+                  {athlete?.averages?.aces !== undefined && athlete?.averages?.aces !== null
+                    ? String(athlete?.averages?.aces)
+                    : "0"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.averagesBottomRow}>
+              <View style={styles.averagesSmallCard}>
+                <Text style={styles.avgLabel}>DINKS</Text>
+                <Text style={styles.avgValueSmall}>
+                  {athlete?.averages?.dinks !== undefined && athlete?.averages?.dinks !== null
+                    ? String(athlete?.averages?.dinks)
+                    : "0"}
+                </Text>
+              </View>
+              <View style={styles.averagesSmallCard}>
+                <Text style={styles.avgLabel}>SMASHES</Text>
+                <Text style={styles.avgValueSmall}>
+                  {athlete?.averages?.smashes !== undefined && athlete?.averages?.smashes !== null
+                    ? String(athlete?.averages?.smashes)
+                    : "0"}
+                </Text>
+              </View>
+              <View style={styles.averagesSmallCard}>
+                <Text style={styles.avgLabel}>ERRORS</Text>
+                <Text style={styles.avgValueSmall}>
+                  {athlete?.averages?.unforced_errors !== undefined && athlete?.averages?.unforced_errors !== null
+                    ? String(athlete?.averages?.unforced_errors)
+                    : "0"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+            <View style={styles.advancedTile}>
+              <Text style={styles.advancedLabel}>
+                PICKLEBALL RATING SCORE (+-)
+              </Text>
+              <Text style={styles.advancedValue}>
+                {calculateDynamicPER(athlete?.averages)}
+              </Text>
+            </View>
+
+            <View style={styles.advancedTile}>
+              <Text style={styles.advancedLabel}>GAMES WON</Text>
               <Text style={styles.advancedValue}>
                 {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
                   ? String(athlete?.averages?.wins)

@@ -5,10 +5,14 @@ const styles = StyleSheet.create({
     color: "#00C8FF",
     fontSize: 14,
     fontWeight: "700",
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: 22,
+    marginBottom: 22,
     textAlign: "center",
-    letterSpacing: 0.3
+    letterSpacing: 0.3,
+    includeFontPadding: false
+  },
+  dividerRow: {
+    marginTop: 0
   }
 });
 

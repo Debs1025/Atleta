@@ -10,6 +10,8 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -252,7 +254,6 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionDate, setSessionDate] = useState("");
   const [sessionTime, setSessionTime] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [showInterruptionModal, setShowInterruptionModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -484,31 +485,8 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         : Array.isArray(coachAthletesRes)
         ? coachAthletesRes
         : [];
+      // Strictly restrict athlete selection to coach's assigned/owned roster
       let rawList: any[] = [...coachList, ...(initialAthletes || [])];
-
-      if (rawList.length === 0) {
-        const res = await fetch(`${API_BASE}/athletes?sport=${encodeURIComponent(sport)}`, {
-          headers: {
-            Accept: "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }).catch(() => null);
-
-        if (res && res.ok) {
-          const data = await res.json().catch(() => null);
-          rawList = Array.isArray(data?.athletes)
-            ? data.athletes
-            : Array.isArray(data)
-            ? data
-            : [];
-        } else {
-          // Offline / WiFi off: Load from persistent Firestore offline cache or initialAthletes
-          const offlineList = await getAthletesOfflineFirst(sport);
-          if (offlineList.length > 0) {
-            rawList = offlineList;
-          }
-        }
-      }
 
       if (rawList.length > 0) {
         // Deduplicate athletes by canonical ID or name
@@ -530,6 +508,8 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
             const fName = a.first_name || "";
             const lName = a.last_name || "";
             const fullName = a.full_name || `${fName} ${lName}`.trim() || "Athlete";
+            const teamName = a.team_name || a.team || a.current_affiliation?.team_name || "";
+            const teamId = a.team_id || a.current_affiliation?.team_id || "";
             return {
               athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}_${Math.random()}`,
               jersey_number: String(a.jersey_number ?? "00"),
@@ -542,6 +522,8 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
               is_active_on_field: false,
               avatar_url: a.avatar_url,
               sport_type: a.sport_type || sport,
+              team_name: teamName,
+              team_id: teamId,
               basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
               timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
             };
@@ -796,11 +778,20 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
       benchRoster = [];
     }
 
+    const allRosterIds = allSelected.map((a) => a.athlete_id);
     setSessionDetails({
       date_time: `${effectiveDate}, ${effectiveTime}`,
       location: effectiveLocation,
       active_roster: activeRoster,
       bench_roster: benchRoster,
+      rosterAthletes: allRosterIds,
+      roster_athletes: allRosterIds,
+      awayRosterAthletes: [],
+      away_roster_athletes: [],
+      playerStats: [],
+      player_stats: [],
+      scoresheetUrl: "",
+      scoresheet_url: "",
     });
 
     setShowErrors(false);
@@ -816,6 +807,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
       return (
         a.full_name.toLowerCase().includes(q) ||
         a.position_or_event.toLowerCase().includes(q) ||
+        (Boolean(a.team_name) && Boolean(a.team_name?.toLowerCase().includes(q))) ||
         String(a.jersey_number).includes(q)
       );
     });
@@ -831,8 +823,19 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         <Text style={styles.headerTitle}>CREATE LOG SESSION</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* SELECT SPORT */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 60 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* SELECT SPORT */}
         <Text style={styles.sectionLabel}>SELECT SPORT</Text>
 
         {loadingSports && sports.length === 0 ? (
@@ -875,72 +878,142 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
           </View>
         )}
 
-        <Text style={styles.subLabel}>Search Athletes</Text>
+        {/* ATHLETES & ROSTER SECTION */}
+        <Text style={styles.sectionLabel}>ATHLETES & TEAMS</Text>
+
+        {/* Search Bar for Athletes & Teams */}
+        <Text style={styles.subLabel}>Search Athletes or Teams</Text>
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Type athlete name..."
+            placeholder={`Search ${session.sport_type.toLowerCase()} athlete or team...`}
             placeholderTextColor="#5C6B82"
             value={searchQuery}
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              if (text.length > 0) setShowAddModal(true);
-            }}
+            onChangeText={setSearchQuery}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchIcon} activeOpacity={0.7}>
               <Ionicons name="close-circle" size={20} color="#8E9BAE" />
             </TouchableOpacity>
           ) : (
-            <Ionicons name="person-add-outline" size={20} color="#5C6B82" style={styles.searchIcon} />
+            <Ionicons name="search-outline" size={20} color="#5C6B82" style={styles.searchIcon} />
           )}
         </View>
 
-        {/* Selected Athletes Cards List */}
-        {session.active_roster.map((athlete) => (
-          <View key={athlete.athlete_id} style={styles.athleteCard}>
-            {athlete.avatar_url ? (
-              <Image source={{ uri: athlete.avatar_url }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarPlaceholderText}>
-                  {athlete.full_name.charAt(0)}
-                </Text>
-              </View>
-            )}
+        {/* Loading Indicator for DB Fetch */}
+        {loadingAthletes && (
+          <View style={{ paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "rgba(0, 200, 255, 0.05)", borderRadius: 12, marginBottom: 14, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.2)" }}>
+            <ActivityIndicator size="small" color="#00D2FF" />
+            <Text style={{ color: "#8E9BAE", fontSize: 13 }}>
+              Fetching {session.sport_type.toLowerCase()} athletes from database...
+            </Text>
+          </View>
+        )}
 
-            <View style={styles.athleteInfo}>
-              <Text style={styles.athleteName}>{athlete.full_name}</Text>
-              <Text style={styles.athleteSubtitle}>
-                {athlete.position_or_event} • #{athlete.jersey_number}
+        {/* Selected Active Roster Section */}
+        {session.active_roster.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text style={[styles.subLabel, { color: "#38BDF8", marginBottom: 0 }]}>
+                SELECTED SQUAD ({session.active_roster.length})
               </Text>
+              <Text style={{ color: "#64748B", fontSize: 11 }}>Active in Session</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.removeButton}
-              onPress={() => removeAthleteFromRoster(athlete.athlete_id)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={22} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-        ))}
+            {session.active_roster.map((athlete) => (
+              <View key={athlete.athlete_id} style={styles.athleteCard}>
+                {athlete.avatar_url ? (
+                  <Image source={{ uri: athlete.avatar_url }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarPlaceholderText}>
+                      {athlete.full_name.charAt(0)}
+                    </Text>
+                  </View>
+                )}
 
-        {/* ADD ATHLETE Dashed Button */}
-        <TouchableOpacity
-          style={[
-            styles.addAthleteBtn,
-            showErrors && session.active_roster.length === 0 && { borderColor: "#EF4444" },
-          ]}
-          onPress={() => setShowAddModal(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.addAthleteBtnText, showErrors && session.active_roster.length === 0 && { color: "#EF4444" }]}>
-            {showErrors && session.active_roster.length === 0 ? "! ADD ATHLETE (REQUIRED)" : "ADD ATHLETE"}
-          </Text>
-        </TouchableOpacity>
+                <View style={styles.athleteInfo}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                    <Text style={styles.athleteName}>{athlete.full_name}</Text>
+                    {Boolean(athlete.team_name && athlete.team_name !== "Unassigned" && athlete.team_name !== "Unassigned / No Team") && (
+                      <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>{(athlete.team_name || "").toUpperCase()}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.athleteSubtitle}>
+                    {athlete.position_or_event} • #{athlete.jersey_number}
+                    {athlete.team_name && athlete.team_name !== "Unassigned" && athlete.team_name !== "Unassigned / No Team" ? ` • Team: ${athlete.team_name}` : ""}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => removeAthleteFromRoster(athlete.athlete_id)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={22} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Available Athletes from DB Section (Inline directly on page) */}
+        <View style={{ marginBottom: 18 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <Text style={[styles.subLabel, { marginBottom: 0 }]}>
+              AVAILABLE {session.sport_type} ATHLETES ({filteredPool.length})
+            </Text>
+            <Text style={{ color: "#64748B", fontSize: 11 }}>Tap to Add</Text>
+          </View>
+
+          {filteredPool.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              {filteredPool.map((item) => (
+                <TouchableOpacity
+                  key={item.athlete_id}
+                  style={styles.poolItem}
+                  onPress={() => addAthleteToRoster(item)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 3 }}>
+                      <Text style={styles.poolItemTitle}>{item.full_name}</Text>
+                      {Boolean(item.team_name && item.team_name !== "Unassigned" && item.team_name !== "Unassigned / No Team") && (
+                        <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>{(item.team_name || "").toUpperCase()}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.poolItemSub}>
+                      {item.position_or_event} • #{item.jersey_number}
+                      {item.team_name && item.team_name !== "Unassigned" && item.team_name !== "Unassigned / No Team" ? ` • Team: ${item.team_name}` : ""}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0, 210, 255, 0.12)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(0, 210, 255, 0.3)" }}>
+                    <Ionicons name="add" size={16} color="#00D2FF" />
+                    <Text style={{ color: "#00D2FF", fontSize: 12, fontWeight: "800" }}>ADD</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : !loadingAthletes ? (
+            <View style={{ paddingVertical: 18, alignItems: "center", backgroundColor: "#111C35", borderRadius: 12, borderWidth: 1, borderColor: "#1E293B", paddingHorizontal: 16 }}>
+              <Ionicons name="people-outline" size={28} color="#64748B" />
+              <Text style={{ color: "#8E9BAE", fontSize: 13, marginTop: 6, textAlign: "center" }}>
+                {searchQuery
+                  ? `No ${session.sport_type} athletes match "${searchQuery}".`
+                  : session.active_roster.length > 0
+                  ? "All available athletes have been added to this session squad."
+                  : `No registered ${session.sport_type} athletes found in your roster. Please recruit or assign athletes first.`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
         {showErrors && session.active_roster.length === 0 && (
-          <Text style={[styles.errorText, { marginTop: -14, marginBottom: 14 }]}>
+          <Text style={[styles.errorText, { marginTop: -6, marginBottom: 14 }]}>
             Please select at least 1 athlete to start session.
           </Text>
         )}
@@ -1085,113 +1158,9 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
           <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
-      {/* Add Athlete Modal */}
-      <Modal
-        visible={showAddModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAddModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Available {session.sport_type} Athletes</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
 
-            {/* In-Modal Search Input */}
-            <View style={[styles.searchContainer, { marginBottom: 14 }]}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder={`Search ${session.sport_type.toLowerCase()} athlete...`}
-                placeholderTextColor="#5C6B82"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery ? (
-                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchIcon} activeOpacity={0.7}>
-                  <Ionicons name="close-circle" size={20} color="#8E9BAE" />
-                </TouchableOpacity>
-              ) : (
-                <Ionicons name="search-outline" size={20} color="#5C6B82" style={styles.searchIcon} />
-              )}
-            </View>
-
-            {loadingAthletes ? (
-              <View style={{ paddingVertical: 32, alignItems: "center" }}>
-                <ActivityIndicator size="large" color="#00D2FF" />
-                <Text style={{ color: "#8E9BAE", fontSize: 13, marginTop: 10 }}>
-                  Fetching {session.sport_type.toLowerCase()} athletes from database...
-                </Text>
-              </View>
-            ) : filteredPool.length > 0 ? (
-              <ScrollView style={{ maxHeight: 320 }} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                {filteredPool.map((item) => (
-                  <TouchableOpacity
-                    key={item.athlete_id}
-                    style={styles.poolItem}
-                    onPress={() => {
-                      addAthleteToRoster(item);
-                      if (filteredPool.length <= 1) setShowAddModal(false);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.poolItemTitle}>{item.full_name}</Text>
-                      <Text style={styles.poolItemSub}>
-                        {item.position_or_event} • #{item.jersey_number}
-                      </Text>
-                    </View>
-                    <Ionicons name="add-circle-outline" size={24} color="#00D2FF" />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={{ paddingVertical: 24, alignItems: "center" }}>
-                <Ionicons name="people-outline" size={32} color="#64748B" />
-                <Text style={{ color: "#8E9BAE", fontSize: 14, marginTop: 8, textAlign: "center" }}>
-                  {searchQuery
-                    ? `No ${session.sport_type} athletes match "${searchQuery}".`
-                    : `No registered ${session.sport_type} athletes found in database.`}
-                </Text>
-                <TouchableOpacity
-                  style={{
-                    marginTop: 14,
-                    paddingVertical: 10,
-                    paddingHorizontal: 16,
-                    backgroundColor: "#00D2FF",
-                    borderRadius: 8,
-                  }}
-                  onPress={() => {
-                    const fallbackName = searchQuery.trim() || "Harold Delos Santos";
-                    addAthleteToRoster({
-                      athlete_id: `ath_custom_${Date.now()}`,
-                      jersey_number: "0",
-                      last_name: fallbackName.split(" ").slice(-1)[0] || fallbackName,
-                      full_name: fallbackName.toUpperCase(),
-                      position_or_event: session.sport_type === "BASKETBALL" ? "Guard" : session.sport_type === "SWIMMING" ? "Freestyle" : session.sport_type === "TRACK AND FIELD" ? "100m" : "Player",
-                      is_active_on_field: false,
-                      sport_type: session.sport_type,
-                      basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-                      timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
-                    });
-                    setShowAddModal(false);
-                    setSearchQuery("");
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={{ color: "#070D19", fontWeight: "bold" }}>
-                    + Add {searchQuery.trim() ? `"${searchQuery.trim()}"` : "Harold Delos Santos"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
 
       {/* Required Interruption Modal */}
       <Modal
@@ -1272,7 +1241,19 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
               style={styles.successBtn}
               onPress={() => {
                 setShowSuccessModal(false);
-                if (onStartLogging) onStartLogging(session);
+                const allRosterIds = (session.active_roster || []).concat(session.bench_roster || []).map((a) => a.athlete_id);
+                const updatedSession: MatchLogSessionState = {
+                  ...session,
+                  rosterAthletes: allRosterIds,
+                  roster_athletes: allRosterIds,
+                  awayRosterAthletes: session.awayRosterAthletes || [],
+                  away_roster_athletes: session.away_roster_athletes || [],
+                  playerStats: session.playerStats || [],
+                  player_stats: session.player_stats || [],
+                  scoresheetUrl: session.scoresheetUrl || session.scoresheet_url || "",
+                  scoresheet_url: session.scoresheet_url || session.scoresheetUrl || "",
+                };
+                if (onStartLogging) onStartLogging(updatedSession);
               }}
               activeOpacity={0.85}
             >

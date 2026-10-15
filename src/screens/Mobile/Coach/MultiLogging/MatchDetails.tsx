@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ScrollView,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,6 +16,7 @@ import { styles } from "./styles/MatchDetails";
 import { useMatchSession } from "./MatchSessionContext";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { saveMatchOfflineFirst } from "../../../../services/firebaseClient";
+import { getSportStatSchema, loadDynamicSportsSchemas } from "./sportStatSchemas";
 
 interface MatchDetailsProps {
   onBack?: () => void;
@@ -25,15 +28,36 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   // Insets and Match Session
   const insets = useSafeAreaInsets();
   const { session, setSessionDetails, resetSession } = useMatchSession();
+  const [dynamicConfigs, setDynamicConfigs] = useState<any[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadDynamicSportsSchemas().then((configs) => {
+      if (mounted && Array.isArray(configs) && configs.length > 0) {
+        setDynamicConfigs(configs);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const schema = getSportStatSchema(session.sport_type, dynamicConfigs);
+  const isTimedSport = Boolean(
+    schema.isTimed ||
+    (session.sport_type || "").toUpperCase().includes("SWIM") ||
+    (session.sport_type || "").toUpperCase().includes("TRACK") ||
+    (session.sport_type || "").toUpperCase().includes("FIELD")
+  );
 
   // Local form state pre-populated from session
   const [gameName, setGameName] = useState(session.game_name || "ADNU vs. UNC - Intramurals 2026");
   const [opponentName, setOpponentName] = useState(session.opponent_team_name || "");
   const [gameType, setGameType] = useState<'Tournament' | 'Practice' | 'Tune-Up'>(
-    session.game_type || "Tournament"
+    (session.game_type as 'Tournament' | 'Practice' | 'Tune-Up') || "Tournament"
   );
   const [gameResult, setGameResult] = useState<'Win' | 'Lose'>(
-    session.game_result || "Win"
+    (session.game_result as 'Win' | 'Lose') || "Win"
   );
   const [notes, setNotes] = useState(session.notes || "");
 
@@ -57,49 +81,71 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     const normalizedSport = (session.sport_type || "BASKETBALL").toUpperCase();
     const normalizedGameResult = (gameResult || "Win").toUpperCase();
 
-    // Map all active and bench players to player_stats
-    const playerStats = allPlayers.map((p) => {
-      const bStats = p.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
-      const tStats = p.timing_stats || { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false };
+    // Map all active and bench players to comprehensive player_stats & playerStats
+    const playerStatsArray = allPlayers.map((p) => {
+      const bStats: any = p.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 };
+      const tStats: any = p.timing_stats || { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false };
+      const cStats: any = p.custom_stats || {};
+
+      const points = Number(bStats.pts ?? cStats.points ?? cStats.pts ?? cStats.kills ?? cStats.goals ?? 0);
+      const rebounds = Number(bStats.reb ?? cStats.rebounds ?? cStats.reb ?? cStats.digs ?? 0);
+      const assists = Number(bStats.ast ?? cStats.assists ?? cStats.ast ?? 0);
+      const steals = Number(bStats.stl ?? cStats.steals ?? cStats.stl ?? cStats.tackles ?? 0);
+      const blocks = Number(bStats.blk ?? cStats.blocks ?? cStats.blk ?? 0);
+      const fouls = Number(bStats.pf ?? cStats.fouls ?? cStats.pf ?? 0);
+      const turnovers = Number(bStats.to ?? cStats.turnovers ?? cStats.to ?? 0);
+
+      const statLine: Record<string, any> = {
+        points,
+        pts: points,
+        rebounds,
+        reb: rebounds,
+        assists,
+        ast: assists,
+        steals,
+        stl: steals,
+        blocks,
+        blk: blocks,
+        fouls,
+        pf: fouls,
+        turnovers,
+        to: turnovers,
+        timer_seconds: Number(tStats.timer_seconds || 0),
+        finish_time: tStats.formatted_time || "00:00.00",
+        time: tStats.formatted_time || "00:00.00",
+        distance_meters: Number(tStats.distance_meters || 0),
+        split_times: tStats.split_times || [],
+        is_foul_dq: Boolean(tStats.is_foul_dq),
+        ...cStats,
+      };
+
       return {
         athlete_id: p.athlete_id,
         player_name: p.full_name,
         name: p.full_name,
         jersey_number: p.jersey_number,
         position: p.position_or_event,
-        pts: Number(bStats.pts || 0),
-        reb: Number(bStats.reb || 0),
-        ast: Number(bStats.ast || 0),
-        stl: Number(bStats.stl || 0),
-        pf: Number(bStats.pf || 0),
-        to: Number(bStats.to || 0),
-        timer_seconds: Number(tStats.timer_seconds || 0),
-        formatted_time: tStats.formatted_time || "00:00.00",
-        distance_meters: Number(tStats.distance_meters || 0),
-        split_times: tStats.split_times || [],
-        is_foul_dq: Boolean(tStats.is_foul_dq),
+        team_name: session.team_name || "ATLETA VARSITY",
+        ...statLine,
+        stats: statLine,
       };
     });
 
-    const totalCalculatedHomeScore = playerStats.reduce((sum, p) => sum + (p.pts || 0), 0);
+    const homeAthleteIds = allPlayers.map((p) => p.athlete_id);
+    const awayAthleteIds = (session as any).awayRosterAthletes || (session as any).away_roster_athletes || [];
+    const scoresheetUrl = (session as any).scoresheetUrl || (session as any).scoresheet_url || "";
+
+    const totalCalculatedHomeScore = playerStatsArray.reduce((sum, p: any) => sum + (p.pts || 0), 0);
     const homeScore = totalCalculatedHomeScore > 0 ? totalCalculatedHomeScore : (normalizedGameResult === "WIN" ? 78 : 65);
     const awayScore = normalizedGameResult === "WIN" ? Math.max(0, homeScore - 8) : homeScore + 8;
 
-    // Construct backend-ready match payload
-    const updatedSession = {
-      ...session,
-      game_name: gameName,
-      opponent_team_name: opponentName,
-      game_type: gameType,
-      game_result: gameResult,
-      notes,
-    };
-
+    // Construct backend-ready match payload with restored Firestore schema attributes
     const payload = {
       match_id: session.match_id || `match_${Date.now()}`,
       team_id: session.team_name || "team_varsity",
       home_team_name: session.team_name || "ATLETA VARSITY",
       opponent_team_name: opponentName || "OPPONENT TEAM",
+      away_team_name: opponentName || "OPPONENT TEAM",
       match_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
       game_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
       match_type: gameType || "Practice",
@@ -111,8 +157,16 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       home_score: homeScore,
       away_score: awayScore,
       notes: notes || "",
-      player_stats: playerStats,
-      player_metrics: playerStats,
+      // Restored Schema Attributes:
+      playerStats: playerStatsArray,
+      player_stats: playerStatsArray,
+      player_metrics: playerStatsArray,
+      rosterAthletes: homeAthleteIds,
+      roster_athletes: homeAthleteIds,
+      awayRosterAthletes: awayAthleteIds,
+      away_roster_athletes: awayAthleteIds,
+      scoresheetUrl: scoresheetUrl,
+      scoresheet_url: scoresheetUrl,
     };
 
     if (onSaveComplete) onSaveComplete(payload);
@@ -131,7 +185,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   };
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 28) + 44 }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 10 }]}>
       {/* Header Bar (Preserved existing layout & spacing) */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -144,8 +198,19 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         <Text style={styles.headerTitle}>SAVE MATCH DETAILS</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Game Name */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 60 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Game Name */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Game Name</Text>
           <View style={styles.inputBox}>
@@ -222,33 +287,31 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
 
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              {session.sport_type === "BASKETBALL" ? (
+              {!isTimedSport ? (
                 <>
-                  {/* Basketball Table Header */}
+                  {/* Dynamic Ball Games Table Header (Basketball, Volleyball, Pickleball) */}
                   <View style={styles.tableHeaderRow}>
                     <Text style={styles.tableColPlayerHeader}>PLAYER</Text>
-                    <Text style={styles.tableColHeader}>PTS</Text>
-                    <Text style={styles.tableColHeader}>REB</Text>
-                    <Text style={styles.tableColHeader}>AST</Text>
-                    <Text style={styles.tableColHeader}>STL</Text>
-                    <Text style={styles.tableColHeader}>PF</Text>
-                    <Text style={styles.tableColHeader}>TO</Text>
+                    {schema.tableHeaders.map((header, idx) => (
+                      <Text key={idx} style={styles.tableColHeader}>{header.label}</Text>
+                    ))}
                   </View>
 
-                  {/* Basketball Table Rows */}
+                  {/* Dynamic Ball Games Table Rows */}
                   {allPlayers.map((player) => {
-                    const stats = player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
+                    const stats: any = {
+                      ...(player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 }),
+                      ...(player.custom_stats || {}),
+                      ...(player.stats || {}),
+                    };
                     return (
                       <View key={player.athlete_id} style={styles.tableDataRow}>
                         <Text style={styles.tableColPlayer} numberOfLines={1}>
                           {player.full_name}
                         </Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.pts)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.reb)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.ast)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.stl)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.pf)}</Text>
-                        <Text style={styles.tableColText}>{formatNumber(stats.to)}</Text>
+                        {schema.tableHeaders.map((header, idx) => (
+                          <Text key={idx} style={styles.tableColText}>{formatNumber(stats[header.key])}</Text>
+                        ))}
                       </View>
                     );
                   })}
@@ -318,6 +381,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
           <Text style={styles.saveBtnText}>SAVE MATCH</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Game Type Selectable Picker Modal */}
       <Modal

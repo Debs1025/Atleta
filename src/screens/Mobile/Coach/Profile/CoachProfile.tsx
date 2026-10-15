@@ -70,7 +70,7 @@ export function CoachProfile({
   profileData,
 }: CoachProfileProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [profile, setProfile] = useState<CoachProfileState>(profileData || DEFAULT_COACH_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
@@ -301,14 +301,6 @@ export function CoachProfile({
                 <Text style={styles.affiliationItemText}>
                   {profile.national_sports_league || profile.regional_affiliations?.office_name || "No League Specified"}
                 </Text>
-              </View>
-            </View>
-
-            {/* SPORTS FOCUS CARD */}
-            <View style={styles.cardContainer}>
-              <Text style={styles.cyanSubLabel}>SPORTS FOCUS</Text>
-              <View style={styles.sportsPillBadge}>
-                <Text style={styles.sportsPillText}>{profile.sports_focus}</Text>
               </View>
             </View>
 

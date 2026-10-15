@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/AuthEntry";
 import * as SecureStore from "expo-secure-store";
-import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, type AuthRole } from "./authShared";
+import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, clearAuthMicroCache, type AuthRole } from "./authShared";
+import { clearFirebaseClientCaches } from "../../../services/firebaseClient";
 import { LoginScreen } from "./LoginScreen";
 import { PasswordResetScreen } from "./PasswordResetScreen";
 import { SignupScreen } from "./SignupScreen";
@@ -29,6 +31,7 @@ export function AuthEntry() {
   const [screen, setScreen] = useState<ScreenMode>("login");
   const [booting, setBooting] = useState(true);
   const [activeRole, setActiveRole] = useState<AuthRole | null>(null);
+  const [socialSignupData, setSocialSignupData] = useState<any | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -52,9 +55,18 @@ export function AuthEntry() {
   }, []);
 
   const handleLogout = async () => {
+    clearAuthMicroCache();
+    clearFirebaseClientCaches();
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const atletaKeys = allKeys.filter((k) => k.startsWith("atleta_") || k.startsWith("@atleta_"));
+      if (atletaKeys.length > 0) {
+        await AsyncStorage.multiRemove(atletaKeys);
+      }
+    } catch (_) {}
     await Promise.all([
       SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
-      SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null)
+      SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
     ]);
     setActiveRole(null);
     setScreen("login");
@@ -71,12 +83,24 @@ export function AuthEntry() {
     <View style={styles.container}>
       {screen === "login" && (
         <LoginScreen
-          onGoSignup={() => setScreen("signup")}
+          onGoSignup={(data) => {
+            setSocialSignupData(data || null);
+            setScreen("signup");
+          }}
           onGoReset={() => setScreen("reset")}
           onAuthenticated={setActiveRole}
         />
       )}
-      {screen === "signup" && <SignupScreen onGoLogin={() => setScreen("login")} />}
+      {screen === "signup" && (
+        <SignupScreen
+          onGoLogin={() => {
+            setSocialSignupData(null);
+            setScreen("login");
+          }}
+          initialSocialData={socialSignupData}
+          onAuthenticated={setActiveRole}
+        />
+      )}
       {screen === "reset" && <PasswordResetScreen onGoLogin={() => setScreen("login")} />}
     </View>
   );

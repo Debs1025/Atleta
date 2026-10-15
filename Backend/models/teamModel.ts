@@ -33,7 +33,9 @@ export interface Team {
   coach_id: string;               // Foreign Key -> Coach.coach_id, Required
   coach_name?: string;            // Optional coach full name
   roster_list: (string | TeamRosterMember)[]; // Roster array
-  timestamp: string;              // ISO datetime
+  created_at: string;             // ISO datetime from data dictionary
+  timestamp?: string;             // ISO datetime operational alias
+  [key: string]: any;
 }
 
 // ─── Coach Entity ────────────────────────────────────────────────────────────
@@ -141,6 +143,7 @@ export interface TeamDetailResponse {
     quote: string | null;
   };
   roster: RosterAthlete[];
+  created_at?: string;
   timestamp: string;
 }
 
@@ -153,11 +156,18 @@ export interface AthleteTeamResponse {
     division: string;
     region?: string;
     description: string | null;
+    logo_url?: string | null;
+    mission_statement?: string | null;
+    established_year?: string | number | null;
   };
   coach: {
     coach_id: string;
     full_name: string;
     current_institution: string;
+    avatar_url?: string;
+    role_title?: string;
+    years_experience?: string;
+    quote?: string | null;
   };
   roster: RosterAthlete[];
 }

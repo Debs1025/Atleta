@@ -4,15 +4,21 @@
 export interface WorkloadEntry {
   workload_id: string;          // Primary Key, auto-generated
   athlete_id: string;           // Foreign Key → Athlete.athlete_id
+  session_type?: 'Practice' | 'Game' | 'Conditioning' | string; // Session type
   session_duration_mins: number; // Required, > 0
   srpe_score: number;           // Required, 1–10
   daily_load: number;           // Computed: session_duration_mins × srpe_score
   entry_date: string;           // ISO date string (YYYY-MM-DD)
+  short_term_load?: number;     // 7-day rolling load / acute load
+  long_term_load?: number;      // 28-day rolling load / chronic load
+  injury_risk_index?: number;   // Calculated ACWR / Injury Risk
+  monotony_score?: number;      // Monotony score
+  strain_score?: number;        // Strain score
   logged_by_coach_id?: string;  // Optional: Coach who logged this entry
   logged_by_name?: string;      // Optional: Name of coach or logger
   notes?: string;               // Optional: Coach notes
-  session_type?: string;        // Optional: "Practice" | "Conditioning" | "Game" | "Recovery"
   created_at: string;           // ISO datetime
+  [key: string]: any;
 }
 
 // ─── Computed Analytics Response Payload ─────────────────────────────────────

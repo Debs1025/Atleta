@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middlewares/authMiddleware';
+import { authenticate, optionalAuth } from '../middlewares/authMiddleware';
 import {
   browseTeams,
   getTeam,
@@ -11,11 +11,11 @@ import {
 const router = Router();
 
 // Browse & Search Teams (Named and Root Routes)
-router.get('/browse', authenticate, browseTeams);
-router.get('/search', authenticate, browseTeams);
-router.get('/list', authenticate, browseTeams);
-router.get('/all', authenticate, browseTeams);
-router.get('/', authenticate, browseTeams);
+router.get('/browse', optionalAuth, browseTeams);
+router.get('/search', optionalAuth, browseTeams);
+router.get('/list', optionalAuth, browseTeams);
+router.get('/all', optionalAuth, browseTeams);
+router.get('/', optionalAuth, browseTeams);
 
 // Team Creation & Registration
 router.post('/create', authenticate, createTeamHandler);
@@ -27,8 +27,8 @@ router.patch('/:teamId/roster', authenticate, updateRosterHandler);
 router.post('/:teamId/roster', authenticate, updateRosterHandler);
 
 // Team Profile Details & Updates
-router.get('/details/:teamId', authenticate, getTeam);
-router.get('/:teamId', authenticate, getTeam);
+router.get('/details/:teamId', optionalAuth, getTeam);
+router.get('/:teamId', optionalAuth, getTeam);
 router.patch('/:teamId', authenticate, updateTeamHandler);
 router.put('/:teamId', authenticate, updateTeamHandler);
 

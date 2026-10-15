@@ -290,10 +290,7 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
             <View style={modalStyles.filterSection}>
               <Text style={modalStyles.sectionLabel}>KEY STAT THRESHOLDS</Text>
 
-              {(activeSportFilter === 'BASKETBALL' ||
-                activeSportFilter === 'VOLLEYBALL' ||
-                activeSportFilter === 'PICKLEBALL' ||
-                (!activeSportFilter.includes('SWIM') && !activeSportFilter.includes('TRACK'))) && (
+              {activeSportFilter === 'BASKETBALL' && (
                 <View style={modalStyles.subSection}>
                   <Text style={modalStyles.subSectionLabel}>Minimum Points Per Game (PPG)</Text>
                   <View style={modalStyles.chipsWrap}>

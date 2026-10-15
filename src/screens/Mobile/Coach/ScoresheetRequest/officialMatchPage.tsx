@@ -117,7 +117,7 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
       <StatusBar barStyle="light-content" backgroundColor="#070D19" />
 
       {/* Header Bar */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 44) + 38 }]}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 10 }]}>
         <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>

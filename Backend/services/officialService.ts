@@ -5,6 +5,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { OfficialProfile, OfficialSettings, RegisterOfficialDto, UpdateOfficialSettingsDto, User } from '../models/userModel';
 import { generateToken, createFirebaseAuthUser } from './userService';
 import { generateElevatedAdminToken } from './adminService';
+import { hashPassword, verifyPassword, sanitizeUser, sanitizeProfile } from '../utils/passwordUtils';
 
 export class ServiceError extends Error {
   statusCode: number;
@@ -76,6 +77,8 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   const licenseNumber = (data as any).official_license_number || 'OFF-LIC-2026';
   const assignedTournaments = (data as any).assigned_tournaments || [orgName];
 
+  const passwordHash = hashPassword(password);
+
   // 3. Build Base Identity document (Users collection) - COMPLETE DATA (NO PREFIX)
   const userData: any = {
     user_id: uid,
@@ -84,7 +87,8 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
     first_name: firstName,
     last_name: lastName,
     email,
-    password,
+    password: passwordHash,
+    password_hash: passwordHash,
     role: 'Official',
     organization_name: orgName,
     organization: orgName,
@@ -122,6 +126,9 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   userData.settings = settingsData;
   profileData.settings = settingsData;
 
+  // Ensure no password fields exist on child profile before committing
+  sanitizeProfile(profileData);
+
   // 6. Execute atomic batch write
   const batch = db.batch();
   
@@ -135,13 +142,13 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   const token = generateToken(uid, email, 'Official');
 
   return {
-    user: {
+    user: sanitizeUser({
       user_id: uid,
       full_legal_name,
       email,
       role: 'Official',
-    },
-    profile: profileData,
+    }),
+    profile: sanitizeProfile(profileData),
     settings: settingsData,
     token,
   };
@@ -203,7 +210,8 @@ export async function loginOfficialService(email: string, password: string) {
   } catch (err: any) {
     // If client SDK authentication fails (e.g. offline mode, dummy testing API key, network timeout),
     // fall back to verifying the stored password in Firestore
-    if (userData.password && (userData.password === password || userData.password_hash === password)) {
+    const storedPass = String(userData.password_hash || userData.password || '');
+    if (storedPass && verifyPassword(password, storedPass)) {
       firebaseIdToken = 'session_firebase_id_token';
     } else {
       throw {
@@ -221,7 +229,7 @@ export async function loginOfficialService(email: string, password: string) {
     : generateToken(uid, userData.email, actualRole as any);
 
   return {
-    user: {
+    user: sanitizeUser({
       user_id: uid,
       uid: uid,
       full_legal_name: userData.full_legal_name || userData.full_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
@@ -230,7 +238,7 @@ export async function loginOfficialService(email: string, password: string) {
       institution: userData.institution || userData.organization_name || userData.organization || '',
       clearance_level: userData.clearance_level,
       department_code: userData.department_code,
-    },
+    }),
     token,
     firebase_id_token: firebaseIdToken,
   };

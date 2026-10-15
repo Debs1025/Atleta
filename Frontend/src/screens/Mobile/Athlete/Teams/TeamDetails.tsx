@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/TeamDetails";
@@ -116,12 +116,24 @@ export function TeamDetailsScreen({
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>REGION</Text>
-              <Text style={styles.statValue}>{team.region}</Text>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {team.region}
+              </Text>
             </View>
 
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>ATHLETES</Text>
-              <Text style={styles.statValue}>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
                 {team.roster_athletes ? team.roster_athletes.length : 0}
               </Text>
             </View>
@@ -137,8 +149,16 @@ export function TeamDetailsScreen({
             {/* Coach Card */}
             <View style={styles.coachCard}>
               <View style={styles.coachInfoRow}>
-                <View style={styles.coachAvatarBox}>
-                  <Ionicons name="person-outline" size={30} color="#64748B" />
+                <View style={[styles.coachAvatarBox, { overflow: "hidden" }]}>
+                  {team.head_coach.avatar_url ? (
+                    <Image
+                      source={{ uri: team.head_coach.avatar_url }}
+                      style={{ width: "100%", height: "100%", borderRadius: 14 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Ionicons name="person-outline" size={30} color="#64748B" />
+                  )}
                 </View>
                 <View style={styles.coachDetails}>
                   <Text style={styles.coachName}>{team.head_coach.full_name}</Text>

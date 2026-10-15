@@ -12,10 +12,10 @@ import styles from "./styles/ViewAllPlayers";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RosterAthlete, Team } from "../DataTypes";
-import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { getSportsOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 
-const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING", "PICKLEBALL"];
+const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING"];
 
 const fontPlatform = Platform.select({
   ios: "System",
@@ -47,13 +47,44 @@ export function ViewAllPlayers({
   availableSports,
 }: ViewAllPlayersProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
+  const [localPool, setLocalPool] = useState<RosterAthlete[]>(athletesPool);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("ALL");
   const [categories, setCategories] = useState<string[]>(
     availableSports && availableSports.length > 0 ? availableSports : DEFAULT_SPORT_CATEGORIES
   );
+
+  // Sync props immediately when passed or changed
+  useEffect(() => {
+    if (athletesPool && athletesPool.length > 0) {
+      setLocalPool(athletesPool);
+    }
+  }, [athletesPool]);
+
+  // Instant offline cache fallback (<5ms) if athletesPool is not yet populated
+  useEffect(() => {
+    if (localPool.length === 0) {
+      getAthletesOfflineFirst()
+        .then((cached) => {
+          if (Array.isArray(cached) && cached.length > 0) {
+            const mapped: RosterAthlete[] = cached.map((c: any, idx: number) => ({
+              athlete_id: c.athlete_id || c.id || `ath_${idx}`,
+              user_id: c.user_id || c.athlete_id || c.id || `user_${idx}`,
+              full_name: c.full_name || `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Athlete",
+              jersey_number: String(c.jersey_number || idx + 1),
+              position: c.position || c.primary_position || "Player",
+              sport_type: (c.sport_type || c.sport_category || "BASKETBALL").toUpperCase(),
+              rating_score: Number(c.rating_score || c.rating || 0),
+              is_eligibility_verified: Boolean(c.is_eligibility_verified ?? true),
+            }));
+            setLocalPool((prev) => (prev.length === 0 ? mapped : prev));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -105,7 +136,7 @@ export function ViewAllPlayers({
 
   // Reactive player filtering
   const filteredPlayers = useMemo(() => {
-    return athletesPool.filter((p) => {
+    return localPool.filter((p) => {
       const matchesCategory =
         activeCategory === "ALL" || (p.sport_type || "").toUpperCase() === activeCategory.toUpperCase();
       const q = searchQuery.toLowerCase().trim();
@@ -118,7 +149,7 @@ export function ViewAllPlayers({
         teamName.toLowerCase().includes(q);
       return matchesCategory && matchesSearch;
     });
-  }, [athletesPool, activeCategory, searchQuery, athleteTeamMap]);
+  }, [localPool, activeCategory, searchQuery, athleteTeamMap]);
 
   const handleViewStats = useCallback((player: RosterAthlete) => {
     if (onSelectAthlete) {

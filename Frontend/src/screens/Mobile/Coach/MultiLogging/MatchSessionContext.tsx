@@ -10,7 +10,7 @@ interface MatchSessionContextType {
   toggleAthleteActiveStatus: (athleteId: string) => void;
   updateBasketballStats: (
     athleteId: string,
-    stat: keyof NonNullable<AthleteRosterItem["basketball_stats"]>,
+    stat: keyof NonNullable<AthleteRosterItem["basketball_stats"]> | string,
     delta: number
   ) => void;
   updateTimingStats: (
@@ -94,19 +94,31 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const updateBasketballStats = (
     athleteId: string,
-    statKey: keyof NonNullable<AthleteRosterItem["basketball_stats"]>,
+    statKey: string,
     delta: number
   ) => {
     setSession((prev) => {
       const updateList = (list: AthleteRosterItem[]) =>
         list.map((item) => {
           if (item.athlete_id !== athleteId) return item;
-          const currentStats = item.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
-          const newValue = Math.max(0, (currentStats[statKey] || 0) + delta);
+          const currentStats = item.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 };
+          const customStats = item.custom_stats || {};
+          const isStandardKey = ['pts', 'ast', 'reb', 'pf', 'stl', 'to', 'blk'].includes(statKey);
+          const currentVal = isStandardKey
+            ? (currentStats as any)[statKey] || 0
+            : customStats[statKey] || 0;
+          const newValue = Math.max(0, currentVal + delta);
+
           return {
             ...item,
-            basketball_stats: {
-              ...currentStats,
+            basketball_stats: isStandardKey
+              ? {
+                  ...currentStats,
+                  [statKey]: newValue,
+                }
+              : currentStats,
+            custom_stats: {
+              ...customStats,
               [statKey]: newValue,
             },
           };

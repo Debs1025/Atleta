@@ -15,7 +15,8 @@ import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { getSportsOfflineFirst, getTeamsOfflineFirst, db } from "../../../../services/firebaseClient";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 //schemas
 export interface Coach {
@@ -38,6 +39,7 @@ export interface TeamSchema {
   program_type_tag?: string; // e.g. "ELITE VARSITY PROGRAM"
   description: string;
   region: string; // e.g. "Bicol"
+  is_my_team?: boolean;
   head_coach: Coach;
 }
 
@@ -46,11 +48,12 @@ export interface CoachProfileSchema {
   full_name: string;
   institution: string;
   role_title: string;
+  avatar_url?: string;
   tags: string[]; // ["VARSITY", "RECRUITER", "ACTIVE SCOUTING"]
   years_experience: string; // "15+"
   core_specialties: string[];
-  success_rate: string; // "94%"
-  recruits_placed: string; // "80+ Recruits Placed"
+  success_rate?: string;
+  recruits_placed?: string;
   philosophy: string;
   quote: string;
   certificates: string[];
@@ -84,7 +87,6 @@ const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
   { label: "VOLLEYBALL", value: "VOLLEYBALL" },
   { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
   { label: "SWIMMING", value: "SWIMMING" },
-  { label: "PICKLEBALL", value: "PICKLEBALL" },
 ];
 
 const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
@@ -139,7 +141,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
   const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSport, setSelectedSport] = useState<string>(getInitialSport(athleteCategory));
+  const [selectedSport, setSelectedSport] = useState<string>("ALL");
   const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(DEFAULT_SPORT_CHIPS);
   const [loading, setLoading] = useState(true);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
@@ -170,9 +172,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   }, []);
 
   useEffect(() => {
-    if (athleteCategory) {
-      setSelectedSport(getInitialSport(athleteCategory));
-    }
+    // Keep ALL as default so athletes see all sports teams
   }, [athleteCategory]);
 
   useEffect(() => {
@@ -203,7 +203,16 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           setMyCurrentTeamName(currentTeamName);
 
           const restTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
-          const rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
+          let rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
+          if (rawList.length === 0) {
+            try {
+              const snap = await getDocs(collection(db, "Teams"));
+              if (!snap.empty) {
+                rawList = snap.docs.map((d) => ({ team_id: d.id, id: d.id, ...d.data() }));
+              }
+            } catch (_) {}
+          }
+
           const mergedMap = new Map<string, any>();
           rawList.forEach((item: any) => {
             const tid = item.team_id || item.id;
@@ -232,13 +241,11 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           const rawTeams = Array.from(mergedMap.values());
 
           const mappedTeams: TeamSchema[] = rawTeams
-            .filter((t: any) => {
-              // Exclude the athlete's current team if they already play in a team
-              if (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) return false;
-              if (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase()) return false;
-              return true;
-            })
             .map((t: any, idx: number) => {
+              const isMyTeam = Boolean(
+                (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) ||
+                (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase())
+              );
               const coachName = (
                 t.coach_name ||
                 t.head_coach?.full_name ||
@@ -253,8 +260,9 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
                 created_at: t.timestamp || new Date().toISOString(),
                 roster_athletes: Array(t.athlete_count || (Array.isArray(t.roster_list) ? t.roster_list.length : 0)).fill("ath_uuid"),
                 program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
-                description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || "NCR"}.`,
-                region: t.region || "NCR",
+                description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || t.province || "Camarines Sur"}.`,
+                region: t.region || t.province || "Camarines Sur",
+                is_my_team: isMyTeam,
                 head_coach: {
                   coach_id: t.coach_id || t.managed_by_coach_id || "",
                   full_name: (coachName.trim().toLowerCase() !== "coach" ? coachName : "Head Coach").toUpperCase(),
@@ -281,18 +289,35 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
 
           const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
           const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {
-            const rawStatus = (inq.offer_status || "PENDING").toUpperCase();
+            const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
             const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
             return {
-              inquiry_id: inq.scout_id || `inq_${idx}`,
+              inquiry_id: inq.scout_id || inq.inquiry_id || `inq_${idx}`,
               coach_name: inq.coach_name || "Coach",
-              institution_sport: `${inq.current_institution || "Varsity"} • ${inq.sport_type || "Basketball"}`,
+              institution_sport: `${inq.current_institution || inq.institution || "Varsity"} • ${inq.sport_type || inq.role_title || "Basketball"}`,
               status: mappedStatus as any,
               updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
-              sub_note: inq.decline_reason || undefined,
+              sub_note: inq.decline_reason || inq.sub_note || undefined,
             };
           });
-          setInquiries(mappedInquiries);
+
+          // Merge with any existing offline cache items
+          const cachedStr = await AsyncStorage.getItem("atleta_offline_inquiries_cache").catch(() => null);
+          const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
+          const combinedMap = new Map<string, InquirySchema>();
+          
+          cachedItems.forEach((item) => {
+            if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
+          });
+          mappedInquiries.forEach((item) => {
+            if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
+          });
+
+          const finalList = Array.from(combinedMap.values());
+          setInquiries(finalList.length > 0 ? finalList : mappedInquiries);
+          if (finalList.length > 0) {
+            await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(finalList)).catch(() => null);
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -437,8 +462,8 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
         success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
         recruits_placed: c.recruits_placed || "",
-        philosophy: c.philosophy || c.bio || selectedTeam?.head_coach.quote || "Not specified",
-        quote: c.quote || selectedTeam?.head_coach.quote || "Not specified",
+        philosophy: c.coachingPhilosophy || c.coaching_philosophy || c.philosophy || c.bio || selectedTeam?.head_coach.quote || "Not specified",
+        quote: c.quote || c.coachingPhilosophy || c.coaching_philosophy || selectedTeam?.head_coach.quote || "Not specified",
         certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
         contact_info: {
           email: c.email || c.contact_info?.email || "Not specified",
@@ -535,7 +560,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
       >
         {/* Search Row */}
         <View style={styles.searchRow}>
-          <View style={[styles.searchInputContainer, { marginRight: 0 }]}>
+          <View style={styles.searchInputContainer}>
             <Ionicons
               name="search-outline"
               size={18}
@@ -555,6 +580,16 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
               </Pressable>
             )}
           </View>
+
+          <Pressable
+            style={styles.inquiriesQuickLink}
+            onPress={() => setCurrentScreen("INQUIRIES")}
+            accessibilityLabel="Inquiries Status Tracking"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="mail-unread-outline" size={22} color="#38BDF8" />
+            <Text style={styles.inquiriesQuickText}>INQUIRIES</Text>
+          </Pressable>
         </View>
 
         {/* Sport Filter Chips Horizontal Scroll */}
@@ -619,7 +654,14 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         ) : (
           filteredTeams.map((team) => (
             <View key={team.team_id} style={styles.teamCard}>
-              <Text style={styles.teamName}>{team.team_name}</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={[styles.teamName, { flex: 1, marginRight: 8 }]}>{team.team_name}</Text>
+                {team.is_my_team && (
+                  <View style={{ backgroundColor: "#0284C7", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "700" }}>CURRENT TEAM</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.sportTag}>{team.sport_type}</Text>
               <Text style={styles.teamDescription} numberOfLines={2}>
                 {team.description}

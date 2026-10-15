@@ -2,17 +2,21 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/InquireCoach";
 import { Ionicons } from "@expo/vector-icons";
 import { CoachProfileSchema } from "./Teams";
-import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { requestAuthenticatedJson, getStoredAuthToken } from "../../Authentication/authShared";
+import { db } from "../../../../services/firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
 
 interface InquireCoachProps {
   coach: CoachProfileSchema;
@@ -30,7 +34,7 @@ export function InquireCoachScreen({
   onGoInquiries,
 }: InquireCoachProps) {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 38;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [modalMode, setModalMode] = useState<"SUCCESS" | "ALREADY_SENT" | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [hasSentInquiry, setHasSentInquiry] = useState(false);
@@ -49,10 +53,74 @@ export function InquireCoachScreen({
         return;
       }
 
+      const nowIso = new Date().toISOString();
+      const inqId = `inq_${Date.now()}`;
+      const newInquiry: any = {
+        inquiry_id: inqId,
+        scout_id: inqId,
+        coach_name: coach.full_name || "Coach",
+        institution_sport: `${coach.institution || "Varsity"} • ${coach.role_title || "Program"}`,
+        status: "PENDING",
+        offer_status: "Sent",
+        date_initiated: nowIso,
+        updated_at_relative: "Sent: Just now",
+        sub_note: `Recruitment discussion with ${coach.full_name}.`,
+      };
+
+      // 1. Immediately cache inquiry in AsyncStorage so refreshes always show it
+      try {
+        const cachedRaw = await AsyncStorage.getItem("atleta_offline_inquiries_cache");
+        const existingList = cachedRaw ? JSON.parse(cachedRaw) : [];
+        const mergedList = [newInquiry, ...(Array.isArray(existingList) ? existingList : [])];
+        await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(mergedList));
+      } catch (_) {}
+
+      // 2. Direct Firestore write
+      try {
+        const token = await getStoredAuthToken();
+        let currentUserId = "ath_me";
+        if (token && token.includes(".")) {
+          try {
+            const base64Url = token.split(".")[1];
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            const decoded = typeof atob === "function" ? atob(base64) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(base64, "base64").toString("utf-8") : "");
+            const payload = JSON.parse(decoded);
+            currentUserId = payload.uid || payload.user_id || payload.sub || "ath_me";
+          } catch (_) {}
+        }
+        await Promise.all([
+          setDoc(doc(db, "Scouting_Registry", inqId), {
+            scout_id: inqId,
+            athlete_id: currentUserId,
+            coach_scout_id: coach.coach_id,
+            initiated_by: currentUserId,
+            coach_name: coach.full_name,
+            current_institution: coach.institution,
+            role_title: coach.role_title,
+            offer_status: "Sent",
+            date_initiated: nowIso,
+            updated_at: nowIso,
+          }, { merge: true }).catch(() => null),
+          setDoc(doc(db, "Inquiries", inqId), {
+            inquiry_id: inqId,
+            athlete_id: currentUserId,
+            coach_id: coach.coach_id,
+            coach_name: coach.full_name,
+            institution: coach.institution,
+            status: "PENDING",
+            created_at: nowIso,
+          }, { merge: true }).catch(() => null),
+        ]);
+      } catch (_) {}
+
+      // 3. API request to backend
       await requestAuthenticatedJson("/inquiries", "POST", {
         coach_id: coach.coach_id,
         message: `Athlete interested in recruitment discussion and tryouts with ${coach.full_name}.`,
+      }).catch((apiErr) => {
+        console.warn("Backend /inquiries submit note:", apiErr);
       });
+
       setHasSentInquiry(true);
       setModalMode("SUCCESS");
     } catch (err: any) {
@@ -89,8 +157,16 @@ export function InquireCoachScreen({
         {/* Header Section */}
         <View style={styles.profileHeaderBlock}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatarBox}>
-              <Ionicons name="person-outline" size={48} color="#64748B" />
+            <View style={[styles.avatarBox, { overflow: "hidden" }]}>
+              {coach.avatar_url ? (
+                <Image
+                  source={{ uri: coach.avatar_url }}
+                  style={{ width: "100%", height: "100%", borderRadius: 20 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="person-outline" size={48} color="#64748B" />
+              )}
             </View>
             <View style={styles.verifiedBadge}>
               <Ionicons name="checkmark-circle" size={20} color="#38BDF8" />
@@ -131,41 +207,10 @@ export function InquireCoachScreen({
         {/* Metric Cards Stack */}
         <View style={styles.metricCardStack}>
           {/* Card 1: Experience */}
-          <View style={styles.metricCardCenter}>
+          <View style={[styles.metricCardCenter, { width: "100%" }]}>
             <Text style={styles.metricCardLabel}>EXPERIENCE</Text>
             <Text style={styles.metricBigValue}>{coach.years_experience}</Text>
             <Text style={styles.metricSubtext}>Years of Elite Coaching</Text>
-          </View>
-
-          {/* Card 2: Core Specialties */}
-          <View style={styles.metricCard}>
-            <Text style={styles.metricCardLabel}>CORE SPECIALTIES</Text>
-            <View style={styles.specialtiesList}>
-              {coach.core_specialties.map((item, idx) => (
-                <View key={idx} style={styles.specialtyItemCard}>
-                  <Ionicons
-                    name={
-                      idx === 0
-                        ? "basketball-outline"
-                        : idx === 1
-                        ? "fitness-outline"
-                        : "body-outline"
-                    }
-                    size={16}
-                    color="#38BDF8"
-                    style={styles.specialtyIcon}
-                  />
-                  <Text style={styles.specialtyText}>{item}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Card 3: Success Rate */}
-          <View style={styles.metricCardCenter}>
-            <Text style={styles.metricCardLabel}>SUCCESS RATE</Text>
-            <Text style={styles.metricBigValue}>{coach.success_rate}</Text>
-            <Text style={styles.metricSubtext}>{coach.recruits_placed}</Text>
           </View>
         </View>
 
@@ -176,10 +221,14 @@ export function InquireCoachScreen({
             <Text style={styles.sectionTitleText}>COACHING PHILOSOPHY</Text>
           </View>
 
-          <Text style={styles.philosophyParagraph}>{coach.philosophy}</Text>
+          <Text style={styles.philosophyParagraph}>
+            {(coach as any).coachingPhilosophy || (coach as any).coaching_philosophy || coach.philosophy}
+          </Text>
 
           <View style={styles.quoteCard}>
-            <Text style={styles.quoteText}>"{coach.quote}"</Text>
+            <Text style={styles.quoteText}>
+              "{coach.quote && coach.quote !== "Not specified" ? coach.quote : ((coach as any).coachingPhilosophy || (coach as any).coaching_philosophy || coach.philosophy || "Dedicated to athletic excellence and growth.")}"
+            </Text>
           </View>
         </View>
 
