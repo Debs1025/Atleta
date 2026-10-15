@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, LayoutGrid, Calendar, Settings, LogOut, AlertCircle, X } from 'lucide-react';
-import { clearAuthSession } from '../../api/client';
+import { clearAuthSession, getOfficialSchedules } from '../../api/client';
 import { styles } from './styles/Sidebar';
 
 interface SidebarProps {
@@ -58,7 +58,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onCreateMatch }) =>
                 <Link
                   key={key}
                   to={to}
-                  onMouseEnter={() => setHovered(key)}
+                  onMouseEnter={() => {
+                    setHovered(key);
+                    if (key === 'SCHEDULES') {
+                      const d = new Date();
+                      getOfficialSchedules(d.getMonth() + 1, d.getFullYear()).catch(() => {});
+                    }
+                  }}
                   onMouseLeave={() => setHovered(null)}
                   style={{
                     ...styles.navLink,
