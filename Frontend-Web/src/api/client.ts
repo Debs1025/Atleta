@@ -709,7 +709,23 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
     existingIds.add(rawId);
   }
 
-  const finalList = list;
+  // Deduplicate list by canonical match ID to prevent duplicate games
+  const deduplicatedMap = new Map<string, OfficialScheduleItem>();
+  for (const item of list) {
+    const rawMatchId = String(
+      item.match_id ||
+      (item as any).raw_match?.match_id ||
+      item.schedule_id ||
+      ''
+    ).replace(/^#/, '').replace(/^sched_/, '').trim();
+
+    const key = rawMatchId || String(item.schedule_id || Math.random());
+    if (!deduplicatedMap.has(key)) {
+      deduplicatedMap.set(key, item);
+    }
+  }
+
+  const finalList = Array.from(deduplicatedMap.values());
 
   setCachedData(cacheKey, finalList);
   return finalList;

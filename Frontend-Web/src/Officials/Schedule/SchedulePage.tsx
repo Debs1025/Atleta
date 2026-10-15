@@ -18,6 +18,78 @@ import { styles } from './styles/SchedulePage';
 
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
+export const getCanonicalMatchDate = (item: any): { year: number; month: number; day: number; dateStr: string } | null => {
+  if (!item) return null;
+  const raw = item?.raw_match || {};
+  const timeVal = item?.scheduled_time || raw?.match_date || item?.match_date || raw?.timestamp || raw?.requested_at || item?.date_time || '';
+  if (!timeVal) return null;
+
+  // 1. Pure date string like YYYY-MM-DD
+  if (typeof timeVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timeVal.trim())) {
+    const [y, m, d] = timeVal.trim().split('-').map(Number);
+    return {
+      year: y,
+      month: m,
+      day: d,
+      dateStr: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+    };
+  }
+
+  // 2. Normalize potential slashes like "20 OCT 2026 / 02:32"
+  const cleaned = typeof timeVal === 'string' ? timeVal.replace(/\s*\/\s*/g, ' ').trim() : timeVal;
+  let d = new Date(cleaned);
+  if (isNaN(d.getTime())) {
+    d = new Date(timeVal);
+  }
+
+  // 3. Fallback regex for "DD MMM YYYY" or "YYYY-MM-DD" if Date constructor fails
+  if (isNaN(d.getTime()) && typeof timeVal === 'string') {
+    const isoMatch = timeVal.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const y = Number(isoMatch[1]);
+      const m = Number(isoMatch[2]);
+      const day = Number(isoMatch[3]);
+      return {
+        year: y,
+        month: m,
+        day,
+        dateStr: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      };
+    }
+    const dmyMatch = timeVal.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+    if (dmyMatch) {
+      const day = Number(dmyMatch[1]);
+      const mStr = dmyMatch[2].toUpperCase();
+      const y = Number(dmyMatch[3]);
+      const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const mIdx = MONTH_NAMES.indexOf(mStr);
+      if (mIdx !== -1) {
+        const m = mIdx + 1;
+        return {
+          year: y,
+          month: m,
+          day,
+          dateStr: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        };
+      }
+    }
+    return null;
+  }
+
+  if (isNaN(d.getTime())) return null;
+
+  // Consistent assignment: use the local date values matching the user's timezone & time formatting
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return {
+    year: y,
+    month: m,
+    day,
+    dateStr: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+  };
+};
+
 const resolveTeamNames = (item: any): { home: string; away: string } => {
   if (!item) return { home: 'HOME TEAM', away: 'AWAY TEAM' };
   const raw = item?.raw_match || {};
@@ -287,13 +359,9 @@ export const SchedulePage: React.FC = () => {
         }
 
         if (list.length > 0) {
-          const firstTime = list[0].scheduled_time || (list[0] as any).raw_match?.match_date || (list[0] as any).match_date;
-          if (firstTime) {
-            const firstDatePart = firstTime.split('T')[0];
-            const fParts = firstDatePart.split('-');
-            if (Number(fParts[0]) === year && Number(fParts[1]) === month) {
-              return firstDatePart;
-            }
+          const firstParsed = getCanonicalMatchDate(list[0]);
+          if (firstParsed && firstParsed.year === year && firstParsed.month === month) {
+            return firstParsed.dateStr;
           }
         }
 
@@ -341,9 +409,28 @@ export const SchedulePage: React.FC = () => {
   const numWeeks = Math.max(1, Math.ceil(totalCells / 7));
   const rowHeightPct = `${(100 / numWeeks).toFixed(4)}%`;
 
-  const safeSchedules = (Array.isArray(schedules) ? schedules : []).filter((s) => {
-    return isMatchCreatedByOfficial(s as any, user);
-  });
+  // Strictly filter for current official's matches AND deduplicate by canonical match ID
+  const safeSchedules = React.useMemo(() => {
+    const rawList = (Array.isArray(schedules) ? schedules : []).filter((s) => {
+      return isMatchCreatedByOfficial(s as any, user);
+    });
+
+    const uniqueMap = new Map<string, OfficialScheduleItem>();
+    for (const item of rawList) {
+      const canonicalMatchId = String(
+        item.match_id ||
+        (item as any).raw_match?.match_id ||
+        item.schedule_id ||
+        ''
+      ).replace(/^#/, '').replace(/^sched_/, '').trim();
+
+      const key = canonicalMatchId || String(item.schedule_id || Math.random());
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, item);
+      }
+    }
+    return Array.from(uniqueMap.values());
+  }, [schedules, user]);
 
   const onCellClick = (dayNum: number) => {
     const formatted = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
@@ -368,26 +455,8 @@ export const SchedulePage: React.FC = () => {
   const selectedDayMatches = safeSchedules
     .filter((s) => {
       if (!s || !selectedDateStr) return false;
-      const timeStr = s.scheduled_time || (s as any).raw_match?.match_date || (s as any).match_date || '';
-      if (!timeStr) return false;
-      if (timeStr.startsWith(selectedDateStr) || timeStr.includes(selectedDateStr)) return true;
-      try {
-        const d = new Date(timeStr);
-        if (isNaN(d.getTime())) return false;
-        const parts = selectedDateStr.split('-');
-        if (parts.length === 3) {
-          const selYear = Number(parts[0]);
-          const selMonth = Number(parts[1]);
-          const selDay = Number(parts[2]);
-          return (
-            (d.getFullYear() === selYear && d.getMonth() + 1 === selMonth && d.getDate() === selDay) ||
-            (d.getUTCFullYear() === selYear && d.getUTCMonth() + 1 === selMonth && d.getUTCDate() === selDay)
-          );
-        }
-        return false;
-      } catch {
-        return false;
-      }
+      const parsed = getCanonicalMatchDate(s);
+      return parsed ? parsed.dateStr === selectedDateStr : false;
     })
     .sort((a, b) => {
       const timeA = new Date(a.scheduled_time || (a as any).raw_match?.match_date || (a as any).match_date || 0).getTime();
@@ -454,19 +523,8 @@ export const SchedulePage: React.FC = () => {
                       const matchesForDay = safeSchedules
                         .filter((s) => {
                           if (!s) return false;
-                          const timeStr = s.scheduled_time || (s as any).raw_match?.match_date || (s as any).match_date || '';
-                          if (!timeStr) return false;
-                          if (timeStr.startsWith(targetDatePrefix) || timeStr.includes(targetDatePrefix)) return true;
-                          try {
-                            const d = new Date(timeStr);
-                            if (isNaN(d.getTime())) return false;
-                            return (
-                              (d.getFullYear() === year && d.getMonth() + 1 === month && d.getDate() === dayNum) ||
-                              (d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month && d.getUTCDate() === dayNum)
-                            );
-                          } catch {
-                            return false;
-                          }
+                          const parsed = getCanonicalMatchDate(s);
+                          return parsed ? parsed.dateStr === targetDatePrefix : false;
                         })
                         .sort((a, b) => {
                           const timeA = new Date(a.scheduled_time || (a as any).raw_match?.match_date || (a as any).match_date || 0).getTime();
