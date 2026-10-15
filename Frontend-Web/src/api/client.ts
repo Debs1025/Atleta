@@ -2209,5 +2209,153 @@ export const changeOfficialPassword = async (newPassword: string): Promise<{ mes
   return handleResponse<{ message: string }>(res);
 };
 
+// ─── TOURNAMENT BRACKETING API ──────────────────────────────────────────
+
+export interface BracketTeamSlot {
+  team_id?: string;
+  team_name: string;
+  seed?: number;
+  score?: number;
+  is_winner?: boolean;
+}
+
+export interface BracketMatch {
+  match_id: string;
+  round_number: number;
+  stage_name: 'Quarterfinals' | 'Semifinals' | 'Finals' | string;
+  home_team: BracketTeamSlot;
+  away_team: BracketTeamSlot;
+  winner_team_name?: string;
+  winner_team_id?: string;
+  status: 'PENDING' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED';
+  next_match_id?: string;
+  slot_for_next?: 'home' | 'away';
+  match_date?: string;
+  venue?: string;
+}
+
+export interface BracketStage {
+  stage_name: string;
+  round_number: number;
+  matches: BracketMatch[];
+}
+
+export interface TournamentBracket {
+  bracket_id: string;
+  tournament_name: string;
+  sport_type: string;
+  division?: string;
+  format: 'single_elimination' | 'round_robin';
+  status: 'Draft' | 'Active' | 'Completed';
+  stages: BracketStage[];
+  champion_team?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getTournamentBrackets = async (sport?: string): Promise<TournamentBracket[]> => {
+  const token = getStoredToken();
+  const qs = sport && sport.toUpperCase() !== 'ALL' ? `?sport=${encodeURIComponent(sport)}` : '';
+  const cacheKey = `tournament_brackets_${sport || 'all'}`;
+
+  // Instant local cache fallback
+  try {
+    const raw = localStorage.getItem(`atleta_cached_bracket_${sport || 'all'}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setCachedData(cacheKey, parsed);
+      }
+    }
+  } catch { }
+
+  try {
+    const res = await fetch(`${BASE_URL}/tournaments/brackets${qs}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list = Array.isArray(data.brackets) ? data.brackets : [];
+      setCachedData(cacheKey, list);
+      try { localStorage.setItem(`atleta_cached_bracket_${sport || 'all'}`, JSON.stringify(list)); } catch { }
+      return list;
+    }
+  } catch { }
+
+  return getCachedData<TournamentBracket[]>(cacheKey) || [];
+};
+
+export const saveTournamentBracket = async (bracket: Partial<TournamentBracket>): Promise<TournamentBracket> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/tournaments/brackets`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(bracket),
+  });
+  const data = await handleResponse<{ bracket: TournamentBracket }>(res);
+  try {
+    localStorage.setItem(`atleta_cached_bracket_${bracket.sport_type || 'all'}`, JSON.stringify([data.bracket]));
+  } catch { }
+  return data.bracket;
+};
+
+export const advanceBracketTeam = async (
+  bracketId: string,
+  matchId: string,
+  winnerTeamName: string,
+  homeScore?: number,
+  awayScore?: number
+): Promise<TournamentBracket> => {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE_URL}/tournaments/brackets/${bracketId}/advance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      match_id: matchId,
+      winner_team_name: winnerTeamName,
+      home_score: homeScore,
+      away_score: awayScore,
+    }),
+  });
+  const data = await handleResponse<{ bracket: TournamentBracket }>(res);
+  return data.bracket;
+};
+
+// ─── ATHLETE PROFILE VIEWING FOR TOURNAMENT OFFICIALS ──────────────────────
+
+export const getAthleteProfileForOfficial = async (athleteId: string): Promise<any> => {
+  const token = getStoredToken();
+  const cleanId = String(athleteId || '').replace(/^ath_/, '');
+  const cacheKey = `official_athlete_profile_${cleanId}`;
+  const cached = getCachedData<any>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch(`${BASE_URL}/athletes/${cleanId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setCachedData(cacheKey, data);
+      return data;
+    }
+  } catch { }
+
+  return null;
+};
+
 // Re-export OCR and Scoresheet Scanning API functions
 export * from './ocr';

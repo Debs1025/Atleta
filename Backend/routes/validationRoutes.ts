@@ -12,9 +12,13 @@ router.get('/pending', authenticate, getPendingValidationsHandler);
 router.get('/list', authenticate, getPendingValidationsHandler);
 router.get('/', authenticate, getPendingValidationsHandler);
 
-// Certify Validation
+// Certify / Approve / Fulfill Validation Request
 router.post('/:validationId/certify', authenticate, certifyValidationHandler);
 router.patch('/:validationId/certify', authenticate, certifyValidationHandler);
+router.post('/:validationId/approve', authenticate, certifyValidationHandler);
+router.patch('/:validationId/approve', authenticate, certifyValidationHandler);
+router.post('/:validationId/fulfill', authenticate, certifyValidationHandler);
+router.patch('/:validationId/fulfill', authenticate, certifyValidationHandler);
 
 export default router;
 

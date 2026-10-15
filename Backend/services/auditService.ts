@@ -69,11 +69,27 @@ export async function submitAuditRequest(
 
   const batch = db.batch();
   const auditRef = db.collection('Official_Audits').doc(auditId);
+  const validationRef = db.collection('Official_Validations').doc(auditId);
 
   batch.set(auditRef, auditData);
+  batch.set(validationRef, auditData);
   batch.update(matchRef, {
     audit_status: 'Pending',
     verification_status: 'Pending',
+  });
+
+  // Dispatch real-time notification to tournament officials
+  const notifId = `notif_${crypto.randomUUID()}`;
+  batch.set(db.collection('Official_Notifications').doc(notifId), {
+    notification_id: notifId,
+    title: 'New Scoresheet Audit Request',
+    message: `Coach submitted a scoresheet verification request for ${matchData.home_team_name || 'Home'} vs ${matchData.away_team_name || 'Away'}.`,
+    type: 'AUDIT_REQUEST',
+    match_id: matchId,
+    audit_id: auditId,
+    is_read: false,
+    created_at: now,
+    timestamp: now,
   });
 
   await batch.commit();

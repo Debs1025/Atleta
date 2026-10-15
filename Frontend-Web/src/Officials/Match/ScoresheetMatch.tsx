@@ -14,7 +14,11 @@ import {
   Trash2,
   Download,
   Trophy,
+  ChevronLeft,
+  ChevronRight,
+  User,
 } from 'lucide-react';
+import { AthleteProfileModal } from '../Components/AthleteProfileModal';
 import {
   getMatchAuditDetail,
   certifyMatchValidation,
@@ -96,6 +100,15 @@ export const ScoresheetMatch: React.FC = () => {
   const isCertified = Boolean(matchData?.is_certified || isMatchLocallyCertified(cleanId));
 
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
+  const [selectedAthlete, setSelectedAthlete] = useState<{
+    athleteId?: string;
+    athleteName?: string;
+    jerseyNo?: string | number;
+    teamName?: string;
+    position?: string;
+    stats?: Record<string, any>;
+  } | null>(null);
+  const [previewPageIndex, setPreviewPageIndex] = useState<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -176,6 +189,83 @@ export const ScoresheetMatch: React.FC = () => {
     }
     return { homeResult: 'UNPLAYED', awayResult: 'UNPLAYED', finalScore: '0 - 0', summary: 'UNPLAYED' };
   }, [homeScore, awayScore, homeTeamDisplayName, awayTeamDisplayName]);
+
+  const mvpPlayer = useMemo(() => {
+    const allPlayers: Array<{ row: BoxScoreRow; isHome: boolean }> = [
+      ...homeRoster.map((r) => ({ row: r, isHome: true })),
+      ...awayRoster.map((r) => ({ row: r, isHome: false })),
+    ];
+    if (allPlayers.length === 0) {
+      if (raceResults && raceResults.length > 0) {
+        const top = [...raceResults].sort((a, b) => Number(a.placement_rank || 99) - Number(b.placement_rank || 99))[0];
+        if (top) {
+          return {
+            playerName: top.athlete_name || (top as any).athlete || 'Top Performer',
+            jerseyNo: undefined,
+            teamName: top.team_name || 'Individual',
+            score: 1,
+            metricLabel: `Rank #${top.placement_rank || 1} • ${top.finish_time || 'Winner'}`,
+            pts: undefined,
+            reb: undefined,
+            ast: undefined,
+            athleteId: (top as any).athlete_id,
+          };
+        }
+      }
+      return null;
+    }
+
+    let bestScore = -999;
+    let bestPlayer: any = null;
+
+    allPlayers.forEach(({ row, isHome }) => {
+      const name = row.player_name || (row as any).name;
+      if (!name || name.toUpperCase().includes('TOTAL') || name.toUpperCase().includes('TEAM')) return;
+
+      let score = 0;
+      let label = '';
+
+      if (isVolleyball) {
+        const kills = Number(row.kills || 0);
+        const aces = Number(row.service_aces || 0);
+        const blk = Number(row.blk || 0);
+        const digs = Number(row.digs || 0);
+        score = kills * 1.5 + aces * 2 + blk * 2 + digs;
+        label = `${kills} Kills, ${aces} Aces, ${blk} Blk`;
+      } else if (isSoccer) {
+        const goals = Number(row.goals ?? row.pts ?? 0);
+        const ast = Number(row.ast || 0);
+        score = goals * 6 + ast * 4;
+        label = `${goals} Goals, ${ast} Assists`;
+      } else {
+        const pts = Number(row.pts || 0);
+        const reb = Number(row.reb || 0);
+        const ast = Number(row.ast || 0);
+        const stl = Number(row.stl || 0);
+        const blk = Number(row.blk || 0);
+        score = pts + reb * 1.2 + ast * 1.5 + stl * 2 + blk * 2;
+        label = `${pts} PTS, ${reb} REB, ${ast} AST`;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestPlayer = {
+          playerName: name,
+          jerseyNo: row.jersey_no,
+          teamName: isHome ? homeTeamDisplayName : awayTeamDisplayName,
+          score,
+          pts: Number(row.pts || 0),
+          reb: Number(row.reb || 0),
+          ast: Number(row.ast || 0),
+          metricLabel: label,
+          athleteId: (row as any).athlete_id,
+          row,
+        };
+      }
+    });
+
+    return bestPlayer;
+  }, [homeRoster, awayRoster, raceResults, isVolleyball, isSoccer, homeTeamDisplayName, awayTeamDisplayName]);
 
   const isIndividualSport = useMemo(() => {
     const s = (matchData?.sport_type || '').toLowerCase();
@@ -918,7 +1008,34 @@ export const ScoresheetMatch: React.FC = () => {
                     <td style={styles.statTdName}>
                       {isEditing && !isCertified ? (
                         <input type="text" value={row.player_name} onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)} style={styles.statInputName} />
-                      ) : row.player_name}
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAthlete({
+                            athleteId: (row as any).athlete_id,
+                            athleteName: row.player_name,
+                            jerseyNo: row.jersey_no,
+                            teamName: teamType === 'home' ? homeTeamDisplayName : awayTeamDisplayName,
+                            position: row.position,
+                            stats: row,
+                          })}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            margin: 0,
+                            color: '#0B132B',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            textDecoration: 'underline',
+                            textDecorationColor: '#94A3B8',
+                          }}
+                          title="Click to view athlete profile"
+                        >
+                          {row.player_name}
+                        </button>
+                      )}
                     </td>
                     {dynamicSportColumns.map((col) => {
                       const val = getMetricValue(row, col.key);
@@ -1061,7 +1178,32 @@ export const ScoresheetMatch: React.FC = () => {
                   <td style={styles.statTdName}>
                     {isEditing && !isCertified ? (
                       <input type="text" value={row.athlete_name} onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)} style={styles.statInputName} />
-                    ) : row.athlete_name}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAthlete({
+                          athleteId: (row as any).athlete_id,
+                          athleteName: row.athlete_name,
+                          teamName: row.team_name,
+                          stats: row,
+                        })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          margin: 0,
+                          color: '#0B132B',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          textDecoration: 'underline',
+                          textDecorationColor: '#94A3B8',
+                        }}
+                        title="Click to view athlete profile"
+                      >
+                        {row.athlete_name}
+                      </button>
+                    )}
                   </td>
                   <td style={styles.statTd}>
                     {isEditing && !isCertified ? (
@@ -1248,6 +1390,114 @@ export const ScoresheetMatch: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* MVP Top Performer Card */}
+            {mvpPlayer && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#FFFBEB',
+                border: '1.5px solid #F59E0B',
+                borderRadius: '8px',
+                padding: '12px 20px',
+                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.1)',
+                flexWrap: 'wrap',
+                gap: 12,
+                marginTop: 4,
+                marginBottom: 6,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: '50%',
+                    backgroundColor: '#FEF3C7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#D97706',
+                    flexShrink: 0,
+                    boxShadow: '0 0 12px rgba(245, 158, 11, 0.25)',
+                  }}>
+                    <Trophy size={22} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '10px', fontWeight: 800, color: '#B45309', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                        ★ MATCH MVP / TOP PERFORMER
+                      </span>
+                      <span style={{
+                        fontSize: '9px',
+                        fontWeight: 800,
+                        backgroundColor: '#FDE68A',
+                        color: '#78350F',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                      }}>
+                        EFF: {typeof mvpPlayer.score === 'number' ? mvpPlayer.score.toFixed(1) : mvpPlayer.score}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAthlete({
+                        athleteId: mvpPlayer.athleteId,
+                        athleteName: mvpPlayer.playerName,
+                        jerseyNo: mvpPlayer.jerseyNo,
+                        teamName: mvpPlayer.teamName,
+                        stats: mvpPlayer.row || {},
+                      })}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        margin: '2px 0 0 0',
+                        fontSize: '16px',
+                        fontWeight: 800,
+                        color: '#0B132B',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        textDecoration: 'underline',
+                        textDecorationColor: '#D97706',
+                      }}
+                      title="Click to view athlete profile"
+                    >
+                      {mvpPlayer.playerName} {mvpPlayer.jerseyNo ? `(#${mvpPlayer.jerseyNo})` : ''}
+                    </button>
+                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                      {mvpPlayer.teamName} • {mvpPlayer.metricLabel}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedAthlete({
+                    athleteId: mvpPlayer.athleteId,
+                    athleteName: mvpPlayer.playerName,
+                    jerseyNo: mvpPlayer.jerseyNo,
+                    teamName: mvpPlayer.teamName,
+                    stats: mvpPlayer.row || {},
+                  })}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    backgroundColor: '#0B132B',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <User size={13} />
+                  <span>VIEW PROFILE</span>
+                </button>
+              </div>
+            )}
 
             {/* Data Tables */}
             {isIndividualSport ? renderIndividualRaceTable() : (
@@ -1578,26 +1828,173 @@ export const ScoresheetMatch: React.FC = () => {
         </div>
       )}
 
-      {activeModal === 'PREVIEW' && (previewUrl || scoresheetUrl) && (
-        <div style={styles.modalOverlay} onClick={() => { setActiveModal(null); setPreviewUrl(null); }}>
-          <div style={styles.previewModalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.previewModalHeader}>
-              <h3 style={styles.modalTitle}>SCORESHEET PREVIEW</h3>
-              <button type="button" onClick={() => { setActiveModal(null); setPreviewUrl(null); }} className="hover-close-x" style={styles.closeXBtn}>
-                <X style={{ width: 20, height: 20 }} />
-              </button>
-            </div>
-            {(previewUrl || scoresheetUrl || '').toLowerCase().includes('.pdf') || (previewUrl || scoresheetUrl || '').startsWith('data:application/pdf') ? (
-              <iframe src={previewUrl || scoresheetUrl} title="Scoresheet Preview" style={styles.previewPdfIframe} />
-            ) : (
-              <img src={previewUrl || scoresheetUrl} alt="Scoresheet" style={styles.previewImg} />
-            )}
-            <div style={styles.previewModalFooter}>
-              <button type="button" onClick={() => { setActiveModal(null); setPreviewUrl(null); }} className="hover-btn-outline" style={styles.modalCancelBtn}>CLOSE</button>
+      {activeModal === 'PREVIEW' && (previewUrl || scoresheetUrl || displayPages.length > 0) && (() => {
+        const activePage = displayPages[previewPageIndex] || displayPages[0];
+        const currentUrl = previewUrl || activePage?.url || scoresheetUrl || '';
+        const isPdf = (currentUrl || '').toLowerCase().includes('.pdf') || (currentUrl || '').startsWith('data:application/pdf') || activePage?.isPdf;
+        const totalPages = displayPages.length;
+
+        return (
+          <div style={styles.modalOverlay} onClick={() => { setActiveModal(null); setPreviewUrl(null); }}>
+            <div style={{ ...styles.previewModalCard, maxWidth: '850px', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+              <div style={styles.previewModalHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <FileText size={18} color="#0B132B" />
+                  <h3 style={styles.modalTitle}>
+                    SCORESHEET PREVIEW {totalPages > 1 ? `(PAGE ${previewPageIndex + 1} OF ${totalPages})` : ''}
+                  </h3>
+                </div>
+                <button type="button" onClick={() => { setActiveModal(null); setPreviewUrl(null); }} className="hover-close-x" style={styles.closeXBtn}>
+                  <X style={{ width: 20, height: 20 }} />
+                </button>
+              </div>
+
+              {/* Multi-Page Tabs Header if multiple sheets */}
+              {totalPages > 1 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 18px',
+                  backgroundColor: '#F8FAFC',
+                  borderBottom: '1px solid #E2E8F0',
+                  overflowX: 'auto',
+                }}>
+                  {displayPages.map((page, idx) => {
+                    const isActive = idx === previewPageIndex;
+                    return (
+                      <button
+                        key={page.key || idx}
+                        type="button"
+                        onClick={() => {
+                          setPreviewPageIndex(idx);
+                          setPreviewUrl(page.url);
+                        }}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: isActive ? '1.5px solid #0B132B' : '1px solid #CBD5E1',
+                          backgroundColor: isActive ? '#0B132B' : '#FFFFFF',
+                          color: isActive ? '#FFFFFF' : '#64748B',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <span>{page.badge || `PAGE ${idx + 1}`}</span>
+                        {page.name && (
+                          <span style={{ fontSize: 10, opacity: 0.8, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            ({page.name})
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Viewer body */}
+              <div style={{ flex: 1, minHeight: '450px', maxHeight: '68vh', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B0F17' }}>
+                {isPdf ? (
+                  <iframe src={currentUrl} title="Scoresheet Preview" style={{ width: '100%', height: '100%', border: 'none' }} />
+                ) : (
+                  <img src={currentUrl} alt="Scoresheet" style={{ maxWidth: '100%', maxHeight: '68vh', objectFit: 'contain' }} />
+                )}
+
+                {/* Left / Right arrows overlay if multi-page */}
+                {totalPages > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={previewPageIndex <= 0}
+                      onClick={() => {
+                        const nextIdx = Math.max(0, previewPageIndex - 1);
+                        setPreviewPageIndex(nextIdx);
+                        setPreviewUrl(displayPages[nextIdx]?.url);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        left: 14,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 38,
+                        height: 38,
+                        borderRadius: '50%',
+                        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: previewPageIndex <= 0 ? '#475569' : '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: previewPageIndex <= 0 ? 'not-allowed' : 'pointer',
+                        backdropFilter: 'blur(4px)',
+                      }}
+                      title="Previous Page"
+                    >
+                      <ChevronLeft size={22} />
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={previewPageIndex >= totalPages - 1}
+                      onClick={() => {
+                        const nextIdx = Math.min(totalPages - 1, previewPageIndex + 1);
+                        setPreviewPageIndex(nextIdx);
+                        setPreviewUrl(displayPages[nextIdx]?.url);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: 14,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 38,
+                        height: 38,
+                        borderRadius: '50%',
+                        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: previewPageIndex >= totalPages - 1 ? '#475569' : '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: previewPageIndex >= totalPages - 1 ? 'not-allowed' : 'pointer',
+                        backdropFilter: 'blur(4px)',
+                      }}
+                      title="Next Page"
+                    >
+                      <ChevronRight size={22} />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div style={{ ...styles.previewModalFooter, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>
+                  {totalPages > 1 ? `Showing page ${previewPageIndex + 1} of ${totalPages}` : 'Official Scoresheet Archive'}
+                </span>
+                <button type="button" onClick={() => { setActiveModal(null); setPreviewUrl(null); }} className="hover-btn-outline" style={styles.modalCancelBtn}>
+                  CLOSE
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Athlete Profile Modal for Tournament Officials */}
+      <AthleteProfileModal
+        isOpen={Boolean(selectedAthlete)}
+        onClose={() => setSelectedAthlete(null)}
+        athleteId={selectedAthlete?.athleteId}
+        athleteName={selectedAthlete?.athleteName}
+        jerseyNo={selectedAthlete?.jerseyNo}
+        teamName={selectedAthlete?.teamName}
+        position={selectedAthlete?.position}
+        stats={selectedAthlete?.stats}
+      />
     </div>
   );
 };

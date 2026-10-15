@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, FileText, Check } from 'lucide-react';
 import {
   getStoredToken,
   getStoredUser,
@@ -16,6 +16,7 @@ import {
   isMatchDeleted,
   warmOfficialAppCache,
   getSports,
+  certifyMatchValidation,
 } from '../../api/client';
 import type { AuthUser, OfficialDashboardResponse, MatchSummaryItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -27,17 +28,45 @@ export const OfficialHomePage: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(
     () => getCachedData<AuthUser>('user_me') || getStoredUser()
   );
-  const [dashboard, setDashboard] = useState<OfficialDashboardResponse | null>(
-    () => getCachedData<OfficialDashboardResponse>('official_dashboard')
-  );
-  const [masterMatches, setMasterMatches] = useState<MatchSummaryItem[]>(
-    () => getCachedData<MatchSummaryItem[]>('all_official_matches_master') || []
-  );
-  const [loading, setLoading] = useState(() => !getCachedData('official_dashboard'));
+  const [dashboard, setDashboard] = useState<OfficialDashboardResponse | null>(() => {
+    const mem = getCachedData<OfficialDashboardResponse>('official_dashboard');
+    if (mem) return mem;
+    try {
+      const raw = localStorage.getItem('atleta_cached_official_dashboard');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [masterMatches, setMasterMatches] = useState<MatchSummaryItem[]>(() => {
+    const mem = getCachedData<MatchSummaryItem[]>('all_official_matches_master');
+    if (mem && mem.length > 0) return mem;
+    try {
+      const raw = localStorage.getItem('atleta_cached_official_matches_master');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    return !getCachedData('official_dashboard') && !localStorage.getItem('atleta_cached_official_dashboard');
+  });
+  const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
+  const [approvedRequestIds, setApprovedRequestIds] = useState<Set<string>>(() => new Set());
 
   const refreshDashboard = () => {
-    getOfficialDashboard(true).then((res) => setDashboard(res)).catch(() => { });
-    getAllOfficialMatchesMaster(true).then((res) => setMasterMatches(res || [])).catch(() => { });
+    getOfficialDashboard(true).then((res) => {
+      if (res) {
+        setDashboard(res);
+        try { localStorage.setItem('atleta_cached_official_dashboard', JSON.stringify(res)); } catch { }
+      }
+    }).catch(() => { });
+    getAllOfficialMatchesMaster(true).then((res) => {
+      if (res) {
+        setMasterMatches(res);
+        try { localStorage.setItem('atleta_cached_official_matches_master', JSON.stringify(res)); } catch { }
+      }
+    }).catch(() => { });
   };
 
   useEffect(() => {
@@ -54,13 +83,19 @@ export const OfficialHomePage: React.FC = () => {
       return;
     }
 
-    // 1. Load Matches progressively
+    // 1. Load Matches progressively and cache
     getOfficialDashboard().then((res) => {
-      if (res) setDashboard(res);
+      if (res) {
+        setDashboard(res);
+        try { localStorage.setItem('atleta_cached_official_dashboard', JSON.stringify(res)); } catch { }
+      }
     }).catch(() => { });
 
     getAllOfficialMatchesMaster().then((res) => {
-      if (res) setMasterMatches(res);
+      if (res) {
+        setMasterMatches(res);
+        try { localStorage.setItem('atleta_cached_official_matches_master', JSON.stringify(res)); } catch { }
+      }
       setLoading(false);
     }).catch(() => {
       setLoading(false);
@@ -245,6 +280,32 @@ export const OfficialHomePage: React.FC = () => {
     return list.sort((a, b) => b.timestamp - a.timestamp);
   }, [officialMatches]);
 
+  const incomingRequests = useMemo(() => {
+    const queue = dashboard?.audit_queue || [];
+    return queue.filter((item: any) => {
+      const match = item.match_details || {};
+      const rawId = String(match.match_id || item.match_id || '').replace(/^#/, '');
+      if (isMatchDeleted(rawId)) return false;
+      return true;
+    });
+  }, [dashboard]);
+
+  const handleApproveRequest = async (item: any) => {
+    const reqId = item.audit_id || item.validation_id || item.match_id;
+    if (!reqId) return;
+    setApprovingRequestId(reqId);
+    try {
+      await certifyMatchValidation(reqId, { notes: 'Scoresheet request approved and certified by tournament official' });
+      setApprovedRequestIds((prev) => new Set([...prev, reqId]));
+      refreshDashboard();
+    } catch (err) {
+      console.error('Failed to approve scoresheet request:', err);
+      alert('Failed to approve request. Please try again.');
+    } finally {
+      setApprovingRequestId(null);
+    }
+  };
+
   const totalMatches = officialMatches.length;
   const pendingCount = String(
     officialMatches.filter((i) => i.status === 'PENDING').length
@@ -297,6 +358,137 @@ export const OfficialHomePage: React.FC = () => {
               <h2 style={styles.kpiValue}>{loading ? '...' : auditedCount}</h2>
             </div>
           </div>
+
+          {/* Incoming Scoresheet Requests from Coaches */}
+          {incomingRequests.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={styles.sectionHeaderRow}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileText style={{ width: 16, height: 16, color: '#E11D48' }} />
+                  <h3 style={{ ...styles.sectionHeading, color: '#0B132B' }}>
+                    INCOMING SCORESHEET REQUESTS
+                  </h3>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    backgroundColor: '#FEF2F2',
+                    color: '#E11D48',
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    border: '1px solid #FECACA',
+                  }}>
+                    {incomingRequests.length} PENDING
+                  </span>
+                </div>
+              </div>
+
+              <div style={styles.tableFrame}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>REQUEST / MATCH</th>
+                      <th style={styles.th}>COACH / SENDER</th>
+                      <th style={styles.th}>MATCH DETAILS</th>
+                      <th style={styles.th}>STATUS</th>
+                      <th style={{ ...styles.th, borderRight: 'none', textAlign: 'right' }}>ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incomingRequests.map((req: any, idx: number) => {
+                      const match = req.match_details || {};
+                      const rawMatchId = String(match.match_id || req.match_id || `REQ-${idx}`).replace(/^#/, '');
+                      const reqId = req.audit_id || req.validation_id || rawMatchId;
+                      const isApproved =
+                        approvedRequestIds.has(reqId) ||
+                        req.status === 'Approved' ||
+                        req.status === 'Fulfilled' ||
+                        req.status === 'Audited' ||
+                        isMatchLocallyCertified(rawMatchId);
+                      const isApproving = approvingRequestId === reqId;
+
+                      const matchTitle = match.home_team_name && match.away_team_name
+                        ? `${match.home_team_name} vs ${match.away_team_name}`
+                        : req.match_title || 'Tournament Match';
+                      const coachDisplay = req.requested_by_name || req.requested_by || 'Assigned Coach';
+
+                      return (
+                        <tr key={reqId} style={{ backgroundColor: isApproved ? '#F0FDF4' : '#FFFFFF' }}>
+                          <td style={{ ...styles.td, ...styles.tdMatchId }}>
+                            <div style={{ fontWeight: 800 }}>#{rawMatchId}</div>
+                            <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600 }}>{req.audit_id || reqId}</div>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ fontWeight: 700, color: '#0B132B' }}>{coachDisplay}</div>
+                            <div style={{ fontSize: 10, color: '#64748B' }}>
+                              {req.requested_at ? new Date(req.requested_at).toLocaleDateString() : 'Recent Request'}
+                            </div>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ fontWeight: 600 }}>{matchTitle}</div>
+                            <div style={{ fontSize: 11, color: '#64748B' }}>{match.sport_type || req.sport || 'Sports'}</div>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={isApproved ? styles.statusAudited : styles.statusPending}>
+                              {isApproved ? 'APPROVED & FULFILLED' : 'PENDING REVIEW'}
+                            </span>
+                          </td>
+                          <td style={{ ...styles.td, borderRight: 'none', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/matches/${rawMatchId}`)}
+                                style={{
+                                  padding: '5px 10px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#0B132B',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                View Details
+                              </button>
+
+                              {!isApproved && (
+                                <button
+                                  type="button"
+                                  disabled={isApproving}
+                                  onClick={() => handleApproveRequest(req)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '5px 12px',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    backgroundColor: '#10B981',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    borderRadius: 4,
+                                    cursor: isApproving ? 'not-allowed' : 'pointer',
+                                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                                  }}
+                                >
+                                  {isApproving ? (
+                                    <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
+                                  ) : (
+                                    <Check style={{ width: 12, height: 12 }} />
+                                  )}
+                                  <span>{isApproving ? 'Approving...' : 'Approve & Fulfill'}</span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* New Matches Table Section */}
           <div style={styles.sectionHeaderRow}>

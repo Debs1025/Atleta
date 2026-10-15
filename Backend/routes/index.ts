@@ -13,6 +13,7 @@ import validationRoutes from './validationRoutes';
 import adminRoutes from './adminRoutes';
 import sportRoutes from './sportRoutes';
 import syncRoutes from './syncRoutes';
+import tournamentRoutes from './tournamentRoutes';
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/scouting', scoutingRoutes);
 router.use('/validations', validationRoutes);
 router.use('/sports', sportRoutes);
 router.use('/sync', syncRoutes);
+router.use('/tournaments', tournamentRoutes);
 
 export default router;

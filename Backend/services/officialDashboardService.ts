@@ -17,24 +17,32 @@ export async function getOfficialDashboardMetrics(officialId: string) {
   let pendingAuditsDocs: any[] = [];
 
   try {
-    // Run count queries in parallel. Count aggregation queries in Firestore are fast and cheap.
+    // Fast parallel aggregation counts
     const [matchesCount, pendingCountRes, auditedCountRes, pendingAudits] = await Promise.all([
-      db.collection('Match_Logs').count().get(),
-      db.collection('Official_Audits').where('status', '==', 'Pending').count().get(),
-      db.collection('Official_Audits').where('status', 'in', ['Approved', 'Rejected']).count().get(),
-      db.collection('Official_Audits').where('status', '==', 'Pending').get()
+      db.collection('Match_Logs').count().get().catch(() => null),
+      db.collection('Official_Audits').where('status', 'in', ['Pending', 'pending', 'PENDING REQUEST', 'PENDING']).count().get().catch(() => null),
+      db.collection('Official_Audits').where('status', 'in', ['Approved', 'approved', 'Fulfilled', 'fulfilled', 'Certify', 'Certified', 'Rejected']).count().get().catch(() => null),
+      db.collection('Official_Audits')
+        .where('status', 'in', ['Pending', 'pending', 'PENDING REQUEST', 'PENDING'])
+        .limit(50)
+        .get()
+        .catch(() => null)
     ]);
 
-    totalMatches = matchesCount.data().count;
-    pendingCount = pendingCountRes.data().count;
-    auditedCount = auditedCountRes.data().count;
-    pendingAuditsDocs = pendingAudits.docs;
-  } catch (err) {
-    // Fallback using document snapshot size if count is not supported in the local SDK/environment
+    if (matchesCount && pendingCountRes && auditedCountRes && pendingAudits) {
+      totalMatches = matchesCount.data().count;
+      pendingCount = pendingCountRes.data().count;
+      auditedCount = auditedCountRes.data().count;
+      pendingAuditsDocs = pendingAudits.docs;
+    } else {
+      throw new Error('Count aggregation fallback needed');
+    }
+  } catch {
+    // Bounded fallback with lightweight projections
     const [matchesSnap, pendingAuditsSnap, auditedSnap] = await Promise.all([
-      db.collection('Match_Logs').get(),
-      db.collection('Official_Audits').where('status', '==', 'Pending').get(),
-      db.collection('Official_Audits').where('status', 'in', ['Approved', 'Rejected']).get()
+      db.collection('Match_Logs').select('match_id', 'is_certified').limit(150).get().catch(() => ({ size: 0, docs: [] } as any)),
+      db.collection('Official_Audits').where('status', 'in', ['Pending', 'pending', 'PENDING REQUEST']).limit(50).get().catch(() => ({ size: 0, docs: [] } as any)),
+      db.collection('Official_Audits').where('status', 'in', ['Approved', 'approved', 'Fulfilled', 'fulfilled', 'Certify', 'Certified', 'Rejected']).limit(100).get().catch(() => ({ size: 0, docs: [] } as any))
     ]);
 
     totalMatches = matchesSnap.size;
@@ -43,28 +51,50 @@ export async function getOfficialDashboardMetrics(officialId: string) {
     pendingAuditsDocs = pendingAuditsSnap.docs;
   }
 
-  // Populate match details for each audit request in the pending queue in parallel
-  const matchIds = Array.from(new Set(pendingAuditsDocs.map(d => d.data().match_id)));
+  // Populate lightweight match details for pending audit queue in parallel
+  const matchIds = Array.from(new Set(pendingAuditsDocs.map(d => d.data().match_id).filter(Boolean)));
   const matchDocs = await Promise.all(
-    matchIds.map(id => db.collection('Match_Logs').doc(id).get())
+    matchIds.map(id =>
+      db.collection('Match_Logs')
+        .doc(id)
+        .get()
+        .catch(() => null)
+    )
   );
 
   const matchesMap = new Map<string, any>();
   matchDocs.forEach(mDoc => {
-    if (mDoc.exists) {
-      matchesMap.set(mDoc.id, mDoc.data());
+    if (mDoc && mDoc.exists) {
+      const data = mDoc.data() || {};
+      matchesMap.set(mDoc.id, {
+        match_id: data.match_id || mDoc.id,
+        home_team_name: data.home_team_name || data.home_team || 'Home Team',
+        away_team_name: data.away_team_name || data.away_team || 'Away Team',
+        sport_type: data.sport_type || 'Basketball',
+        match_date: data.match_date || data.created_at || new Date().toISOString(),
+        scoresheet_url: data.scoresheet_url || '',
+        is_certified: Boolean(data.is_certified),
+        logged_by_coach_id: data.logged_by_coach_id || data.coach_id || '',
+        coach_name: data.coach_name || '',
+      });
     }
   });
 
   const auditQueue = pendingAuditsDocs.map(d => {
     const auditData = d.data();
+    const details = matchesMap.get(auditData.match_id) || {};
     return {
-      audit_id: auditData.audit_id,
-      match_id: auditData.match_id,
-      requested_by: auditData.requested_by,
-      status: auditData.status,
-      requested_at: auditData.requested_at,
-      match_details: matchesMap.get(auditData.match_id) || null
+      audit_id: auditData.audit_id || d.id,
+      match_id: auditData.match_id || details.match_id || d.id,
+      validation_id: auditData.validation_id || auditData.audit_id || d.id,
+      requested_by: auditData.requested_by_coach_id || auditData.requested_by || details.logged_by_coach_id || 'Coach',
+      requested_by_coach_id: auditData.requested_by_coach_id || auditData.requested_by || details.logged_by_coach_id || 'Coach',
+      status: auditData.status || 'Pending',
+      requested_at: auditData.requested_at || auditData.created_at || new Date().toISOString(),
+      match_details: details.match_id ? details : null,
+      home_team_name: details.home_team_name || 'Home Team',
+      away_team_name: details.away_team_name || 'Away Team',
+      sport_type: details.sport_type || 'Basketball',
     };
   });
 
@@ -75,7 +105,7 @@ export async function getOfficialDashboardMetrics(officialId: string) {
     audit_queue: auditQueue
   };
 
-  serverCache.set(cacheKey, result, 20, ['dashboard', 'matches']);
+  serverCache.set(cacheKey, result, 30, ['dashboard', 'matches', 'validations']);
   return result;
 }
 

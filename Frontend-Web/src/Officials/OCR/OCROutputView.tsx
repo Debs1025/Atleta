@@ -9,9 +9,11 @@ import {
   Loader2,
   Trophy,
   Layers,
+  User,
 } from 'lucide-react';
 import type { RawOCRDetectedData, DetectedAthleteStat, SportConfiguration } from '../../api/types';
 import { submitVerifiedMatch, getSports } from '../../api/client';
+import { AthleteProfileModal } from '../Components/AthleteProfileModal';
 import { INITIAL_DEFAULT_SPORTS } from '../../SysAdmin/Sports_Management/SportPage';
 import { styles } from './styles/OCROutputView';
 import {
@@ -288,6 +290,59 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     }
     return { homeBadge: 'PENDING', awayBadge: 'PENDING', summary: 'Awaiting match data', finalScore: '0 - 0' };
   }, [homeScore, awayScore, homeTeamName, awayTeamName]);
+
+  const [selectedAthlete, setSelectedAthlete] = useState<{
+    athleteId?: string;
+    athleteName?: string;
+    jerseyNo?: string | number;
+    teamName?: string;
+    stats?: Record<string, any>;
+  } | null>(null);
+
+  const mvpAthlete = useMemo(() => {
+    if (!athleteStats || athleteStats.length === 0) return null;
+    let bestScore = -999;
+    let bestItem: any = null;
+
+    athleteStats.forEach((a) => {
+      const name = a.player_name || a.athlete_name || (a as any).name;
+      if (!name || name.toUpperCase().includes('TOTAL') || name.toUpperCase().includes('TEAM')) return;
+
+      const pts = Number(getAthleteStatValue(a, 'pts') || getAthleteStatValue(a, 'points') || 0);
+      const reb = Number(getAthleteStatValue(a, 'reb') || getAthleteStatValue(a, 'rebounds') || 0);
+      const ast = Number(getAthleteStatValue(a, 'ast') || getAthleteStatValue(a, 'assists') || 0);
+      const stl = Number(getAthleteStatValue(a, 'stl') || getAthleteStatValue(a, 'steals') || 0);
+      const blk = Number(getAthleteStatValue(a, 'blk') || getAthleteStatValue(a, 'blocks') || 0);
+      const kills = Number(getAthleteStatValue(a, 'kills') || 0);
+      const goals = Number(getAthleteStatValue(a, 'goals') || 0);
+
+      let score = 0;
+      let label = '';
+      if (kills > 0) {
+        score = kills * 1.5 + Number(getAthleteStatValue(a, 'service_aces') || 0) * 2 + blk * 2;
+        label = `${kills} Kills, ${blk} Blocks`;
+      } else if (goals > 0) {
+        score = goals * 6 + ast * 4;
+        label = `${goals} Goals, ${ast} Assists`;
+      } else {
+        score = pts + reb * 1.2 + ast * 1.5 + stl * 2 + blk * 2;
+        label = `${pts} PTS, ${reb} REB, ${ast} AST`;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestItem = {
+          name,
+          jersey: a.jersey_number,
+          team: a.team_name,
+          score,
+          label,
+          raw: a,
+        };
+      }
+    });
+    return bestItem;
+  }, [athleteStats]);
 
   // Save / Commit verified match data to database
   const handleSaveMatch = async () => {
@@ -640,6 +695,112 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         </div>
       </div>
 
+      {/* MVP Top Performer Card */}
+      {mvpAthlete && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#FFFBEB',
+          border: '1.5px solid #F59E0B',
+          borderRadius: '8px',
+          padding: '12px 20px',
+          boxShadow: '0 2px 8px rgba(245, 158, 11, 0.1)',
+          marginBottom: '16px',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 42,
+              height: 42,
+              borderRadius: '50%',
+              backgroundColor: '#FEF3C7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#D97706',
+              flexShrink: 0,
+            }}>
+              <Trophy size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '10px', fontWeight: 800, color: '#B45309', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  ★ AUTOMATIC MATCH MVP
+                </span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  backgroundColor: '#FDE68A',
+                  color: '#78350F',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                }}>
+                  EFF: {typeof mvpAthlete.score === 'number' ? mvpAthlete.score.toFixed(1) : mvpAthlete.score}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAthlete({
+                  athleteId: mvpAthlete.raw?.athlete_id,
+                  athleteName: mvpAthlete.name,
+                  jerseyNo: mvpAthlete.jersey,
+                  teamName: mvpAthlete.team,
+                  stats: mvpAthlete.raw?.stats || mvpAthlete.raw,
+                })}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  margin: '2px 0 0 0',
+                  fontSize: '16px',
+                  fontWeight: 800,
+                  color: '#0B132B',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  textDecoration: 'underline',
+                  textDecorationColor: '#D97706',
+                }}
+                title="Click to inspect athlete profile"
+              >
+                {mvpAthlete.name} {mvpAthlete.jersey ? `(#${mvpAthlete.jersey})` : ''}
+              </button>
+              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                {mvpAthlete.team} • {mvpAthlete.label}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSelectedAthlete({
+              athleteId: mvpAthlete.raw?.athlete_id,
+              athleteName: mvpAthlete.name,
+              jerseyNo: mvpAthlete.jersey,
+              teamName: mvpAthlete.team,
+              stats: mvpAthlete.raw?.stats || mvpAthlete.raw,
+            })}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              backgroundColor: '#0B132B',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <User size={13} />
+            <span>VIEW ATHLETE PROFILE</span>
+          </button>
+        </div>
+      )}
+
       {/* Team Filter Tabs */}
       <div style={styles.filterTabsWrap}>
         <button
@@ -708,7 +869,33 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                         ? a.placement_rank ? `#${a.placement_rank}` : `#${rowIdx + 1}`
                         : a.jersey_number ? `#${a.jersey_number}` : '-'}
                     </td>
-                    <td style={styles.tdAthleteName}>{a.player_name}</td>
+                    <td style={styles.tdAthleteName}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAthlete({
+                          athleteId: a.athlete_id,
+                          athleteName: a.player_name,
+                          jerseyNo: a.jersey_number,
+                          teamName: a.team_name,
+                          stats: a.stats || a,
+                        })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          margin: 0,
+                          color: '#0B132B',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          textDecoration: 'underline',
+                          textDecorationColor: '#94A3B8',
+                        }}
+                        title="Click to inspect athlete profile"
+                      >
+                        {a.player_name}
+                      </button>
+                    </td>
                     <td style={styles.tdTeam}>
                       <button
                         type="button"
@@ -788,6 +975,17 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Official Athlete Profile Inspection Modal */}
+      <AthleteProfileModal
+        isOpen={Boolean(selectedAthlete)}
+        onClose={() => setSelectedAthlete(null)}
+        athleteId={selectedAthlete?.athleteId}
+        athleteName={selectedAthlete?.athleteName}
+        jerseyNo={selectedAthlete?.jerseyNo}
+        teamName={selectedAthlete?.teamName}
+        stats={selectedAthlete?.stats}
+      />
     </div>
   );
 };

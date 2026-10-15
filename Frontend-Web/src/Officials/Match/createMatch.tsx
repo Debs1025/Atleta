@@ -447,6 +447,7 @@ export const CreateMatch: React.FC = () => {
 
   // Status & Modal Interruption State
   const [submitting, setSubmitting] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdMatchInfo, setCreatedMatchInfo] = useState<{
     matchId: string;
@@ -1408,36 +1409,36 @@ export const CreateMatch: React.FC = () => {
       return;
     }
 
-    let finalHome = '';
-    let finalAway = '';
-    let participating: string[] = [];
-
-    if (isIndividualSport) {
-      const validTeams = teams.map((t) => t.trim()).filter(Boolean);
-      if (validTeams.length < 2) {
-        setErrorMessage('Please specify at least 2 participating teams or delegations for this event.');
-        return;
-      }
-      finalHome = validTeams[0];
-      finalAway = validTeams.slice(1).join(', ') || 'Delegation 2';
-      participating = validTeams;
-    } else {
-      if (!homeTeam.trim() || !awayTeam.trim()) {
-        setErrorMessage('Please specify both Team 1 (Home) and Team 2 (Away).');
-        return;
-      }
-      finalHome = homeTeam.trim();
-      finalAway = awayTeam.trim();
-      participating = [finalHome, finalAway];
-    }
-
-    const requiredCoachesCount = participating.length;
+    const requiredCoachesCount = isIndividualSport
+      ? teams.map((t) => t.trim()).filter(Boolean).length
+      : 2;
     const filledCoaches = coaches.map((c) => c.trim()).filter(Boolean);
     if (filledCoaches.length < requiredCoachesCount) {
       setErrorMessage(
         `Please fill in all ${requiredCoachesCount} assigned coaches (1 coach required for each ${isIndividualSport ? 'participating delegation' : 'team'}).`
       );
       return;
+    }
+
+    // Intercept with confirmation modal before final creation
+    setShowConfirmModal(true);
+  };
+
+  const executeFinalizeCreateMatch = async () => {
+    setShowConfirmModal(false);
+    let finalHome = '';
+    let finalAway = '';
+    let participating: string[] = [];
+
+    if (isIndividualSport) {
+      const validTeams = teams.map((t) => t.trim()).filter(Boolean);
+      finalHome = validTeams[0];
+      finalAway = validTeams.slice(1).join(', ') || 'Delegation 2';
+      participating = validTeams;
+    } else {
+      finalHome = homeTeam.trim();
+      finalAway = awayTeam.trim();
+      participating = [finalHome, finalAway];
     }
 
     try {
@@ -2832,6 +2833,75 @@ export const CreateMatch: React.FC = () => {
                 style={styles.modalSecondaryBtn}
               >
                 DISMISS & CHOOSE ANOTHER FILE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL BEFORE GAME CREATION ("Are you sure...") */}
+      {showConfirmModal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalCard, maxWidth: '460px' }}>
+            <div style={{
+              width: 52,
+              height: 52,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(225, 29, 72, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              color: '#E11D48'
+            }}>
+              <AlertTriangle style={{ width: 28, height: 28 }} />
+            </div>
+            <h2 style={styles.modalTitle}>FINALIZE MATCH CREATION</h2>
+            <p style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: '#0B132B',
+              margin: '10px 0 16px',
+              lineHeight: 1.5,
+              textAlign: 'center'
+            }}>
+              Are you sure you want to finalize creating a match?
+            </p>
+            <div style={{
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: 8,
+              padding: '12px 16px',
+              fontSize: 12,
+              color: '#475569',
+              lineHeight: 1.6,
+              marginBottom: 20,
+              textAlign: 'left'
+            }}>
+              <div><strong>Sport:</strong> {sportCategory}</div>
+              <div><strong>Matchup:</strong> {isIndividualSport ? teams.filter(Boolean).join(', ') : `${homeTeam} vs ${awayTeam}`}</div>
+              <div><strong>Date & Time:</strong> {matchDate} {matchTime ? `at ${matchTime}` : ''}</div>
+              {selectedFile && (
+                <div><strong>Scoresheet:</strong> {selectedFiles.length > 1 ? `${selectedFiles.length} pages attached` : selectedFile.name}</div>
+              )}
+            </div>
+            <div style={styles.modalActions}>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="hover-btn-outline"
+                style={styles.modalSecondaryBtn}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeFinalizeCreateMatch}
+                disabled={submitting}
+                className="hover-btn-solid"
+                style={{ ...styles.modalPrimaryBtn, backgroundColor: '#E11D48', borderColor: '#E11D48' }}
+              >
+                {submitting ? 'Finalizing...' : 'Confirm'}
               </button>
             </div>
           </div>
