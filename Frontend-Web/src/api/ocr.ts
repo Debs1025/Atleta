@@ -90,10 +90,10 @@ export const scanScoresheetOCR = async (file: File): Promise<any> => {
   const token = getStoredToken();
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('scoresheet', file);
-  formData.append('document', file);
 
   const endpoints = [
+    `http://localhost:5000/api/v1/matches/ocr/scan`,
+    `http://localhost:5000/api/v1/matches/scan-scoresheet`,
     `${BASE_URL}/matches/ocr/scan`,
     `${BASE_URL}/matches/scan-scoresheet`,
     `${BASE_URL}/matches/web/scan-scoresheet`,
@@ -150,10 +150,11 @@ export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
   const formData = new FormData();
   files.forEach((f) => {
     formData.append('files', f);
-    formData.append('scoresheet', f);
   });
 
   const endpoints = [
+    `http://localhost:5000/api/v1/matches/mobile/multi/scan-scoresheet`,
+    `http://localhost:5000/api/v1/matches/multi/scan-scoresheet`,
     `${BASE_URL}/matches/mobile/multi/scan-scoresheet`,
     `${BASE_URL}/matches/multi/scan-scoresheet`,
     `${BASE_URL}/matches/web/multi/scan-scoresheet`,
@@ -239,7 +240,6 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
   const formData = new FormData();
   files.forEach((f) => {
     formData.append('files', f);
-    formData.append('scoresheet', f);
   });
 
   try {

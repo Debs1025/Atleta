@@ -6,7 +6,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { requestAuthenticatedJson, API_BASE } from '../../Authentication/authShared';
-import { getMatchesOfflineFirst, saveMatchOfflineFirst } from '../../../../services/firebaseClient';
+import { getMatchesOfflineFirst, saveMatchOfflineFirst, deleteMatchOfflineFirst } from '../../../../services/firebaseClient';
 
 export type AuditStatus = 'NOT REQUESTED' | 'PENDING REQUEST' | 'REQUEST GRANTED';
 
@@ -58,6 +58,7 @@ interface MatchContextType {
   refreshMatches: () => Promise<void>;
   requestAudit: (matchId: string) => Promise<void>;
   grantAudit: (matchId: string) => Promise<void>; // Demo / Backend hook for testing certification state
+  deleteMatch: (matchId: string) => Promise<void>;
   generatePDFScoresheet: (match: OfficialMatchRecord) => Promise<void>;
   isGeneratingPDF: boolean;
   downloadModal: { visible: boolean; fileName: string; uri: string } | null;
@@ -90,12 +91,19 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const allList: any[] = Array.isArray(allRes?.matches) ? allRes.matches : [];
       const syncList: any[] = Array.isArray(syncRes?.scheduled_matches) ? syncRes.scheduled_matches : [];
 
+      const isDeletedOrRevoked = (m: any) => {
+        if (!m) return true;
+        if (m.deleted === true || m.is_deleted === true) return true;
+        const s = String(m.status || m.audit_status || m.verification_status || '').toUpperCase();
+        return s === 'DELETED' || s === 'REVOKED' || s === 'CANCELLED';
+      };
+
       // Merge all sources, deduplicate by match_id (coach list takes precedence for audit_status)
       const seenIds = new Set<string>();
       const merged: any[] = [];
       for (const m of [...coachList, ...allList, ...syncList]) {
         const id = m.match_id || m.id;
-        if (id && !seenIds.has(id)) {
+        if (id && !seenIds.has(id) && !isDeletedOrRevoked(m)) {
           seenIds.add(id);
           merged.push(m);
         }
@@ -104,7 +112,8 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       let rawList = merged;
       if (rawList.length === 0) {
         // Offline fallback from persistent Firestore cache
-        rawList = await getMatchesOfflineFirst();
+        const offline = await getMatchesOfflineFirst();
+        rawList = offline.filter((m: any) => !isDeletedOrRevoked(m));
       }
 
       if (rawList.length > 0) {
@@ -291,12 +300,6 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
     } catch (_) {}
-
-    Alert.alert(
-      'Audit Requested',
-      'Official scoresheet audit request submitted to Tournament Officials.',
-      [{ text: 'OK' }]
-    );
   }, [matches]);
 
   // Simulates official granting & certifying the scoresheet (Backend connected callback)
@@ -342,6 +345,15 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       [{ text: 'OK' }]
     );
   }, [matches]);
+
+  const deleteMatch = useCallback(async (matchId: string) => {
+    setMatches((prev) => prev.filter((m) => m.match_id !== matchId));
+    try {
+      await deleteMatchOfflineFirst(matchId);
+    } catch (e) {
+      console.warn('deleteMatch error:', e);
+    }
+  }, []);
 
   // PDF Scoresheet Generator using expo-print & expo-sharing
   const generatePDFScoresheet = useCallback(async (match: OfficialMatchRecord) => {
@@ -601,6 +613,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       refreshMatches,
       requestAudit,
       grantAudit,
+      deleteMatch,
       generatePDFScoresheet,
       isGeneratingPDF,
       downloadModal,
@@ -613,6 +626,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       refreshMatches,
       requestAudit,
       grantAudit,
+      deleteMatch,
       generatePDFScoresheet,
       isGeneratingPDF,
       downloadModal,

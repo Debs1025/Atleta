@@ -42,7 +42,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
   avatarUrl,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 18;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const {
     activeTab,
@@ -111,7 +111,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
         />
       )}
 
-      <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 56 : 0 }}>
+      <View style={{ flex: 1, paddingTop: subView === 'none' ? headerTopPadding + 74 : 0 }}>
         {subView === 'rankings' || subView === 'recruits' ? (
           <DiscoveryPlayer mode={subView} onCloseSubView={() => setSubView('none')} />
         ) : subView === 'viewTeam' ? (
@@ -123,6 +123,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
+            keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
                 refreshing={isLoading}
@@ -138,7 +139,7 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
                 <Ionicons name="search" size={18} color="#64748B" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search (PPG > 20)"
+                  placeholder="Search athletes, teams, metrics..."
                   placeholderTextColor="#64748B"
                   value={searchQuery}
                   onChangeText={setSearchQuery}

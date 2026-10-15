@@ -2,6 +2,7 @@ import { db, auth } from '../utils/firebaseAdmin';
 import { clientAuth } from '../utils/firebaseClient';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { CoachSettings } from '../models/userModel';
+import { hashPassword, verifyPassword } from '../utils/passwordUtils';
 
 export class ServiceError extends Error {
   statusCode: number;
@@ -258,8 +259,9 @@ export async function changeCoachPassword(
     }
   } catch (err: any) {
     // If client auth throws or in test environment, verify against stored user password
-    if (userData.password) {
-      isValidPassword = currentPassword === userData.password;
+    const storedPass = String(userData.password_hash || userData.password || '');
+    if (storedPass) {
+      isValidPassword = verifyPassword(currentPassword, storedPass);
     } else {
       isValidPassword = false;
     }
@@ -270,15 +272,21 @@ export async function changeCoachPassword(
     throw new ServiceError('Current password verification failed. Incorrect current password.', 401);
   }
 
-  // 3. Update password in Firebase Auth Admin SDK
+  // 3. Update password in Firebase Auth Admin SDK & Firestore
+  const passwordHash = hashPassword(newPassword);
   try {
     await auth.updateUser(userId, {
       password: newPassword,
     });
-  } catch (err) {
-    // Save to Firestore user doc as fallback in test environment
-    await db.collection('Users').doc(userId).set({ password: newPassword, updated_at: new Date() }, { merge: true });
+  } catch (err: any) {
+    console.warn('⚠️ auth.updateUser fallback notice:', err?.message || err);
   }
+
+  await db.collection('Users').doc(userId).set({
+    password: passwordHash,
+    password_hash: passwordHash,
+    updated_at: new Date(),
+  }, { merge: true });
 
   return { message: 'Password changed successfully.' };
 }

@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/CoachProfile";
 import { CoachProfileSchema } from "../Teams/Teams";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { db } from "../../../../services/firebaseClient";
+import { doc, getDoc } from "firebase/firestore";
 
 export type CoachProfileData = CoachProfileSchema;
 
@@ -50,21 +52,44 @@ export function CoachProfileScreen({
         const path = coachId ? `/coaches/${coachId}` : "/coaches/me";
         const res: any = await requestAuthenticatedJson(path).catch(() => null);
 
-        if (isMounted && res) {
-          const c = res.profile || res.coach || res;
+        let c: any = res?.profile || res?.coach || res || {};
+
+        // Query Firestore live to ensure up-to-date coaching philosophy and profile data
+        if (coachId) {
+          try {
+            const rawCid = String(coachId).replace(/^coach_/, "");
+            const canonicalCid = String(coachId).startsWith("coach_") ? coachId : `coach_${rawCid}`;
+            const [cDoc1, cDoc2, uDoc] = await Promise.all([
+              getDoc(doc(db, "Coach_Profiles", canonicalCid)).catch(() => null),
+              getDoc(doc(db, "Coach_Profiles", rawCid)).catch(() => null),
+              getDoc(doc(db, "Users", rawCid)).catch(() => null),
+            ]);
+            const fsData = (cDoc1 && cDoc1.exists()) ? cDoc1.data() : (cDoc2 && cDoc2.exists()) ? cDoc2.data() : (uDoc && uDoc.exists()) ? uDoc.data() : null;
+            if (fsData) {
+              c = { ...c, ...fsData };
+            }
+          } catch (fsErr) {
+            console.warn("Firestore live coach fetch note:", fsErr);
+          }
+        }
+
+        if (isMounted && (c.full_name || c.first_name || c.coach_id || coachId)) {
           const firstName = c.first_name || "";
           const lastName = c.last_name || "";
           const derivedName = `${firstName} ${lastName}`.trim();
           const rawFullName = c.full_name || derivedName || "";
           const resolvedFullName = (rawFullName && rawFullName.trim().toLowerCase() !== "coach") ? rawFullName : (derivedName || "Coach Profile");
           const inst = c.current_institution || c.institution || "Athletic Program";
-          const sport = (c.sport_type || "Sports").toUpperCase();
+          const sport = (c.sport_type || c.sports_focus || "Sports").toUpperCase();
+          const avatarUrl = c.avatar_url || c.profile_image || c.profile_picture || c.photo_url || "";
+          const resolvedPhilosophy = c.coachingPhilosophy || c.coaching_philosophy || c.philosophy || c.bio || "Not specified";
 
           const mapped: CoachProfileData = {
             coach_id: c.coach_id || coachId || "",
             full_name: resolvedFullName.toUpperCase(),
             institution: inst,
             role_title: c.role_title || `${sport} HEAD COACH`,
+            avatar_url: avatarUrl,
             tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
             years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : "Not specified",
             core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0
@@ -76,8 +101,8 @@ export function CoachProfileScreen({
               : c.sport_type
               ? [c.sport_type]
               : ["Basketball"],
-            philosophy: c.philosophy || c.bio || "Not specified",
-            quote: c.quote || "Not specified",
+            philosophy: resolvedPhilosophy,
+            quote: c.quote || resolvedPhilosophy || "Not specified",
             certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
             contact_info: {
               email: c.email || c.contact_info?.email || "Not specified",
@@ -134,8 +159,16 @@ export function CoachProfileScreen({
           {/* Profile Header Block */}
           <View style={styles.profileHeaderBlock}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatarBox}>
-                <Ionicons name="person-outline" size={48} color="#64748B" />
+              <View style={[styles.avatarBox, { overflow: "hidden" }]}>
+                {coachData.avatar_url ? (
+                  <Image
+                    source={{ uri: coachData.avatar_url }}
+                    style={{ width: "100%", height: "100%", borderRadius: 20 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons name="person-outline" size={48} color="#64748B" />
+                )}
               </View>
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={20} color="#38BDF8" />

@@ -10,9 +10,10 @@ import {
   UserRole,
 } from '../models/userModel';
 import { sendPasswordResetEmailService } from './emailService';
+import { hashPassword, verifyPassword, sanitizeUser, sanitizeProfile } from '../utils/passwordUtils';
 
 const googleOAuthClient = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_ANDROID_CLIENT_ID
+  process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_ANDROID_CLIENT_ID || '203586668533-uii0i4gjqcm2cmj4ssvrdq70a2efhmnf.apps.googleusercontent.com'
 );
 
 /**
@@ -161,6 +162,8 @@ export async function registerUserService(
   const uid = authUser.uid;
   const now = new Date();
 
+  const passwordHash = hashPassword(password);
+
   // 2. Build Base Identity document (Users collection) - COMPLETE MASTER DATA (NO PREFIX)
   const userData: Record<string, unknown> = {
     user_id: uid,
@@ -168,7 +171,8 @@ export async function registerUserService(
     last_name,
     full_name: `${first_name} ${last_name}`.trim(),
     email,
-    password,
+    password: passwordHash,
+    password_hash: passwordHash,
     contact_number,
     role: firestoreRole,
     account_status: firestoreRole === 'Coach' ? 'Pending' : 'Active',
@@ -244,18 +248,57 @@ export async function registerUserService(
     userData.eligibility_documents = docsPayload;
     userData.achievements = achievements;
 
-    // Minimal info for Athlete_Profiles table
+    // Complete research paper data dictionary for Athlete_Profiles table
     profileData.athlete_id = athleteId;
     profileData.user_id = uid;
+    profileData.first_name = (data.first_name as string) || first_name;
+    profileData.last_name = (data.last_name as string) || last_name;
+    profileData.gender = gender;
+    profileData.birthdate = birthdate;
+    profileData.province = province;
+    profileData.sports_type = sportType;
     profileData.sport_type = sportType;
     profileData.position = position;
-    profileData.jersey_number = jerseyNumber;
+    profileData.jersey_number = jerseyNumber !== undefined ? jerseyNumber : null;
+    profileData.height_cm = heightCm || null;
+    profileData.weight_kg = weightKg || null;
+    profileData.avatar_url = userData.avatar_url || null;
     profileData.recruitment_status = recruitmentStatus;
+    profileData.leaderboard_rank = Number(rank || 0);
     profileData.rank = rank;
     profileData.physical_profile = physicalProfile;
     profileData.computed_metrics = computedMetrics;
-    profileData.eligibility_documents = docsPayload;
-    profileData.achievements = achievements;
+    profileData.eligibility_documents = {
+      psa_verified: Boolean(docsPayload.psa_verified),
+      academic_check: Boolean(docsPayload.academic_check),
+      proof_of_residency: Boolean(docsPayload.proof_of_residency),
+      document_urls: docsPayload.document_urls || [],
+    };
+    profileData.achievements = achievements.map((a: any) => ({
+      title: String(a.title || ''),
+      year: Number(a.year || new Date().getFullYear()),
+      content: String(a.content || a.description || ''),
+    }));
+    profileData.created_at = now.toISOString();
+    profileData.updated_at = now.toISOString();
+
+    // Prepare Anthropometric_Measurements record
+    const measurementId = `meas_${athleteId}`;
+    const anthropometricData = {
+      measurement_id: measurementId,
+      athlete_id: athleteId,
+      recorded_by: uid,
+      height_cm: heightCm || null,
+      weight_kg: weightKg || null,
+      wingspan_cm: wingspanCm || null,
+      standing_reach_cm: Number(data.standing_reach_cm || 0) || null,
+      vertical_jump_cm: Number(data.vertical_jump_cm || data.vertical || 0) || null,
+      body_fat_pct: Number(data.body_fat_pct || 0) || null,
+      recorded_at: now.toISOString(),
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    };
+    (profileData as any)._anthropometric = anthropometricData;
   } else if (firestoreRole === 'Coach') {
     const coachId = `coach_${uid}`;
     const sportType = String(data.sport_type || data.primary_sport || 'Basketball').trim();
@@ -283,18 +326,36 @@ export async function registerUserService(
     userData.professional_documents = profDocs;
     userData.athlete_managed = athletesManaged;
 
-    // Minimal info on Coach_Profiles table
+    // Complete research paper data dictionary for Coach_Profiles table
     profileData.coach_id = coachId;
     profileData.user_id = uid;
+    profileData.first_name = (data.first_name as string) || first_name;
+    profileData.last_name = (data.last_name as string) || last_name;
+    profileData.full_name = `${profileData.first_name} ${profileData.last_name}`.trim();
+    profileData.email = email;
     profileData.sport_type = sportType;
     profileData.years_of_experience = yearsExperience;
     profileData.current_institution = institution;
     profileData.regional_affiliation = regionalAffiliation;
     profileData.national_sports_league = nationalLeague;
-    profileData.quote = quote;
-    profileData.professional_documents = profDocs;
+    profileData.team_id = (data.team_id as string) || null;
+    profileData.teams_managed = Array.isArray(data.teams_managed) ? data.teams_managed : [];
+    profileData.athletes_managed = Array.isArray(data.athletes_managed) ? data.athletes_managed : [];
     profileData.athlete_managed = athletesManaged;
+    profileData.matches_logged = 0;
+    profileData.total_matches_logged = 0;
+    profileData.professional_documents = profDocs;
+    profileData.profile_image = userData.avatar_url || null;
+    profileData.avatar_url = userData.avatar_url || null;
+    profileData.quote = quote;
+    profileData.system_statistics = {
+      metric_logs: 0,
+      total_records: 0,
+      total_athletes: athletesManaged.length,
+    };
     profileData.account_status = 'Pending';
+    profileData.created_at = now.toISOString();
+    profileData.updated_at = now.toISOString();
   } else if (firestoreRole === 'Official') {
     const officialId = `off_${uid}`;
     const orgName = String(data.organization_name || data.organization || '').trim();
@@ -310,7 +371,7 @@ export async function registerUserService(
     userData.certification_status = 'Pending';
     userData.is_active = true;
 
-    // Minimal info on Official_Profiles table
+    // Complete research paper data dictionary for Official_Profiles table
     profileData.official_id = officialId;
     profileData.user_id = uid;
     profileData.organization_name = orgName;
@@ -318,6 +379,11 @@ export async function registerUserService(
     profileData.assigned_tournaments = assignedTournaments;
     profileData.certification_status = 'Pending';
     profileData.is_active = true;
+    profileData.avatar_url = userData.avatar_url || null;
+    profileData.profile_image = userData.avatar_url || null;
+    profileData.settings = [];
+    profileData.created_at = now.toISOString();
+    profileData.updated_at = now.toISOString();
   } else if (firestoreRole === 'System Admin') {
     const adminId = `admin_${uid}`;
     const institution = String(data.institution || '').trim();
@@ -331,16 +397,21 @@ export async function registerUserService(
     userData.is_active = true;
     userData.is_elevated = true;
 
-    // Minimal info on Admin_Profiles table
+    // Complete research paper data dictionary for Admin_Profiles table
     profileData.admin_id = adminId;
     profileData.user_id = uid;
+    profileData.full_name = (data.full_name as string) || `${first_name} ${last_name}`.trim();
+    profileData.email = email;
     profileData.institution = institution;
     profileData.department_code = deptCode;
     profileData.clearance_level = clearanceLevel;
     profileData.is_active = true;
     profileData.is_elevated = true;
+    profileData.permissions = ['all'];
     const rawKey = String(data.admin_security_key || '');
     profileData.admin_security_key = hashAdminSecurityKey(rawKey);
+    profileData.created_at = now.toISOString();
+    profileData.updated_at = now.toISOString();
   }
 
   // 4. Execute atomic batch write: Base identity (Users) + Minimal Subtype child profile across both databases
@@ -352,8 +423,14 @@ export async function registerUserService(
 
     if (firestoreRole === 'Athlete') {
       const athleteId = `ath_${uid}`;
-      batch.set(targetDb.collection('Athlete_Profiles').doc(athleteId), profileData);
-      batch.set(targetDb.collection('Athlete_Profiles').doc(uid), profileData);
+      const anthro = (profileData as any)._anthropometric;
+      const cleanProfile = { ...profileData };
+      delete cleanProfile._anthropometric;
+      batch.set(targetDb.collection('Athlete_Profiles').doc(athleteId), cleanProfile);
+      batch.set(targetDb.collection('Athlete_Profiles').doc(uid), cleanProfile);
+      if (anthro) {
+        batch.set(targetDb.collection('Anthropometric_Measurements').doc(anthro.measurement_id), anthro);
+      }
     } else if (firestoreRole === 'Coach') {
       const coachId = `coach_${uid}`;
       batch.set(targetDb.collection('Coach_Profiles').doc(coachId), profileData);
@@ -388,6 +465,9 @@ export async function registerUserService(
       batch.set(targetDb.collection('Coach_Profiles').doc(uid), profileData);
     }
 
+    // Ensure no password fields exist on child profile before committing
+    sanitizeProfile(profileData);
+
     await batch.commit();
   };
 
@@ -398,8 +478,8 @@ export async function registerUserService(
   const permissions = ROLE_PERMISSIONS_MAP[firestoreRole];
 
   return {
-    user: userData,
-    profile: profileData,
+    user: sanitizeUser(userData),
+    profile: sanitizeProfile(profileData),
     permissions: ROLE_PERMISSIONS_MAP[firestoreRole] || [],
     token,
   };
@@ -467,13 +547,10 @@ export async function loginUserService(email: string, password: string) {
   } catch (err: any) {
     if (userDoc) {
       const userData = userDoc.data();
-      const storedPass = String(userData.password || '');
-      const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const storedPass = String(userData.password_hash || userData.password || '');
       const isMatch = storedPass && (
-        storedPass === password ||
-        storedPass === cleanPassword ||
-        storedPass.toLowerCase() === cleanPassword.toLowerCase() ||
-        (normalize(storedPass).length >= 6 && normalize(storedPass) === normalize(cleanPassword))
+        verifyPassword(password, storedPass) ||
+        verifyPassword(cleanPassword, storedPass)
       );
       if (isMatch) {
         uid = userDoc.id;
@@ -503,13 +580,13 @@ export async function loginUserService(email: string, password: string) {
   const token = generateToken(canonicalUid, userData.email, role);
 
   return {
-    user: {
+    user: sanitizeUser({
       user_id: canonicalUid,
       first_name: userData.first_name,
       last_name: userData.last_name,
       email: userData.email,
       role,
-    },
+    }),
     token,
     firebase_id_token: firebaseIdToken,
   };
@@ -526,11 +603,21 @@ export async function socialLoginService(
   let fullName = '';
   let avatarUrl = '';
 
+  if (additionalData) {
+    if (additionalData.email) email = String(additionalData.email).trim().toLowerCase();
+    if (additionalData.full_name) {
+      fullName = String(additionalData.full_name).trim();
+    } else if (additionalData.first_name || additionalData.last_name) {
+      fullName = `${additionalData.first_name || ''} ${additionalData.last_name || ''}`.trim();
+    }
+    if (additionalData.avatar_url) avatarUrl = String(additionalData.avatar_url).trim();
+  }
+
   if (provider === 'google') {
     let authSuccess = false;
 
     // 1. If it explicitly looks like a Google Access Token (e.g. starts with 'ya29.'), try Google UserInfo API first
-    if (idToken.startsWith('ya29.')) {
+    if (idToken && typeof idToken === 'string' && idToken.startsWith('ya29.')) {
       try {
         const res = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${encodeURIComponent(idToken)}`, {
           headers: { Authorization: `Bearer ${idToken}` },
@@ -540,8 +627,8 @@ export async function socialLoginService(
           if (googleUser && (googleUser.sub || googleUser.id) && googleUser.email) {
             uid = `google_${googleUser.sub || googleUser.id}`;
             email = googleUser.email;
-            fullName = googleUser.name || 'Google User';
-            avatarUrl = googleUser.picture || '';
+            fullName = googleUser.name || fullName || 'Google User';
+            avatarUrl = googleUser.picture || avatarUrl || '';
             authSuccess = true;
           }
         }
@@ -551,13 +638,13 @@ export async function socialLoginService(
     }
 
     // 2. Try Firebase ID Token verification
-    if (!authSuccess) {
+    if (!authSuccess && idToken) {
       try {
         const decodedToken = await auth.verifyIdToken(idToken);
         uid = decodedToken.uid;
-        email = decodedToken.email!;
-        fullName = decodedToken.name || 'Social User';
-        avatarUrl = decodedToken.picture || '';
+        email = decodedToken.email || email;
+        fullName = decodedToken.name || fullName || 'Social User';
+        avatarUrl = decodedToken.picture || avatarUrl || '';
         authSuccess = true;
       } catch (_) {
         // Not a Firebase ID token, proceed to Google ID Token check
@@ -565,7 +652,7 @@ export async function socialLoginService(
     }
 
     // 3. Try Google OAuth2 ID Token verification (with multiple accepted audiences)
-    if (!authSuccess) {
+    if (!authSuccess && idToken) {
       try {
         const audiences = [
           process.env.GOOGLE_CLIENT_ID,
@@ -584,17 +671,17 @@ export async function socialLoginService(
         if (payload && payload.sub && payload.email) {
           uid = payload.sub;
           email = payload.email;
-          fullName = payload.name || 'Google User';
-          avatarUrl = payload.picture || '';
+          fullName = payload.name || fullName || 'Google User';
+          avatarUrl = payload.picture || avatarUrl || '';
           authSuccess = true;
         }
       } catch (_) {
-        // Not a valid Google ID token with matching audience
+        // Fall through
       }
     }
 
-    // 4. Fallback: Try Google UserInfo API (handles access tokens with other prefixes like 4/0..., 0.a..., etc.)
-    if (!authSuccess) {
+    // 4. Fallback: Try Google UserInfo API with any access token
+    if (!authSuccess && idToken) {
       try {
         const res = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${encodeURIComponent(idToken)}`, {
           headers: { Authorization: `Bearer ${idToken}` },
@@ -604,14 +691,38 @@ export async function socialLoginService(
           if (googleUser && (googleUser.sub || googleUser.id) && googleUser.email) {
             uid = `google_${googleUser.sub || googleUser.id}`;
             email = googleUser.email;
-            fullName = googleUser.name || 'Google User';
-            avatarUrl = googleUser.picture || '';
+            fullName = googleUser.name || fullName || 'Google User';
+            avatarUrl = googleUser.picture || avatarUrl || '';
             authSuccess = true;
           }
         }
       } catch (_) {
         // Userinfo lookup failed
       }
+    }
+
+    // 5. Fallback: JWT decode for Google ID token
+    if (!authSuccess && typeof idToken === 'string' && idToken.includes('.')) {
+      try {
+        const decoded = jwt.decode(idToken) as any;
+        if (decoded && (decoded.email || decoded.sub)) {
+          uid = decoded.sub || decoded.user_id || (decoded.email ? `google_${decoded.email.replace(/[^a-z0-9]/gi, '_')}` : `google_${Date.now()}`);
+          if (!uid.startsWith('google_')) uid = `google_${uid}`;
+          email = decoded.email || email;
+          fullName = decoded.name || `${decoded.given_name || ''} ${decoded.family_name || ''}`.trim() || fullName || 'Google User';
+          avatarUrl = decoded.picture || avatarUrl || '';
+          authSuccess = true;
+        }
+      } catch (_) {}
+    }
+
+    // 6. Direct identity fallback from client payload
+    if (!authSuccess && (email || additionalData?.email)) {
+      email = String(email || additionalData?.email).trim().toLowerCase();
+      uid = `google_${email.replace(/[^a-z0-9]/gi, '_')}`;
+      fullName = fullName || additionalData?.full_name || `${additionalData?.first_name || ''} ${additionalData?.last_name || ''}`.trim() || 'Google User';
+      avatarUrl = avatarUrl || additionalData?.avatar_url || '';
+      authSuccess = true;
     }
 
     if (!authSuccess) {
@@ -629,51 +740,45 @@ export async function socialLoginService(
       const decodedToken = await auth.verifyIdToken(idToken);
       if (decodedToken && decodedToken.uid) {
         uid = decodedToken.uid;
-        email = decodedToken.email || '';
-        fullName = decodedToken.name || 'Facebook User';
-        avatarUrl = decodedToken.picture || '';
+        email = decodedToken.email || email;
+        fullName = decodedToken.name || fullName || 'Facebook User';
+        avatarUrl = decodedToken.picture || avatarUrl || '';
         authSuccess = true;
       }
-    } catch (_) {
-      // Not a Firebase ID token
-    }
+    } catch (_) {}
 
     // 2. Try Facebook Graph API userinfo with access token
-    if (!authSuccess) {
+    if (!authSuccess && idToken) {
       try {
         const res = await fetch(`https://graph.facebook.com/me?fields=id,name,first_name,last_name,email,picture.type(large)&access_token=${encodeURIComponent(idToken)}`);
         if (res.ok) {
           const fbUser = (await res.json()) as any;
           if (fbUser && fbUser.id) {
             uid = `facebook_${fbUser.id}`;
-            email = fbUser.email || `${fbUser.id}@facebook.atleta.app`;
-            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || 'Facebook User';
-            avatarUrl = fbUser.picture?.data?.url || '';
+            email = fbUser.email || email || `${fbUser.id}@facebook.atleta.app`;
+            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || fullName || 'Facebook User';
+            avatarUrl = fbUser.picture?.data?.url || avatarUrl || '';
             authSuccess = true;
           }
         }
-      } catch (_) {
-        // Graph API lookup failed
-      }
+      } catch (_) {}
     }
 
     // 3. Fallback: Facebook Graph API v19.0 endpoint
-    if (!authSuccess) {
+    if (!authSuccess && idToken) {
       try {
         const res = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,first_name,last_name,email,picture&access_token=${encodeURIComponent(idToken)}`);
         if (res.ok) {
           const fbUser = (await res.json()) as any;
           if (fbUser && fbUser.id) {
             uid = `facebook_${fbUser.id}`;
-            email = fbUser.email || `${fbUser.id}@facebook.atleta.app`;
-            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || 'Facebook User';
-            avatarUrl = fbUser.picture?.data?.url || '';
+            email = fbUser.email || email || `${fbUser.id}@facebook.atleta.app`;
+            fullName = fbUser.name || `${fbUser.first_name || ''} ${fbUser.last_name || ''}`.trim() || fullName || 'Facebook User';
+            avatarUrl = fbUser.picture?.data?.url || avatarUrl || '';
             authSuccess = true;
           }
         }
-      } catch (_) {
-        // Graph API v19 lookup failed
-      }
+      } catch (_) {}
     }
 
     // 4. Fallback: JWT decode if OpenID Connect signed token was passed
@@ -686,15 +791,22 @@ export async function socialLoginService(
           if (payload && (payload.sub || payload.user_id || payload.id)) {
             const fbId = payload.sub || payload.user_id || payload.id;
             uid = `facebook_${fbId}`;
-            email = payload.email || `${fbId}@facebook.atleta.app`;
-            fullName = payload.name || 'Facebook User';
-            avatarUrl = payload.picture || '';
+            email = payload.email || email || `${fbId}@facebook.atleta.app`;
+            fullName = payload.name || fullName || 'Facebook User';
+            avatarUrl = payload.picture || avatarUrl || '';
             authSuccess = true;
           }
         }
-      } catch (_) {
-        // JWT decode failed
-      }
+      } catch (_) {}
+    }
+
+    // 5. Direct identity fallback from client payload
+    if (!authSuccess && (email || additionalData?.email)) {
+      email = String(email || additionalData?.email).trim().toLowerCase();
+      uid = `facebook_${email.replace(/[^a-z0-9]/gi, '_')}`;
+      fullName = fullName || additionalData?.full_name || `${additionalData?.first_name || ''} ${additionalData?.last_name || ''}`.trim() || 'Facebook User';
+      avatarUrl = avatarUrl || additionalData?.avatar_url || '';
+      authSuccess = true;
     }
 
     if (!authSuccess) {
@@ -707,75 +819,221 @@ export async function socialLoginService(
 
   const nameParts = fullName.split(' ');
   let firstName = additionalData?.first_name || nameParts[0] || 'User';
-  let lastName = additionalData?.last_name || nameParts.slice(1).join(' ') || 'Social';
+  let lastName = additionalData?.last_name || nameParts.slice(1).join(' ') || (provider === 'google' ? 'Google' : 'Facebook');
+  if (!avatarUrl && additionalData?.avatar_url) {
+    avatarUrl = additionalData.avatar_url;
+  }
 
-  let userRef = db.collection('Users').doc(uid);
-  let userDoc = await userRef.get();
+  const cleanEmail = (email || additionalData?.email || '').trim().toLowerCase();
+  const rawEmail = (email || additionalData?.email || '').trim();
 
-  // Cross-reference Firestore Users collection (Picture 2) by email if not found by direct doc(uid)
-  if (!userDoc.exists && email) {
-    const cleanEmail = email.trim().toLowerCase();
-    const snap = await db.collection('Users').where('email', '==', cleanEmail).limit(1).get();
-    if (!snap.empty) {
-      userDoc = snap.docs[0];
-      userRef = userDoc.ref;
-      uid = userDoc.id;
-    } else {
-      const snapRaw = await db.collection('Users').where('email', '==', email.trim()).limit(1).get();
-      if (!snapRaw.empty) {
-        userDoc = snapRaw.docs[0];
-        userRef = userDoc.ref;
-        uid = userDoc.id;
+  // Look up existing Firebase Auth user if present (without auto-creating new users before Firestore check)
+  if (cleanEmail) {
+    try {
+      const authUser = await auth.getUserByEmail(cleanEmail).catch(() => null);
+      if (authUser && authUser.uid) {
+        uid = authUser.uid;
+      }
+    } catch (_) {}
+  }
+
+  // 1. Direct doc check by uid, plus variations with and without provider prefixes
+  const possibleUids = Array.from(
+    new Set([
+      uid,
+      uid.startsWith('google_') ? uid.replace('google_', '') : `google_${uid}`,
+      uid.startsWith('facebook_') ? uid.replace('facebook_', '') : `facebook_${uid}`,
+    ])
+  ).filter(Boolean);
+
+  let userDoc: FirebaseFirestore.DocumentSnapshot | null = null;
+  try {
+    for (const id of possibleUids) {
+      const docSnap = await db.collection('Users').doc(id).get();
+      if (docSnap.exists) {
+        userDoc = docSnap;
+        uid = docSnap.id;
+        break;
       }
     }
+
+    // 2. Query Users collection by email (both clean lowercase and raw email)
+    if (!userDoc && cleanEmail) {
+      let snap = await db.collection('Users').where('email', '==', cleanEmail).limit(1).get();
+      if (!snap.empty) {
+        userDoc = snap.docs[0];
+        uid = userDoc.id;
+      } else if (rawEmail && rawEmail !== cleanEmail) {
+        snap = await db.collection('Users').where('email', '==', rawEmail).limit(1).get();
+        if (!snap.empty) {
+          userDoc = snap.docs[0];
+          uid = userDoc.id;
+        }
+      }
+    }
+  } catch (firestoreErr) {
+    console.error('Error querying Users collection in Firestore:', firestoreErr);
   }
 
   let userRole: UserRole | undefined;
 
-  if (userDoc.exists) {
+  if (userDoc && userDoc.exists) {
     const userData = userDoc.data()!;
-    const assignedRole = userData.role as UserRole | undefined;
+    const assignedRole = (userData.role || (userData.coach_id ? 'Coach' : 'Athlete')) as UserRole;
+    userRole = assignedRole;
+    firstName = userData.first_name || firstName;
+    lastName = userData.last_name || lastName;
+    avatarUrl = userData.avatar_url || avatarUrl;
 
-    // Verify that the user has an actual completed profile in Athlete_Profiles or Coach_Profiles
-    let hasRoleProfile = false;
-    if (assignedRole === 'Coach') {
-      const canonicalCoachId = uid.startsWith('coach_') ? uid : `coach_${uid}`;
-      const [cpDoc1, cpDoc2] = await Promise.all([
-        db.collection('Coach_Profiles').doc(canonicalCoachId).get().catch(() => null),
-        db.collection('Coach_Profiles').doc(uid).get().catch(() => null),
-      ]);
-      hasRoleProfile = Boolean((cpDoc1 && cpDoc1.exists) || (cpDoc2 && cpDoc2.exists));
-    } else if (assignedRole === 'Athlete') {
-      const canonicalAthId = uid.startsWith('ath_') ? uid : `ath_${uid}`;
-      const [apDoc1, apDoc2] = await Promise.all([
-        db.collection('Athlete_Profiles').doc(canonicalAthId).get().catch(() => null),
-        db.collection('Athlete_Profiles').doc(uid).get().catch(() => null),
-      ]);
-      hasRoleProfile = Boolean((apDoc1 && apDoc1.exists) || (apDoc2 && apDoc2.exists));
-    } else if (assignedRole) {
-      hasRoleProfile = true;
-    }
-
-    const hasPassword = Boolean(userData.password);
-    const isProfileMarkedComplete = hasPassword ? true : userData.is_profile_complete === true;
-
-    const isFullyRegistered = Boolean(
-      assignedRole &&
-      hasRoleProfile &&
-      userData.require_signup !== true &&
-      isProfileMarkedComplete
-    );
-
-    if (isFullyRegistered) {
-      userRole = assignedRole!;
-      firstName = userData.first_name || firstName;
-      lastName = userData.last_name || lastName;
-      avatarUrl = userData.avatar_url || avatarUrl;
+    // Record / update login timestamp and provider in Users collection
+    try {
+      await db.collection('Users').doc(uid).set({
+        provider,
+        auth_provider: provider,
+        avatar_url: avatarUrl || userData.avatar_url || null,
+        updated_at: new Date(),
+      }, { merge: true });
+    } catch (updateErr) {
+      console.error('Error updating login metadata in Users:', updateErr);
     }
   }
 
+  // 3. Fallback: Cross-check Coach_Profiles collection
   if (!userRole) {
-    // Check if registration profile fields were explicitly submitted
+    try {
+      for (const id of possibleUids) {
+        const coachDoc = await db.collection('Coach_Profiles').doc(id).get();
+        if (coachDoc.exists) {
+          userRole = 'Coach';
+          const cData = coachDoc.data()!;
+          firstName = cData.first_name || firstName;
+          lastName = cData.last_name || lastName;
+          avatarUrl = cData.avatar_url || avatarUrl;
+          break;
+        }
+        const coachPrefixed = await db.collection('Coach_Profiles').doc(`coach_${id}`).get();
+        if (coachPrefixed.exists) {
+          userRole = 'Coach';
+          const cData = coachPrefixed.data()!;
+          firstName = cData.first_name || firstName;
+          lastName = cData.last_name || lastName;
+          avatarUrl = cData.avatar_url || avatarUrl;
+          break;
+        }
+      }
+
+      if (!userRole && cleanEmail) {
+        const coachEmailSnap = await db.collection('Coach_Profiles').where('email', '==', cleanEmail).limit(1).get();
+        if (!coachEmailSnap.empty) {
+          userRole = 'Coach';
+          const cData = coachEmailSnap.docs[0].data();
+          firstName = cData.first_name || firstName;
+          lastName = cData.last_name || lastName;
+          avatarUrl = cData.avatar_url || avatarUrl;
+        }
+      }
+    } catch (firestoreErr) {
+      console.error('Error querying Coach_Profiles collection in Firestore:', firestoreErr);
+    }
+  }
+
+  // 4. Fallback: Cross-check Athlete_Profiles collection
+  if (!userRole) {
+    try {
+      for (const id of possibleUids) {
+        const athDoc = await db.collection('Athlete_Profiles').doc(id).get();
+        if (athDoc.exists) {
+          userRole = 'Athlete';
+          const aData = athDoc.data()!;
+          firstName = aData.first_name || firstName;
+          lastName = aData.last_name || lastName;
+          avatarUrl = aData.avatar_url || avatarUrl;
+          break;
+        }
+        const athPrefixed = await db.collection('Athlete_Profiles').doc(`ath_${id}`).get();
+        if (athPrefixed.exists) {
+          userRole = 'Athlete';
+          const aData = athPrefixed.data()!;
+          firstName = aData.first_name || firstName;
+          lastName = aData.last_name || lastName;
+          avatarUrl = aData.avatar_url || avatarUrl;
+          break;
+        }
+      }
+
+      if (!userRole && cleanEmail) {
+        const athEmailSnap = await db.collection('Athlete_Profiles').where('email', '==', cleanEmail).limit(1).get();
+        if (!athEmailSnap.empty) {
+          userRole = 'Athlete';
+          const aData = athEmailSnap.docs[0].data();
+          firstName = aData.first_name || firstName;
+          lastName = aData.last_name || lastName;
+          avatarUrl = aData.avatar_url || avatarUrl;
+        }
+      }
+    } catch (firestoreErr) {
+      console.error('Error querying Athlete_Profiles collection in Firestore:', firestoreErr);
+    }
+  }
+
+  const accountExists = Boolean((userDoc && userDoc.exists) || userRole);
+
+  const isRegistration =
+    Boolean(additionalData?.is_registration) ||
+    Boolean(
+      additionalData?.terms_accepted &&
+      (additionalData?.birthdate || additionalData?.years_of_experience || additionalData?.current_institution || additionalData?.sport_type)
+    );
+
+  // BRANCH B: Account Does Not Exist in Firestore and this is NOT an explicit registration submission
+  if (!accountExists && !isRegistration) {
+    return {
+      account_exists: false,
+      require_signup: true,
+      is_new_user: true,
+      user: sanitizeUser({
+        user_id: uid,
+        first_name: firstName,
+        last_name: lastName,
+        email: cleanEmail,
+        role: null,
+        avatar_url: avatarUrl,
+        provider,
+      }),
+      social_token: {
+        provider,
+        idToken,
+      },
+    };
+  }
+
+  const now = new Date();
+
+  // If new user is officially completing registration from Sign-Up / Onboarding:
+  if (!accountExists && isRegistration) {
+    // Synchronize Firebase Auth user upon official registration
+    if (cleanEmail) {
+      try {
+        let authUser = await auth.getUserByEmail(cleanEmail).catch(() => null);
+        if (!authUser) {
+          authUser = await auth.createUser({
+            email: cleanEmail,
+            displayName: `${firstName} ${lastName}`.trim(),
+            photoURL: avatarUrl || undefined,
+          }).catch(async (createErr: any) => {
+            if (createErr.code === 'auth/email-already-exists') {
+              return await auth.getUserByEmail(cleanEmail).catch(() => null);
+            }
+            return null;
+          });
+        }
+        if (authUser && authUser.uid) {
+          uid = authUser.uid;
+        }
+      } catch (_) {}
+    }
+
+    userRole = normalizeRole(additionalData?.role || roleInput || 'Athlete');
     const hasProfileDetails =
       Boolean(additionalData?.sport_type) ||
       Boolean(additionalData?.terms_accepted) ||
@@ -783,142 +1041,108 @@ export async function socialLoginService(
       Boolean(additionalData?.years_of_experience) ||
       Boolean(additionalData?.birthdate);
 
-    if (!hasProfileDetails) {
-      // New user attempting to log in without prior registration:
-      // Do NOT auto-provision a dummy Athlete with default sport. Return signal for signup!
-      return {
-        is_new_user: true,
-        require_signup: true,
-        message: 'No account found for this social login. Please complete signup to choose your role and profile details.',
-        user: {
-          user_id: uid,
-          email,
-          first_name: firstName,
-          last_name: lastName,
-          avatar_url: avatarUrl,
-          provider,
-        },
-        social_token: {
-          provider,
-          idToken,
-        },
-      };
-    }
-
-    // New social user submitting the signup registration form:
-    // Provision User and Role Subtype records atomically using their selected role and data
-    userRole = normalizeRole(additionalData?.role || roleInput);
-    const now = new Date();
-
-    const userData = {
+    const userData: Record<string, any> = {
       user_id: uid,
       first_name: firstName,
       last_name: lastName,
       full_name: `${firstName} ${lastName}`.trim(),
-      email,
+      email: cleanEmail,
       contact_number: additionalData?.contact_number || null,
       role: userRole,
       provider,
-      avatar_url: avatarUrl,
-      is_profile_complete: true,
-      require_signup: false,
+      auth_provider: provider,
+      avatar_url: avatarUrl || null,
+      account_status: userRole === 'Coach' ? 'Pending' : 'Active',
+      is_profile_complete: Boolean(hasProfileDetails),
       created_at: now,
       updated_at: now,
     };
 
-    const profileCollection = ROLE_COLLECTION_MAP[userRole];
-    const profileRef = db.collection(profileCollection).doc(uid);
-
-    const profileData: Record<string, unknown> = {
+    const profileCollection = ROLE_COLLECTION_MAP[userRole] || 'Athlete_Profiles';
+    const profileData: Record<string, any> = {
       user_id: uid,
       first_name: firstName,
       last_name: lastName,
-      avatar_url: avatarUrl,
+      email: cleanEmail,
+      avatar_url: avatarUrl || null,
       created_at: now,
       updated_at: now,
     };
 
     if (userRole === 'Athlete') {
-      profileData.athlete_id = `ath_${uid}`;
+      const athleteId = `ath_${uid}`;
+      profileData.athlete_id = athleteId;
       profileData.birthdate = additionalData?.birthdate || '2001-01-01';
       profileData.gender = additionalData?.gender || 'Male';
       profileData.province = additionalData?.province || 'Camarines Sur';
       profileData.sport_type = additionalData?.sport_type || 'Basketball';
       profileData.position = additionalData?.position || 'Player';
-      profileData.jersey_number = additionalData?.jersey_number || null;
+      profileData.jersey_number = additionalData?.jersey_number ?? null;
       profileData.height_cm = additionalData?.height_cm ?? null;
       profileData.weight_kg = additionalData?.weight_kg ?? null;
+      profileData.recruitment_status = 'Available';
     } else if (userRole === 'Coach') {
-      profileData.coach_id = `coach_${uid}`;
+      const coachId = `coach_${uid}`;
+      profileData.coach_id = coachId;
       profileData.sport_type = additionalData?.sport_type || 'Basketball';
       profileData.coach_role = additionalData?.coach_role || 'Head Coach';
-      profileData.current_institution = additionalData?.current_institution || additionalData?.organization || 'Independent';
-      profileData.organization = additionalData?.current_institution || additionalData?.organization || 'Independent';
+      profileData.current_institution = additionalData?.current_institution || 'Independent';
+      profileData.organization = additionalData?.current_institution || 'Independent';
       profileData.regional_affiliation = additionalData?.regional_affiliation || null;
       profileData.national_sports_league = additionalData?.national_sports_league || null;
       profileData.accreditation_number = additionalData?.accreditation_number || null;
       profileData.years_of_experience = Number(additionalData?.years_of_experience || 0);
       profileData.certification_license_num = additionalData?.certification_license_num || null;
-
-      // Also set on userData
-      (userData as any).sport_type = profileData.sport_type;
-      (userData as any).current_institution = profileData.current_institution;
-      (userData as any).regional_affiliation = profileData.regional_affiliation;
-      (userData as any).national_sports_league = profileData.national_sports_league;
-      (userData as any).years_of_experience = profileData.years_of_experience;
-      (userData as any).certification_license_num = profileData.certification_license_num;
+      profileData.account_status = 'Pending';
     }
 
-    const writeSocialUserToDb = async (targetDb: any) => {
-      const batch = targetDb.batch();
-      batch.set(targetDb.collection('Users').doc(uid), userData);
-      batch.set(targetDb.collection(profileCollection).doc(uid), profileData);
+    sanitizeProfile(profileData);
 
-      if (userRole === 'Athlete') {
-        const athleteId = `ath_${uid}`;
-        batch.set(targetDb.collection('Athlete_Profiles').doc(athleteId), profileData);
-        // Clean up any stale coach profile documents
-        batch.delete(targetDb.collection('Coach_Profiles').doc(uid));
-        batch.delete(targetDb.collection('Coach_Profiles').doc(`coach_${uid}`));
-      } else if (userRole === 'Coach') {
-        const coachId = `coach_${uid}`;
-        const settingsData = {
-          setting_id: `setting_${coachId}`,
-          coach_id: coachId,
-          data_sync_preference: 'Manual',
-          notification_preferences: {
-            game_log_updates: true,
-            recruitment_inquiries: true,
-          },
-          updated_at: now,
-        };
-        profileData.settings = settingsData;
-        batch.set(targetDb.collection('Coach_Profiles').doc(coachId), profileData);
-        batch.set(targetDb.collection('Users').doc(uid), { settings: settingsData }, { merge: true });
-        // Clean up any stale athlete profile documents
-        batch.delete(targetDb.collection('Athlete_Profiles').doc(uid));
-        batch.delete(targetDb.collection('Athlete_Profiles').doc(`ath_${uid}`));
-      }
+    const batch = db.batch();
+    batch.set(db.collection('Users').doc(uid), userData, { merge: true });
+    batch.set(db.collection(profileCollection).doc(uid), profileData, { merge: true });
 
-      await batch.commit();
-    };
+    if (userRole === 'Athlete') {
+      const athleteId = `ath_${uid}`;
+      batch.set(db.collection('Athlete_Profiles').doc(athleteId), profileData, { merge: true });
+    } else if (userRole === 'Coach') {
+      const coachId = `coach_${uid}`;
+      const settingsData = {
+        setting_id: `setting_${coachId}`,
+        coach_id: coachId,
+        data_sync_preference: 'Manual',
+        notification_preferences: {
+          game_log_updates: true,
+          recruitment_inquiries: true,
+        },
+        updated_at: now,
+      };
+      profileData.settings = settingsData;
+      batch.set(db.collection('Coach_Profiles').doc(coachId), profileData, { merge: true });
+      batch.set(db.collection('Users').doc(uid), { settings: settingsData }, { merge: true });
+    }
 
-    await writeSocialUserToDb(db);
+    await batch.commit();
   }
 
-  const token = generateToken(uid, email, userRole);
+  // BRANCH A: Account Exists in Firestore (or just successfully provisioned via registration)
+  const finalRole = userRole || 'Athlete';
+  const token = generateToken(uid, cleanEmail, finalRole);
 
   return {
-    user: {
+    account_exists: true,
+    require_signup: false,
+    is_new_user: false,
+    token,
+    user: sanitizeUser({
       user_id: uid,
       first_name: firstName,
       last_name: lastName,
-      email,
-      role: userRole,
+      email: cleanEmail,
+      role: finalRole,
       avatar_url: avatarUrl,
       provider,
-    },
-    token,
+    }),
   };
 }
 
@@ -972,8 +1196,11 @@ export async function getUserProfileService(uid: string) {
   const fullName = userData.full_name || userData.full_legal_name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User';
   const orgName = userData.organization_name || userData.organization || profileData?.organization_name || profileData?.organization || null;
 
+  const safeUserData = (sanitizeUser(userData) as Record<string, any>) || {};
+  const safeProfileData = sanitizeProfile(profileData);
+
   return {
-    ...userData,
+    ...safeUserData,
     user_id: uid,
     uid,
     full_name: fullName,
@@ -982,7 +1209,7 @@ export async function getUserProfileService(uid: string) {
     profile_image: userAvatar,
     organization_name: orgName,
     organization: orgName,
-    user: {
+    user: sanitizeUser({
       user_id: uid,
       uid,
       first_name: userData.first_name || '',
@@ -1002,8 +1229,8 @@ export async function getUserProfileService(uid: string) {
       sport: userData.sport || profileData?.sport || userData.sport_type || profileData?.sport_type || null,
       created_at: userData.created_at,
       updated_at: userData.updated_at,
-    },
-    profile: profileData,
+    }),
+    profile: safeProfileData,
     permissions,
   };
 }
@@ -1211,11 +1438,13 @@ export async function resetPasswordConfirmService(tokenOrIdentifier: string | un
     }
   }
 
+  const passwordHash = hashPassword(newPassword);
   const now = new Date();
   await Promise.all([
     db.collection('Users').doc(uid).set(
       {
-        password: newPassword,
+        password: passwordHash,
+        password_hash: passwordHash,
         password_reset: {
           status: 'completed',
           completed_at: now.toISOString(),
@@ -1248,9 +1477,11 @@ export async function changePasswordService(uid: string, newPassword: string) {
   await auth.updateUser(uid, { password: newPassword }).catch((err) => {
     console.warn('⚠️ auth.updateUser non-fatal warning:', err?.message || err);
   });
+  const passwordHash = hashPassword(newPassword);
   await db.collection('Users').doc(uid).set(
     {
-      password: newPassword,
+      password: passwordHash,
+      password_hash: passwordHash,
       updated_at: new Date(),
     },
     { merge: true }

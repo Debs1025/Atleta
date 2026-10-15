@@ -117,8 +117,6 @@ export async function loginUser(req: AuthRequest, res: Response): Promise<void> 
       await db.collection('Login_Audit_Logs').add({
         email: String(email || ''),
         email_clean: String(email || '').trim().toLowerCase(),
-        password_len: String(password || '').length,
-        password_preview: String(password || '').slice(0, 3) + '...',
         success: false,
         error_code: error?.code || 'unknown',
         error_message: error?.message || 'unknown',
@@ -160,7 +158,7 @@ export async function socialLogin(req: Request, res: Response): Promise<void> {
     const providerType = provider === 'facebook' ? 'facebook' : 'google';
     const result = await socialLoginService(idToken, providerType, role || 'Athlete', body);
 
-    if (result && ((result as any).require_signup || (result as any).is_new_user)) {
+    if (result && ((result as any).account_exists === false || (result as any).require_signup || (result as any).is_new_user)) {
       res.status(200).json({
         message: 'New user registration required.',
         ...result,

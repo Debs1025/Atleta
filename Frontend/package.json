@@ -8,10 +8,11 @@
     "android": "ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk} PATH=$PATH:$HOME/Android/Sdk/platform-tools:$HOME/Android/Sdk/emulator expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "postinstall": "node scripts/generate-svg-icon-map.js"
   },
   "dependencies": {
-    "@expo/vector-icons": "^14.0.0",
+    "@expo/vector-icons": "^14.1.0",
     "@hookform/resolvers": "^3.3.4",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-google-signin/google-signin": "^12.1.0",
@@ -28,6 +29,7 @@
     "expo-status-bar": "~1.12.1",
     "expo-web-browser": "~13.0.3",
     "firebase": "^10.12.2",
+    "ionicons": "^8.1.0",
     "react": "18.2.0",
     "react-hook-form": "^7.51.5",
     "react-native": "0.74.5",

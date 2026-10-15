@@ -180,7 +180,7 @@ export function TrackFieldMatchScreen({ onClose, onSaveMatch }: TrackFieldMatchP
   };
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 28) + 44 }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 10 }]}>
       {/* Top Header */}
       <View style={styles.header}>
         <Text style={styles.brandTitle}>ATLETA</Text>

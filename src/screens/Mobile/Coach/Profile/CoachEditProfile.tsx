@@ -100,6 +100,7 @@ export function CoachEditProfile({
     current_institution: currentProfile.current_institution || "",
     regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
     national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
+    coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
   });
 
   const [avatarUri, setAvatarUri] = useState<string | undefined>(currentProfile.avatar_url);
@@ -119,6 +120,7 @@ export function CoachEditProfile({
       current_institution: currentProfile.current_institution || "",
       regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
       national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
+      coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
     });
     setAvatarUri(currentProfile.avatar_url);
     setDocuments(currentProfile.uploaded_documents || []);
@@ -336,6 +338,11 @@ export function CoachEditProfile({
       sports_focus: form.sports_focus,
       role_title: updatedRoleTitle,
       avatar_url: avatarUri,
+      current_institution: form.current_institution.trim(),
+      regional_affiliation: form.regional_affiliation.trim(),
+      national_sports_league: form.national_sports_league.trim(),
+      coaching_philosophy: form.coaching_philosophy.trim(),
+      coachingPhilosophy: form.coaching_philosophy.trim(),
       credentials: [...nonDocCredentials, ...docCredentials],
       uploaded_documents: documents,
       last_updated: todayFormatted,
@@ -359,6 +366,10 @@ export function CoachEditProfile({
       current_institution: form.current_institution.trim(),
       regional_affiliation: form.regional_affiliation.trim(),
       national_sports_league: form.national_sports_league.trim(),
+      coaching_philosophy: form.coaching_philosophy.trim(),
+      coachingPhilosophy: form.coaching_philosophy.trim(),
+      philosophy: form.coaching_philosophy.trim(),
+      quote: form.coaching_philosophy.trim(),
       email: form.email.trim(),
       avatar_url: avatarUri,
       uploaded_documents: documents,
@@ -394,6 +405,10 @@ export function CoachEditProfile({
             full_name: form.full_name.trim(),
             avatar_url: avatarUri,
             profile_image: avatarUri,
+            coaching_philosophy: form.coaching_philosophy.trim(),
+            coachingPhilosophy: form.coaching_philosophy.trim(),
+            philosophy: form.coaching_philosophy.trim(),
+            quote: form.coaching_philosophy.trim(),
             updated_at: new Date().toISOString(),
           }, { merge: true }).catch(() => null),
         ]);
@@ -603,6 +618,22 @@ export function CoachEditProfile({
               placeholder="e.g. Batang Pinoy / Palarong Pambansa"
               placeholderTextColor="#64748B"
               autoCapitalize="words"
+            />
+          </View>
+        </View>
+
+        {/* COACHING PHILOSOPHY */}
+        <View style={styles.formFieldContainer}>
+          <Text style={styles.inputLabel}>COACHING PHILOSOPHY</Text>
+          <View style={[styles.inputWrapper, { minHeight: 88, paddingVertical: 8, alignItems: "flex-start" }]}>
+            <TextInput
+              style={[styles.textInput, { minHeight: 72, textAlignVertical: "top" }]}
+              value={form.coaching_philosophy}
+              onChangeText={(text) => setForm((prev) => ({ ...prev, coaching_philosophy: text }))}
+              placeholder="e.g. Relentless effort, high athletic IQ, and character on and off the court."
+              placeholderTextColor="#64748B"
+              multiline
+              numberOfLines={3}
             />
           </View>
         </View>

@@ -54,7 +54,15 @@ import { MatchHistory } from "../Performance/matchHistory";
 import { TrackfieldMatchResult } from "../Performance/trackfieldMatchResult";
 import { SwimmingMatchResult } from "../Performance/swimmingMatchResult";
 import { BasketballMatchResult } from "../Performance/basketballMatchResult";
-import { getMatchesOfflineFirst, getAthletesOfflineFirst, getSportsOfflineFirst, getCoachProfileOfflineFirst } from "../../../../services/firebaseClient";
+import {
+  getMatchesOfflineFirst,
+  saveMatchOfflineFirst,
+  getAthletesOfflineFirst,
+  getSportsOfflineFirst,
+  getCoachProfileOfflineFirst,
+  saveTeamOfflineFirst,
+  deleteTeamOfflineFirst,
+} from "../../../../services/firebaseClient";
 import { calculatePlayerRating } from "../Performance/performanceUtils";
 
 // Font Styles
@@ -130,10 +138,21 @@ const PlayerRowItem = React.memo(
                   ? fallbackSport.toUpperCase()
                   : player.position;
 
+    const playerTeamName = (player as any).team_name;
+
     return (
       <View style={[styles.playerRow, !isLast && styles.playerRowBorder]}>
         <View style={styles.playerTextContainer}>
-          <Text style={styles.playerName}>{player.full_name}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+            <Text style={styles.playerName}>{player.full_name}</Text>
+            {Boolean(playerTeamName && playerTeamName !== "Unassigned" && playerTeamName !== "Unassigned / No Team") && (
+              <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>
+                  {(playerTeamName || "").toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.playerSubtitle}>
             {formattedPos} • #{player.jersey_number}
           </Text>
@@ -274,14 +293,21 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   // Helper function to dynamically compute performance profile from real metrics
   const computeAthletePerformance = (a: any, matchesList: MatchHistoryItem[] = matchHistoryList): AthletePerformanceProfile => {
     const athleteName = (a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || "").toLowerCase();
-    const athleteId = a.athlete_id || a.user_id;
+    const rawAthId = String(a.athlete_id || a.user_id || a.id || "").toLowerCase();
+    const cleanAthId = rawAthId.replace(/^ath_/, "");
+
+    const isMatchingPlayerStat = (ps: any) => {
+      if (!ps) return false;
+      const rawPsId = String(ps.athlete_id || ps.user_id || ps.id || "").toLowerCase();
+      const cleanPsId = rawPsId.replace(/^ath_/, "");
+      if (cleanAthId && cleanPsId && cleanAthId === cleanPsId) return true;
+      const psName = (ps.player_name || ps.name || ps.athlete_name || ps.full_name || "").toLowerCase().trim();
+      if (athleteName && psName && athleteName === psName) return true;
+      return false;
+    };
 
     const matchingMatches = (matchesList || []).filter((m) =>
-      m.player_stats?.some(
-        (ps: any) =>
-          (ps.name && athleteName && ps.name.toLowerCase() === athleteName) ||
-          (ps.athlete_id && athleteId && ps.athlete_id === athleteId)
-      )
+      m.player_stats?.some(isMatchingPlayerStat)
     );
 
     let matchPts = 0;
@@ -291,16 +317,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     let matchTrends: number[] = [];
 
     matchingMatches.forEach((m) => {
-      const ps = m.player_stats?.find(
-        (p: any) =>
-          (p.name && athleteName && p.name.toLowerCase() === athleteName) ||
-          (p.athlete_id && athleteId && p.athlete_id === athleteId)
-      );
+      const ps = m.player_stats?.find(isMatchingPlayerStat);
       if (ps) {
-        const pts = Number(ps.pts || 0);
+        const rawPs = ps as any;
+        const pts = Number(rawPs.pts || rawPs.stats?.points || rawPs.stats?.pts || 0);
         matchPts += pts;
-        matchReb += Number(ps.reb || 0);
-        matchAst += Number(ps.ast || 0);
+        matchReb += Number(rawPs.reb || rawPs.stats?.rebounds || rawPs.stats?.reb || 0);
+        matchAst += Number(rawPs.ast || rawPs.stats?.assists || rawPs.stats?.ast || 0);
         matchTrends.push(pts);
       }
     });
@@ -547,14 +570,21 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const allTeamsRes: any = null;
 
         if (isMounted) {
-          // Process Notifications
+          // Process Notifications (deduplicated by unique notification ID)
           const rawNotifs: any[] = Array.isArray(notifsRes?.notifications)
             ? notifsRes.notifications
             : Array.isArray(notifsRes)
             ? notifsRes
             : [];
-          setNotificationsList(rawNotifs);
-          const unreadCount = rawNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
+          const seenNotifIds = new Set<string>();
+          const dedupedNotifs = rawNotifs.filter((n: any) => {
+            const nId = String(n.notification_id || n.id || `${n.created_at}_${n.title}`);
+            if (seenNotifIds.has(nId)) return false;
+            seenNotifIds.add(nId);
+            return true;
+          });
+          setNotificationsList(dedupedNotifs);
+          const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
 
           const rawMatchList = (matchesRes?.matches && Array.isArray(matchesRes.matches) && matchesRes.matches.length > 0)
@@ -563,11 +593,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             ? syncRes.scheduled_matches
             : [];
 
-          const rawCombined = [...(rawMatchList || [])];
+          const isDeletedMatch = (m: any) => {
+            if (!m) return true;
+            if (m.deleted === true || m.is_deleted === true) return true;
+            const s = String(m.status || m.audit_status || m.verification_status || "").toUpperCase();
+            return s === "DELETED" || s === "REVOKED" || s === "CANCELLED";
+          };
+          const rawCombined = [...(rawMatchList || [])].filter((m) => !isDeletedMatch(m));
           if (Array.isArray(offlineMatches)) {
             offlineMatches.forEach((om: any) => {
               const omId = om.match_id || om.id;
-              if (omId && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {
+              if (omId && !isDeletedMatch(om) && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {
                 rawCombined.unshift(om);
               }
             });
@@ -664,10 +700,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             return Boolean(athCoachId && athCoachId === cleanEffectiveCoachId);
           };
 
-          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes) && coachAthletesRes.athletes.length > 0
+          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)
             ? coachAthletesRes.athletes
-            : Array.isArray(syncRes?.handled_athletes) && syncRes.handled_athletes.length > 0
-            ? syncRes.handled_athletes
+            : Array.isArray(syncRes?.handled_athletes)
+            ? syncRes.handled_athletes.filter(isOwnedByCoach)
             : (Array.isArray(offlineAthletes) ? offlineAthletes.filter(isOwnedByCoach) : []);
 
           // Strictly scope teams to the coach's authenticated account (never fall back to global allTeamsRes)
@@ -677,8 +713,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             ? teamsRes.teams
             : [];
 
+          const managedTeamIdsList = new Set<string>([
+            ...(Array.isArray(validProfileRes?.teams_managed) ? validProfileRes.teams_managed : []),
+            ...(Array.isArray(validOfflineProfileRes?.teams_managed) ? validOfflineProfileRes.teams_managed : []),
+            ...(Array.isArray((coachProfile as any)?.teams_managed) ? (coachProfile as any).teams_managed : []),
+          ].map((id: any) => String(id).toLowerCase()));
+
           const rawTeamsList: any[] = incomingCoachTeams.filter((t: any) => {
             if (!cleanEffectiveCoachId) return false;
+            const teamIdStr = String(t.team_id || "").toLowerCase();
+            if (teamIdStr && managedTeamIdsList.has(teamIdStr)) return true;
             const teamCoachId = String(t.coach_id || t.coach_scout_id || "").replace(/^coach_/, "").toLowerCase();
             if (teamCoachId) return teamCoachId === cleanEffectiveCoachId;
             if (Array.isArray(t.coaching_staff)) {
@@ -774,7 +818,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             rawCoachAthletes.forEach((ha: any) => {
               const k = normalizeId(ha.athlete_id || ha.user_id);
               if (!k || rosterSeen.has(k)) return;
-              const matchesTeam = (ha.team_id && ha.team_id === t.team_id) || (ha.team_name && t.team_name && ha.team_name.toLowerCase() === t.team_name.toLowerCase());
+              const matchesTeam =
+                (ha.team_id && ha.team_id === t.team_id) ||
+                (ha.team_name && t.team_name && ha.team_name.toLowerCase().includes(t.team_name.toLowerCase())) ||
+                (Array.isArray(ha.team_ids) && ha.team_ids.includes(t.team_id)) ||
+                (Array.isArray(ha.teams) && ha.teams.some((tm: any) => tm.team_id === t.team_id || (tm.team_name && t.team_name && tm.team_name.toLowerCase() === t.team_name.toLowerCase())));
               if (matchesTeam) {
                 rosterSeen.add(k);
                 const rich = richCoachAthletesMap.get(k) || {};
@@ -879,8 +927,35 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const seenMap = new Map<string, any>();
           for (const a of [...coachTeamAthletes, ...unassignedCoachAthletes]) {
             const k = normalizeId(a.athlete_id || a.user_id);
-            if (k && !seenMap.has(k)) {
-              seenMap.set(k, a);
+            if (k) {
+              if (!seenMap.has(k)) {
+                seenMap.set(k, {
+                  ...a,
+                  team_ids: a.team_id ? [a.team_id] : (a.team_ids || []),
+                  team_names: a.team_name ? [a.team_name] : (a.team_names || []),
+                  teams: a.team_id ? [{ team_id: a.team_id, team_name: a.team_name }] : (a.teams || []),
+                });
+              } else {
+                const existing = seenMap.get(k);
+                const existingTeamIds: string[] = existing.team_ids || (existing.team_id ? [existing.team_id] : []);
+                const existingTeamNames: string[] = existing.team_names || (existing.team_name ? [existing.team_name] : []);
+                const newTeamId = a.team_id;
+                const newTeamName = a.team_name;
+                const mergedTeamIds = Array.from(new Set([...existingTeamIds, ...(a.team_ids || (newTeamId ? [newTeamId] : []))].filter(Boolean)));
+                const mergedTeamNames = Array.from(new Set([...existingTeamNames, ...(a.team_names || (newTeamName ? [newTeamName] : []))].filter(Boolean)));
+                seenMap.set(k, {
+                  ...existing,
+                  ...a,
+                  team_id: existing.team_id || newTeamId,
+                  team_ids: mergedTeamIds,
+                  team_names: mergedTeamNames,
+                  team_name: mergedTeamNames.join(" • "),
+                  teams: [
+                    ...(existing.teams || []),
+                    ...(newTeamId && !(existing.teams || []).some((tm: any) => tm.team_id === newTeamId) ? [{ team_id: newTeamId, team_name: newTeamName }] : []),
+                  ],
+                });
+              }
             }
           }
           const allHandledAthletes = Array.from(seenMap.values());
@@ -1029,8 +1104,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             : Array.isArray(notifsRes)
             ? notifsRes
             : [];
-          setNotificationsList(rawNotifs);
-          const unreadCount = rawNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
+          const seenNotifIds = new Set<string>();
+          const dedupedNotifs = rawNotifs.filter((n: any) => {
+            const nId = String(n.notification_id || n.id || `${n.created_at}_${n.title}`);
+            if (seenNotifIds.has(nId)) return false;
+            seenNotifIds.add(nId);
+            return true;
+          });
+          setNotificationsList(dedupedNotifs);
+          const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
         }
       } catch {}
@@ -1068,6 +1150,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     );
 
     try {
+      await saveTeamOfflineFirst({ team_id: teamId, team_name: newName });
       await requestAuthenticatedJson(`/teams/${teamId}`, "PATCH", { team_name: newName });
     } catch (err) {
       console.warn("Backend update team name error:", err);
@@ -1084,6 +1167,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       );
 
       try {
+        await saveTeamOfflineFirst({ team_id: teamId, ...updates });
         await requestAuthenticatedJson(`/teams/${teamId}`, "PATCH", updates);
       } catch (err) {
         console.warn("Backend update team details error:", err);
@@ -1281,6 +1365,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       setTeams((prev) => [created, ...prev]);
       setSelectedTeamId(tempId);
       setActiveView("manage_team");
+      saveTeamOfflineFirst(created).catch(() => null);
 
       try {
         const res: any = await requestAuthenticatedJson("/teams", "POST", {
@@ -1297,8 +1382,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const newTeamId = createdTeam?.team_id ? String(createdTeam.team_id) : res?.team_id ? String(res.team_id) : undefined;
         if (newTeamId) {
           created.team_id = newTeamId;
-          setTeams((prev) => prev.map((t) => (t.team_id === tempId ? { ...t, ...createdTeam, team_id: newTeamId } : t)));
+          const mergedTeam = { ...created, ...createdTeam, team_id: newTeamId };
+          setTeams((prev) => prev.map((t) => (t.team_id === tempId ? mergedTeam : t)));
           setSelectedTeamId(newTeamId);
+          await saveTeamOfflineFirst(mergedTeam);
         }
       } catch (err) {
         console.warn("Backend team creation sync:", err);
@@ -1331,7 +1418,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const rawUid = athId.startsWith("ath_") ? athId.replace("ath_", "") : athId;
     const athName = (selectedPerfAthlete.full_name || "").toLowerCase().trim();
 
-    return coachMatches.filter((m: any) => {
+    const candidateMatches = matchHistoryList && matchHistoryList.length > 0 ? matchHistoryList : coachMatches;
+
+    return candidateMatches.filter((m: any) => {
       // 1. Direct athlete_id match
       if (m.athlete_id && (String(m.athlete_id) === athId || String(m.athlete_id) === rawUid)) return true;
       // 2. athlete_ids array
@@ -1339,24 +1428,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       // 3. participants array
       if (Array.isArray(m.participants) && m.participants.some((p: any) => {
         const pId = typeof p === "string" ? p : p.athlete_id || p.id || p.uid;
-        const pName = (p.full_name || p.name || "").toLowerCase().trim();
+        const pName = (p.full_name || p.name || p.athlete_name || "").toLowerCase().trim();
         return (athId && pId === athId) || (rawUid && pId === rawUid) || (athName && pName === athName);
       })) return true;
       // 4. player_stats array
       if (Array.isArray(m.player_stats) && m.player_stats.some((ps: any) => {
         const psId = ps.athlete_id || ps.id || ps.uid;
-        const psName = (ps.athlete_name || ps.full_name || ps.name || "").toLowerCase().trim();
+        const psName = (ps.player_name || ps.athlete_name || ps.full_name || ps.name || "").toLowerCase().trim();
         return (athId && psId === athId) || (rawUid && psId === rawUid) || (athName && psName === athName);
       })) return true;
       // 5. roster array
       if (Array.isArray(m.roster) && m.roster.some((r: any) => {
         const rId = typeof r === "string" ? r : r.athlete_id || r.id;
-        const rName = (r.full_name || r.name || "").toLowerCase().trim();
+        const rName = (r.full_name || r.name || r.athlete_name || "").toLowerCase().trim();
         return (athId && rId === athId) || (rawUid && rId === rawUid) || (athName && rName === athName);
       })) return true;
       return false;
     });
-  }, [coachMatches, selectedPerfAthlete]);
+  }, [matchHistoryList, coachMatches, selectedPerfAthlete]);
 
   const handleSelectTab = useCallback((tab: NavigationTab) => {
     setActiveTab(tab);
@@ -1382,10 +1471,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     setActiveView("athlete_portfolio");
   }, [perfAthletes, activeView, matchHistoryList]);
 
-  const handleDeleteTeam = useCallback((teamId: string) => {
+  const handleDeleteTeam = useCallback(async (teamId: string) => {
     setTeams((prev) => prev.filter((t) => t.team_id !== teamId));
     setActiveView("teams_list");
     setActiveTab("Teams");
+    try {
+      await deleteTeamOfflineFirst(teamId);
+      await requestAuthenticatedJson(`/teams/${teamId}`, "DELETE").catch(() => null);
+    } catch (err) {
+      console.warn("Delete team sync error:", err);
+    }
   }, []);
 
   const handleMatchSaveCompleted = useCallback((savedPayload?: any) => {
@@ -1684,11 +1779,20 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               away_score: oppPts,
               entries_count: finalData.athlete_overview.length,
               player_stats: finalData.athlete_overview.map((p) => ({
+                ...p,
                 name: p.player_name,
+                player_name: p.player_name,
                 team: p.team_name,
+                team_name: p.team_name,
                 pts: Number(p.pts || 0),
                 ast: Number(p.ast || 0),
                 reb: Number(p.reb || 0),
+                stl: Number(p.stl || 0),
+                blk: Number(p.blk || 0),
+                pf: Number(p.fouls || p.pf || 0),
+                to: Number(p.to || 0),
+                min: Number(p.min || 0),
+                stats: { ...p },
               })),
               leaderboard_entries: finalData.athlete_overview.map((p, idx) => ({
                 rank: idx + 1,
@@ -1700,115 +1804,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             };
 
             setMatchHistoryList((prev) => [newMatchItem, ...prev]);
-
-            // Persist match and player stats to Firestore collections (Match_Logs & Performance_Metrics)
-            try {
-              const token = await getStoredAuthToken();
-              const idempotencyKey = `ocr_match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-              
-              const playerStatsPayload = finalData.athlete_overview.map((p, idx) => {
-                const found = athletesPool.find(
-                  (a) => a.full_name.toLowerCase() === p.player_name.toLowerCase()
-                );
-                const athleteId = found?.athlete_id || `ath_ocr_${idx + 1}`;
-                return {
-                  athlete_id: athleteId,
-                  player_name: p.player_name,
-                  team_name: p.team_name,
-                  stats: {
-                    points: Number(p.pts || 0),
-                    assists: Number(p.ast || 0),
-                    turnovers: Number(p.to || 0),
-                    rebounds: Number(p.reb || 0),
-                    steals: Number(p.stl || 0),
-                    blocks: Number(p.blk || 0),
-                    fouls: 0,
-                    minutes: Number(p.min || 0),
-                    fg_made: Math.round(Number(p.pts || 0) * 0.4),
-                    fg_attempted: Math.max(1, Math.round(Number(p.pts || 0) * 0.8)),
-                    ft_made: Math.round(Number(p.pts || 0) * 0.2),
-                    ft_attempted: Math.max(1, Math.round(Number(p.pts || 0) * 0.3)),
-                  },
-                };
-              });
-
-              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Team";
-              const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
-
-              const matchPayload = {
-                team_id: teams[0]?.team_id || (teams[0] as any)?.id || "",
-                home_team_name: resolvedTeamName,
-                away_team_name: resolvedOpponentName,
-                opponent_team_name: resolvedOpponentName,
-                home_score: homePts,
-                away_score: oppPts,
-                sport_type:
-                  finalData.sport_type === "SWIMMING"
-                    ? "Swimming"
-                    : finalData.sport_type === "TRACK AND FIELD"
-                    ? "Track & Field"
-                    : finalData.sport_type
-                    ? finalData.sport_type.charAt(0).toUpperCase() + finalData.sport_type.slice(1).toLowerCase()
-                    : "Basketball",
-                match_type: "OCR Scanned Match",
-                match_date: new Date().toISOString(),
-                location: (finalData as any).location || "Arena",
-                game_result: homePts >= oppPts ? "WIN" : "LOSS",
-                notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
-                player_stats: playerStatsPayload,
-              };
-
-              const saveRes = await fetch(`${API_BASE}/matches`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Accept: "application/json",
-                  "Idempotency-Key": idempotencyKey,
-                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify(matchPayload),
-              });
-
-              if (saveRes.ok) {
-                const resJson = await saveRes.json();
-                if (resJson?.match?.match_id) {
-                  newMatchItem.match_id = resJson.match.match_id;
-                }
-              }
-
-              // Immediately fetch latest snapshot from the database so the app is always 100% in sync with Firestore
-              const updatedSnapshot = await requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null);
-              if (updatedSnapshot && Array.isArray(updatedSnapshot.scheduled_matches) && updatedSnapshot.scheduled_matches.length > 0) {
-                const refreshedMatches: MatchHistoryItem[] = updatedSnapshot.scheduled_matches.map((m: any) => {
-                  const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
-                  const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
-                  const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
-                  const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
-                  const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
-
-                  return {
-                    match_id: m.match_id || `match_${Date.now()}`,
-                    date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
-                    full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
-                    date_group: "MATCH LOGS",
-                    event_or_opponent: `${homeName} vs ${oppName}`,
-                    score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),
-                    sport_category: (m.sport_type || "BASKETBALL").toUpperCase(),
-                    result_badge_text: m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS"),
-                    is_official: m.is_official !== false,
-                    home_team: homeName,
-                    away_team: oppName,
-                    home_score: hScore,
-                    away_score: aScore,
-                    player_stats: m.player_stats || [],
-                    coach_notes: m.notes ? [m.notes] : ["Match recorded via OCR Scoresheet."],
-                  };
-                });
-                setMatchHistoryList(refreshedMatches);
-              }
-            } catch (saveErr) {
-              console.warn("Could not persist match to Firestore:", saveErr);
-            }
 
             // Update roster athletes state with the confirmed OCR performance stats (strictly for owned roster athletes)
             setAthletesPool((prev: RosterAthlete[]) => {
@@ -1825,7 +1820,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     jersey_number: String(stat.jersey_number || updated[existingIndex].jersey_number),
                   };
                 }
-                // Do NOT push unmanaged/opponent athletes to coach's roster
               });
               return updated;
             });
@@ -1839,10 +1833,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     (stat.athlete_id && a.athlete_id === stat.athlete_id) ||
                     a.full_name.trim().toLowerCase() === (stat.player_name || "").trim().toLowerCase()
                 );
-                if (!isRosterPlayer) {
-                  // Completely ignore/exclude opponent players and unmanaged athletes from auto-recruitment/stats
-                  return;
-                }
+                if (!isRosterPlayer) return;
 
                 const existingIndex = updated.findIndex(
                   (a) =>
@@ -1906,9 +1897,187 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               }))
             );
 
-            // Redirect straight back to Home/Dashboard view
+            // Immediately redirect straight back to Home/Dashboard view without waiting for network
             setActiveTab("Home");
             setActiveView("dashboard");
+
+            // Asynchronous background task: Persist match and player stats to Firestore / Backend silently
+            (async () => {
+            try {
+              const token = await getStoredAuthToken();
+              const idempotencyKey = `ocr_match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              
+              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Team";
+              const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
+              const scoresheetUrlVal = finalData.scoresheetUrl || finalData.scoresheet_url || "";
+
+              const homeRosterAthletes = finalData.athlete_overview
+                .filter((p) => (p.team_name || "").toUpperCase() === resolvedTeamName.toUpperCase())
+                .map((p, idx) => {
+                  const found = athletesPool.find((a) => a.full_name.toLowerCase() === p.player_name.toLowerCase());
+                  return found?.athlete_id || p.athlete_id || `ath_ocr_home_${idx + 1}`;
+                });
+
+              const awayRosterAthletes = finalData.athlete_overview
+                .filter((p) => (p.team_name || "").toUpperCase() !== resolvedTeamName.toUpperCase())
+                .map((p, idx) => {
+                  const found = athletesPool.find((a) => a.full_name.toLowerCase() === p.player_name.toLowerCase());
+                  return found?.athlete_id || p.athlete_id || `ath_ocr_away_${idx + 1}`;
+                });
+
+              const playerStatsPayload = finalData.athlete_overview.map((p, idx) => {
+                const found = athletesPool.find(
+                  (a) => a.full_name.toLowerCase() === p.player_name.toLowerCase()
+                );
+                const athleteId = found?.athlete_id || p.athlete_id || `ath_ocr_${idx + 1}`;
+                
+                // Preserve all secondary stats verbatim from OCR without math approximations or dropping
+                const rawStats = {
+                  ...p,
+                  points: Number(p.pts ?? p.points ?? 0),
+                  pts: Number(p.pts ?? p.points ?? 0),
+                  assists: Number(p.ast ?? p.assists ?? 0),
+                  ast: Number(p.ast ?? p.assists ?? 0),
+                  rebounds: Number(p.reb ?? p.rebounds ?? 0),
+                  reb: Number(p.reb ?? p.rebounds ?? 0),
+                  steals: Number(p.stl ?? p.steals ?? 0),
+                  stl: Number(p.stl ?? p.steals ?? 0),
+                  blocks: Number(p.blk ?? p.blocks ?? 0),
+                  blk: Number(p.blk ?? p.blocks ?? 0),
+                  turnovers: Number(p.to ?? p.turnovers ?? 0),
+                  to: Number(p.to ?? p.turnovers ?? 0),
+                  fouls: Number(p.fouls ?? p.pf ?? 0),
+                  pf: Number(p.fouls ?? p.pf ?? 0),
+                  minutes: Number(p.min ?? p.minutes ?? 0),
+                  min: Number(p.min ?? p.minutes ?? 0),
+                  fg_made: Number(p.fg_made ?? 0),
+                  fg_attempted: Number(p.fg_attempted ?? 0),
+                  three_made: Number(p.three_made ?? 0),
+                  three_attempted: Number(p.three_attempted ?? 0),
+                  ft_made: Number(p.ft_made ?? 0),
+                  ft_attempted: Number(p.ft_attempted ?? 0),
+                  kills: Number(p.kills ?? 0),
+                  attack_errors: Number(p.attack_errors ?? 0),
+                  attack_attempts: Number(p.attack_attempts ?? 0),
+                  digs: Number(p.digs ?? 0),
+                  service_aces: Number(p.service_aces ?? 0),
+                  goals: Number(p.goals ?? 0),
+                  saves: Number(p.saves ?? 0),
+                  shots: Number(p.shots ?? 0),
+                  shots_on_target: Number(p.shots_on_target ?? 0),
+                  tackles: Number(p.tackles ?? 0),
+                  finish_time: String(p.finish_time || p.time || ""),
+                  split_times: String(p.split || p.split_times || ""),
+                };
+
+                return {
+                  ...rawStats,
+                  athlete_id: athleteId,
+                  player_name: p.player_name,
+                  team_name: p.team_name,
+                  jersey_number: p.jersey_number,
+                  position: p.position,
+                  pts: rawStats.points,
+                  reb: rawStats.rebounds,
+                  ast: rawStats.assists,
+                  stl: rawStats.steals,
+                  blk: rawStats.blocks,
+                  pf: rawStats.fouls,
+                  to: rawStats.turnovers,
+                  min: rawStats.minutes,
+                  stats: rawStats,
+                  sport_stats: rawStats,
+                  custom_stats: rawStats,
+                };
+              });
+
+              const matchPayload = {
+                match_id: newMatchItem.match_id,
+                team_id: teams[0]?.team_id || (teams[0] as any)?.id || "",
+                home_team_name: resolvedTeamName,
+                away_team_name: resolvedOpponentName,
+                opponent_team_name: resolvedOpponentName,
+                home_score: homePts,
+                away_score: oppPts,
+                sport_type:
+                  finalData.sport_type === "SWIMMING"
+                    ? "Swimming"
+                    : finalData.sport_type === "TRACK AND FIELD"
+                    ? "Track & Field"
+                    : finalData.sport_type
+                    ? finalData.sport_type.charAt(0).toUpperCase() + finalData.sport_type.slice(1).toLowerCase()
+                    : "Basketball",
+                match_type: "OCR Scanned Match",
+                match_date: new Date().toISOString(),
+                location: (finalData as any).location || "Arena",
+                game_result: homePts >= oppPts ? "WIN" : "LOSS",
+                notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
+                player_stats: playerStatsPayload,
+                playerStats: playerStatsPayload,
+                roster_athletes: homeRosterAthletes,
+                rosterAthletes: homeRosterAthletes,
+                away_roster_athletes: awayRosterAthletes,
+                awayRosterAthletes: awayRosterAthletes,
+                scoresheet_url: scoresheetUrlVal,
+                scoresheetUrl: scoresheetUrlVal,
+              };
+
+              // 1. Persist offline-first to Firestore & local storage
+              await saveMatchOfflineFirst(matchPayload).catch(() => null);
+
+              // 2. Transmit to backend REST API
+              const saveRes = await fetch(`${API_BASE}/matches`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  "Idempotency-Key": idempotencyKey,
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify(matchPayload),
+              });
+
+              if (saveRes.ok) {
+                const resJson = await saveRes.json();
+                if (resJson?.match?.match_id) {
+                  newMatchItem.match_id = resJson.match.match_id;
+                }
+              }
+
+              // Immediately fetch latest snapshot from the database so the app is always 100% in sync with Firestore
+              const updatedSnapshot = await requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null);
+              if (updatedSnapshot && Array.isArray(updatedSnapshot.scheduled_matches) && updatedSnapshot.scheduled_matches.length > 0) {
+                const refreshedMatches: MatchHistoryItem[] = updatedSnapshot.scheduled_matches.map((m: any) => {
+                  const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
+                  const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
+                  const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
+                  const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
+                  const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
+
+                  return {
+                    match_id: m.match_id || `match_${Date.now()}`,
+                    date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
+                    full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
+                    date_group: "MATCH LOGS",
+                    event_or_opponent: `${homeName} vs ${oppName}`,
+                    score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),
+                    sport_category: (m.sport_type || "BASKETBALL").toUpperCase(),
+                    result_badge_text: m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS"),
+                    is_official: m.is_official !== false,
+                    home_team: homeName,
+                    away_team: oppName,
+                    home_score: hScore,
+                    away_score: aScore,
+                    player_stats: m.player_stats || [],
+                    coach_notes: m.notes ? [m.notes] : ["Match recorded via OCR Scoresheet."],
+                  };
+                });
+                setMatchHistoryList(refreshedMatches);
+              }
+            } catch (saveErr) {
+              console.warn("Could not persist match to Firestore:", saveErr);
+            }
+            })();
           }}
         />
       )}

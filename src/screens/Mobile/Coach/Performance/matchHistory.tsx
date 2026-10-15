@@ -24,7 +24,7 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
   sportCategory,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 60) + 48;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   // Filter and group items chronologically by date_group (e.g. OCTOBER 2026, SEPTEMBER 2026)
   const groupedMatches = useMemo(() => {

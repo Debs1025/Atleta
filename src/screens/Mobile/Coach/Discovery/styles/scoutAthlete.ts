@@ -79,7 +79,9 @@ export const styles = StyleSheet.create({
   athleteNameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 4,
   },
   athleteNameText: {
@@ -88,6 +90,7 @@ export const styles = StyleSheet.create({
     fontWeight: '900',
     fontFamily: fontBoldPlatform,
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   positionBadge: {
     borderWidth: 1,

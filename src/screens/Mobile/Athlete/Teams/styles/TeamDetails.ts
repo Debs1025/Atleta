@@ -77,7 +77,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#1E293B",
-    padding: 16,
+    padding: 14,
+    justifyContent: "center",
+    minHeight: 70,
   },
   statLabel: {
     color: "#38BDF8",
@@ -88,8 +90,9 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: "#FFFFFF",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "800",
+    lineHeight: 20,
   },
   coachingStaffSection: {
     marginBottom: 20,

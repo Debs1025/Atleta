@@ -46,7 +46,7 @@ export function AddAthlete({
   const [liveAthletes, setLiveAthletes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch all live registered / recruited athletes from Firestore via backend
+  // Fetch only recruited / owned athletes belonging to this coach
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -54,17 +54,16 @@ export function AddAthlete({
         setIsLoading(true);
         let rawList: any[] = [];
         const coachAthletesRes = await requestAuthenticatedJson("/coaches/athletes").catch(() => null);
-        if (coachAthletesRes && Array.isArray(coachAthletesRes.athletes) && coachAthletesRes.athletes.length > 0) {
+        if (coachAthletesRes && Array.isArray(coachAthletesRes.athletes)) {
           rawList = coachAthletesRes.athletes;
-        } else {
-          const res = await requestAuthenticatedJson("/athletes").catch(() => null);
-          rawList = Array.isArray(res) ? res : Array.isArray(res?.athletes) ? res.athletes : [];
+        } else if (athletesPool && athletesPool.length > 0) {
+          rawList = athletesPool;
         }
-        if (isMounted && rawList.length > 0) {
+        if (isMounted) {
           setLiveAthletes(rawList);
         }
       } catch (err) {
-        console.warn("Failed to fetch live athletes for roster:", err);
+        console.warn("Failed to fetch coach athletes for roster:", err);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -74,7 +73,7 @@ export function AddAthlete({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [athletesPool]);
 
   // Base pool filtered strictly by team sport_type from both live athletes and coach's athletesPool
   const baseSportPool: AthleteItem[] = useMemo(() => {

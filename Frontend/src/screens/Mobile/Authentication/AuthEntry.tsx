@@ -57,20 +57,16 @@ export function AuthEntry() {
   const handleLogout = async () => {
     clearAuthMicroCache();
     clearFirebaseClientCaches();
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const atletaKeys = allKeys.filter((k) => k.startsWith("atleta_") || k.startsWith("@atleta_"));
+      if (atletaKeys.length > 0) {
+        await AsyncStorage.multiRemove(atletaKeys);
+      }
+    } catch (_) {}
     await Promise.all([
       SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
       SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
-      AsyncStorage.multiRemove([
-        "atleta_coach_dashboard_cache_v2",
-        "atleta_offline_coach_profile_cache",
-        "atleta_offline_athlete_profile_cache",
-        "atleta_offline_teams_cache",
-        "atleta_offline_matches_cache",
-        "atleta_offline_athletes_cache",
-        "atleta_offline_sports_cache",
-        "atleta_coach_settings",
-        "atleta_cached_user",
-      ]).catch(() => null),
     ]);
     setActiveRole(null);
     setScreen("login");

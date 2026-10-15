@@ -25,7 +25,7 @@ interface CachedItem<T> {
   cachedAt: number;
 }
 const teamDirectoryCache = new Map<string, CachedItem<TeamSummary[]>>();
-const coachSummaryCache = new Map<string, CachedItem<{ coach_id: string; full_name: string; years_of_experience: number; current_institution: string; quote: string | null }>>();
+const coachSummaryCache = new Map<string, CachedItem<{ coach_id: string; full_name: string; years_of_experience: number; current_institution: string; quote: string | null; avatar_url?: string }>>();
 const rosterAthleteCache = new Map<string, CachedItem<RosterAthlete>>();
 const coachTeamsCache = new Map<string, CachedItem<TeamSummary[]>>();
 const coachManagedAthletesCache = new Map<string, CachedItem<any[]>>();
@@ -51,6 +51,7 @@ async function enrichCoach(coachId?: string): Promise<{
   years_of_experience: number;
   current_institution: string;
   quote: string | null;
+  avatar_url?: string;
 }> {
   if (!coachId || typeof coachId !== 'string' || !coachId.trim()) {
     return {
@@ -59,6 +60,7 @@ async function enrichCoach(coachId?: string): Promise<{
       years_of_experience: 0,
       current_institution: 'Athletic Program',
       quote: null,
+      avatar_url: '',
     };
   }
 
@@ -87,11 +89,12 @@ async function enrichCoach(coachId?: string): Promise<{
   let institution = coachData.current_institution || coachData.institution || '';
   let quote = coachData.quote || null;
   let experience = Number(coachData.years_of_experience || coachData.years_experience || 0);
+  let avatarUrl = coachData.avatar_url || coachData.profile_image || '';
 
   // Look up Users collection across all possible ID variants
   const lookupIds = [coachData.user_id, rawUid, canonicalCoachId, rawCoachId].filter(Boolean) as string[];
   for (const uid of lookupIds) {
-    if (fullName && institution && experience) break;
+    if (fullName && institution && experience && avatarUrl) break;
     const userDoc = await db.collection('Users').doc(uid).get();
     if (userDoc.exists) {
       const userData = userDoc.data()!;
@@ -101,6 +104,7 @@ async function enrichCoach(coachId?: string): Promise<{
       institution = institution || userData.current_institution || userData.institution || '';
       quote = quote || userData.quote || null;
       experience = experience || Number(userData.years_of_experience || userData.years_experience || 0);
+      avatarUrl = avatarUrl || userData.avatar_url || userData.profile_image || userData.photo_url || '';
     }
   }
 
@@ -118,6 +122,7 @@ async function enrichCoach(coachId?: string): Promise<{
     years_of_experience: experience,
     current_institution: institution || 'Athletic Program',
     quote: quote,
+    avatar_url: avatarUrl || '',
   };
 
   coachSummaryCache.set(rawCoachId, { data: result, cachedAt: Date.now() });
@@ -216,6 +221,7 @@ export async function createTeam(coachId: string, payload: CreateTeamDto): Promi
     season_record: { wins: 0, losses: 0 },
     coach_id: coachId,
     roster_list: Array.isArray(payload.roster_list) ? payload.roster_list : [],
+    created_at: now,
     timestamp: now,
   };
 
@@ -420,7 +426,19 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
   ]);
 
   const athleteIdSet = new Set<string>();
-  const athleteTeamMap = new Map<string, { team_id: string; team_name: string; sport_type: string; jersey_number?: number; position?: string }>();
+  const athleteTeamsMap = new Map<string, Array<{ team_id: string; team_name: string; sport_type: string; jersey_number?: number; position?: string }>>();
+
+  const addTeamForAthlete = (rawAthId: string, teamObj: { team_id: string; team_name: string; sport_type: string; jersey_number?: number; position?: string }) => {
+    const clean = rawAthId.replace(/^ath_/, '');
+    const canonical = rawAthId.startsWith('ath_') ? rawAthId : `ath_${rawAthId}`;
+    const keys = [rawAthId, clean, canonical];
+    for (const k of keys) {
+      const existing = athleteTeamsMap.get(k) || [];
+      if (!existing.some((e) => e.team_id === teamObj.team_id)) {
+        athleteTeamsMap.set(k, [...existing, teamObj]);
+      }
+    }
+  };
 
   // 1. From Coach Profile athlete_managed array
   const coachData = (coachProfileDoc1 && coachProfileDoc1.exists) ? coachProfileDoc1.data() : (coachProfileDoc2 && coachProfileDoc2.exists) ? coachProfileDoc2.data() : null;
@@ -443,8 +461,8 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
           const aId = typeof item === 'string' ? item : (item.athlete_id || (item as any).user_id);
           if (aId) {
             athleteIdSet.add(aId);
-            athleteTeamMap.set(aId, {
-              team_id: t.team_id,
+            addTeamForAthlete(aId, {
+              team_id: t.team_id || doc.id,
               team_name: t.team_name,
               sport_type: t.sport_type,
               jersey_number: typeof item === 'object' ? item.jersey_number : undefined,
@@ -499,7 +517,11 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
     const u2 = (userDoc2 && userDoc2.exists) ? (userDoc2.data() || {}) : {};
     const userData: Record<string, any> = { ...u2, ...u1 };
 
-    const teamInfo = athleteTeamMap.get(aId) || athleteTeamMap.get(canonicalAthleteId) || athleteTeamMap.get(rawUid);
+    const teamEntries = athleteTeamsMap.get(aId) || athleteTeamsMap.get(canonicalAthleteId) || athleteTeamsMap.get(rawUid) || [];
+    const primaryTeam = teamEntries[0];
+    const teamNames = teamEntries.map((te) => te.team_name).filter(Boolean);
+    const combinedTeamName = teamNames.length > 0 ? teamNames.join(' • ') : 'Unassigned / No Team';
+    const teamIds = teamEntries.map((te) => te.team_id).filter(Boolean);
 
     const firstName = userData.first_name || profileData.first_name || 'Athlete';
     const lastName = userData.last_name || profileData.last_name || '';
@@ -528,13 +550,16 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
       first_name: firstName,
       last_name: lastName,
       full_name: fullName,
-      position: (teamInfo?.position && teamInfo.position !== 'Unassigned' ? teamInfo.position : (profileData.position && profileData.position !== 'Unassigned' ? profileData.position : (userData.position && userData.position !== 'Unassigned' ? userData.position : (teamInfo?.sport_type || profileData.sport_type || userData.sport_type || 'Basketball')))),
-      jersey_number: teamInfo?.jersey_number ?? profileData.jersey_number ?? userData.jersey_number ?? null,
-      sport_type: teamInfo?.sport_type || profileData.sport_type || userData.sport_type || 'Basketball',
-      sport_category: (teamInfo?.sport_type || profileData.sport_type || userData.sport_type || 'Basketball').toUpperCase(),
-      team_id: teamInfo?.team_id || null,
-      team_name: teamInfo?.team_name || 'Unassigned / No Team',
-      has_team: Boolean(teamInfo?.team_id),
+      position: (primaryTeam?.position && primaryTeam.position !== 'Unassigned' ? primaryTeam.position : (profileData.position && profileData.position !== 'Unassigned' ? profileData.position : (userData.position && userData.position !== 'Unassigned' ? userData.position : (primaryTeam?.sport_type || profileData.sport_type || userData.sport_type || 'Basketball')))),
+      jersey_number: primaryTeam?.jersey_number ?? profileData.jersey_number ?? userData.jersey_number ?? null,
+      sport_type: primaryTeam?.sport_type || profileData.sport_type || userData.sport_type || 'Basketball',
+      sport_category: (primaryTeam?.sport_type || profileData.sport_type || userData.sport_type || 'Basketball').toUpperCase(),
+      team_id: primaryTeam?.team_id || null,
+      team_name: combinedTeamName,
+      team_ids: teamIds,
+      team_names: teamNames,
+      teams: teamEntries,
+      has_team: teamEntries.length > 0,
       province: profileData.province || userData.province || undefined,
       location: profileData.province || userData.province || undefined,
       avatar_url: profileData.avatar_url || userData.avatar_url || undefined,
@@ -605,7 +630,8 @@ export async function getTeamDetails(teamId: string): Promise<TeamDetailResponse
     athlete_count: data.roster_list ? data.roster_list.length : 0,
     coach,
     roster,
-    timestamp: data.timestamp,
+    created_at: data.created_at || data.timestamp || new Date().toISOString(),
+    timestamp: data.timestamp || data.created_at || new Date().toISOString(),
   };
 }
 
@@ -1287,6 +1313,9 @@ export async function getAthleteTeam(athleteId: string): Promise<AthleteTeamResp
     coach_id: teamData.coach_id,
     full_name: 'Coach',
     current_institution: '',
+    years_of_experience: 0,
+    quote: null,
+    avatar_url: '',
   }));
 
   const roster = await enrichRoster(teamData.roster_list || []).catch(() => []);
@@ -1298,13 +1327,20 @@ export async function getAthleteTeam(athleteId: string): Promise<AthleteTeamResp
       team_name: teamData.team_name,
       sport_type: teamData.sport_type,
       division: teamData.division || 'Varsity',
-      region: teamData.region,
+      region: teamData.region || 'Camarines Sur',
       description: teamData.description || null,
+      logo_url: (teamData as any).logo_url || (teamData as any).banner_url || (teamData as any).team_logo || null,
+      mission_statement: (teamData as any).mission_statement || (teamData as any).quote || null,
+      established_year: teamData.established_year || null,
     },
     coach: {
       coach_id: coach.coach_id,
       full_name: coach.full_name,
       current_institution: coach.current_institution,
+      avatar_url: coach.avatar_url || '',
+      role_title: coach.current_institution || 'HEAD COACH',
+      years_experience: coach.years_of_experience ? `${coach.years_of_experience} Years` : 'Head Coach',
+      quote: coach.quote || 'Dedicated to driving team excellence and athlete development.',
     },
     roster,
   };

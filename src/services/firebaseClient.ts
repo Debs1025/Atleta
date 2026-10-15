@@ -18,6 +18,8 @@ import {
   disableNetwork,
   serverTimestamp,
   setLogLevel,
+  deleteDoc,
+  updateDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
@@ -75,7 +77,10 @@ try {
   }
 }
 
+import { getStorage, FirebaseStorage } from "firebase/storage";
+
 export const db: Firestore = dbInstance;
+export const storage: FirebaseStorage = getStorage(app);
 
 const OFFLINE_MATCHES_CACHE_KEY = "atleta_offline_matches_cache";
 const OFFLINE_ATHLETES_CACHE_KEY = "atleta_offline_athletes_cache";
@@ -89,9 +94,22 @@ const OFFLINE_TEAMS_CACHE_KEY = "atleta_offline_teams_cache";
  */
 export async function saveMatchOfflineFirst(payload: any): Promise<{ success: boolean; match_id: string; offline: boolean }> {
   const matchId = payload.match_id || `match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const playerStatsList = payload.playerStats || payload.player_stats || [];
+  const rosterAthletesList = payload.rosterAthletes || payload.roster_athletes || [];
+  const awayRosterAthletesList = payload.awayRosterAthletes || payload.away_roster_athletes || [];
+  const scoresheetUrlVal = payload.scoresheetUrl || payload.scoresheet_url || "";
+
   const cleanPayload = {
     ...payload,
     match_id: matchId,
+    playerStats: playerStatsList,
+    player_stats: playerStatsList,
+    rosterAthletes: rosterAthletesList,
+    roster_athletes: rosterAthletesList,
+    awayRosterAthletes: awayRosterAthletesList,
+    away_roster_athletes: awayRosterAthletesList,
+    scoresheetUrl: scoresheetUrlVal,
+    scoresheet_url: scoresheetUrlVal,
     synced_offline: true,
     updated_at: new Date().toISOString(),
     created_at: payload.created_at || payload.match_date || new Date().toISOString(),
@@ -127,18 +145,19 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     const existingAthletesRaw = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
     let athletesList: any[] = existingAthletesRaw ? JSON.parse(existingAthletesRaw) : [];
 
-    if (Array.isArray(payload.player_stats)) {
-      for (const ps of payload.player_stats) {
+    const pStats = Array.isArray(cleanPayload.playerStats) ? cleanPayload.playerStats : [];
+    if (pStats.length > 0) {
+      for (const ps of pStats) {
         const athId = ps.athlete_id || ps.user_id || ps.id || "";
         const cleanAthId = String(athId).replace(/^ath_/, "");
         const canonicalAthId = athId.startsWith("ath_") ? athId : `ath_${athId}`;
 
-        const newPts = Number(ps.pts ?? ps.stats?.points ?? ps.stats?.pts ?? 0);
-        const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? ps.stats?.reb ?? 0);
-        const newAst = Number(ps.ast ?? ps.stats?.assists ?? ps.stats?.ast ?? 0);
-        const newStl = Number(ps.stl ?? ps.stats?.steals ?? ps.stats?.stl ?? 0);
-        const newPf = Number(ps.pf ?? ps.stats?.fouls ?? ps.stats?.pf ?? 0);
-        const newTo = Number(ps.to ?? ps.stats?.turnovers ?? ps.stats?.to ?? 0);
+        const newPts = Number(ps.pts ?? ps.stats?.points ?? ps.stats?.pts ?? ps.points ?? 0);
+        const newReb = Number(ps.reb ?? ps.stats?.rebounds ?? ps.stats?.reb ?? ps.rebounds ?? 0);
+        const newAst = Number(ps.ast ?? ps.stats?.assists ?? ps.stats?.ast ?? ps.assists ?? 0);
+        const newStl = Number(ps.stl ?? ps.stats?.steals ?? ps.stats?.stl ?? ps.steals ?? 0);
+        const newPf = Number(ps.pf ?? ps.stats?.fouls ?? ps.stats?.pf ?? ps.fouls ?? 0);
+        const newTo = Number(ps.to ?? ps.stats?.turnovers ?? ps.stats?.to ?? ps.turnovers ?? 0);
 
         const idx = athletesList.findIndex(
           (a) =>
@@ -241,6 +260,7 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
         if (athId) {
           try {
             const metricId = `metric_${matchId}_${cleanAthId}`;
+            const rawStats = ps.stats || ps.sport_stats || ps.custom_stats || {};
             const metricDoc = {
               metric_id: metricId,
               match_id: matchId,
@@ -260,7 +280,9 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
               pf: newPf,
               turnovers: newTo,
               to: newTo,
-              sport_stats: ps.stats || {},
+              ...rawStats,
+              sport_stats: rawStats,
+              stats: rawStats,
               timestamp: cleanPayload.created_at,
               created_at: cleanPayload.created_at,
             };
@@ -308,6 +330,115 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     match_id: matchId,
     offline: isOffline,
   };
+}
+
+export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean> {
+  const cleanId = String(matchId).replace(/^#/, '').trim();
+  const idVariants = Array.from(new Set([matchId, cleanId, `match_${cleanId}`])).filter(Boolean);
+
+  // 1. Direct Firestore document deletion
+  try {
+    for (const v of idVariants) {
+      await Promise.all([
+        deleteDoc(doc(db, "Match_Logs", v)).catch(() => null),
+        deleteDoc(doc(db, "Matches", v)).catch(() => null),
+        deleteDoc(doc(db, "Official_Schedules", v)).catch(() => null),
+        deleteDoc(doc(db, "Official_Audits", v)).catch(() => null),
+      ]);
+    }
+  } catch (err) {
+    console.warn("deleteMatchOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache purge
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
+    if (cached) {
+      const parsed: any[] = JSON.parse(cached);
+      const filtered = parsed.filter((m) => {
+        const id = m.match_id || m.id;
+        return !idVariants.includes(id);
+      });
+      await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(filtered));
+      matchesMemoryCache = filtered;
+      matchesLastFetched = Date.now();
+    }
+  } catch (cacheErr) {
+    console.warn("deleteMatchOfflineFirst cache error:", cacheErr);
+  }
+
+  // 3. REST API deletion
+  try {
+    const token = await getStoredAuthToken();
+    await fetch(`${API_BASE}/matches/${cleanId}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).catch(() => null);
+  } catch (_) {}
+
+  return true;
+}
+
+export async function saveTeamOfflineFirst(teamPayload: any): Promise<boolean> {
+  const teamId = teamPayload.team_id || teamPayload.id || `team_${Date.now()}`;
+  const cleanPayload = {
+    ...teamPayload,
+    team_id: teamId,
+    id: teamId,
+    updated_at: new Date().toISOString(),
+  };
+
+  // 1. Firestore commit
+  try {
+    await setDoc(doc(db, "Teams", teamId), cleanPayload, { merge: true });
+  } catch (err) {
+    console.warn("saveTeamOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache commit
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_TEAMS_CACHE_KEY);
+    const existing: any[] = cached ? JSON.parse(cached) : [];
+    const filtered = existing.filter((t) => (t.team_id || t.id) !== teamId);
+    filtered.unshift(cleanPayload);
+    await AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(filtered));
+    teamsMemoryCache = filtered;
+    teamsLastFetched = Date.now();
+  } catch (cacheErr) {
+    console.warn("saveTeamOfflineFirst cache error:", cacheErr);
+  }
+
+  return true;
+}
+
+export async function deleteTeamOfflineFirst(teamId: string): Promise<boolean> {
+  const cleanId = String(teamId).trim();
+
+  // 1. Firestore deletion
+  try {
+    await deleteDoc(doc(db, "Teams", cleanId)).catch(() => null);
+  } catch (err) {
+    console.warn("deleteTeamOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache purge
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_TEAMS_CACHE_KEY);
+    if (cached) {
+      const existing: any[] = JSON.parse(cached);
+      const filtered = existing.filter((t) => (t.team_id || t.id) !== cleanId);
+      await AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(filtered));
+      teamsMemoryCache = filtered;
+      teamsLastFetched = Date.now();
+    }
+  } catch (cacheErr) {
+    console.warn("deleteTeamOfflineFirst cache error:", cacheErr);
+  }
+
+  return true;
 }
 
 // In-memory cache variables for instant sub-second responses (0-10ms)

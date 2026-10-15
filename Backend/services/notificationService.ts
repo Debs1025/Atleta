@@ -103,8 +103,14 @@ export async function getAthleteNotifications(recipientUserId: string): Promise<
       }
 
       const notifications: Notification[] = [];
+      const seenIds = new Set<string>();
       snapshot.forEach((doc) => {
-        notifications.push(doc.data() as Notification);
+        const data = doc.data() as Notification;
+        const id = data.notification_id || doc.id;
+        if (!seenIds.has(id)) {
+          seenIds.add(id);
+          notifications.push({ ...data, notification_id: id });
+        }
       });
 
       // Sort descending by created_at

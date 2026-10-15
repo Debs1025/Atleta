@@ -101,6 +101,8 @@ export interface AthleteFullProfile {
   gender: string;
   position: string;
   location: string;
+  province?: string;
+  eligible_documents?: any[];
   sport_type: string;
   physical_attributes: PhysicalAttributes;
   computed_metrics: {

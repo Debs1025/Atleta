@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/basketballMatch";
 import { useMatchSession } from "./MatchSessionContext";
 import { AthleteRosterItem } from "./types";
-import { getSportStatSchema } from "./sportStatSchemas";
+import { getSportStatSchema, loadDynamicSportsSchemas } from "./sportStatSchemas";
 
 interface BasketballMatchProps {
   onClose?: () => void;
@@ -25,7 +25,21 @@ interface BasketballMatchProps {
 export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchProps) {
   const insets = useSafeAreaInsets();
   const { session, updateBasketballStats, setSessionDetails } = useMatchSession();
-  const schema = getSportStatSchema(session.sport_type);
+  const [dynamicConfigs, setDynamicConfigs] = useState<any[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadDynamicSportsSchemas().then((configs) => {
+      if (mounted && Array.isArray(configs) && configs.length > 0) {
+        setDynamicConfigs(configs);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const schema = getSportStatSchema(session.sport_type, dynamicConfigs);
 
   // Active & Bench rosters from session
   const activeRoster = session.active_roster;
@@ -68,7 +82,7 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
 
   // Stat action handler for direct and modal stat updates
   const handleStatAction = (
-    statKey: keyof NonNullable<AthleteRosterItem["basketball_stats"]>,
+    statKey: string,
     delta: number = 1
   ) => {
     if (!selectedActionPlayer) return;
@@ -81,11 +95,24 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
     setSelectedActionPlayer((prev) => {
       if (!prev) return null;
       const currentStats = prev.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
+      const customStats = prev.custom_stats || {};
+      const isStandardKey = ['pts', 'ast', 'reb', 'pf', 'stl', 'to', 'blk'].includes(statKey);
+      const currentVal = isStandardKey
+        ? (currentStats as any)[statKey] || 0
+        : customStats[statKey] || 0;
+      const newVal = Math.max(0, currentVal + delta);
+
       return {
         ...prev,
-        basketball_stats: {
-          ...currentStats,
-          [statKey]: Math.max(0, (currentStats[statKey] || 0) + delta),
+        basketball_stats: isStandardKey
+          ? {
+              ...currentStats,
+              [statKey]: newVal,
+            }
+          : currentStats,
+        custom_stats: {
+          ...customStats,
+          [statKey]: newVal,
         },
       };
     });
@@ -281,45 +308,16 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
             {/* Quick Stat Corrections (Decrements) */}
             <Text style={styles.modalSectionTitle}>Stat Corrections (Undo)</Text>
             <View style={styles.correctionRow}>
-              <TouchableOpacity
-                style={styles.correctionBtn}
-                onPress={() => handleStatAction("pts", -1)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.correctionBtnText}>-1 PTS</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.correctionBtn}
-                onPress={() => handleStatAction("ast", -1)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.correctionBtnText}>-1 AST</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.correctionBtn}
-                onPress={() => handleStatAction("reb", -1)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.correctionBtnText}>-1 REB</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.correctionBtn}
-                onPress={() => handleStatAction("pf", -1)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.correctionBtnText}>-1 PF</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.correctionBtn}
-                onPress={() => handleStatAction("to", -1)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.correctionBtnText}>-1 TO</Text>
-              </TouchableOpacity>
+              {schema.tableHeaders.map((header, hIdx) => (
+                <TouchableOpacity
+                  key={hIdx}
+                  style={styles.correctionBtn}
+                  onPress={() => handleStatAction(header.key as any, -1)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.correctionBtnText}>-1 {header.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         </View>

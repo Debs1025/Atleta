@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,6 +16,8 @@ try {
 import {
   AuthHeader,
   authScreenStyles,
+  AUTH_TOKEN_KEY,
+  AUTH_ROLE_KEY,
   Banner,
   Button,
   Checkbox,
@@ -45,8 +48,9 @@ import {
   type StoredUpload
 } from "./authShared";
 
+import { clearFirebaseClientCaches, getSportsOfflineFirst, db } from "../../../services/firebaseClient";
+import { collection, getDocs } from "firebase/firestore";
 import { DatePickerModal } from "../Athlete/Profile/AthleteProfileModals";
-import { clearFirebaseClientCaches, getSportsOfflineFirst } from "../../../services/firebaseClient";
 
 export type InitialSocialData = {
   socialToken: { provider: "google" | "facebook"; idToken: string };
@@ -229,19 +233,36 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
   useEffect(() => {
     let isMounted = true;
-    getSportsOfflineFirst()
-      .then((sports: any) => {
+    const fetchActiveSports = async () => {
+      try {
+        let sports: any[] = [];
+        try {
+          let snap = await getDocs(collection(db, "Sports_Configurations"));
+          if (snap.empty) {
+            snap = await getDocs(collection(db, "sports_configurations"));
+          }
+          if (!snap.empty) {
+            sports = snap.docs
+              .map((d) => ({ sport_id: d.id, ...d.data() }))
+              .filter((s: any) => s.is_active !== false && s.active !== false);
+          }
+        } catch (_) {}
+
+        if (sports.length === 0) {
+          sports = await getSportsOfflineFirst(true);
+        }
+
         if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
         const seen = new Set<string>();
         const mapped: string[] = [];
         sports.forEach((s: any) => {
           const raw = String(s.sport_name || s.name || s.id || '').trim();
           if (!raw) return;
-          const upper = raw.toUpperCase();
+          const upper = raw.toUpperCase().replace(/&/g, 'AND').replace(/\s+/g, ' ');
           if (seen.has(upper)) return;
           seen.add(upper);
           const label =
-            upper === 'TRACK AND FIELD' || upper === 'TRACK & FIELD'
+            upper === 'TRACK AND FIELD'
               ? 'Track and Field'
               : raw.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
           mapped.push(label);
@@ -249,8 +270,11 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         if (mapped.length > 0) {
           setSportOptions(mapped);
         }
-      })
-      .catch((err: any) => console.warn('Could not fetch dynamic sports for signup:', err));
+      } catch (err: any) {
+        console.warn('Could not fetch dynamic sports for signup:', err);
+      }
+    };
+    fetchActiveSports();
     return () => {
       isMounted = false;
     };
@@ -507,6 +531,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           credential: socialToken.idToken,
           provider: socialToken.provider,
           role: "Athlete",
+          is_registration: true,
           ...restValues
         });
         const token = extractAuthToken(result);
@@ -595,6 +620,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           credential: socialToken.idToken,
           provider: socialToken.provider,
           role: "Coach",
+          is_registration: true,
           sport_type: coachSport,
           ...restValues
         });
@@ -621,12 +647,21 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         setDocumentFile(null);
         setSocialToken(null);
 
-        if (onAuthenticated && token) {
-          onAuthenticated(savedRole);
-          return;
+        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
         } else {
           setAccountCreated(true);
         }
+        return;
       } else {
         const payload = {
           role: "Coach",
@@ -668,12 +703,21 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         setDocumentFile(null);
         setSocialToken(null);
 
-        if (onAuthenticated && token) {
-          onAuthenticated(savedRole);
-          return;
+        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
         } else {
           setAccountCreated(true);
         }
+        return;
       }
     } catch (error) {
       setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
@@ -715,6 +759,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           credential: currentToken,
           provider: socialToken.provider,
           role: "Athlete",
+          is_registration: true,
           first_name: values.first_name || socialProfileRef.current.first_name,
           last_name: values.last_name || socialProfileRef.current.last_name,
           email: values.email || socialProfileRef.current.email,
@@ -779,6 +824,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           credential: currentToken,
           provider: socialToken.provider,
           role: "Coach",
+          is_registration: true,
           first_name: values.first_name || socialProfileRef.current.first_name,
           last_name: values.last_name || socialProfileRef.current.last_name,
           email: values.email || socialProfileRef.current.email,
@@ -813,11 +859,21 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         coachForm.reset();
         setSocialToken(null);
 
-        if (onAuthenticated) {
-          onAuthenticated(savedRole);
+        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
         } else {
           setAccountCreated(true);
         }
+        return;
       } catch (error) {
         setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
       } finally {

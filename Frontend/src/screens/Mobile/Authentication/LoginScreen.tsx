@@ -103,17 +103,34 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
   ) => {
     setLoading(true);
     setFeedback(null);
+    let extractedEmail = (fallbackUser?.email || "").trim().toLowerCase();
+    let extractedFirstName = fallbackUser?.givenName || "";
+    let extractedLastName = fallbackUser?.familyName || "";
+    let extractedAvatar = fallbackUser?.photo || "";
+
     try {
       const jwtPayload = parseJwtPayload(idToken);
-      let extractedEmail = (jwtPayload?.email || fallbackUser?.email || "").trim().toLowerCase();
-      let extractedFirstName = jwtPayload?.given_name || fallbackUser?.givenName || (jwtPayload?.name ? jwtPayload.name.split(" ")[0] : "");
-      let extractedLastName = jwtPayload?.family_name || fallbackUser?.familyName || (jwtPayload?.name ? jwtPayload.name.split(" ").slice(1).join(" ") : "");
-      let extractedAvatar = jwtPayload?.picture || fallbackUser?.photo || "";
+      if (jwtPayload?.email) extractedEmail = jwtPayload.email.trim().toLowerCase();
+      if (jwtPayload?.given_name) extractedFirstName = jwtPayload.given_name;
+      else if (jwtPayload?.name) extractedFirstName = jwtPayload.name.split(" ")[0];
+      if (jwtPayload?.family_name) extractedLastName = jwtPayload.family_name;
+      else if (jwtPayload?.name) extractedLastName = jwtPayload.name.split(" ").slice(1).join(" ");
+      if (jwtPayload?.picture) extractedAvatar = jwtPayload.picture;
 
       const endpoint = provider === "google" ? "/users/google-login" : "/users/facebook-login";
-      const payload = provider === "google"
-        ? { id_token: idToken, idToken, token: idToken, credential: idToken, provider }
-        : { access_token: idToken, accessToken: idToken, id_token: idToken, idToken, provider };
+      const payload = {
+        id_token: idToken,
+        idToken,
+        token: idToken,
+        credential: idToken,
+        access_token: idToken,
+        accessToken: idToken,
+        provider,
+        email: extractedEmail,
+        first_name: extractedFirstName,
+        last_name: extractedLastName,
+        avatar_url: extractedAvatar,
+      };
 
       let result: any = null;
       try {
@@ -141,61 +158,15 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       if (resData?.user?.last_name && !extractedLastName) extractedLastName = resData.user.last_name;
       if (resData?.user?.avatar_url && !extractedAvatar) extractedAvatar = resData.user.avatar_url;
 
-      // Direct Firestore check: verify whether this user is actually registered and complete
-      let isExistingFullyRegistered = false;
-      let existingRole: AuthRole = "athlete";
-
-      try {
-        let userDocSnap: any = null;
-        if (extractedEmail) {
-          const q = query(collection(db, "Users"), where("email", "==", extractedEmail));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            userDocSnap = snap.docs[0];
-          }
-        }
-        if (!userDocSnap && resData?.user?.user_id) {
-          const directDoc = await getDoc(doc(db, "Users", resData.user.user_id));
-          if (directDoc.exists()) {
-            userDocSnap = directDoc;
-          }
-        }
-
-        if (userDocSnap && userDocSnap.exists()) {
-          const uData = userDocSnap.data();
-          const role = (uData.role || "").toLowerCase();
-          const uid = userDocSnap.id;
-
-          const hasCompleteFlag = uData.is_profile_complete === true;
-          const notRequireSignup = uData.require_signup !== true;
-
-          let hasRoleProfileDoc = false;
-          if (role === "coach") {
-            const [cp1, cp2] = await Promise.all([
-              getDoc(doc(db, "Coach_Profiles", uid)).catch(() => null),
-              getDoc(doc(db, "Coach_Profiles", `coach_${uid}`)).catch(() => null),
-            ]);
-            hasRoleProfileDoc = Boolean((cp1 && cp1.exists()) || (cp2 && cp2.exists()));
-          } else if (role === "athlete") {
-            const [ap1, ap2] = await Promise.all([
-              getDoc(doc(db, "Athlete_Profiles", uid)).catch(() => null),
-              getDoc(doc(db, "Athlete_Profiles", `ath_${uid}`)).catch(() => null),
-            ]);
-            hasRoleProfileDoc = Boolean((ap1 && ap1.exists()) || (ap2 && ap2.exists()));
-          }
-
-          if (hasCompleteFlag && notRequireSignup && hasRoleProfileDoc) {
-            isExistingFullyRegistered = true;
-            existingRole = role === "coach" ? "coach" : "athlete";
-          }
-        }
-      } catch (e) {
-        console.warn("Direct Firestore auth check note:", e);
-      }
-
-      // If user is new OR incomplete OR backend explicitly requested signup:
-      // Route immediately to Sign Up wizard!
-      if (!isExistingFullyRegistered || resData?.require_signup || resData?.is_new_user || !resData?.token) {
+      // Branch B (Account Does Not Exist - New User):
+      // If no matching document is found in Firestore, do not create a default account or route to the dashboard.
+      // Temporarily hold the verified social credentials in staging state and redirect to Sign-Up / Onboarding Screen.
+      if (
+        resData?.account_exists === false ||
+        resData?.require_signup ||
+        resData?.is_new_user ||
+        !resData?.token
+      ) {
         onGoSignup?.({
           socialToken: { provider, idToken },
           initialData: {
@@ -208,8 +179,10 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         return;
       }
 
+      // Branch A (Account Exists):
+      // Fetch user's role from Firestore, securely store session tokens via Expo SecureStore, and route directly to dashboard.
       const token = extractAuthToken(result);
-      const role = existingRole || extractAuthRole(result) || "athlete";
+      const role = extractAuthRole(result, extractedEmail);
 
       if (token) await storeAuthToken(token);
       await storeAuthRole(role);
@@ -236,10 +209,17 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         msg.toLowerCase().includes("exist") ||
         msg.toLowerCase().includes("sign up") ||
         msg.toLowerCase().includes("signup") ||
-        msg.toLowerCase().includes("register")
+        msg.toLowerCase().includes("register") ||
+        error?.code === "USER_NOT_FOUND"
       ) {
         onGoSignup?.({
           socialToken: { provider, idToken },
+          initialData: {
+            email: extractedEmail,
+            first_name: extractedFirstName,
+            last_name: extractedLastName,
+            avatar_url: extractedAvatar,
+          }
         });
         return;
       }

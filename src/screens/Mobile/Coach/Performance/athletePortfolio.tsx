@@ -39,7 +39,7 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
   onViewMatchHistory,
 }) => {
   const insets = useSafeAreaInsets();
-  const headerTopPadding = Math.max(insets.top, 44) + 20;
+  const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const calculateDynamicPER = (avg: any): string => {
     if (typeof avg?.per_score === "number" && avg.per_score > 0) {
@@ -421,6 +421,60 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                   {athlete.averages.podiums_count !== undefined && athlete.averages.podiums_count !== null
                     ? String(athlete.averages.podiums_count)
                     : "0"}
+                </Text>
+              </View>
+            </>
+          ) : athlete.sport_category === "VOLLEYBALL" ? (
+            <>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>KILLS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.spike_kills ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>BLOCKS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.block_points ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>ACES</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.service_aces ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>PER</Text>
+                <Text style={styles.statValue}>
+                  {calculateDynamicPER(athlete.averages)}
+                </Text>
+              </View>
+            </>
+          ) : athlete.sport_category === "PICKLEBALL" ? (
+            <>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>POINTS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.points_scored ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>ACES</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.aces ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>DINKS</Text>
+                <Text style={styles.statValue}>
+                  {athlete.averages.dinks ?? 0}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>PER</Text>
+                <Text style={styles.statValue}>
+                  {calculateDynamicPER(athlete.averages)}
                 </Text>
               </View>
             </>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styles from "./styles/TeamProfile";
@@ -11,12 +11,15 @@ export interface RosterPlayer {
   id: string;
   name: string;
   position: string;
+  sport?: string;
   avatar_url?: string;
 }
 
 export interface TeamProfileData {
   team_id: string;
   team_name: string;
+  sport_type?: string;
+  logo_url?: string;
   mission_statement: string;
   region: string;
   total_athletes: number;
@@ -66,14 +69,28 @@ export function TeamProfileScreen({
             const rawCoach = res.coach || rawTeam.coach || {};
             const rawRoster = Array.isArray(res.roster) ? res.roster : Array.isArray(rawTeam.roster) ? rawTeam.roster : Array.isArray(rawTeam.roster_list) ? rawTeam.roster_list : [];
 
+            let coachAvatar = rawCoach.avatar_url || rawCoach.profile_image || rawTeam.coach_avatar || rawCoach.photo_url || "";
+            if (!coachAvatar && (rawCoach.coach_id || rawTeam.coach_id)) {
+              const targetCoachId = rawCoach.coach_id || rawTeam.coach_id;
+              try {
+                const coachRes: any = await requestAuthenticatedJson(`/coaches/${targetCoachId}`).catch(() => null);
+                if (coachRes?.coach?.avatar_url || coachRes?.avatar_url || coachRes?.profile_image) {
+                  coachAvatar = coachRes.coach?.avatar_url || coachRes.avatar_url || coachRes.profile_image;
+                }
+              } catch (_) {}
+            }
+
             const coachObj: Coach = {
               coach_id: rawCoach.coach_id || rawTeam.coach_id || "",
               full_name: (rawCoach.full_name || rawCoach.name || "Assigned Coach").toUpperCase(),
               role_title: (rawCoach.role_title || rawCoach.current_institution || "HEAD COACH").toUpperCase(),
               years_experience: rawCoach.years_of_experience || rawCoach.years_experience ? `${rawCoach.years_of_experience || rawCoach.years_experience} Years` : "Head Coach",
               quote: rawCoach.quote || "Dedicated to driving team excellence and athlete development.",
+              avatar_url: coachAvatar,
               is_verified: true,
             };
+
+            const sportType = (rawTeam.sport_type || "BASKETBALL").toUpperCase();
 
             const playersList: RosterPlayer[] = rawRoster.map((player: any, idx: number) => {
               const fName = player.first_name || player.name || "Player";
@@ -82,15 +99,18 @@ export function TeamProfileScreen({
                 id: player.athlete_id || player.id || player.user_id || `player_${idx}`,
                 name: `${fName} ${lName}`.trim(),
                 position: (player.position || "ATHLETE").toUpperCase(),
-                avatar_url: player.avatar_url,
+                sport: (player.sport_type || player.sport || sportType).toUpperCase(),
+                avatar_url: player.avatar_url || player.profile_image || "",
               };
             });
 
             setTeamData({
               team_id: rawTeam.team_id || teamId || "",
               team_name: rawTeam.team_name || "Team Roster",
+              sport_type: sportType,
+              logo_url: rawTeam.logo_url || rawTeam.banner_url || rawTeam.team_logo || "",
               mission_statement: rawTeam.mission_statement || rawTeam.description || "Building character, discipline, and competitive excellence through athletics.",
-              region: rawTeam.region || "NCR",
+              region: rawTeam.region || rawTeam.province || rawCoach.province || "Camarines Sur",
               total_athletes: playersList.length || Number(rawTeam.athlete_count || 0),
               established_year: String(rawTeam.established_year || new Date().getFullYear()),
               coach: coachObj,
@@ -148,8 +168,16 @@ export function TeamProfileScreen({
         >
           {/* Main Team Card */}
           <View style={styles.mainTeamCard}>
-            <View style={styles.avatarBox}>
-              <Ionicons name="shield-checkmark-outline" size={44} color="#38BDF8" />
+            <View style={[styles.avatarBox, { overflow: "hidden" }]}>
+              {teamData.logo_url ? (
+                <Image
+                  source={{ uri: teamData.logo_url }}
+                  style={{ width: "100%", height: "100%", borderRadius: 16 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="shield-checkmark-outline" size={44} color="#38BDF8" />
+              )}
             </View>
 
             <Text style={styles.teamTitle}>{teamData.team_name}</Text>
@@ -165,21 +193,42 @@ export function TeamProfileScreen({
           <View style={styles.statsCardContainer}>
             <View style={styles.statColumn}>
               <Text style={styles.statLabel}>REGION</Text>
-              <Text style={styles.statValue}>{teamData.region}</Text>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {teamData.region}
+              </Text>
             </View>
 
             <View style={styles.statDivider} />
 
             <View style={styles.statColumn}>
               <Text style={styles.statLabel}>ATHLETES</Text>
-              <Text style={styles.statValue}>{teamData.total_athletes}</Text>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {teamData.total_athletes}
+              </Text>
             </View>
 
             <View style={styles.statDivider} />
 
             <View style={styles.statColumn}>
               <Text style={styles.statLabel}>EST.</Text>
-              <Text style={styles.statValue}>{teamData.established_year}</Text>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {teamData.established_year}
+              </Text>
             </View>
           </View>
 
@@ -192,8 +241,16 @@ export function TeamProfileScreen({
 
             {/* Coach Card */}
             <View style={styles.coachCard}>
-              <View style={styles.coachBannerArea}>
-                <Ionicons name="person-outline" size={56} color="#64748B" />
+              <View style={[styles.coachBannerArea, { overflow: "hidden" }]}>
+                {teamData.coach.avatar_url ? (
+                  <Image
+                    source={{ uri: teamData.coach.avatar_url }}
+                    style={{ width: "100%", height: "100%", borderRadius: 16 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons name="person-outline" size={56} color="#64748B" />
+                )}
               </View>
 
               <View style={styles.coachDetailsBody}>
@@ -244,15 +301,30 @@ export function TeamProfileScreen({
             ) : (
               displayedPlayers.map((player) => (
                 <View key={player.id} style={styles.playerCard}>
-                  <View style={styles.playerAvatarBox}>
-                    <Ionicons name="person-outline" size={24} color="#64748B" />
+                  <View style={[styles.playerAvatarBox, { overflow: "hidden" }]}>
+                    {player.avatar_url ? (
+                      <Image
+                        source={{ uri: player.avatar_url }}
+                        style={{ width: "100%", height: "100%", borderRadius: 12 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Ionicons name="person-outline" size={24} color="#64748B" />
+                    )}
                   </View>
                   <View style={styles.playerInfo}>
                     <Text style={styles.playerName}>{player.name}</Text>
-                    <View style={styles.positionBadge}>
-                      <Text style={styles.positionBadgeText}>
-                        {player.position}
-                      </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                      <View style={styles.positionBadge}>
+                        <Text style={styles.positionBadgeText}>
+                          {player.position}
+                        </Text>
+                      </View>
+                      <View style={[styles.positionBadge, { backgroundColor: "rgba(56, 189, 248, 0.12)", borderColor: "rgba(56, 189, 248, 0.3)" }]}>
+                        <Text style={[styles.positionBadgeText, { color: "#38BDF8" }]}>
+                          {(player.sport || teamData.sport_type || "BASKETBALL").toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>

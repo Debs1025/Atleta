@@ -12,6 +12,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import styles from "./styles/OCRoutput";
+import {
+    loadDynamicSportsSchemas,
+    getSportStatSchema,
+} from "../MultiLogging/sportStatSchemas";
 
 // Client State Schema Models
 export interface TeamScoreItem {
@@ -140,6 +144,14 @@ export interface RawOCRDetectedData {
     teams?: string[];
     sport_type: "BASKETBALL" | "VOLLEYBALL" | "SWIMMING" | "TRACK AND FIELD" | "BADMINTON" | "PICKLEBALL" | "SOCCER" | string;
     file_name?: string;
+    scoresheet_url?: string;
+    scoresheetUrl?: string;
+    roster_athletes?: string[];
+    rosterAthletes?: string[];
+    away_roster_athletes?: string[];
+    awayRosterAthletes?: string[];
+    player_stats?: any[];
+    playerStats?: any[];
     athlete_overview: DetectedAthleteStat[];
     expanded_metrics: ExpandedPerformanceMetrics;
     batch_matches?: RawOCRDetectedData[];
@@ -244,6 +256,22 @@ export function OCRoutput({
             };
         });
     };
+
+    const [customSchemas, setCustomSchemas] = useState<any[]>([]);
+
+    useEffect(() => {
+        let isMounted = true;
+        loadDynamicSportsSchemas().then((schemas) => {
+            if (isMounted) setCustomSchemas(schemas);
+        }).catch(() => null);
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const activeSportSchema = useMemo(() => {
+        return getSportStatSchema(currentActiveMatch.sport_type || "BASKETBALL", customSchemas);
+    }, [currentActiveMatch.sport_type, customSchemas]);
 
     const sportUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
     const isVolleyball = sportUpper.includes("VOLLEY");
@@ -496,12 +524,55 @@ export function OCRoutput({
     // Confirm & Save Action Handler
     const handleSave = useCallback(() => {
         if (onConfirmSave) {
+            const homeTeamUpper = (currentActiveMatch.team_name || "").toUpperCase();
+            const homeRoster = athleteStats
+                .filter((a) => (a.team_name || "").toUpperCase() === homeTeamUpper)
+                .map((a) => a.athlete_id);
+            const awayRoster = athleteStats
+                .filter((a) => (a.team_name || "").toUpperCase() !== homeTeamUpper)
+                .map((a) => a.athlete_id);
+            const scoresheetUrlVal = currentActiveMatch.scoresheetUrl || currentActiveMatch.scoresheet_url || "";
+            const playerStatsList = athleteStats.map((a) => ({
+                ...a,
+                athlete_id: a.athlete_id,
+                player_name: a.player_name,
+                team_name: a.team_name,
+                jersey_number: a.jersey_number,
+                position: a.position,
+                pts: a.pts ?? 0,
+                points: a.pts ?? 0,
+                reb: a.reb ?? 0,
+                rebounds: a.reb ?? 0,
+                ast: a.ast ?? 0,
+                assists: a.ast ?? 0,
+                stl: a.stl ?? 0,
+                steals: a.stl ?? 0,
+                blk: a.blk ?? 0,
+                blocks: a.blk ?? 0,
+                pf: a.fouls ?? a.pf ?? 0,
+                fouls: a.fouls ?? a.pf ?? 0,
+                to: a.to ?? 0,
+                turnovers: a.to ?? 0,
+                min: a.min ?? 0,
+                minutes: a.min ?? 0,
+                stats: { ...a },
+                sport_stats: { ...a },
+                custom_stats: { ...a },
+            }));
+
             onConfirmSave({
                 ...currentActiveMatch,
                 athlete_overview: athleteStats,
+                playerStats: playerStatsList,
+                player_stats: playerStatsList,
+                rosterAthletes: homeRoster,
+                roster_athletes: homeRoster,
+                awayRosterAthletes: awayRoster,
+                away_roster_athletes: awayRoster,
+                scoresheetUrl: scoresheetUrlVal,
+                scoresheet_url: scoresheetUrlVal,
             });
         }
-        setShowSuccessModal(true);
     }, [currentActiveMatch, athleteStats, onConfirmSave]);
 
     return (
@@ -731,89 +802,24 @@ export function OCRoutput({
                         showsHorizontalScrollIndicator={true}
                         nestedScrollEnabled
                     >
-                        <View style={{ minWidth: 680 }}>
+                        <View style={{ minWidth: Math.max(680, (activeSportSchema?.tableHeaders?.length || 8) * 64 + 180) }}>
                             {/* Table Header Row */}
                             <View style={styles.tableHeaderRow}>
                                 <Text style={styles.tableHeaderColName}>
                                     {isSwimming ? "SWIMMER" : isTrack ? "ATHLETE" : "PLAYER NAME"}
                                 </Text>
 
-                                {isVolleyball && (
-                                    <>
-                                        <Text style={styles.tableHeaderColStat}>KILLS</Text>
-                                        <Text style={styles.tableHeaderColStat}>ERR</Text>
-                                        <Text style={styles.tableHeaderColStat}>ATT</Text>
-                                        <Text style={styles.tableHeaderColStat}>AST</Text>
-                                        <Text style={styles.tableHeaderColStat}>ACES</Text>
-                                        <Text style={styles.tableHeaderColStat}>DIGS</Text>
-                                        <Text style={styles.tableHeaderColStat}>BLKS</Text>
-                                        <Text style={styles.tableHeaderColStat}>PTS</Text>
-                                        <Text style={styles.tableHeaderColStat}>HIT%</Text>
-                                    </>
-                                )}
-
-                                {isSwimming && (
-                                    <>
-                                        <Text style={styles.tableHeaderColStat}>EVENT</Text>
-                                        <Text style={styles.tableHeaderColStat}>TIME</Text>
-                                        <Text style={styles.tableHeaderColStat}>SPLIT</Text>
-                                        <Text style={styles.tableHeaderColStat}>RANK</Text>
-                                        <Text style={styles.tableHeaderColStat}>LANE</Text>
-                                        <Text style={styles.tableHeaderColStat}>HEAT</Text>
-                                        <Text style={styles.tableHeaderColStat}>STROKES</Text>
-                                        <Text style={styles.tableHeaderColStat}>PTS</Text>
-                                    </>
-                                )}
-
-                                {isTrack && (
-                                    <>
-                                        <Text style={styles.tableHeaderColStat}>EVENT</Text>
-                                        <Text style={styles.tableHeaderColStat}>TIME/MARK</Text>
-                                        <Text style={styles.tableHeaderColStat}>SPLIT</Text>
-                                        <Text style={styles.tableHeaderColStat}>RANK</Text>
-                                        <Text style={styles.tableHeaderColStat}>HEAT</Text>
-                                        <Text style={styles.tableHeaderColStat}>DIST</Text>
-                                        <Text style={styles.tableHeaderColStat}>PTS</Text>
-                                    </>
-                                )}
-
-                                {isSoccer && (
-                                    <>
-                                        <Text style={styles.tableHeaderColStat}>GOALS</Text>
-                                        <Text style={styles.tableHeaderColStat}>AST</Text>
-                                        <Text style={styles.tableHeaderColStat}>SHOTS</Text>
-                                        <Text style={styles.tableHeaderColStat}>SOG</Text>
-                                        <Text style={styles.tableHeaderColStat}>SAVES</Text>
-                                        <Text style={styles.tableHeaderColStat}>TKL</Text>
-                                        <Text style={styles.tableHeaderColStat}>FOULS</Text>
-                                        <Text style={styles.tableHeaderColStat}>YC/RC</Text>
-                                        <Text style={styles.tableHeaderColStat}>MIN</Text>
-                                    </>
-                                )}
-
-                                {isRacket && (
-                                    <>
-                                        <Text style={styles.tableHeaderColStat}>SMASH</Text>
-                                        <Text style={styles.tableHeaderColStat}>NET KILL</Text>
-                                        <Text style={styles.tableHeaderColStat}>ERRORS</Text>
-                                        <Text style={styles.tableHeaderColStat}>FAULTS</Text>
-                                        <Text style={styles.tableHeaderColStat}>ACES</Text>
-                                        <Text style={styles.tableHeaderColStat}>PTS</Text>
-                                    </>
-                                )}
-
-                                {isBasketball && (
-                                    <>
-                                        <Text style={styles.tableHeaderColStat}>PTS</Text>
-                                        <Text style={styles.tableHeaderColStat}>AST</Text>
-                                        <Text style={styles.tableHeaderColStat}>TO</Text>
-                                        <Text style={styles.tableHeaderColStat}>REB</Text>
-                                        <Text style={styles.tableHeaderColStat}>STL</Text>
-                                        <Text style={styles.tableHeaderColStat}>BLK</Text>
-                                        <Text style={styles.tableHeaderColStat}>MIN</Text>
-                                        <Text style={styles.tableHeaderColStat}>FG%</Text>
-                                    </>
-                                )}
+                                {activeSportSchema?.tableHeaders?.map((header) => (
+                                    <Text
+                                        key={header.key}
+                                        style={[
+                                            styles.tableHeaderColStat,
+                                            header.width ? { width: header.width } : null,
+                                        ]}
+                                    >
+                                        {header.shortLabel || header.label}
+                                    </Text>
+                                ))}
                             </View>
 
                             {/* Table Data Rows */}
@@ -847,242 +853,78 @@ export function OCRoutput({
                                         </TouchableOpacity>
                                     </View>
 
-                                    {/* VOLLEYBALL ROW */}
-                                    {isVolleyball && (
-                                        isEditing ? (
-                                            <>
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.kills ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "kills", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.attack_errors ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "attack_errors", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.attack_attempts ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "attack_attempts", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.ast ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "ast", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.service_aces ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "service_aces", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.digs ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "digs", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.block_points ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "block_points", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.pts ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "pts", val)} />
-                                                <Text style={styles.cellStatText}>{item.hitting_pct || "0%"}</Text>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Text style={styles.cellStatText}>{item.kills ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.attack_errors ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.attack_attempts ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.ast ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.service_aces ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.digs ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.block_points ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.pts ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.hitting_pct || "0%"}</Text>
-                                            </>
-                                        )
-                                    )}
+                                    {activeSportSchema?.tableHeaders?.map((header) => {
+                                        const rawVal = item[header.key] ?? item.stats?.[header.key] ?? item.custom_stats?.[header.key];
+                                        const fallbackVal = header.key === "pts" ? item.pts : (header.key === "min" ? item.min : undefined);
+                                        const val = rawVal !== undefined ? rawVal : fallbackVal;
+                                        const isNumeric = typeof val === "number" || (!isNaN(Number(val)) && val !== "" && val !== undefined);
 
-                                    {/* SWIMMING ROW */}
-                                    {isSwimming && (
-                                        isEditing ? (
-                                            <>
-                                                <TextInput style={styles.cellStatInput} value={String(item.event || item.event_name || "")} onChangeText={(val) => handleStatChange(item.athlete_id, "event", val)} />
-                                                <TextInput style={styles.cellStatInput} value={String(item.time || item.finish_time || "")} onChangeText={(val) => handleStatChange(item.athlete_id, "time", val)} />
-                                                <TextInput style={styles.cellStatInput} value={String(item.split || "")} onChangeText={(val) => handleStatChange(item.athlete_id, "split", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.rank ?? 1)} onChangeText={(val) => handleStatChange(item.athlete_id, "rank", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.lane ?? 1)} onChangeText={(val) => handleStatChange(item.athlete_id, "lane", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.heat ?? 1)} onChangeText={(val) => handleStatChange(item.athlete_id, "heat", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.stroke_count ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "stroke_count", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.pts ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "pts", val)} />
-                                            </>
+                                        return isEditing ? (
+                                            <TextInput
+                                                key={header.key}
+                                                style={[
+                                                    styles.cellStatInput,
+                                                    header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                                ]}
+                                                keyboardType={isNumeric ? "number-pad" : "default"}
+                                                value={val !== undefined && val !== null ? String(val) : ""}
+                                                onChangeText={(newVal) => handleStatChange(item.athlete_id, header.key, newVal)}
+                                            />
                                         ) : (
-                                            <>
-                                                <Text style={styles.cellStatText}>{item.event || item.event_name || "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.time || item.finish_time || "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.split || "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.rank ?? 1}</Text>
-                                                <Text style={styles.cellStatText}>{item.lane ?? 1}</Text>
-                                                <Text style={styles.cellStatText}>{item.heat ?? 1}</Text>
-                                                <Text style={styles.cellStatText}>{item.stroke_count ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.pts ?? 0}</Text>
-                                            </>
-                                        )
-                                    )}
-
-                                    {/* TRACK & FIELD ROW */}
-                                    {isTrack && (
-                                        isEditing ? (
-                                            <>
-                                                <TextInput style={styles.cellStatInput} value={String(item.event || item.event_name || "")} onChangeText={(val) => handleStatChange(item.athlete_id, "event", val)} />
-                                                <TextInput style={styles.cellStatInput} value={String(item.time || item.finish_time || "")} onChangeText={(val) => handleStatChange(item.athlete_id, "time", val)} />
-                                                <TextInput style={styles.cellStatInput} value={String(item.split || "")} onChangeText={(val) => handleStatChange(item.athlete_id, "split", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.rank ?? 1)} onChangeText={(val) => handleStatChange(item.athlete_id, "rank", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.heat ?? 1)} onChangeText={(val) => handleStatChange(item.athlete_id, "heat", val)} />
-                                                <TextInput style={styles.cellStatInput} value={String(item.distance_m ? item.distance_m + "m" : "")} onChangeText={(val) => handleStatChange(item.athlete_id, "distance_m", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.pts ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "pts", val)} />
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Text style={styles.cellStatText}>{item.event || item.event_name || "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.time || item.finish_time || "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.split || "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.rank ?? 1}</Text>
-                                                <Text style={styles.cellStatText}>{item.heat ?? 1}</Text>
-                                                <Text style={styles.cellStatText}>{item.distance_m ? `${item.distance_m}m` : "-"}</Text>
-                                                <Text style={styles.cellStatText}>{item.pts ?? 0}</Text>
-                                            </>
-                                        )
-                                    )}
-
-                                    {/* SOCCER ROW */}
-                                    {isSoccer && (
-                                        isEditing ? (
-                                            <>
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.goals ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "goals", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.ast ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "ast", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.shots ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "shots", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.shots_on_target ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "shots_on_target", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.saves ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "saves", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.tackles ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "tackles", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.fouls ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "fouls", val)} />
-                                                <Text style={styles.cellStatText}>{item.yellow_cards ?? 0}/{item.red_cards ?? 0}</Text>
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.min ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "min", val)} />
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Text style={styles.cellStatText}>{item.goals ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.ast ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.shots ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.shots_on_target ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.saves ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.tackles ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.fouls ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.yellow_cards ?? 0}/{item.red_cards ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.min ?? 0}</Text>
-                                            </>
-                                        )
-                                    )}
-
-                                    {/* RACKET ROW */}
-                                    {isRacket && (
-                                        isEditing ? (
-                                            <>
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.smash_winners ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "smash_winners", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.net_kills ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "net_kills", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.unforced_errors ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "unforced_errors", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.service_faults ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "service_faults", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.service_aces ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "service_aces", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.pts ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "pts", val)} />
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Text style={styles.cellStatText}>{item.smash_winners ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.net_kills ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.unforced_errors ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.service_faults ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.service_aces ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.pts ?? 0}</Text>
-                                            </>
-                                        )
-                                    )}
-
-                                    {/* BASKETBALL / DEFAULT ROW */}
-                                    {isBasketball && (
-                                        isEditing ? (
-                                            <>
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.pts ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "pts", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.ast ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "ast", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.to ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "to", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.reb ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "reb", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.stl ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "stl", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.blk ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "blk", val)} />
-                                                <TextInput style={styles.cellStatInput} keyboardType="number-pad" value={String(item.min ?? 0)} onChangeText={(val) => handleStatChange(item.athlete_id, "min", val)} />
-                                                <Text style={styles.cellStatText}>{item.fg_pct || "50%"}</Text>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Text style={styles.cellStatText}>{item.pts ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.ast ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.to ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.reb ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.stl ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.blk ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.min ?? 0}</Text>
-                                                <Text style={styles.cellStatText}>{item.fg_pct || "50%"}</Text>
-                                            </>
-                                        )
-                                    )}
+                                            <Text
+                                                key={header.key}
+                                                style={[
+                                                    styles.cellStatText,
+                                                    header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                                ]}
+                                            >
+                                                {val !== undefined && val !== null ? String(val) : "-"}
+                                            </Text>
+                                        );
+                                    })}
                                 </View>
                             ))}
 
                             {/* Totals Row */}
                             <View style={[styles.tableDataRow, styles.totalsRow]}>
                                 <Text style={styles.cellNameText}>TOTAL</Text>
-                                {isVolleyball && (
-                                    <>
-                                        <Text style={styles.cellStatText}>{totals.kills}</Text>
-                                        <Text style={styles.cellStatText}>{totals.attack_errors}</Text>
-                                        <Text style={styles.cellStatText}>{totals.attack_attempts}</Text>
-                                        <Text style={styles.cellStatText}>{totals.ast}</Text>
-                                        <Text style={styles.cellStatText}>{totals.service_aces}</Text>
-                                        <Text style={styles.cellStatText}>{totals.digs}</Text>
-                                        <Text style={styles.cellStatText}>{totals.block_points}</Text>
-                                        <Text style={styles.cellStatText}>{totals.pts}</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                    </>
-                                )}
-                                {isSwimming && (
-                                    <>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>{visibleAthletes.length} SWIM</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>{totals.pts}</Text>
-                                    </>
-                                )}
-                                {isTrack && (
-                                    <>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>{visibleAthletes.length} RUN</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>{totals.pts}</Text>
-                                    </>
-                                )}
-                                {isSoccer && (
-                                    <>
-                                        <Text style={styles.cellStatText}>{totals.goals}</Text>
-                                        <Text style={styles.cellStatText}>{totals.ast}</Text>
-                                        <Text style={styles.cellStatText}>{totals.shots}</Text>
-                                        <Text style={styles.cellStatText}>{totals.shots_on_target}</Text>
-                                        <Text style={styles.cellStatText}>{totals.saves}</Text>
-                                        <Text style={styles.cellStatText}>{totals.tackles}</Text>
-                                        <Text style={styles.cellStatText}>{totals.fouls}</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                        <Text style={styles.cellStatText}>{totals.min}</Text>
-                                    </>
-                                )}
-                                {isRacket && (
-                                    <>
-                                        <Text style={styles.cellStatText}>{totals.smash_winners}</Text>
-                                        <Text style={styles.cellStatText}>{totals.net_kills}</Text>
-                                        <Text style={styles.cellStatText}>{totals.unforced_errors}</Text>
-                                        <Text style={styles.cellStatText}>{totals.service_faults}</Text>
-                                        <Text style={styles.cellStatText}>{totals.service_aces}</Text>
-                                        <Text style={styles.cellStatText}>{totals.pts}</Text>
-                                    </>
-                                )}
-                                {isBasketball && (
-                                    <>
-                                        <Text style={styles.cellStatText}>{totals.pts}</Text>
-                                        <Text style={styles.cellStatText}>{totals.ast}</Text>
-                                        <Text style={styles.cellStatText}>{totals.to}</Text>
-                                        <Text style={styles.cellStatText}>{totals.reb}</Text>
-                                        <Text style={styles.cellStatText}>{totals.stl}</Text>
-                                        <Text style={styles.cellStatText}>{totals.blk}</Text>
-                                        <Text style={styles.cellStatText}>{totals.min}</Text>
-                                        <Text style={styles.cellStatText}>-</Text>
-                                    </>
-                                )}
+                                {activeSportSchema?.tableHeaders?.map((header) => {
+                                    const isNumericHeader = visibleAthletes.some((a) => {
+                                        const v = a[header.key] ?? a.stats?.[header.key] ?? (header.key === "pts" ? a.pts : undefined);
+                                        return typeof v === "number" || (!isNaN(Number(v)) && v !== "" && v !== undefined);
+                                    });
+
+                                    if (!isNumericHeader) {
+                                        return (
+                                            <Text
+                                                key={header.key}
+                                                style={[
+                                                    styles.cellStatText,
+                                                    header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                                ]}
+                                            >
+                                                -
+                                            </Text>
+                                        );
+                                    }
+
+                                    const sumVal = visibleAthletes.reduce((acc, a) => {
+                                        const v = a[header.key] ?? a.stats?.[header.key] ?? (header.key === "pts" ? a.pts : 0);
+                                        return acc + (Number(v) || 0);
+                                    }, 0);
+
+                                    return (
+                                        <Text
+                                            key={header.key}
+                                            style={[
+                                                styles.cellStatText,
+                                                header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                            ]}
+                                        >
+                                            {sumVal}
+                                        </Text>
+                                    );
+                                })}
                             </View>
                         </View>
                     </ScrollView>

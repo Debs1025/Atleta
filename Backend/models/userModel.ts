@@ -14,62 +14,114 @@ export interface User {
   email: string;
   contact_number?: string | null;
   role: UserRole;
+  provider?: 'google' | 'password' | string;
+  avatar_url?: string | null;
   account_status?: UserAccountStatus;
-  created_at: Date;
-  updated_at: Date;
+  password?: string;
+  password_hash?: string;
+  created_at: Date | string;
+  updated_at: Date | string;
+  [key: string]: any;
+}
+
+// Eligibility documents sub-structure
+export interface AthleteEligibilityDocuments {
+  psa_verified: boolean;
+  academic_check: boolean;
+  proof_of_residency: boolean;
+  document_urls?: string[];
+  [key: string]: any;
+}
+
+// Athlete achievement sub-structure
+export interface AthleteAchievementItem {
+  title: string;
+  year: number | string;
+  content: string;
+  [key: string]: any;
 }
 
 // Athlete_Profiles Subtype
 export interface AthleteProfile {
   athlete_id: string;
   user_id: string;
-  birthdate: string;
+  first_name?: string;
+  last_name?: string;
   gender: string;
+  birthdate: string; // Date (YYYY-MM-DD)
   province: string;
-  sport_type: string;
-  recruitment_status?: string | null;
+  sports_type: string;
+  sport_type?: string; // Operational alias
+  position: string;
+  jersey_number?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  avatar_url?: string | null;
+  recruitment_status?: 'Available' | 'Recruited' | string | null;
+  leaderboard_rank?: number;
   rank?: string | number | null;
   physical_profile?: {
     height_cm: number;
     weight_kg: number;
     wingspan_cm: number;
   } | null;
-  eligibility_documents?: {
-    psa_verified: boolean;
-    academic_check: boolean;
-    proof_of_residency: boolean;
-    document_urls: string[];
+  eligibility_documents?: AthleteEligibilityDocuments | null;
+  achievements?: AthleteAchievementItem[] | null;
+  computed_metrics?: {
+    bmi: number;
+    ape_index: number;
   } | null;
-  achievements?: {
-    title: string;
-    year: string;
-    content: string;
-  }[] | null;
   workload_analytics?: any;
   workload?: any;
   workload_target?: any;
-  created_at: Date;
-  updated_at: Date;
+  created_at: Date | string;
+  updated_at: Date | string;
+  [key: string]: any;
+}
+
+// Coach managed athlete reference
+export interface CoachAthleteManagedRef {
+  athlete_id: string;
+  full_name: string;
+}
+
+// Coach system statistics
+export interface CoachSystemStatistics {
+  metric_logs: number;
+  total_records: number;
+  total_athletes?: number;
 }
 
 // Coach_Profiles Subtype
 export interface CoachProfile {
   coach_id: string;
   user_id: string;
-  professional_documents?: string[];
-  certification_license_num?: string | null;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  email?: string;
+  account_status?: 'Active' | 'Inactive' | UserAccountStatus | string;
+  sport_type?: string;
   years_of_experience: number;
   current_institution: string;
   regional_affiliation?: string | null;
   national_sports_league?: string | null;
-  quote?: string | null;
-  specialties?: string[];
-  sport_type?: string;
   team_id?: string | null;
   teams_managed?: string[];
-  account_status?: UserAccountStatus;
-  created_at: Date;
-  updated_at: Date;
+  athletes_managed?: CoachAthleteManagedRef[];
+  athlete_managed?: string[]; // Operational alias for array of athlete UUIDs
+  matches_logged?: number;
+  total_matches_logged?: number;
+  professional_documents?: string[];
+  profile_image?: string | null;
+  avatar_url?: string | null; // Operational alias
+  quote?: string | null;
+  system_statistics?: CoachSystemStatistics;
+  certification_license_num?: string | null;
+  specialties?: string[];
+  created_at: Date | string;
+  updated_at: Date | string;
+  [key: string]: any;
 }
 
 // Admin Audit Log entity for coach accreditation decision
@@ -91,9 +143,16 @@ export interface OfficialProfile {
   official_id: string;
   user_id: string;
   organization_name: string;
-  certification_status: 'Pending' | 'Verified';
-  created_at: Date;
-  updated_at: Date;
+  official_license_number?: string;
+  certification_status: 'Pending' | 'Certified' | 'Verified' | string;
+  assigned_tournaments?: string[];
+  is_active?: boolean;
+  avatar_url?: string | null;
+  profile_image?: string | null;
+  settings?: any[];
+  created_at: Date | string;
+  updated_at: Date | string;
+  [key: string]: any;
 }
 
 // Official_Settings Entity
@@ -133,12 +192,18 @@ export interface UpdateOfficialSettingsDto {
 export interface AdminProfile {
   admin_id: string;
   user_id: string;
-  clearance_level: number;
+  full_name?: string;
+  email?: string;
   department_code: string;
+  institution?: string;
+  clearance_level: number;
   is_active: boolean;
+  is_elevated?: boolean;
+  permissions?: string[];
   admin_security_key?: string;
   created_at: Date | string;
   updated_at?: Date | string;
+  [key: string]: any;
 }
 
 // System Admin DTOs

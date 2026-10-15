@@ -15,6 +15,8 @@ export interface TeamAffiliation {
   team_name: string;
   sport_type: string;
   division?: string;
+  logo_url?: string;
+  banner_url?: string;
   head_coach: Coach;
   is_verified: boolean;
 }
@@ -90,6 +92,7 @@ interface HomeAnalyticsPageProps {
   onNavigateToProfile?: () => void;
   onNavigateToCoaches?: () => void;
   onNavigateToTeamProfile?: () => void;
+  onViewCoachProfile?: (coachId?: string) => void;
 }
 
 export function HomeAnalyticsPage({
@@ -98,6 +101,7 @@ export function HomeAnalyticsPage({
   onNavigateToProfile,
   onNavigateToCoaches,
   onNavigateToTeamProfile,
+  onViewCoachProfile,
 }: HomeAnalyticsPageProps) {
   const [dynamicSports, setDynamicSports] = useState<any[]>([]);
 
@@ -326,12 +330,20 @@ export function HomeAnalyticsPage({
             <>
               {/* Group / Teams */}
               <View style={styles.teamHeaderRow}>
-                <View style={styles.groupIconWrapper}>
-                  <Image
-                    source={require("../../../../assets/groupprofile.png")}
-                    style={styles.groupIconImage}
-                    resizeMode="contain"
-                  />
+                <View style={[styles.groupIconWrapper, { overflow: "hidden" }]}>
+                  {team.logo_url || (team as any).banner_url ? (
+                    <Image
+                      source={{ uri: team.logo_url || (team as any).banner_url }}
+                      style={styles.groupIconImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Image
+                      source={require("../../../../assets/groupprofile.png")}
+                      style={styles.groupIconImage}
+                      resizeMode="contain"
+                    />
+                  )}
                 </View>
                 <Text style={styles.teamNameText}>{team.team_name}</Text>
               </View>
@@ -339,13 +351,28 @@ export function HomeAnalyticsPage({
               {/* Coach */}
               <View style={styles.coachSectionWrapper}>
                 <Text style={styles.coachLabelHeader}>COACH</Text>
-                <View style={styles.coachInnerCard}>
-                  <View style={styles.coachAvatarWrapper}>
-                    <Image
-                      source={require("../../../../assets/profile.png")}
-                      style={styles.coachAvatarImage}
-                      resizeMode="contain"
-                    />
+                <Pressable
+                  style={styles.coachInnerCard}
+                  onPress={() => {
+                    if (onViewCoachProfile && team.head_coach.coach_id) {
+                      onViewCoachProfile(team.head_coach.coach_id);
+                    }
+                  }}
+                >
+                  <View style={[styles.coachAvatarWrapper, { overflow: "hidden" }]}>
+                    {team.head_coach.avatar_url ? (
+                      <Image
+                        source={{ uri: team.head_coach.avatar_url }}
+                        style={styles.coachAvatarImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Image
+                        source={require("../../../../assets/profile.png")}
+                        style={styles.coachAvatarImage}
+                        resizeMode="contain"
+                      />
+                    )}
                   </View>
                   <View style={styles.coachInfoTextGroup}>
                     <Text style={styles.coachNameText}>
@@ -355,10 +382,10 @@ export function HomeAnalyticsPage({
                       {team.head_coach.role_title}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               </View>
 
-              {/* View Full Team Profile Button */}
+              {/* View Team Button */}
               <Pressable
                 style={styles.viewTeamButton}
                 onPress={() =>
@@ -368,13 +395,13 @@ export function HomeAnalyticsPage({
                 }
               >
                 <Text style={styles.viewTeamButtonText}>
-                  View Full Team Profile
+                  View Team
                 </Text>
               </Pressable>
             </>
           ) : (
             <View style={styles.noTeamContainer}>
-              <Text style={styles.noTeamTitle}>No Team Joined</Text>
+              <Text style={styles.noTeamTitle}>No Team Assigned</Text>
               <Text style={styles.noTeamSubtext}>
                 You are currently not affiliated with any athletic team program.
               </Text>
@@ -383,18 +410,6 @@ export function HomeAnalyticsPage({
                 onPress={() => onNavigateToCoaches && onNavigateToCoaches()}
               >
                 <Text style={styles.joinTeamButtonText}>JOIN TEAM</Text>
-              </Pressable>
-
-              {/* Preview Button */}
-              <Pressable
-                style={styles.devTestButton}
-                onPress={() =>
-                  onNavigateToTeamProfile && onNavigateToTeamProfile()
-                }
-              >
-                <Text style={styles.devTestButtonText}>
-                  Preview Team Profile UI
-                </Text>
               </Pressable>
             </View>
           )}

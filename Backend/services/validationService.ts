@@ -21,11 +21,17 @@ export interface CreateOfficialMatchDto {
   assigned_coaches?: string[];
   notes?: string;
   scoresheet_url?: string;
+  scoresheetUrl?: string;
   official_id?: string;
   home_score?: number;
   away_score?: number;
   game_result?: 'WIN' | 'LOSS' | 'TBD';
   player_stats?: any[];
+  playerStats?: any[];
+  roster_athletes?: string[];
+  rosterAthletes?: string[];
+  away_roster_athletes?: string[];
+  awayRosterAthletes?: string[];
   scoresheet_data?: any;
   parsed_tables?: any;
 }
@@ -84,8 +90,39 @@ export async function createOfficialMatchService(
   const homeName = data.home_team_name || data.home_team_id || data.team_id || defaultHome;
   const awayName = data.away_team_name || data.opponent_team_name || data.away_team_id || defaultAway;
 
+  const rawData = data as any;
+  const playerStatsList = Array.isArray(rawData.playerStats) && rawData.playerStats.length > 0
+    ? rawData.playerStats
+    : (Array.isArray(rawData.player_stats) ? rawData.player_stats : []);
+
+  const explicitHomeRoster = Array.isArray(rawData.rosterAthletes)
+    ? rawData.rosterAthletes
+    : (Array.isArray(rawData.roster_athletes) ? rawData.roster_athletes : []);
+  const explicitAwayRoster = Array.isArray(rawData.awayRosterAthletes)
+    ? rawData.awayRosterAthletes
+    : (Array.isArray(rawData.away_roster_athletes) ? rawData.away_roster_athletes : []);
+
+  const homeRosterIds: string[] = [...explicitHomeRoster];
+  const awayRosterIds: string[] = [...explicitAwayRoster];
+
+  if (homeRosterIds.length === 0 && awayRosterIds.length === 0 && Array.isArray(playerStatsList)) {
+    playerStatsList.forEach((p: any) => {
+      const pTeam = (p.team_name || p.team || '').toUpperCase();
+      const pId = p.athlete_id || p.id;
+      if (pId) {
+        if (!pTeam || pTeam === homeName.toUpperCase()) {
+          homeRosterIds.push(pId);
+        } else {
+          awayRosterIds.push(pId);
+        }
+      }
+    });
+  }
+
+  const scoresheetUrlVal = String(rawData.scoresheetUrl || rawData.scoresheet_url || '').trim();
+
   // 3. Construct Match Log — include display-friendly team names so coaches can see the match
-  const matchLog: MatchLog = {
+  const matchLog: any = {
     match_id: matchId,
     team_id: teamId,
     home_team_name: homeName,
@@ -98,18 +135,26 @@ export async function createOfficialMatchService(
     game_name: data.game_name || `${homeName} vs ${awayName}`,
     game_result: data.game_result || 'TBD',
     notes: data.notes || '',
-    scoresheet_url: data.scoresheet_url || '',
+    scoresheet_url: scoresheetUrlVal,
+    scoresheetUrl: scoresheetUrlVal,
     idempotency_key: idempotencyKey,
     reference_id: data.reference_id || crypto.randomUUID(),
     home_team_id: data.home_team_id || teamId,
     away_team_id: data.away_team_id || awayName,
     assigned_coaches: data.assigned_coaches || [],
-    player_stats: data.player_stats || [],
+    roster_athletes: [...homeRosterIds, ...awayRosterIds],
+    rosterAthletes: homeRosterIds,
+    away_roster_athletes: awayRosterIds,
+    awayRosterAthletes: awayRosterIds,
+    player_stats: playerStatsList,
+    playerStats: playerStatsList,
     is_official: true,
     official_id: officialId || uid,
     is_certified: false,
     is_locked: false,
     timestamp: now,
+    created_at: now,
+    updated_at: now,
   };
 
   if (data.home_score !== undefined) (matchLog as any).home_score = Number(data.home_score);
@@ -117,29 +162,40 @@ export async function createOfficialMatchService(
   if (data.scoresheet_data) (matchLog as any).scoresheet_data = data.scoresheet_data;
   if (data.parsed_tables) (matchLog as any).parsed_tables = data.parsed_tables;
 
-  // 4. Construct Official Audit (Validation) Entity
-  const auditDoc: OfficialAudit = {
+  // 4. Construct Official Audit (Validation) Entity matching Atleta research data dictionary
+  const auditDoc: any = {
     validation_id: validationId,
+    audit_id: validationId,
     match_id: matchId,
     official_id: officialId || uid,
-    status: 'Pending',
-    scoresheet_url: data.scoresheet_url || '',
-    context_notes: data.notes || '',
     requested_by: uid,
+    requested_by_coach_id: (matchLog.assigned_coaches && matchLog.assigned_coaches[0]) || uid,
+    requested_at: now,
+    verification_status: 'Pending',
+    status: 'Pending',
+    scoresheet_attachment_url: scoresheetUrlVal || null,
+    scoresheet_url: scoresheetUrlVal,
+    scoresheetUrl: scoresheetUrlVal,
+    ocr_extracted_data_url: null,
+    context_notes: data.notes || '',
+    timestamp: now,
     created_at: now,
+    updated_at: now,
   };
 
-  // 5. Save atomically
+  // 5. Save atomically to both Official_Audits and Official_Validations
   const batch = db.batch();
   batch.set(db.collection('Match_Logs').doc(matchId), matchLog, { merge: true });
   batch.set(db.collection('Official_Audits').doc(validationId), auditDoc, { merge: true });
+  batch.set(db.collection('Official_Validations').doc(validationId), auditDoc, { merge: true });
 
-  // If match already had an audit, update its scoresheet_url too
+  // If match already had an audit/validation, update its scoresheet_url too
   try {
     const existingAudits = await db.collection('Official_Audits').where('match_id', '==', matchId).get();
     if (!existingAudits.empty) {
       for (const aDoc of existingAudits.docs) {
-        batch.set(aDoc.ref, { scoresheet_url: data.scoresheet_url || '', updated_at: now }, { merge: true });
+        batch.set(aDoc.ref, { scoresheet_url: data.scoresheet_url || '', scoresheet_attachment_url: data.scoresheet_url || null, updated_at: now }, { merge: true });
+        batch.set(db.collection('Official_Validations').doc(aDoc.id), { scoresheet_url: data.scoresheet_url || '', scoresheet_attachment_url: data.scoresheet_url || null, updated_at: now }, { merge: true });
       }
     }
   } catch (_) {}
@@ -442,10 +498,13 @@ export async function certifyValidationService(
   // 4. Update Official_Audits record
   const updatedAudit: Partial<OfficialAudit> = {
     status: 'Approved',
+    verification_status: 'Certified',
     official_id: officialId,
     context_notes: dto.context_notes || auditData.context_notes || '',
     scoresheet_url: dto.scoresheet_url || auditData.scoresheet_url || matchData.scoresheet_url || '',
+    scoresheet_attachment_url: dto.scoresheet_url || auditData.scoresheet_attachment_url || auditData.scoresheet_url || matchData.scoresheet_url || '',
     certified_at: now,
+    updated_at: now,
   };
 
   // 5. Update Match_Logs record to lock to read-only
@@ -454,10 +513,12 @@ export async function certifyValidationService(
     is_locked: true,
     notes: dto.context_notes !== undefined ? dto.context_notes : (matchData.notes || ''),
     scoresheet_url: dto.scoresheet_url || matchData.scoresheet_url || '',
+    updated_at: now,
   };
 
   const batch = db.batch();
   batch.set(validationRef!, { ...auditData, ...updatedAudit }, { merge: true });
+  batch.set(db.collection('Official_Validations').doc(validationRef!.id), { ...auditData, ...updatedAudit }, { merge: true });
   batch.set(matchRef, updatedMatch, { merge: true });
 
   // Dispatch real-time notification to requesting coach

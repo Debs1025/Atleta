@@ -12,7 +12,7 @@ import { CoachProfileScreen } from "./CoachProfile";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { AthleteHomePageSkeleton } from "./AthleteSkeletons";
 import { getAthleteProfileOfflineFirst, db } from "../../../../services/firebaseClient";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
 
@@ -217,8 +217,172 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
         const teamObj = teamRes?.team || {};
         const coachObj = teamRes?.coach || {};
-        const currentTeamId = teamObj.team_id || teamRes?.team_id || raw.current_affiliation?.team_id || raw.team_id || homeRes?.current_team_summary?.team_id || "";
-        const currentTeamName = teamObj.team_name || teamRes?.team_name || raw.current_affiliation?.team_name || raw.team_name || homeRes?.current_team_summary?.team_name || (currentTeamId ? "Assigned Team" : "Unassigned Team");
+        let docList = (raw.eligible_documents && raw.eligible_documents.length > 0)
+          ? raw.eligible_documents
+          : (raw.documents && raw.documents.length > 0)
+            ? raw.documents
+            : [];
+
+        const targetId = raw.athlete_id || raw.user_id || raw.id;
+        const cleanId = targetId ? String(targetId).replace(/^ath_/, "") : "";
+
+        // Check local AsyncStorage cache for uploaded documents first
+        if (cleanId) {
+          try {
+            const cachedDocsRaw = await AsyncStorage.getItem(`atleta_offline_eligible_docs_${cleanId}`);
+            if (cachedDocsRaw) {
+              const parsedDocs = JSON.parse(cachedDocsRaw);
+              if (Array.isArray(parsedDocs) && parsedDocs.length > 0) {
+                docList = parsedDocs;
+              }
+            }
+          } catch (_) {}
+        }
+
+        let dData: any = null;
+        let uData: any = null;
+        if (cleanId) {
+          try {
+            const [d1, d2, uDocSnap] = await Promise.all([
+              getDoc(doc(db, "Athlete_Profiles", `ath_${cleanId}`)).catch(() => null),
+              getDoc(doc(db, "Athlete_Profiles", cleanId)).catch(() => null),
+              getDoc(doc(db, "Users", cleanId)).catch(() => null),
+            ]);
+            dData = (d1 && d1.exists()) ? d1.data() : (d2 && d2.exists()) ? d2.data() : null;
+            uData = (uDocSnap && uDocSnap.exists()) ? uDocSnap.data() : null;
+
+            if (docList.length === 0) {
+              if (dData?.eligible_documents && Array.isArray(dData.eligible_documents) && dData.eligible_documents.length > 0) {
+                docList = dData.eligible_documents;
+              } else if (dData?.documents && Array.isArray(dData.documents) && dData.documents.length > 0) {
+                docList = dData.documents;
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Dynamically resolve athlete's assigned team ID from Firestore profile
+        const athleteTeamId =
+          dData?.team_id ||
+          dData?.teamId ||
+          dData?.current_affiliation?.team_id ||
+          uData?.team_id ||
+          uData?.teamId ||
+          uData?.current_affiliation?.team_id ||
+          raw.team_id ||
+          raw.teamId ||
+          raw.current_affiliation?.team_id ||
+          teamObj.team_id ||
+          teamRes?.team_id ||
+          homeRes?.current_team_summary?.team_id ||
+          "";
+
+        // Query Firestore Teams collection dynamically for the live team document
+        let dynamicTeamData: any = null;
+        if (athleteTeamId) {
+          try {
+            const teamDocSnap = await getDoc(doc(db, "Teams", athleteTeamId)).catch(() => null);
+            if (teamDocSnap && teamDocSnap.exists()) {
+              dynamicTeamData = teamDocSnap.data();
+            }
+          } catch (tErr) {
+            console.warn("Dynamic team fetch notice:", tErr);
+          }
+        }
+
+        const finalTeamId = athleteTeamId;
+        const finalTeamName =
+          dynamicTeamData?.team_name ||
+          dynamicTeamData?.name ||
+          teamObj.team_name ||
+          teamRes?.team_name ||
+          raw.current_affiliation?.team_name ||
+          homeRes?.current_team_summary?.team_name ||
+          (finalTeamId ? "Assigned Team" : "Unassigned Team");
+
+        const finalSportType = (
+          dynamicTeamData?.sport_type ||
+          teamObj.sport_type ||
+          raw.current_affiliation?.sport_type ||
+          raw.sport_type ||
+          sportCategory
+        ).toUpperCase() as any;
+
+        const finalDivision =
+          dynamicTeamData?.division ||
+          teamObj.division ||
+          raw.current_affiliation?.division ||
+          raw.division ||
+          "";
+
+        const finalLogoUrl =
+          dynamicTeamData?.logo_url ||
+          dynamicTeamData?.banner_url ||
+          dynamicTeamData?.team_logo ||
+          teamObj.logo_url ||
+          teamObj.banner_url ||
+          teamObj.team_logo ||
+          raw.current_affiliation?.logo_url ||
+          "";
+
+        let coachId =
+          dynamicTeamData?.head_coach?.coach_id ||
+          dynamicTeamData?.coach_id ||
+          coachObj.coach_id ||
+          raw.current_affiliation?.head_coach?.coach_id ||
+          "";
+
+        let coachName =
+          dynamicTeamData?.head_coach?.full_name ||
+          coachObj.full_name ||
+          raw.current_affiliation?.head_coach?.full_name ||
+          homeRes?.current_team_summary?.coach_name ||
+          "No Coach Assigned";
+
+        let coachRole =
+          dynamicTeamData?.head_coach?.role_title ||
+          coachObj.current_institution ||
+          raw.current_affiliation?.head_coach?.role_title ||
+          "Head Coach";
+
+        let coachExp =
+          dynamicTeamData?.head_coach?.years_experience ||
+          raw.current_affiliation?.head_coach?.years_experience ||
+          "0 Years";
+
+        let coachQuote =
+          dynamicTeamData?.head_coach?.quote ||
+          dynamicTeamData?.head_coach?.coachingPhilosophy ||
+          raw.current_affiliation?.head_coach?.quote ||
+          "";
+
+        let coachAvatar =
+          dynamicTeamData?.head_coach?.avatar_url ||
+          coachObj.avatar_url ||
+          coachObj.profile_image ||
+          raw.current_affiliation?.head_coach?.avatar_url ||
+          "";
+
+        if (coachId) {
+          try {
+            const rawCid = String(coachId).replace(/^coach_/, "");
+            const canonicalCid = String(coachId).startsWith("coach_") ? coachId : `coach_${rawCid}`;
+            const [cDoc, uDocCoach] = await Promise.all([
+              getDoc(doc(db, "Coach_Profiles", canonicalCid)).catch(() => null),
+              getDoc(doc(db, "Users", rawCid)).catch(() => null),
+            ]);
+            const liveCoach = (cDoc && cDoc.exists()) ? cDoc.data() : (uDocCoach && uDocCoach.exists()) ? uDocCoach.data() : null;
+            if (liveCoach) {
+              coachName = (liveCoach.full_name || `${liveCoach.first_name || ""} ${liveCoach.last_name || ""}`.trim() || coachName).toUpperCase();
+              coachRole = liveCoach.role_title || liveCoach.current_institution || coachRole;
+              coachExp = liveCoach.years_experience || liveCoach.years_of_experience ? `${liveCoach.years_experience || liveCoach.years_of_experience} Years` : coachExp;
+              coachQuote = liveCoach.coachingPhilosophy || liveCoach.coaching_philosophy || liveCoach.philosophy || liveCoach.quote || coachQuote;
+              coachAvatar = liveCoach.avatar_url || liveCoach.profile_image || coachAvatar;
+            }
+          } catch (_) {}
+        }
+
+        const resolvedProvince = (raw.province || raw.location || raw.user?.province || raw.regional_affiliation || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase() || "CAMARINES SUR";
 
         const mappedProfile: AthleteProfile = {
           athlete_id: raw.athlete_id || raw.user_id || "ath_me",
@@ -226,7 +390,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           last_name: (raw.last_name || raw.user?.last_name || "").toUpperCase(),
           birthdate: raw.birthdate || raw.birth_date || raw.user?.birthdate || "",
           gender: (raw.gender || raw.user?.gender || "").toUpperCase(),
-          province: (raw.province || raw.location || raw.user?.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase(),
+          province: resolvedProvince,
           category: sportCategory as any,
           height_cm: Number(phys.height_cm ?? phys.height ?? raw.height_cm ?? raw.height ?? 0),
           weight_kg: Number(phys.weight_kg ?? phys.weight ?? raw.weight_kg ?? raw.weight ?? 0),
@@ -234,18 +398,20 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           recruitment_status: raw.recruitment_status || "AVAILABLE",
           leaderboard_rank: raw.leaderboard_rank || "N/A",
           current_affiliation: {
-            team_id: currentTeamId,
-            team_name: currentTeamName,
-            sport_type: (teamObj.sport_type || raw.current_affiliation?.sport_type || raw.sport_type || sportCategory).toUpperCase() as any,
-            division: teamObj.division || raw.current_affiliation?.division || raw.division || "",
+            team_id: finalTeamId,
+            team_name: finalTeamName,
+            sport_type: finalSportType,
+            division: finalDivision,
+            logo_url: finalLogoUrl,
             head_coach: {
-              coach_id: coachObj.coach_id || raw.current_affiliation?.head_coach?.coach_id || "",
-              full_name: (coachObj.full_name || raw.current_affiliation?.head_coach?.full_name || homeRes?.current_team_summary?.coach_name || "No Coach Assigned").toUpperCase(),
-              role_title: coachObj.current_institution || raw.current_affiliation?.head_coach?.role_title || "Head Coach",
-              years_experience: raw.current_affiliation?.head_coach?.years_experience || "0 Years",
-              quote: raw.current_affiliation?.head_coach?.quote || "",
+              coach_id: coachId,
+              full_name: coachName.toUpperCase(),
+              role_title: coachRole,
+              years_experience: coachExp,
+              quote: coachQuote,
+              avatar_url: coachAvatar,
             },
-            is_verified: Boolean(currentTeamId || (raw.current_affiliation?.is_verified ?? raw.is_verified)),
+            is_verified: Boolean(finalTeamId || (raw.current_affiliation?.is_verified ?? raw.is_verified)),
           },
           analytics: {
             points_per_game: Number(
@@ -339,13 +505,11 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           },
           avatar_url: raw.avatar_url || raw.user?.avatar_url || "",
           workload_analytics: workloadAnalyticsObj,
-          eligible_documents: (raw.eligible_documents && raw.eligible_documents.length > 0)
-            ? raw.eligible_documents
-            : (raw.documents && raw.documents.length > 0)
-              ? raw.documents
-              : (profile?.eligible_documents && profile.eligible_documents.length > 0)
-                ? profile.eligible_documents
-                : [],
+          eligible_documents: (docList && docList.length > 0)
+            ? docList
+            : (profile?.eligible_documents && profile.eligible_documents.length > 0)
+              ? profile.eligible_documents
+              : [],
           auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
         };
         setProfile(mappedProfile);
@@ -471,28 +635,53 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     }
   }, [activeTab, refreshAthleteData]);
 
+  const sanitizeFirestoreData = (val: any): any => {
+    if (val === undefined || val === null) return null;
+    if (Array.isArray(val)) {
+      return val.map(sanitizeFirestoreData).filter((v) => v !== undefined);
+    }
+    if (typeof val === "object" && !(val instanceof Date)) {
+      const res: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) {
+          const cleaned = sanitizeFirestoreData(v);
+          if (cleaned !== undefined) {
+            res[k] = cleaned;
+          }
+        }
+      }
+      return res;
+    }
+    return val;
+  };
+
   const handleUpdateProfile = (updatedProfile: AthleteProfile) => {
     setProfile(updatedProfile);
     AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(updatedProfile)).catch(() => null);
 
     const athleteUid = updatedProfile.athlete_id || (updatedProfile as any).user_id;
     if (athleteUid) {
-      const cleanId = String(athleteUid).replace(/^ath_/, "");
-      const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
-      setDoc(doc(db, "Athlete_Profiles", canonicalId), {
-        first_name: updatedProfile.first_name,
-        last_name: updatedProfile.last_name,
-        birthdate: updatedProfile.birthdate,
-        gender: updatedProfile.gender,
-        province: updatedProfile.province,
-        category: updatedProfile.category,
-        height_cm: updatedProfile.height_cm,
-        weight_kg: updatedProfile.weight_kg,
-        wingspan_cm: updatedProfile.wingspan_cm,
-        avatar_url: updatedProfile.avatar_url,
-        eligible_documents: updatedProfile.eligible_documents,
-        updated_at: new Date().toISOString(),
-      }, { merge: true }).catch(() => null);
+      try {
+        const cleanId = String(athleteUid).replace(/^ath_/, "");
+        const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+        const payload = sanitizeFirestoreData({
+          first_name: updatedProfile.first_name,
+          last_name: updatedProfile.last_name,
+          birthdate: updatedProfile.birthdate,
+          gender: updatedProfile.gender,
+          province: updatedProfile.province,
+          category: updatedProfile.category,
+          height_cm: updatedProfile.height_cm,
+          weight_kg: updatedProfile.weight_kg,
+          wingspan_cm: updatedProfile.wingspan_cm,
+          avatar_url: updatedProfile.avatar_url,
+          eligible_documents: updatedProfile.eligible_documents,
+          updated_at: new Date().toISOString(),
+        });
+        setDoc(doc(db, "Athlete_Profiles", canonicalId), payload, { merge: true }).catch(() => null);
+      } catch (err) {
+        console.warn("AthleteHomePage handleUpdateProfile setDoc error:", err);
+      }
     }
   };
 
@@ -555,12 +744,17 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
 
     const athleteUid = updatedProfile.athlete_id || (updatedProfile as any).user_id;
     if (athleteUid) {
-      const cleanId = String(athleteUid).replace(/^ath_/, "");
-      const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
-      setDoc(doc(db, "Athlete_Profiles", canonicalId), {
-        eligible_documents: updatedDocs,
-        updated_at: new Date().toISOString(),
-      }, { merge: true }).catch(() => null);
+      try {
+        const cleanId = String(athleteUid).replace(/^ath_/, "");
+        const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+        const payload = sanitizeFirestoreData({
+          eligible_documents: updatedDocs,
+          updated_at: new Date().toISOString(),
+        });
+        setDoc(doc(db, "Athlete_Profiles", canonicalId), payload, { merge: true }).catch(() => null);
+      } catch (err) {
+        console.warn("AthleteHomePage handleUploadDocumentFromNotification setDoc error:", err);
+      }
     }
 
     refreshAthleteData(false);
@@ -634,6 +828,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         {activeTab === "HOME" &&
           (dashboardScreen === "TEAM_PROFILE" ? (
             <TeamProfileScreen
+              teamId={profile.current_affiliation?.team_id}
               onBack={() => {
                 setDashboardScreen("HOME_MAIN");
                 setHideParentBars(false);
@@ -648,8 +843,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             <CoachProfileScreen
               coachId={selectedCoachId || profile.current_affiliation?.head_coach?.coach_id}
               onBack={() => {
-                setDashboardScreen("TEAM_PROFILE");
-                setHideParentBars(true);
+                setDashboardScreen("HOME_MAIN");
+                setHideParentBars(false);
               }}
             />
           ) : loading ? (
@@ -662,6 +857,11 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               onNavigateToCoaches={() => setActiveTab("COACHES")}
               onNavigateToTeamProfile={() => {
                 setDashboardScreen("TEAM_PROFILE");
+                setHideParentBars(true);
+              }}
+              onViewCoachProfile={(coachId) => {
+                if (coachId) setSelectedCoachId(coachId);
+                setDashboardScreen("COACH_PROFILE");
                 setHideParentBars(true);
               }}
             />

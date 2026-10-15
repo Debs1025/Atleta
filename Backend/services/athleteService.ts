@@ -76,6 +76,7 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
     gender: profileData.gender || userData.gender || '',
     position: profileData.position || userData.position || 'Unassigned',
     location: profileData.province || userData.province || '',
+    province: profileData.province || userData.province || 'Camarines Sur',
     sport_type: profileData.sport_type || userData.sport_type || '',
 
     physical_attributes: {
@@ -120,6 +121,7 @@ export async function getAthleteProfile(athleteId: string): Promise<AthleteFullP
       psa_birth_certificate: profileData.psa_birth_certificate || null,
       proof_of_residency: profileData.proof_of_residency || null,
     },
+    eligible_documents: profileData.eligible_documents || (Array.isArray(profileData.documents) ? profileData.documents : []),
 
     achievements: profileData.achievements || [],
     workload_analytics: mergedWorkload,
@@ -180,6 +182,10 @@ export async function updateAthleteProfile(
     payload.avatar_url = String(updateData.avatar_url).trim();
     userPayload.avatar_url = payload.avatar_url;
   }
+  if (updateData.eligible_documents) {
+    payload.eligible_documents = updateData.eligible_documents;
+    payload.documents = updateData.eligible_documents;
+  }
 
   // Auto-package physical attributes and recompute sports science metrics (BMI & Ape Index)
   if (payload.height_cm !== undefined || payload.weight_kg !== undefined || payload.wingspan_cm !== undefined || payload.vertical_cm !== undefined) {
@@ -204,18 +210,44 @@ export async function updateAthleteProfile(
       ape_index: apeIndex,
     };
 
+    // Retain height_cm & weight_kg directly on Athlete_Profiles per research data dictionary
+    payload.height_cm = height || null;
+    payload.weight_kg = weight || null;
+    userPayload.height_cm = height || null;
+    userPayload.weight_kg = weight || null;
     userPayload.physical_profile = payload.physical_profile;
     userPayload.computed_metrics = payload.computed_metrics;
 
-    delete payload.height_cm;
-    delete payload.weight_kg;
-    delete payload.wingspan_cm;
-    delete payload.vertical_cm;
+    // Record or update Anthropometric_Measurements collection
+    const measurementId = `meas_${canonicalAthleteId}`;
+    try {
+      await db.collection('Anthropometric_Measurements').doc(measurementId).set({
+        measurement_id: measurementId,
+        athlete_id: canonicalAthleteId,
+        recorded_by: rawUid,
+        height_cm: height || null,
+        weight_kg: weight || null,
+        wingspan_cm: wingspan || null,
+        standing_reach_cm: (payload as any).standing_reach_cm ?? null,
+        vertical_jump_cm: vertical || null,
+        body_fat_pct: (payload as any).body_fat_pct ?? null,
+        recorded_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { merge: true });
+    } catch (measErr) {
+      console.warn('Anthropometric_Measurements sync warning:', measErr);
+    }
   }
 
-  // Remove first_name, last_name, email from profile updates to avoid database duplication
-  delete payload.first_name;
-  delete payload.last_name;
+  // Ensure sports_type matches research data dictionary
+  if (payload.sport_type && !payload.sports_type) {
+    payload.sports_type = payload.sport_type;
+  } else if (payload.sports_type && !payload.sport_type) {
+    payload.sport_type = payload.sports_type;
+  }
+
+  // Preserve first_name and last_name in Athlete_Profiles per research paper
   delete payload.email;
 
   if (profileDoc.exists && profileDoc.id === canonicalAthleteId) {

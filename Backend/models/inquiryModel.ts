@@ -47,7 +47,10 @@ export interface RecruitmentInquiry {
   coach_name?: string;
   current_institution?: string;
   sport_type?: string;
+  [key: string]: any;
 }
+
+export type ScoutingRegistry = RecruitmentInquiry;
 
 // ─── Enriched Inquiry Response for Inquiry Tracker ──────────────────────────
 

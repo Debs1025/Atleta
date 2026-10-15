@@ -7,6 +7,7 @@ import {
     ActivityIndicator,
     Modal,
     Platform,
+    Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -510,63 +511,120 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 const totalPlayers = rawPlayers.length;
                 const halfCount = Math.ceil(totalPlayers / 2);
 
+                const parseStatValue = (val: any, fallback = 0): number => {
+                    if (val === undefined || val === null || val === "") return fallback;
+                    if (typeof val === "number") return isNaN(val) ? fallback : val;
+                    const str = String(val).trim();
+                    const match = str.match(/-?\d+(\.\d+)?/);
+                    if (!match) return fallback;
+                    const num = parseFloat(match[0]);
+                    return isNaN(num) ? fallback : num;
+                };
+
+                const parseSplitStat = (val: any): { made: number; attempted: number } | null => {
+                    if (!val) return null;
+                    const str = String(val).trim();
+                    const parts = str.split(/[/\\-]/).map((s) => s.trim()).filter(Boolean);
+                    if (parts.length === 2) {
+                        const m = parseStatValue(parts[0], -1);
+                        const a = parseStatValue(parts[1], -1);
+                        if (m >= 0 && a >= 0) return { made: m, attempted: a };
+                    }
+                    return null;
+                };
+
                 const athleteOverview: DetectedAthleteStat[] = rawPlayers.map((p: any, idx: number) => {
                     let resolvedTeam = String(p.team_name || p.team || "").trim().toUpperCase();
                     if (!resolvedTeam) {
                         resolvedTeam = idx < halfCount ? oppTeamName : homeTeamName;
                     }
 
-                    const fgMade = Number(p.fg_made ?? p.fgm ?? 0);
-                    const fgAtt = Number(p.fg_attempted ?? p.fga ?? 0);
+                    const fgSplit = parseSplitStat(p.fg || p.field_goals || p.fgm_fga);
+                    const fgMade = parseStatValue(p.fg_made ?? p.fgm ?? fgSplit?.made ?? 0);
+                    const fgAtt = parseStatValue(p.fg_attempted ?? p.fga ?? fgSplit?.attempted ?? 0);
                     const fgPct = p.true_shooting_pct
                         ? `${Math.round(p.true_shooting_pct)}%`
                         : fgAtt > 0
                         ? `${Math.round((fgMade / fgAtt) * 100)}%`
                         : "0%";
 
-                    const kills = Number(p.kills ?? p.kill ?? 0);
-                    const attErr = Number(p.attack_errors ?? p.att_err ?? p.ae ?? p.e ?? 0);
-                    const attAtt = Number(p.attack_attempts ?? p.total_attacks ?? p.ta ?? 0);
+                    const threeSplit = parseSplitStat(p["3pt"] || p.three_pt || p.three || p["3p"]);
+                    const threeMade = parseStatValue(p.three_made ?? p.three_pt_made ?? p["3pm"] ?? threeSplit?.made ?? 0);
+                    const threeAtt = parseStatValue(p.three_attempted ?? p.three_pt_attempted ?? p["3pa"] ?? threeSplit?.attempted ?? 0);
+
+                    const ftSplit = parseSplitStat(p.ft || p.free_throws || p.ftm_fta);
+                    const ftMade = parseStatValue(p.ft_made ?? p.ftm ?? ftSplit?.made ?? 0);
+                    const ftAtt = parseStatValue(p.ft_attempted ?? p.fta ?? ftSplit?.attempted ?? 0);
+
+                    const kills = parseStatValue(p.kills ?? p.kill ?? 0);
+                    const attErr = parseStatValue(p.attack_errors ?? p.att_err ?? p.ae ?? p.e ?? 0);
+                    const attAtt = parseStatValue(p.attack_attempts ?? p.total_attacks ?? p.ta ?? 0);
                     const hitPct = attAtt > 0 ? `${Math.round(((kills - attErr) / attAtt) * 100)}%` : (p.hitting_pct ? `${p.hitting_pct}%` : "0%");
+
+                    let pts = parseStatValue(p.points ?? p.pts ?? p.score ?? 0);
+                    const blockPts = parseStatValue(p.block_points ?? p.blocks ?? p.blk ?? 0);
+                    const serviceAces = parseStatValue(p.service_aces ?? p.aces ?? p.ace ?? 0);
+
+                    if (pts === 0) {
+                        if (fgMade > 0 || threeMade > 0 || ftMade > 0) {
+                            pts = (fgMade * 2) + (threeMade * 3) + ftMade;
+                        } else if (kills > 0 || serviceAces > 0 || blockPts > 0) {
+                            pts = kills + serviceAces + blockPts;
+                        }
+                    }
 
                     return {
                         ...p,
                         athlete_id: p.athlete_id || `ath_${idx + 1}`,
                         player_name: String(p.player_name || p.name || `ATHLETE #${p.jersey_number || idx + 1}`).toUpperCase(),
                         team_name: resolvedTeam,
-                        jersey_number: Number(p.jersey_number || p.number || (idx + 1)),
+                        jersey_number: parseStatValue(p.jersey_number || p.number || (idx + 1)),
                         position: p.position || "G",
                         // Basketball
-                        pts: Number(p.points ?? p.pts ?? p.score ?? 0),
-                        ast: Number(p.assists ?? p.ast ?? 0),
-                        to: Number(p.turnovers ?? p.to ?? 0),
-                        reb: Number(p.rebounds ?? p.reb ?? 0),
-                        stl: Number(p.steals ?? p.stl ?? 0),
-                        blk: Number(p.blocks ?? p.blk ?? 0),
-                        min: Number(p.minutes ?? p.min ?? 0),
+                        pts,
+                        points: pts,
+                        ast: parseStatValue(p.assists ?? p.ast ?? 0),
+                        assists: parseStatValue(p.assists ?? p.ast ?? 0),
+                        to: parseStatValue(p.turnovers ?? p.to ?? 0),
+                        turnovers: parseStatValue(p.turnovers ?? p.to ?? 0),
+                        reb: parseStatValue(p.rebounds ?? p.reb ?? 0),
+                        rebounds: parseStatValue(p.rebounds ?? p.reb ?? 0),
+                        stl: parseStatValue(p.steals ?? p.stl ?? 0),
+                        steals: parseStatValue(p.steals ?? p.stl ?? 0),
+                        blk: blockPts,
+                        blocks: blockPts,
+                        fouls: parseStatValue(p.fouls ?? p.pf ?? 0),
+                        pf: parseStatValue(p.fouls ?? p.pf ?? 0),
+                        min: parseStatValue(p.minutes ?? p.min ?? 0),
+                        minutes: parseStatValue(p.minutes ?? p.min ?? 0),
+                        fg_made: fgMade,
+                        fg_attempted: fgAtt,
+                        three_made: threeMade,
+                        three_attempted: threeAtt,
+                        ft_made: ftMade,
+                        ft_attempted: ftAtt,
                         fg_pct: fgPct,
                         // Volleyball
                         kills,
                         attack_errors: attErr,
                         attack_attempts: attAtt,
                         hitting_pct: hitPct,
-                        block_solos: Number(p.block_solos ?? p.bs ?? 0),
-                        block_assists: Number(p.block_assists ?? p.ba ?? 0),
-                        block_points: Number(p.block_points ?? p.blocks ?? p.blk ?? p.tb ?? 0),
-                        digs: Number(p.digs ?? p.dig ?? p.d ?? 0),
-                        service_aces: Number(p.service_aces ?? p.aces ?? p.ace ?? p.sa ?? 0),
-                        service_errors: Number(p.service_errors ?? p.serv_err ?? p.se ?? 0),
-                        reception_errors: Number(p.reception_errors ?? p.rec_err ?? p.re ?? 0),
-                        sets_played: Number(p.sets_played ?? p.sp ?? p.sets ?? 0),
+                        block_solos: parseStatValue(p.block_solos ?? p.bs ?? 0),
+                        block_assists: parseStatValue(p.block_assists ?? p.ba ?? 0),
+                        block_points: blockPts,
+                        digs: parseStatValue(p.digs ?? p.dig ?? p.d ?? 0),
+                        service_aces: serviceAces,
+                        service_errors: parseStatValue(p.service_errors ?? p.serv_err ?? p.se ?? 0),
+                        reception_errors: parseStatValue(p.reception_errors ?? p.rec_err ?? p.re ?? 0),
+                        sets_played: parseStatValue(p.sets_played ?? p.sp ?? p.sets ?? 0),
                         // Soccer
-                        goals: Number(p.goals ?? p.goal ?? p.g ?? 0),
-                        shots: Number(p.shots ?? p.sh ?? 0),
-                        shots_on_target: Number(p.shots_on_target ?? p.sog ?? p.sot ?? 0),
-                        fouls: Number(p.fouls ?? p.fouls_committed ?? p.fc ?? 0),
-                        yellow_cards: Number(p.yellow_cards ?? p.yc ?? 0),
-                        red_cards: Number(p.red_cards ?? p.rc ?? 0),
-                        saves: Number(p.saves ?? p.save ?? p.sv ?? 0),
-                        tackles: Number(p.tackles ?? p.tkl ?? 0),
+                        goals: parseStatValue(p.goals ?? p.goal ?? p.g ?? 0),
+                        shots: parseStatValue(p.shots ?? p.sh ?? 0),
+                        shots_on_target: parseStatValue(p.shots_on_target ?? p.sog ?? p.sot ?? 0),
+                        yellow_cards: parseStatValue(p.yellow_cards ?? p.yc ?? 0),
+                        red_cards: parseStatValue(p.red_cards ?? p.rc ?? 0),
+                        saves: parseStatValue(p.saves ?? p.save ?? p.sv ?? 0),
+                        tackles: parseStatValue(p.tackles ?? p.tkl ?? 0),
                         // Timed / Individual (Swimming / Track)
                         time: String(p.finish_time || p.time || ""),
                         finish_time: String(p.finish_time || p.time || ""),
@@ -574,40 +632,43 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                         split_2: String(p.split_2 || ""),
                         event: String(p.event || p.event_name || p.race || ""),
                         event_name: String(p.event || p.event_name || p.race || ""),
-                        stroke_count: Number(p.stroke_count || p.strokes || 0),
-                        distance_m: Number(p.distance_m || p.distance || 0),
+                        stroke_count: parseStatValue(p.stroke_count || p.strokes || 0),
+                        distance_m: parseStatValue(p.distance_m || p.distance || 0),
                         pace: String(p.pace || p.avg_pace || ""),
                         reaction_sec: String(p.reaction_sec || p.reaction_time || ""),
-                        heat: Number(p.heat || 1),
-                        lane: Number(p.lane || 1),
-                        rank: Number(p.rank || p.place || idx + 1),
+                        heat: parseStatValue(p.heat || 1),
+                        lane: parseStatValue(p.lane || 1),
+                        rank: parseStatValue(p.rank || p.place || idx + 1),
                         // Badminton / Racket
-                        smash_winners: Number(p.smash_winners ?? p.smashes ?? 0),
-                        net_kills: Number(p.net_kills ?? p.net_shots ?? 0),
-                        unforced_errors: Number(p.unforced_errors ?? p.errors ?? 0),
-                        service_faults: Number(p.service_faults ?? p.faults ?? 0),
-                        service_aces_racket: Number(p.service_aces ?? 0),
+                        smash_winners: parseStatValue(p.smash_winners ?? p.smashes ?? 0),
+                        net_kills: parseStatValue(p.net_kills ?? p.net_shots ?? 0),
+                        unforced_errors: parseStatValue(p.unforced_errors ?? p.errors ?? 0),
+                        service_faults: parseStatValue(p.service_faults ?? p.faults ?? 0),
+                        service_aces_racket: parseStatValue(p.service_aces ?? 0),
                         // Baseball
-                        at_bats: Number(p.at_bats ?? p.ab ?? 0),
-                        runs: Number(p.runs ?? p.r ?? 0),
-                        hits: Number(p.hits ?? p.h ?? 0),
-                        rbi: Number(p.rbi ?? 0),
-                        home_runs: Number(p.home_runs ?? p.hr ?? 0),
-                        walks: Number(p.walks ?? p.bb ?? 0),
-                        strikeouts: Number(p.strikeouts ?? p.so ?? p.k ?? 0),
-                        innings_pitched: Number(p.innings_pitched ?? p.ip ?? 0),
-                        earned_runs: Number(p.earned_runs ?? p.er ?? 0),
+                        at_bats: parseStatValue(p.at_bats ?? p.ab ?? 0),
+                        runs: parseStatValue(p.runs ?? p.r ?? 0),
+                        hits: parseStatValue(p.hits ?? p.h ?? 0),
+                        rbi: parseStatValue(p.rbi ?? 0),
+                        home_runs: parseStatValue(p.home_runs ?? p.hr ?? 0),
+                        walks: parseStatValue(p.walks ?? p.bb ?? 0),
+                        strikeouts: parseStatValue(p.strikeouts ?? p.so ?? p.k ?? 0),
+                        innings_pitched: parseStatValue(p.innings_pitched ?? p.ip ?? 0),
+                        earned_runs: parseStatValue(p.earned_runs ?? p.er ?? 0),
+                        stats: { ...p },
+                        sport_stats: { ...p },
+                        custom_stats: { ...p },
                     };
                 });
 
-                const ftMade = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_made || 0), 0);
-                const ftAttempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_attempted || 0), 0);
-                const pt2Made = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_made || 0), 0);
-                const pt2Attempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_attempted || 0), 0);
-                const pt3Made = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.three_made || 0), 0);
-                const pt3Attempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.three_attempted || 0), 0);
-                const totalAssists = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.assists || p.ast || 0), 0);
-                const totalTurnovers = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.turnovers || p.to || 0), 0);
+                const ftMade = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.ft_made || 0), 0);
+                const ftAttempts = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.ft_attempted || 0), 0);
+                const pt2Made = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.fg_made || 0), 0);
+                const pt2Attempts = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.fg_attempted || 0), 0);
+                const pt3Made = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.three_made || 0), 0);
+                const pt3Attempts = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.three_attempted || 0), 0);
+                const totalAssists = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.assists || p.ast || 0), 0);
+                const totalTurnovers = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.turnovers || p.to || 0), 0);
 
                 const isSoccerMatch = detectedSport === "SOCCER";
                 const isBaseballMatch = detectedSport.includes("BASE") || detectedSport.includes("SOFT");
@@ -658,6 +719,47 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     aScore = oppAthleteSum;
                 }
 
+                const scoresheetUrlVal = String(
+                    dataObj.scoresheet_url ||
+                    dataObj.scoresheetUrl ||
+                    responseData?.scoresheet_url ||
+                    responseData?.scoresheetUrl ||
+                    uploadedFiles[0]?.file_url ||
+                    ""
+                );
+
+                const homeAthletes = athleteOverview.filter(a => (a.team_name || "").toUpperCase() === homeTeamName.toUpperCase());
+                const awayAthletes = athleteOverview.filter(a => (a.team_name || "").toUpperCase() !== homeTeamName.toUpperCase());
+                const homeRosterIds = homeAthletes.map(a => a.athlete_id);
+                const awayRosterIds = awayAthletes.map(a => a.athlete_id);
+                const playerStatsList = athleteOverview.map(a => ({
+                    ...a,
+                    athlete_id: a.athlete_id,
+                    player_name: a.player_name,
+                    team_name: a.team_name,
+                    jersey_number: a.jersey_number,
+                    position: a.position,
+                    pts: a.pts ?? 0,
+                    points: a.pts ?? 0,
+                    reb: a.reb ?? 0,
+                    rebounds: a.reb ?? 0,
+                    ast: a.ast ?? 0,
+                    assists: a.ast ?? 0,
+                    stl: a.stl ?? 0,
+                    steals: a.stl ?? 0,
+                    blk: a.blk ?? 0,
+                    blocks: a.blk ?? 0,
+                    pf: a.fouls ?? a.pf ?? 0,
+                    fouls: a.fouls ?? a.pf ?? 0,
+                    to: a.to ?? 0,
+                    turnovers: a.to ?? 0,
+                    min: a.min ?? 0,
+                    minutes: a.min ?? 0,
+                    stats: { ...a },
+                    sport_stats: { ...a },
+                    custom_stats: { ...a },
+                }));
+
                 return {
                     team_name: homeTeamName,
                     opponent_team_name: oppTeamName,
@@ -670,6 +772,14 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     teams: detectedTeamNames,
                     sport_type: detectedSport as any,
                     file_name: dataObj.file_name || dataObj.filename,
+                    scoresheet_url: scoresheetUrlVal,
+                    scoresheetUrl: scoresheetUrlVal,
+                    roster_athletes: homeRosterIds,
+                    rosterAthletes: homeRosterIds,
+                    away_roster_athletes: awayRosterIds,
+                    awayRosterAthletes: awayRosterIds,
+                    player_stats: playerStatsList,
+                    playerStats: playerStatsList,
                     athlete_overview: athleteOverview.length > 0 ? athleteOverview : [
                         {
                             athlete_id: "ath_1",
@@ -959,15 +1069,35 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.previewBody}>
+                        <View style={[styles.previewBody, previewFile && { padding: 8, minHeight: 280, justifyContent: 'center' }]}>
                             {previewFile ? (
-                                <>
-                                    <Ionicons name="document-text-outline" size={38} color="#00C8FF" style={{ marginBottom: 8 }} />
-                                     <Text style={styles.previewMetaText}>
-                                         File Type: {previewFile.file_type}{"\n"}
-                                         Storage Size: {formatFileSize(previewFile.file_size_bytes)}
-                                     </Text>
-                                </>
+                                <View style={{ width: "100%", alignItems: "center" }}>
+                                    {previewFile.file_url ? (
+                                        <Image
+                                            source={{ uri: previewFile.file_url }}
+                                            style={{
+                                                width: "100%",
+                                                height: 300,
+                                                borderRadius: 8,
+                                                backgroundColor: "#070D19",
+                                            }}
+                                            resizeMode="contain"
+                                        />
+                                    ) : (
+                                        <View style={{ height: 200, alignItems: 'center', justifyContent: 'center' }}>
+                                            <Ionicons name="document-text-outline" size={54} color="#00C8FF" />
+                                            <Text style={[styles.previewMetaText, { marginTop: 12 }]}>Document loaded from device cache.</Text>
+                                        </View>
+                                    )}
+                                    <View style={{ marginTop: 10, width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
+                                        <Text style={[styles.previewMetaText, { color: "#FFFFFF", fontWeight: "700", flex: 1 }]} numberOfLines={1}>
+                                            {previewFile.file_name}
+                                        </Text>
+                                        <Text style={[styles.previewMetaText, { color: "#00C8FF", fontSize: 11, marginLeft: 8 }]}>
+                                            {previewFile.file_type} • {formatFileSize(previewFile.file_size_bytes)}
+                                        </Text>
+                                    </View>
+                                </View>
                             ) : (
                                 <Text style={styles.previewMetaText}>{modalMessage}</Text>
                             )}

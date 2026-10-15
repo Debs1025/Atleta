@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   onBack,
 }) => {
   const insets = useSafeAreaInsets();
+  const [showSuccessRequestModal, setShowSuccessRequestModal] = useState(false);
   const {
     matches,
     requestAudit,
@@ -40,6 +41,7 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   const handleRequestAudit = useCallback(async () => {
     if (!match) return;
     await requestAudit(match.match_id);
+    setShowSuccessRequestModal(true);
   }, [match, requestAudit]);
 
 
@@ -404,6 +406,68 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* SCORESHEET REQUESTED SUCCESS MODAL (Consistent with Team Created dialog) */}
+      <Modal
+        visible={showSuccessRequestModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessRequestModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.confirmOverlayBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowSuccessRequestModal(false)}
+        >
+          <View style={styles.confirmDialogCard}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark-circle-sharp" size={46} color="#00C8FF" />
+            </View>
+
+            <Text style={styles.successTitle}>SCORESHEET REQUESTED !</Text>
+            <Text style={styles.successTeamName}>
+              {match.away_team_name ? `VS ${match.away_team_name.toUpperCase()}` : 'AUDIT PENDING'}
+            </Text>
+            <Text style={styles.successMessage}>
+              Official review has been dispatched. Scoresheet metrics will be audited and certified.
+            </Text>
+
+            <View style={styles.summaryBox}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>SPORT CATEGORY</Text>
+                <View style={styles.summaryBadgePill}>
+                  <Text style={styles.summaryBadgeText}>
+                    {match.sport_type || 'BASKETBALL'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>STATUS</Text>
+                <Text style={[styles.summaryValueText, { color: '#00C8FF' }]}>
+                  {match.audit_status || 'PENDING'}
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>MATCH DATE</Text>
+                <Text style={styles.summaryValueText}>
+                  {match.match_date || new Date().toISOString().split('T')[0]}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.finishCtaButton}
+              onPress={() => setShowSuccessRequestModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.finishCtaText}>GOT IT</Text>
+              <Ionicons name="checkmark-sharp" size={18} color="#070D19" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

@@ -16,6 +16,7 @@ import { OCROutputView } from './OCROutputView';
 import { scanScoresheetOCR } from '../../api/client';
 import { scanMultipleScoresheets } from '../../api/ocr';
 import type { UploadedFileItem, RawOCRDetectedData, DetectedAthleteStat } from '../../api/types';
+import { parseRobustStatNum } from '../../api/sportSchema';
 import { styles } from './styles/OCRLoggingPage';
 
 const formatFileSize = (bytes: number): string => {
@@ -62,6 +63,8 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
   const totalPlayers = rawPlayers.length;
   const halfCount = Math.ceil(totalPlayers / 2);
 
+  const scoresheetUrl = String(dataObj.scoresheet_url || dataObj.scoresheetUrl || '').trim();
+
   const athleteOverview: DetectedAthleteStat[] = rawPlayers.map((p: any, idx: number) => {
     let resolvedTeam = (p.team_name || p.team) ? String(p.team_name || p.team).toUpperCase() : '';
     if (!resolvedTeam) {
@@ -78,12 +81,144 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
     const baseAthleteId = p.athlete_id || `ath_${startingIdx + idx + 1}`;
     const rowUid = `${baseAthleteId}_${cleanEventSlug}_${idx + 1}`;
 
+    // Robust numerical validation against expected ranges per sport metric
+    const jerseyNumber = parseRobustStatNum(
+      p.jersey_number ?? p.jersey ?? p.number ?? p.no ?? p['#'] ?? p.j_no,
+      'jersey_number',
+      startingIdx + idx + 1
+    );
+
+    // Basketball box score metrics
+    const pts = parseRobustStatNum(p.points ?? p.pts ?? p.score, 'points', 0);
+    const ast = parseRobustStatNum(p.assists ?? p.ast ?? p.a, 'assists', 0);
+    const oreb = parseRobustStatNum(p.offensive_rebounds ?? p.oreb ?? p.orb ?? p.off_reb, 'offensive_rebounds', 0);
+    const dreb = parseRobustStatNum(p.defensive_rebounds ?? p.dreb ?? p.drb ?? p.def_reb, 'defensive_rebounds', 0);
+    const rawReb = parseRobustStatNum(p.rebounds ?? p.reb ?? p.total_rebounds ?? p.trb, 'rebounds', 0);
+    const reb = rawReb > 0 ? rawReb : (oreb + dreb);
+    const stl = parseRobustStatNum(p.steals ?? p.stl ?? p.s, 'steals', 0);
+    const blk = parseRobustStatNum(p.blocks ?? p.blk ?? p.block_points, 'blocks', 0);
+    const fouls = parseRobustStatNum(p.fouls ?? p.pf ?? p.personal_fouls ?? p.f ?? p.foul ?? p.fouls_committed, 'fouls', 0);
+    const to = parseRobustStatNum(p.turnovers ?? p.to ?? p.tov, 'turnovers', 0);
+    const min = parseRobustStatNum(p.min ?? p.minutes ?? p.mp, 'minutes', 0);
+
+    const fgMade = parseRobustStatNum(p.fg_made ?? p.fgm ?? p.two_made, 'fg_made', 0);
+    const fgAttempted = parseRobustStatNum(p.fg_attempted ?? p.fga ?? p.two_attempted, 'fg_attempted', fgMade);
+    const threeMade = parseRobustStatNum(p.three_made ?? p.three_pt_made ?? p['3pm'], 'three_made', 0);
+    const threeAttempted = parseRobustStatNum(p.three_attempted ?? p.three_pt_attempted ?? p['3pa'], 'three_attempted', threeMade);
+    const ftMade = parseRobustStatNum(p.ft_made ?? p.ftm, 'ft_made', 0);
+    const ftAttempted = parseRobustStatNum(p.ft_attempted ?? p.fta, 'ft_attempted', ftMade);
+
+    const fgPct = p.true_shooting_pct
+      ? `${Math.round(p.true_shooting_pct)}%`
+      : fgAttempted > 0
+        ? `${Math.round((fgMade / fgAttempted) * 100)}%`
+        : p.fg_pct || '0%';
+
+    // Volleyball box score metrics
+    const kills = parseRobustStatNum(p.kills ?? p.kill_points ?? p.k, 'kills', 0);
+    const attackErrors = parseRobustStatNum(p.attack_errors ?? p.att_err ?? p.ae, 'attack_errors', 0);
+    const attackAttempts = parseRobustStatNum(p.attack_attempts ?? p.total_attacks ?? p.ta, 'attack_attempts', kills + attackErrors);
+    const serviceAces = parseRobustStatNum(p.service_aces ?? p.aces ?? p.sa ?? p.ace, 'service_aces', 0);
+    const serviceErrors = parseRobustStatNum(p.service_errors ?? p.serv_err ?? p.se, 'service_errors', 0);
+    const receptionErrors = parseRobustStatNum(p.reception_errors ?? p.rec_err ?? p.re, 'reception_errors', 0);
+    const digs = parseRobustStatNum(p.digs ?? p.dig ?? p.d, 'digs', 0);
+    const blockSolos = parseRobustStatNum(p.block_solos ?? p.bs, 'block_solos', 0);
+    const blockAssists = parseRobustStatNum(p.block_assists ?? p.ba, 'block_assists', 0);
+    const blockPoints = parseRobustStatNum(p.block_points ?? p.blocks ?? p.blk, 'block_points', blockSolos + blockAssists);
+    const setsPlayed = parseRobustStatNum(p.sets_played ?? p.sp ?? p.sets, 'sets_played', 0);
+    const hittingPct = attackAttempts > 0
+      ? `${(((kills - attackErrors) / attackAttempts) * 100).toFixed(1)}%`
+      : (p.hitting_pct || p.hit_pct || '0.0%');
+
+    // Soccer box score metrics
+    const goals = parseRobustStatNum(p.goals ?? p.g, 'goals', 0);
+    const shots = parseRobustStatNum(p.shots ?? p.sh, 'shots', 0);
+    const shotsOnTarget = parseRobustStatNum(p.shots_on_target ?? p.sog ?? p.sot, 'shots_on_target', 0);
+    const saves = parseRobustStatNum(p.saves ?? p.sv ?? p.save, 'saves', 0);
+    const tackles = parseRobustStatNum(p.tackles ?? p.tkl, 'tackles', 0);
+    const yellowCards = parseRobustStatNum(p.yellow_cards ?? p.yc, 'yellow_cards', 0);
+    const redCards = parseRobustStatNum(p.red_cards ?? p.rc, 'red_cards', 0);
+
+    // Timed / Individual box score metrics
+    const finishTime = String(p.finish_time || p.time || p.result_time || p.mark || '').trim();
+    const splitTime = String(p.split || p.split_time || p.split_1 || p.lap_splits || '').trim();
+    const split2 = String(p.split_2 || p.split_second || '').trim();
+    const distanceM = parseRobustStatNum(p.distance_m ?? p.distance ?? p.dist, 'distance_m', 0);
+    const strokeCount = parseRobustStatNum(p.stroke_count ?? p.strokes, 'stroke_count', 0);
+    const strokeRate = parseRobustStatNum(p.stroke_rate ?? p.strokerate, 'stroke_rate', 0);
+    const lapCount = parseRobustStatNum(p.lap_count ?? p.laps, 'lap_count', 0);
+    const lapSplits = p.lap_splits || p.split_times || (splitTime ? [splitTime] : []);
+    const wind = String(p.wind || p.wind_gauge || '').trim();
+    const heat = p.heat !== undefined ? parseRobustStatNum(p.heat, 'heat', 1) : undefined;
+    const lane = p.lane !== undefined ? parseRobustStatNum(p.lane, 'lane', 1) : undefined;
+    const rank = String(p.placement_rank || p.rank || p.place || (startingIdx + idx + 1)).trim();
+
+    // Preserve all parsed columns into state object
     const rawStatsObj: Record<string, any> = {
       ...(typeof p.stats === 'object' && p.stats !== null ? p.stats : {}),
       ...(typeof p.sport_stats === 'object' && p.sport_stats !== null ? p.sport_stats : {}),
       ...p,
       event: athleteEvent,
       event_id: athleteEventId,
+      pts,
+      points: pts,
+      ast,
+      assists: ast,
+      reb,
+      rebounds: reb,
+      offensive_rebounds: oreb,
+      defensive_rebounds: dreb,
+      stl,
+      steals: stl,
+      blk,
+      blocks: blk,
+      fouls,
+      pf: fouls,
+      personal_fouls: fouls,
+      to,
+      turnovers: to,
+      min,
+      minutes: min,
+      fg_pct: fgPct,
+      fg_made: fgMade,
+      fg_attempted: fgAttempted,
+      three_made: threeMade,
+      three_attempted: threeAttempted,
+      ft_made: ftMade,
+      ft_attempted: ftAttempted,
+      kills,
+      attack_errors: attackErrors,
+      attack_attempts: attackAttempts,
+      hitting_pct: hittingPct,
+      service_aces: serviceAces,
+      service_errors: serviceErrors,
+      reception_errors: receptionErrors,
+      digs,
+      block_points: blockPoints,
+      block_solos: blockSolos,
+      block_assists: blockAssists,
+      sets_played: setsPlayed,
+      set_scores: p.set_scores || p.set_score || '',
+      goals,
+      shots,
+      shots_on_target: shotsOnTarget,
+      saves,
+      tackles,
+      yellow_cards: yellowCards,
+      red_cards: redCards,
+      finish_time: finishTime,
+      time: finishTime,
+      split: splitTime,
+      split_2: split2,
+      lap_splits: lapSplits,
+      distance_m: distanceM,
+      stroke_count: strokeCount,
+      stroke_rate: strokeRate,
+      lap_count: lapCount,
+      wind,
+      heat,
+      lane,
+      placement_rank: rank,
     };
 
     return {
@@ -91,53 +226,83 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
       row_uid: rowUid,
       player_name: athleteName,
       team_name: resolvedTeam,
-      jersey_number: Number(p.jersey_number || 0),
+      jersey_number: jerseyNumber,
       position: p.position || 'G',
       event: athleteEvent,
       event_id: athleteEventId,
-      heat: p.heat !== undefined ? p.heat : undefined,
-      lane: p.lane !== undefined ? p.lane : undefined,
-      placement_rank: p.placement_rank || p.rank || '',
-      finish_time: p.finish_time || p.time || '',
-      time: p.finish_time || p.time || p.result_time || '',
-      split: p.split || p.split_time || p.split_1 || '',
+      heat,
+      lane,
+      placement_rank: rank,
+      finish_time: finishTime,
+      time: finishTime,
+      split: splitTime,
+      split_2: split2,
+      lap_splits: lapSplits,
       stats: rawStatsObj,
-      // Basketball
-      pts: Number(p.points ?? p.pts ?? 0),
-      ast: Number(p.assists ?? p.ast ?? 0),
-      to: Number(p.turnovers ?? p.to ?? 0),
-      reb: Number((p.offensive_rebounds || 0) + (p.defensive_rebounds || 0) || p.rebounds || p.reb || 0),
-      stl: Number(p.steals ?? p.stl ?? 0),
-      blk: Number(p.blocks ?? p.blk ?? 0),
-      min: Number(p.min ?? p.minutes ?? 0),
-      fg_pct: p.true_shooting_pct
-        ? `${Math.round(p.true_shooting_pct)}%`
-        : p.fg_attempted > 0
-          ? `${Math.round((p.fg_made / p.fg_attempted) * 100)}%`
-          : p.fg_pct || '50%',
+      // Basketball & General
+      pts,
+      points: pts,
+      ast,
+      assists: ast,
+      to,
+      turnovers: to,
+      reb,
+      rebounds: reb,
+      offensive_rebounds: oreb,
+      defensive_rebounds: dreb,
+      stl,
+      steals: stl,
+      blk,
+      blocks: blk,
+      fouls,
+      pf: fouls,
+      personal_fouls: fouls,
+      min,
+      minutes: min,
+      fg_pct: fgPct,
+      fg_made: fgMade,
+      fg_attempted: fgAttempted,
+      three_made: threeMade,
+      three_attempted: threeAttempted,
+      ft_made: ftMade,
+      ft_attempted: ftAttempted,
       // Volleyball
-      kills: Number(p.kills ?? p.kill_points ?? 0),
-      attack_errors: Number(p.attack_errors ?? p.att_err ?? 0),
-      attack_attempts: Number(p.attack_attempts ?? p.total_attacks ?? 0),
-      hitting_pct: p.hitting_pct || p.hit_pct || '0.0%',
-      service_aces: Number(p.service_aces ?? p.aces ?? 0),
-      digs: Number(p.digs ?? 0),
-      block_points: Number(p.block_points ?? p.blocks ?? 0),
+      kills,
+      attack_errors: attackErrors,
+      attack_attempts: attackAttempts,
+      hitting_pct: hittingPct,
+      service_aces: serviceAces,
+      service_errors: serviceErrors,
+      reception_errors: receptionErrors,
+      digs,
+      block_points: blockPoints,
+      block_solos: blockSolos,
+      block_assists: blockAssists,
+      sets_played: setsPlayed,
+      set_scores: p.set_scores || p.set_score || '',
       // Soccer
-      goals: Number(p.goals ?? 0),
-      shots: Number(p.shots ?? 0),
-      shots_on_target: Number(p.shots_on_target ?? p.sog ?? 0),
-      saves: Number(p.saves ?? 0),
-      tackles: Number(p.tackles ?? p.tkl ?? 0),
+      goals,
+      shots,
+      shots_on_target: shotsOnTarget,
+      saves,
+      tackles,
+      yellow_cards: yellowCards,
+      red_cards: redCards,
+      // Timed / Individual
+      stroke_count: strokeCount,
+      stroke_rate: strokeRate,
+      distance_m: distanceM,
+      lap_count: lapCount,
+      wind,
     };
   });
 
-  const ftMade = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_made || 0), 0);
-  const ftAttempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.ft_attempted || 0), 0);
-  const pt2Made = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_made || 0), 0);
-  const pt2Attempts = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.fg_attempted || 0), 0);
-  const totalAssists = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.assists || p.ast || 0), 0);
-  const totalTurnovers = rawPlayers.reduce((acc: number, p: any) => acc + Number(p.turnovers || p.to || 0), 0);
+  const ftTotalMade = rawPlayers.reduce((acc: number, p: any) => acc + parseRobustStatNum(p.ft_made ?? p.ftm, 'ft_made', 0), 0);
+  const ftTotalAttempts = rawPlayers.reduce((acc: number, p: any) => acc + parseRobustStatNum(p.ft_attempted ?? p.fta, 'ft_attempted', 0), 0);
+  const pt2TotalMade = rawPlayers.reduce((acc: number, p: any) => acc + parseRobustStatNum(p.fg_made ?? p.fgm, 'fg_made', 0), 0);
+  const pt2TotalAttempts = rawPlayers.reduce((acc: number, p: any) => acc + parseRobustStatNum(p.fg_attempted ?? p.fga, 'fg_attempted', 0), 0);
+  const totalAssists = rawPlayers.reduce((acc: number, p: any) => acc + parseRobustStatNum(p.assists ?? p.ast, 'assists', 0), 0);
+  const totalTurnovers = rawPlayers.reduce((acc: number, p: any) => acc + parseRobustStatNum(p.turnovers ?? p.to, 'turnovers', 0), 0);
 
   const homeAthleteSum = athleteOverview
     .filter((a) => a.team_name === homeTeamName)
@@ -168,6 +333,16 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
     aScore = oppAthleteSum;
   }
 
+  const ocrHomeRosterIds: string[] = [];
+  const ocrAwayRosterIds: string[] = [];
+  athleteOverview.forEach((a) => {
+    if (a.team_name === homeTeamName) {
+      ocrHomeRosterIds.push(a.athlete_id);
+    } else {
+      ocrAwayRosterIds.push(a.athlete_id);
+    }
+  });
+
   return {
     team_name: homeTeamName,
     opponent_team_name: oppTeamName,
@@ -179,6 +354,14 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
     ],
     teams: detectedTeamNames,
     sport_type: rawSport,
+    scoresheet_url: scoresheetUrl,
+    scoresheetUrl: scoresheetUrl,
+    roster_athletes: ocrHomeRosterIds,
+    rosterAthletes: ocrHomeRosterIds,
+    away_roster_athletes: ocrAwayRosterIds,
+    awayRosterAthletes: ocrAwayRosterIds,
+    player_stats: athleteOverview,
+    playerStats: athleteOverview,
     athlete_overview: athleteOverview.length > 0 ? athleteOverview : [
       {
         athlete_id: `ath_${startingIdx + 1}`,
@@ -196,10 +379,10 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
     ],
     expanded_metrics: {
       shooting_efficiency: {
-        ft_made: ftMade,
-        ft_attempts: ftAttempts,
-        pt2_made: pt2Made,
-        pt2_attempts: pt2Attempts,
+        ft_made: ftTotalMade,
+        ft_attempts: ftTotalAttempts,
+        pt2_made: pt2TotalMade,
+        pt2_attempts: pt2TotalAttempts,
         pt3_made: 0,
         pt3_attempts: 0,
       },
@@ -254,26 +437,47 @@ const mergeContinuationRosters = (base: RawOCRDetectedData, continuation: RawOCR
 
     if (existingIdx !== -1) {
       const curr = mergedAthletes[existingIdx];
+      const curPts = Number(curr.pts || 0);
+      const incPts = Number(incoming.pts || 0);
+      const curFga = Number(curr.fg_attempted || 0);
+      const incFga = Number(incoming.fg_attempted || 0);
+      const isCumulative = (incPts >= curPts && incFga >= curFga && incPts > 0) || (incPts > 0 && curPts === 0);
+
       mergedAthletes[existingIdx] = {
         ...curr,
-        pts: (curr.pts || 0) + (incoming.pts || 0),
-        ast: (curr.ast || 0) + (incoming.ast || 0),
-        to: (curr.to || 0) + (incoming.to || 0),
-        reb: (curr.reb || 0) + (incoming.reb || 0),
-        stl: (curr.stl || 0) + (incoming.stl || 0),
-        blk: (curr.blk || 0) + (incoming.blk || 0),
-        min: (curr.min || 0) + (incoming.min || 0),
-        kills: (curr.kills || 0) + (incoming.kills || 0),
-        attack_errors: (curr.attack_errors || 0) + (incoming.attack_errors || 0),
-        attack_attempts: (curr.attack_attempts || 0) + (incoming.attack_attempts || 0),
-        service_aces: (curr.service_aces || 0) + (incoming.service_aces || 0),
-        digs: (curr.digs || 0) + (incoming.digs || 0),
-        block_points: (curr.block_points || 0) + (incoming.block_points || 0),
-        goals: (curr.goals || 0) + (incoming.goals || 0),
-        shots: (curr.shots || 0) + (incoming.shots || 0),
-        shots_on_target: (curr.shots_on_target || 0) + (incoming.shots_on_target || 0),
-        saves: (curr.saves || 0) + (incoming.saves || 0),
-        tackles: (curr.tackles || 0) + (incoming.tackles || 0),
+        ...incoming,
+        pts: isCumulative ? incPts : (curPts + incPts),
+        points: isCumulative ? incPts : (curPts + incPts),
+        ast: isCumulative ? Number(incoming.ast || 0) : ((curr.ast || 0) + (incoming.ast || 0)),
+        to: isCumulative ? Number(incoming.to || 0) : ((curr.to || 0) + (incoming.to || 0)),
+        reb: isCumulative ? Number(incoming.reb || 0) : ((curr.reb || 0) + (incoming.reb || 0)),
+        stl: isCumulative ? Number(incoming.stl || 0) : ((curr.stl || 0) + (incoming.stl || 0)),
+        blk: isCumulative ? Number(incoming.blk || 0) : ((curr.blk || 0) + (incoming.blk || 0)),
+        min: isCumulative ? Number(incoming.min || 0) : ((curr.min || 0) + (incoming.min || 0)),
+        fouls: isCumulative ? Number(incoming.fouls || 0) : ((curr.fouls || 0) + (incoming.fouls || 0)),
+        pf: isCumulative ? Number(incoming.pf || 0) : ((curr.pf || 0) + (incoming.pf || 0)),
+        oreb: isCumulative ? Number(incoming.oreb || 0) : ((curr.oreb || 0) + (incoming.oreb || 0)),
+        dreb: isCumulative ? Number(incoming.dreb || 0) : ((curr.dreb || 0) + (incoming.dreb || 0)),
+        fg_made: isCumulative ? Number(incoming.fg_made || 0) : ((curr.fg_made || 0) + (incoming.fg_made || 0)),
+        fg_attempted: isCumulative ? incFga : (curFga + incFga),
+        three_made: isCumulative ? Number(incoming.three_made || 0) : ((curr.three_made || 0) + (incoming.three_made || 0)),
+        three_attempted: isCumulative ? Number(incoming.three_attempted || 0) : ((curr.three_attempted || 0) + (incoming.three_attempted || 0)),
+        ft_made: isCumulative ? Number(incoming.ft_made || 0) : ((curr.ft_made || 0) + (incoming.ft_made || 0)),
+        ft_attempted: isCumulative ? Number(incoming.ft_attempted || 0) : ((curr.ft_attempted || 0) + (incoming.ft_attempted || 0)),
+        kills: isCumulative ? Number(incoming.kills || 0) : ((curr.kills || 0) + (incoming.kills || 0)),
+        attack_errors: isCumulative ? Number(incoming.attack_errors || 0) : ((curr.attack_errors || 0) + (incoming.attack_errors || 0)),
+        attack_attempts: isCumulative ? Number(incoming.attack_attempts || 0) : ((curr.attack_attempts || 0) + (incoming.attack_attempts || 0)),
+        service_aces: isCumulative ? Number(incoming.service_aces || 0) : ((curr.service_aces || 0) + (incoming.service_aces || 0)),
+        service_errors: isCumulative ? Number(incoming.service_errors || 0) : ((curr.service_errors || 0) + (incoming.service_errors || 0)),
+        reception_errors: isCumulative ? Number(incoming.reception_errors || 0) : ((curr.reception_errors || 0) + (incoming.reception_errors || 0)),
+        digs: isCumulative ? Number(incoming.digs || 0) : ((curr.digs || 0) + (incoming.digs || 0)),
+        block_points: isCumulative ? Number(incoming.block_points || 0) : ((curr.block_points || 0) + (incoming.block_points || 0)),
+        sets_played: isCumulative ? Number(incoming.sets_played || 0) : ((curr.sets_played || 0) + (incoming.sets_played || 0)),
+        goals: isCumulative ? Number(incoming.goals || 0) : ((curr.goals || 0) + (incoming.goals || 0)),
+        shots: isCumulative ? Number(incoming.shots || 0) : ((curr.shots || 0) + (incoming.shots || 0)),
+        shots_on_target: isCumulative ? Number(incoming.shots_on_target || 0) : ((curr.shots_on_target || 0) + (incoming.shots_on_target || 0)),
+        saves: isCumulative ? Number(incoming.saves || 0) : ((curr.saves || 0) + (incoming.saves || 0)),
+        tackles: isCumulative ? Number(incoming.tackles || 0) : ((curr.tackles || 0) + (incoming.tackles || 0)),
         stats: {
           ...(curr.stats || {}),
           ...(incoming.stats || {}),
@@ -296,10 +500,19 @@ const mergeContinuationRosters = (base: RawOCRDetectedData, continuation: RawOCR
     .filter((a) => a.team_name === base.opponent_team_name)
     .reduce((sum, a) => sum + (a.pts || a.kills || a.goals || 0), 0);
 
+  const homeAthletes = mergedAthletes.filter((a) => a.team_name === base.team_name).map((a) => a.athlete_id);
+  const awayAthletes = mergedAthletes.filter((a) => a.team_name === base.opponent_team_name).map((a) => a.athlete_id);
+  const combinedScoresheetUrl = base.scoresheet_url || continuation.scoresheet_url || base.scoresheetUrl || continuation.scoresheetUrl;
+
   return {
     ...base,
     teams: allTeams,
     athlete_overview: mergedAthletes,
+    playerStats: mergedAthletes,
+    scoresheet_url: combinedScoresheetUrl,
+    scoresheetUrl: combinedScoresheetUrl,
+    rosterAthletes: Array.from(new Set([...(base.rosterAthletes || []), ...(continuation.rosterAthletes || []), ...homeAthletes])),
+    awayRosterAthletes: Array.from(new Set([...(base.awayRosterAthletes || []), ...(continuation.awayRosterAthletes || []), ...awayAthletes])),
     team_scores: [
       { team: base.team_name || 'HOME TEAM', score: hSum },
       { team: base.opponent_team_name || 'OPPONENT TEAM', score: aSum },
@@ -406,6 +619,19 @@ export const OCRLoggingPage: React.FC = () => {
         parsedOcrResult = accumulated;
       } else {
         parsedOcrResult = mapSingleMatch(responseData);
+      }
+
+      const resolvedScoresheetUrl = responseData?.scoresheet_url || responseData?.scoresheetUrl || parsedOcrResult.scoresheet_url || parsedOcrResult.scoresheetUrl || target.file_url;
+      parsedOcrResult.scoresheet_url = resolvedScoresheetUrl;
+      parsedOcrResult.scoresheetUrl = resolvedScoresheetUrl;
+      if (!parsedOcrResult.playerStats) {
+        parsedOcrResult.playerStats = parsedOcrResult.athlete_overview;
+      }
+      if (!parsedOcrResult.rosterAthletes || parsedOcrResult.rosterAthletes.length === 0) {
+        parsedOcrResult.rosterAthletes = parsedOcrResult.athlete_overview.filter((a) => a.team_name === parsedOcrResult.team_name).map((a) => a.athlete_id);
+      }
+      if (!parsedOcrResult.awayRosterAthletes || parsedOcrResult.awayRosterAthletes.length === 0) {
+        parsedOcrResult.awayRosterAthletes = parsedOcrResult.athlete_overview.filter((a) => a.team_name === parsedOcrResult.opponent_team_name).map((a) => a.athlete_id);
       }
 
       setOcrResult(parsedOcrResult);

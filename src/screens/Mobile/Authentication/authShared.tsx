@@ -262,8 +262,18 @@ export async function storeAuthRole(role: AuthRole) {
 }
 
 export async function getStoredAuthRole(): Promise<AuthRole | null> {
-  const role = await SecureStore.getItemAsync(AUTH_ROLE_KEY).catch(() => null);
-  return role === "coach" || role === "athlete" ? role : null;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const role = await Promise.race([
+      SecureStore.getItemAsync(AUTH_ROLE_KEY).catch(() => null),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), 1500);
+      }),
+    ]);
+    return role === "coach" || role === "athlete" ? role : null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 export function extractAuthToken(payload: Record<string, unknown>) {

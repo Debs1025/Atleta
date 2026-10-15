@@ -230,6 +230,53 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
   },
+  emptyStateContainer: {
+    backgroundColor: "#0F172A",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#1E293B",
+    padding: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 12,
+  },
+  emptyStateIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#1E293B",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyStateText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  emptyStateCta: {
+    backgroundColor: "#2563EB",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyStateCtaText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
 });
 
 export default styles;

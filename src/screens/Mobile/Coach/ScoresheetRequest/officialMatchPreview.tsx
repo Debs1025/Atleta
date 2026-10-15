@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   onBack,
 }) => {
   const insets = useSafeAreaInsets();
+  const [showSuccessRequestModal, setShowSuccessRequestModal] = useState(false);
   const {
     matches,
     requestAudit,
@@ -40,16 +41,9 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
   const handleRequestAudit = useCallback(async () => {
     if (!match) return;
     await requestAudit(match.match_id);
+    setShowSuccessRequestModal(true);
   }, [match, requestAudit]);
 
-  const handleToggleCertified = useCallback(async () => {
-    if (!match) return;
-    if (match.audit_status === 'REQUEST GRANTED') {
-      await requestAudit(match.match_id);
-    } else {
-      await grantAudit(match.match_id);
-    }
-  }, [match, requestAudit, grantAudit]);
 
   const handleDownloadPDF = useCallback(async () => {
     if (!match) return;
@@ -260,6 +254,19 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
               </ScrollView>
             </View>
 
+            {/* Audit Context Notes / Official Notes */}
+            {match.coach_notes && match.coach_notes.length > 0 && (
+              <View style={styles.coachNotesCard}>
+                <Text style={styles.coachNotesTitle}>AUDIT CONTEXT & NOTES</Text>
+                {match.coach_notes.map((note, index) => (
+                  <View key={index} style={styles.noteRow}>
+                    <Text style={styles.noteIndex}>{String(index + 1).padStart(2, '0')}</Text>
+                    <Text style={styles.noteContentText}>{note}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Bottom Primary Action Button: DOWNLOAD PDF SCORESHEET */}
             <TouchableOpacity
               style={styles.primaryButton}
@@ -275,17 +282,6 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
                   <Text style={styles.primaryButtonText}>DOWNLOAD PDF SCORESHEET</Text>
                 </>
               )}
-            </TouchableOpacity>
-
-            {/* Demo state switch button */}
-            <TouchableOpacity
-              style={styles.demoToggleBtn}
-              onPress={handleToggleCertified}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.demoToggleText}>
-                Demo: Switch to Unrequested / Pending View
-              </Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -372,17 +368,6 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
                   : 'Request Official Scoresheet'}
               </Text>
             </TouchableOpacity>
-
-            {/* Demo state switch button */}
-            <TouchableOpacity
-              style={styles.demoToggleBtn}
-              onPress={handleToggleCertified}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.demoToggleText}>
-                Demo: Certify Scoresheet (Show Certified State & Stats)
-              </Text>
-            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -421,6 +406,68 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* SCORESHEET REQUESTED SUCCESS MODAL (Consistent with Team Created dialog) */}
+      <Modal
+        visible={showSuccessRequestModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessRequestModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.confirmOverlayBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowSuccessRequestModal(false)}
+        >
+          <View style={styles.confirmDialogCard}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark-circle-sharp" size={46} color="#00C8FF" />
+            </View>
+
+            <Text style={styles.successTitle}>SCORESHEET REQUESTED !</Text>
+            <Text style={styles.successTeamName}>
+              {match.away_team_name ? `VS ${match.away_team_name.toUpperCase()}` : 'AUDIT PENDING'}
+            </Text>
+            <Text style={styles.successMessage}>
+              Official review has been dispatched. Scoresheet metrics will be audited and certified.
+            </Text>
+
+            <View style={styles.summaryBox}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>SPORT CATEGORY</Text>
+                <View style={styles.summaryBadgePill}>
+                  <Text style={styles.summaryBadgeText}>
+                    {match.sport_type || 'BASKETBALL'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>STATUS</Text>
+                <Text style={[styles.summaryValueText, { color: '#00C8FF' }]}>
+                  {match.audit_status || 'PENDING'}
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>MATCH DATE</Text>
+                <Text style={styles.summaryValueText}>
+                  {match.match_date || new Date().toISOString().split('T')[0]}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.finishCtaButton}
+              onPress={() => setShowSuccessRequestModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.finishCtaText}>GOT IT</Text>
+              <Ionicons name="checkmark-sharp" size={18} color="#070D19" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

@@ -14,8 +14,19 @@ import {
 } from './discoveryTypes';
 import { requestAuthenticatedJson } from '../../Authentication/authShared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMatchesOfflineFirst } from '../../../../services/firebaseClient';
 
 const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache';
+const DISCOVERY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minute TTL
+
+let discoveryMemoryCache: {
+  athletes: AthleteDiscoveryItem[];
+  rankingAthletes: AthleteDiscoveryItem[];
+  proposals: ScoutingProposalItem[];
+  teams: DiscoveryTeamItem[];
+  events: DiscoveryEventItem[];
+  lastFetched: number;
+} | null = null;
 
 interface DiscoveryContextType {
   athletes: AthleteDiscoveryItem[];
@@ -52,11 +63,11 @@ interface DiscoveryContextType {
 const DiscoveryContext = createContext<DiscoveryContextType | undefined>(undefined);
 
 export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [athletes, setAthletes] = useState<AthleteDiscoveryItem[]>([]);
-  const [rankingAthletes, setRankingAthletes] = useState<AthleteDiscoveryItem[]>([]);
-  const [scoutingProposals, setScoutingProposals] = useState<ScoutingProposalItem[]>([]);
-  const [teams, setTeams] = useState<DiscoveryTeamItem[]>([]);
-  const [events, setEvents] = useState<DiscoveryEventItem[]>([]);
+  const [athletes, setAthletes] = useState<AthleteDiscoveryItem[]>(discoveryMemoryCache?.athletes || []);
+  const [rankingAthletes, setRankingAthletes] = useState<AthleteDiscoveryItem[]>(discoveryMemoryCache?.rankingAthletes || []);
+  const [scoutingProposals, setScoutingProposals] = useState<ScoutingProposalItem[]>(discoveryMemoryCache?.proposals || []);
+  const [teams, setTeams] = useState<DiscoveryTeamItem[]>(discoveryMemoryCache?.teams || []);
+  const [events, setEvents] = useState<DiscoveryEventItem[]>(discoveryMemoryCache?.events || []);
 
   const [activeTab, setActiveTab] = useState<DiscoveryTab>('PLAYERS');
   const [activeSportFilter, setActiveSportFilter] = useState<SportCategoryFilter>('BASKETBALL');
@@ -89,11 +100,13 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const loadDiscoveryData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [athletesRes, proposalsRes, teamsRes, matchesRes]: [any, any, any, any] = await Promise.all([
+      const [athletesRes, proposalsRes, teamsRes, coachMatchesRes, allMatchesRes, offlineMatches]: [any, any, any, any, any, any] = await Promise.all([
         requestAuthenticatedJson('/athletes').catch(() => null),
         requestAuthenticatedJson('/scouting/proposals/list').catch(() => null),
         requestAuthenticatedJson('/teams?all=true').catch(() => null),
         requestAuthenticatedJson('/matches').catch(() => null),
+        requestAuthenticatedJson('/matches?all=true').catch(() => null),
+        getMatchesOfflineFirst().catch(() => []),
       ]);
 
       let finalAthletes: AthleteDiscoveryItem[] = [];
@@ -453,15 +466,38 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setScoutingProposals([]);
       }
 
-      // 4. Map Events & Matches
-      const rawMatchesList = Array.isArray(matchesRes?.matches)
-        ? matchesRes.matches
-        : Array.isArray(matchesRes)
-          ? matchesRes
+      // 4. Map Events & Matches (merging coach matches, official tournament matches, and offline records)
+      const coachMatches = Array.isArray(coachMatchesRes?.matches)
+        ? coachMatchesRes.matches
+        : Array.isArray(coachMatchesRes)
+          ? coachMatchesRes
           : [];
+      const allMatches = Array.isArray(allMatchesRes?.matches)
+        ? allMatchesRes.matches
+        : Array.isArray(allMatchesRes)
+          ? allMatchesRes
+          : [];
+      const offlineList = Array.isArray(offlineMatches) ? offlineMatches : [];
 
-      if (rawMatchesList.length > 0) {
-        const mappedEvents: DiscoveryEventItem[] = rawMatchesList.map((m: any) => {
+      const seenMatchIds = new Set<string>();
+      const combinedMatches: any[] = [];
+      const isDeletedMatch = (m: any) => {
+        if (!m) return true;
+        if (m.deleted === true || m.is_deleted === true) return true;
+        const s = String(m.status || m.audit_status || m.verification_status || '').toUpperCase();
+        return s === 'DELETED' || s === 'REVOKED' || s === 'CANCELLED';
+      };
+
+      for (const m of [...coachMatches, ...allMatches, ...offlineList]) {
+        const id = m.match_id || m.id;
+        if (id && !seenMatchIds.has(id) && !isDeletedMatch(m)) {
+          seenMatchIds.add(id);
+          combinedMatches.push(m);
+        }
+      }
+
+      if (combinedMatches.length > 0) {
+        const mappedEvents: DiscoveryEventItem[] = combinedMatches.map((m: any) => {
           const homeScoreMatch = (m.notes || '').match(/\((\d+)\s*-\s*(\d+)\)/);
           const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : 0);
           const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : 0);
@@ -507,7 +543,17 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setEvents([]);
       }
 
-      // Persist snapshot to AsyncStorage for instant next render (<10ms)
+      // Update in-memory discovery cache so subsequent navigations don't refetch
+      discoveryMemoryCache = {
+        athletes: finalAthletes,
+        rankingAthletes: finalAthletes,
+        proposals: finalProposals,
+        teams: finalTeams,
+        events: finalEvents,
+        lastFetched: Date.now(),
+      };
+
+      // Persist snapshot to AsyncStorage for instant cold boot (<10ms)
       AsyncStorage.setItem(
         DISCOVERY_CACHE_KEY,
         JSON.stringify({
@@ -526,6 +572,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Instant cache hydration on mount (<10ms)
   useEffect(() => {
+    if (discoveryMemoryCache) return;
     AsyncStorage.getItem(DISCOVERY_CACHE_KEY)
       .then((raw) => {
         if (raw) {
@@ -549,6 +596,10 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   useEffect(() => {
+    // If memory cache is fresh, render immediately from cache and skip redundant network refetches
+    if (discoveryMemoryCache && Date.now() - discoveryMemoryCache.lastFetched < DISCOVERY_CACHE_TTL_MS) {
+      return;
+    }
     loadDiscoveryData();
   }, [loadDiscoveryData]);
 

@@ -30,9 +30,17 @@ import {
   getStoredUser,
   createOfficialMatch,
   invalidateCache,
+  getSports,
 } from '../../api/client';
 import { scanScoresheetStandalone, scanMultipleScoresheets } from '../../api/ocr';
-import type { MatchAuditDetail, BoxScoreRow, RaceResultRow } from '../../api/types';
+import type { MatchAuditDetail, BoxScoreRow, RaceResultRow, SportConfiguration } from '../../api/types';
+import {
+  resolveSportColumns,
+  getMetricValue,
+  setMetricValue,
+  parseRobustStatNum,
+  type SportColumnDef,
+} from '../../api/sportSchema';
 import { styles } from './styles/ScoresheetMatch';
 
 export const ScoresheetMatch: React.FC = () => {
@@ -86,6 +94,39 @@ export const ScoresheetMatch: React.FC = () => {
 
   // Strictly check if match is certified (read-only locking)
   const isCertified = Boolean(matchData?.is_certified || isMatchLocallyCertified(cleanId));
+
+  const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    getSports()
+      .then((res) => {
+        if (mounted && res) {
+          const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
+          setConfiguredSports(list);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const activeSportConfig = useMemo<SportConfiguration | null>(() => {
+    const norm = (matchData?.sport_type || 'Basketball').trim().toUpperCase();
+    return configuredSports.find(
+      (s) =>
+        s.sport_name.trim().toUpperCase() === norm ||
+        s.short_identifier.trim().toUpperCase() === norm ||
+        norm.includes(s.sport_name.trim().toUpperCase()) ||
+        s.sport_name.trim().toUpperCase().includes(norm)
+    ) || null;
+  }, [configuredSports, matchData?.sport_type]);
+
+  const dynamicSportColumns = useMemo<SportColumnDef[]>(() => {
+    const sportType = matchData?.sport_type || 'Basketball';
+    return resolveSportColumns(sportType, activeSportConfig, [...homeRoster, ...awayRoster]);
+  }, [matchData?.sport_type, activeSportConfig, homeRoster, awayRoster]);
 
   const isVolleyball = useMemo(() => (matchData?.sport_type || '').toLowerCase().includes('volley'), [matchData?.sport_type]);
   const isSoccer = useMemo(() => {
@@ -516,8 +557,8 @@ export const ScoresheetMatch: React.FC = () => {
         if (hRows.length > 0) setHomeRoster(hRows);
         if (aRows.length > 0) setAwayRoster(aRows);
 
-        const hSum = hRows.reduce((a, b) => a + b.pts, 0);
-        const aSum = aRows.reduce((a, b) => a + b.pts, 0);
+        const hSum = hRows.reduce((a, b) => a + (b.pts ?? 0), 0);
+        const aSum = aRows.reduce((a, b) => a + (b.pts ?? 0), 0);
 
         setMatchData((prev) => {
           if (!prev) return prev;
@@ -553,9 +594,11 @@ export const ScoresheetMatch: React.FC = () => {
     }
   };
 
-  const updateBasketballStat = (team: 'home' | 'away', idx: number, field: keyof BoxScoreRow, value: any) => {
+  const updateBasketballStat = (team: 'home' | 'away', idx: number, field: any, value: any) => {
     const target = team === 'home' ? [...homeRoster] : [...awayRoster];
-    target[idx] = { ...target[idx], [field]: value };
+    const row = { ...target[idx] };
+    setMetricValue(row, field, value);
+    target[idx] = row;
     if (team === 'home') setHomeRoster(target);
     else setAwayRoster(target);
   };
@@ -576,6 +619,120 @@ export const ScoresheetMatch: React.FC = () => {
     setActionError(null);
     try {
       const finalNotes = typeof notes === 'string' ? notes : Array.isArray(notes) ? (notes as any[]).join('\n') : '';
+      const resolvedScoresheetUrl = scoresheetUrl?.startsWith('data:') ? undefined : scoresheetUrl;
+      const homeRosterIds = homeRoster.map((p, idx) => p.athlete_id || `ath_home_${idx + 1}`);
+      const awayRosterIds = awayRoster.map((p, idx) => p.athlete_id || `ath_away_${idx + 1}`);
+
+      const playerStatsPayload = isIndividualSport ? raceResults : [
+        ...homeRoster.map((p, idx) => {
+          const completeStats: Record<string, any> = {
+            ...(p.stats || {}),
+          };
+          dynamicSportColumns.forEach((col) => {
+            const val = getMetricValue(p, col.key);
+            if (val !== undefined && val !== null && val !== '') {
+              completeStats[col.key] = val;
+            }
+          });
+          return {
+            athlete_id: p.athlete_id || `ath_home_${idx + 1}`,
+            player_name: p.player_name,
+            team_name: homeTeamDisplayName,
+            jersey_number: Number(p.jersey_no) || idx + 1,
+            position: p.position || 'ATH',
+            pts: parseRobustStatNum(completeStats.pts ?? completeStats.points ?? p.pts ?? 0, 'pts'),
+            ast: parseRobustStatNum(completeStats.ast ?? completeStats.assists ?? p.ast ?? 0, 'ast'),
+            reb: parseRobustStatNum(completeStats.reb ?? completeStats.rebounds ?? p.reb ?? 0, 'reb'),
+            stl: parseRobustStatNum(completeStats.stl ?? completeStats.steals ?? p.stl ?? 0, 'stl'),
+            blk: parseRobustStatNum(completeStats.blk ?? completeStats.blocks ?? p.blk ?? 0, 'blk'),
+            to: parseRobustStatNum(completeStats.to ?? completeStats.turnovers ?? p.to ?? 0, 'to'),
+            fouls: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+            pf: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+            oreb: parseRobustStatNum(completeStats.oreb ?? completeStats.offensive_rebounds ?? p.oreb ?? 0, 'oreb'),
+            dreb: parseRobustStatNum(completeStats.dreb ?? completeStats.defensive_rebounds ?? p.dreb ?? 0, 'dreb'),
+            min: parseRobustStatNum(completeStats.min ?? completeStats.minutes ?? p.minutes ?? 0, 'min'),
+            fg_made: parseRobustStatNum(completeStats.fg_made ?? p.fg_made ?? 0, 'fg_made'),
+            fg_attempted: parseRobustStatNum(completeStats.fg_attempted ?? p.fg_attempted ?? 0, 'fg_attempted'),
+            three_made: parseRobustStatNum(completeStats.three_made ?? p.three_made ?? 0, 'three_made'),
+            three_attempted: parseRobustStatNum(completeStats.three_attempted ?? p.three_attempted ?? 0, 'three_attempted'),
+            ft_made: parseRobustStatNum(completeStats.ft_made ?? p.ft_made ?? 0, 'ft_made'),
+            ft_attempted: parseRobustStatNum(completeStats.ft_attempted ?? p.ft_attempted ?? 0, 'ft_attempted'),
+            fg_pct: p.fg_pct,
+            three_p_pct: p.three_p_pct,
+            ft_pct: p.ft_pct,
+            kills: parseRobustStatNum(completeStats.kills ?? p.kills ?? 0, 'kills'),
+            attack_errors: parseRobustStatNum(completeStats.attack_errors ?? p.attack_errors ?? 0, 'attack_errors'),
+            attack_attempts: parseRobustStatNum(completeStats.attack_attempts ?? p.attack_attempts ?? 0, 'attack_attempts'),
+            hitting_pct: p.hitting_pct,
+            service_aces: parseRobustStatNum(completeStats.service_aces ?? p.service_aces ?? 0, 'service_aces'),
+            service_errors: parseRobustStatNum(completeStats.service_errors ?? p.service_errors ?? 0, 'service_errors'),
+            reception_errors: parseRobustStatNum(completeStats.reception_errors ?? p.reception_errors ?? 0, 'reception_errors'),
+            digs: parseRobustStatNum(completeStats.digs ?? p.digs ?? 0, 'digs'),
+            block_points: parseRobustStatNum(completeStats.block_points ?? p.block_points ?? 0, 'block_points'),
+            sets_played: parseRobustStatNum(completeStats.sets_played ?? p.sets_played ?? 0, 'sets_played'),
+            goals: parseRobustStatNum(completeStats.goals ?? p.goals ?? 0, 'goals'),
+            shots: parseRobustStatNum(completeStats.shots ?? p.shots ?? 0, 'shots'),
+            shots_on_target: parseRobustStatNum(completeStats.shots_on_target ?? p.shots_on_target ?? 0, 'shots_on_target'),
+            saves: parseRobustStatNum(completeStats.saves ?? p.saves ?? 0, 'saves'),
+            tackles: parseRobustStatNum(completeStats.tackles ?? p.tackles ?? 0, 'tackles'),
+            stats: completeStats,
+          };
+        }),
+        ...awayRoster.map((p, idx) => {
+          const completeStats: Record<string, any> = {
+            ...(p.stats || {}),
+          };
+          dynamicSportColumns.forEach((col) => {
+            const val = getMetricValue(p, col.key);
+            if (val !== undefined && val !== null && val !== '') {
+              completeStats[col.key] = val;
+            }
+          });
+          return {
+            athlete_id: p.athlete_id || `ath_away_${idx + 1}`,
+            player_name: p.player_name,
+            team_name: awayTeamDisplayName,
+            jersey_number: Number(p.jersey_no) || idx + 1,
+            position: p.position || 'ATH',
+            pts: parseRobustStatNum(completeStats.pts ?? completeStats.points ?? p.pts ?? 0, 'pts'),
+            ast: parseRobustStatNum(completeStats.ast ?? completeStats.assists ?? p.ast ?? 0, 'ast'),
+            reb: parseRobustStatNum(completeStats.reb ?? completeStats.rebounds ?? p.reb ?? 0, 'reb'),
+            stl: parseRobustStatNum(completeStats.stl ?? completeStats.steals ?? p.stl ?? 0, 'stl'),
+            blk: parseRobustStatNum(completeStats.blk ?? completeStats.blocks ?? p.blk ?? 0, 'blk'),
+            to: parseRobustStatNum(completeStats.to ?? completeStats.turnovers ?? p.to ?? 0, 'to'),
+            fouls: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+            pf: parseRobustStatNum(completeStats.fouls ?? completeStats.pf ?? p.fouls ?? p.pf ?? 0, 'fouls'),
+            oreb: parseRobustStatNum(completeStats.oreb ?? completeStats.offensive_rebounds ?? p.oreb ?? 0, 'oreb'),
+            dreb: parseRobustStatNum(completeStats.dreb ?? completeStats.defensive_rebounds ?? p.dreb ?? 0, 'dreb'),
+            min: parseRobustStatNum(completeStats.min ?? completeStats.minutes ?? p.minutes ?? 0, 'min'),
+            fg_made: parseRobustStatNum(completeStats.fg_made ?? p.fg_made ?? 0, 'fg_made'),
+            fg_attempted: parseRobustStatNum(completeStats.fg_attempted ?? p.fg_attempted ?? 0, 'fg_attempted'),
+            three_made: parseRobustStatNum(completeStats.three_made ?? p.three_made ?? 0, 'three_made'),
+            three_attempted: parseRobustStatNum(completeStats.three_attempted ?? p.three_attempted ?? 0, 'three_attempted'),
+            ft_made: parseRobustStatNum(completeStats.ft_made ?? p.ft_made ?? 0, 'ft_made'),
+            ft_attempted: parseRobustStatNum(completeStats.ft_attempted ?? p.ft_attempted ?? 0, 'ft_attempted'),
+            fg_pct: p.fg_pct,
+            three_p_pct: p.three_p_pct,
+            ft_pct: p.ft_pct,
+            kills: parseRobustStatNum(completeStats.kills ?? p.kills ?? 0, 'kills'),
+            attack_errors: parseRobustStatNum(completeStats.attack_errors ?? p.attack_errors ?? 0, 'attack_errors'),
+            attack_attempts: parseRobustStatNum(completeStats.attack_attempts ?? p.attack_attempts ?? 0, 'attack_attempts'),
+            hitting_pct: p.hitting_pct,
+            service_aces: parseRobustStatNum(completeStats.service_aces ?? p.service_aces ?? 0, 'service_aces'),
+            service_errors: parseRobustStatNum(completeStats.service_errors ?? p.service_errors ?? 0, 'service_errors'),
+            reception_errors: parseRobustStatNum(completeStats.reception_errors ?? p.reception_errors ?? 0, 'reception_errors'),
+            digs: parseRobustStatNum(completeStats.digs ?? p.digs ?? 0, 'digs'),
+            block_points: parseRobustStatNum(completeStats.block_points ?? p.block_points ?? 0, 'block_points'),
+            sets_played: parseRobustStatNum(completeStats.sets_played ?? p.sets_played ?? 0, 'sets_played'),
+            goals: parseRobustStatNum(completeStats.goals ?? p.goals ?? 0, 'goals'),
+            shots: parseRobustStatNum(completeStats.shots ?? p.shots ?? 0, 'shots'),
+            shots_on_target: parseRobustStatNum(completeStats.shots_on_target ?? p.shots_on_target ?? 0, 'shots_on_target'),
+            saves: parseRobustStatNum(completeStats.saves ?? p.saves ?? 0, 'saves'),
+            tackles: parseRobustStatNum(completeStats.tackles ?? p.tackles ?? 0, 'tackles'),
+            stats: completeStats,
+          };
+        }),
+      ];
 
       // Sync latest notes and match details directly to Match_Logs
       await createOfficialMatch({
@@ -586,25 +743,14 @@ export const ScoresheetMatch: React.FC = () => {
         sport_type: matchData.sport_type || 'Basketball',
         match_date: (matchData as any).match_date || (matchData as any).match_date_formatted || new Date().toISOString(),
         location: (matchData as any).location || (matchData as any).venue || 'Tournament Sports Complex',
-        scoresheet_url: scoresheetUrl?.startsWith('data:') ? undefined : scoresheetUrl,
-        player_stats: isIndividualSport ? raceResults : [
-          ...homeRoster.map((p, idx) => ({
-            athlete_id: `ath_home_${idx + 1}`,
-            player_name: p.player_name,
-            team_name: homeTeamDisplayName,
-            jersey_number: Number(p.jersey_no) || idx + 1,
-            position: p.position || 'G',
-            stats: { points: Number(p.pts || 0), rebounds: Number(p.reb || 0), assists: Number(p.ast || 0), steals: Number(p.stl || 0), blocks: Number(p.blk || 0), fg_pct: p.fg_pct, three_p_pct: p.three_p_pct, ft_pct: p.ft_pct },
-          })),
-          ...awayRoster.map((p, idx) => ({
-            athlete_id: `ath_away_${idx + 1}`,
-            player_name: p.player_name,
-            team_name: awayTeamDisplayName,
-            jersey_number: Number(p.jersey_no) || idx + 1,
-            position: p.position || 'G',
-            stats: { points: Number(p.pts || 0), rebounds: Number(p.reb || 0), assists: Number(p.ast || 0), steals: Number(p.stl || 0), blocks: Number(p.blk || 0), fg_pct: p.fg_pct, three_p_pct: p.three_p_pct, ft_pct: p.ft_pct },
-          })),
-        ],
+        scoresheet_url: resolvedScoresheetUrl,
+        scoresheetUrl: resolvedScoresheetUrl,
+        roster_athletes: homeRosterIds,
+        rosterAthletes: homeRosterIds,
+        away_roster_athletes: awayRosterIds,
+        awayRosterAthletes: awayRosterIds,
+        player_stats: playerStatsPayload,
+        playerStats: playerStatsPayload,
         home_score: homeScore,
         away_score: awayScore,
         game_result: dynamicMatchResult.homeResult,
@@ -719,7 +865,6 @@ export const ScoresheetMatch: React.FC = () => {
 
   // Render Table for Team Basketball Stats with live sums
   const renderTeamStatsTable = (teamName: string, roster: BoxScoreRow[], teamType: 'home' | 'away') => {
-    const liveScore = roster.reduce((a, b) => a + (Number(b.pts) || 0), 0);
     return (
       <div style={styles.tableSection}>
         <div style={styles.tableHeaderRow}>
@@ -751,15 +896,11 @@ export const ScoresheetMatch: React.FC = () => {
               <tr>
                 <th style={styles.statThNo}>[ NO ]</th>
                 <th style={styles.statThPlayerName}>[ PLAYER NAME ]</th>
-                <th style={styles.statTh}>[ MIN ]</th>
-                <th style={styles.statTh}>[ PTS ]</th>
-                <th style={styles.statTh}>[ REB ]</th>
-                <th style={styles.statTh}>[ AST ]</th>
-                <th style={styles.statTh}>[ STL ]</th>
-                <th style={styles.statTh}>[ BLK ]</th>
-                <th style={styles.statTh}>[ FG% ]</th>
-                <th style={styles.statTh}>[ 3P% ]</th>
-                <th style={isEditing && !isCertified ? styles.statTh : styles.statThLast}>[ FT% ]</th>
+                {dynamicSportColumns.map((col) => (
+                  <th key={col.key} style={styles.statTh}>
+                    [ {col.label} ]
+                  </th>
+                ))}
                 {isEditing && !isCertified && (
                   <th style={styles.statThLast}>[ ACTION ]</th>
                 )}
@@ -779,39 +920,26 @@ export const ScoresheetMatch: React.FC = () => {
                         <input type="text" value={row.player_name} onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)} style={styles.statInputName} />
                       ) : row.player_name}
                     </td>
-                    <td style={styles.statTd}>
-                      {isEditing && !isCertified ? (
-                        <input type="text" value={row.minutes} onChange={(e) => updateBasketballStat(teamType, idx, 'minutes', e.target.value)} style={styles.statInput} />
-                      ) : row.minutes}
-                    </td>
-                    <td style={styles.statTd}>
-                      {isEditing && !isCertified ? (
-                        <input type="number" value={row.pts} onChange={(e) => updateBasketballStat(teamType, idx, 'pts', Number(e.target.value))} style={styles.statInput} />
-                      ) : row.pts}
-                    </td>
-                    <td style={styles.statTd}>
-                      {isEditing && !isCertified ? (
-                        <input type="number" value={row.reb} onChange={(e) => updateBasketballStat(teamType, idx, 'reb', Number(e.target.value))} style={styles.statInput} />
-                      ) : row.reb}
-                    </td>
-                    <td style={styles.statTd}>
-                      {isEditing && !isCertified ? (
-                        <input type="number" value={row.ast} onChange={(e) => updateBasketballStat(teamType, idx, 'ast', Number(e.target.value))} style={styles.statInput} />
-                      ) : row.ast}
-                    </td>
-                    <td style={styles.statTd}>
-                      {isEditing && !isCertified ? (
-                        <input type="number" value={row.stl} onChange={(e) => updateBasketballStat(teamType, idx, 'stl', Number(e.target.value))} style={styles.statInput} />
-                      ) : row.stl}
-                    </td>
-                    <td style={styles.statTd}>
-                      {isEditing && !isCertified ? (
-                        <input type="number" value={row.blk} onChange={(e) => updateBasketballStat(teamType, idx, 'blk', Number(e.target.value))} style={styles.statInput} />
-                      ) : row.blk}
-                    </td>
-                    <td style={styles.statTd}>{row.fg_pct}</td>
-                    <td style={styles.statTd}>{row.three_p_pct}</td>
-                    <td style={isEditing && !isCertified ? styles.statTd : styles.statTdLast}>{row.ft_pct}</td>
+                    {dynamicSportColumns.map((col) => {
+                      const val = getMetricValue(row, col.key);
+                      return (
+                        <td key={col.key} style={styles.statTd}>
+                          {isEditing && !isCertified ? (
+                            <input
+                              type={col.isNumeric ? 'number' : 'text'}
+                              value={val !== undefined && val !== null ? val : (col.isNumeric ? 0 : '')}
+                              onChange={(e) => {
+                                const v = col.isNumeric ? parseRobustStatNum(e.target.value, col.key) : e.target.value;
+                                updateBasketballStat(teamType, idx, col.key, v);
+                              }}
+                              style={styles.statInput}
+                            />
+                          ) : (
+                            val !== '' && val !== undefined && val !== null ? val : (col.isNumeric ? 0 : '-')
+                          )}
+                        </td>
+                      );
+                    })}
                     {isEditing && !isCertified && (
                       <td style={styles.statTdLast}>
                         <button
@@ -828,7 +956,7 @@ export const ScoresheetMatch: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={isEditing && !isCertified ? 12 : 11} style={styles.tableEmptyNotice}>
+                  <td colSpan={dynamicSportColumns.length + (isEditing && !isCertified ? 3 : 2)} style={styles.tableEmptyNotice}>
                     No player statistics recorded. Upload official scoresheet below to extract results with OCR.
                   </td>
                 </tr>
@@ -836,30 +964,25 @@ export const ScoresheetMatch: React.FC = () => {
               <tr style={styles.statTotalsTr}>
                 <td style={styles.statTotalsTd}></td>
                 <td style={styles.statTotalsTdName}>TEAM TOTALS</td>
-                <td style={styles.statTotalsTd}>0</td>
-                <td style={styles.statTotalsTd}>{liveScore}</td>
-                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.reb) || 0), 0)}</td>
-                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.ast) || 0), 0)}</td>
-                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.stl) || 0), 0)}</td>
-                <td style={styles.statTotalsTd}>{roster.reduce((a, b) => a + (Number(b.blk) || 0), 0)}</td>
-                <td style={styles.statTotalsTd}>
-                  {(() => {
-                    const pcts = roster.map((r) => parseFloat(String(r.fg_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
-                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
-                  })()}
-                </td>
-                <td style={styles.statTotalsTd}>
-                  {(() => {
-                    const pcts = roster.map((r) => parseFloat(String(r.three_p_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
-                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
-                  })()}
-                </td>
-                <td style={styles.statTotalsTd}>
-                  {(() => {
-                    const pcts = roster.map((r) => parseFloat(String(r.ft_pct || '').replace('%', ''))).filter((n) => !isNaN(n) && n > 0);
-                    return pcts.length > 0 ? `${(pcts.reduce((a, b) => a + b, 0) / pcts.length).toFixed(1)}%` : '0.0%';
-                  })()}
-                </td>
+                {dynamicSportColumns.map((col) => {
+                  if (col.isNumeric) {
+                    const total = roster.reduce((sum, r) => {
+                      const val = getMetricValue(r, col.key);
+                      const num = typeof val === 'number' ? val : parseFloat(val);
+                      return sum + (isNaN(num) ? 0 : num);
+                    }, 0);
+                    return (
+                      <td key={col.key} style={styles.statTotalsTd}>
+                        {Number.isInteger(total) ? total : total.toFixed(1)}
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={col.key} style={styles.statTotalsTd}>
+                      -
+                    </td>
+                  );
+                })}
                 {isEditing && !isCertified && <td style={styles.statTotalsTdLast}></td>}
               </tr>
             </tbody>
