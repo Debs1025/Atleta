@@ -77,8 +77,21 @@ export const getCachedData = <T>(key: string): T | null => {
         cache.set(key, parsed);
         return parsed.data as T;
       } else {
-        // Discard stale or outdated cache
         sessionStorage.removeItem(`atleta_cache_${key}`);
+      }
+    }
+  } catch { }
+
+  // Check persistent localStorage for instant startup render across reloads & logins
+  try {
+    const localItem = localStorage.getItem(`atleta_cache_${key}`);
+    if (localItem) {
+      const parsed = JSON.parse(localItem);
+      if (parsed && parsed.version === CACHE_VERSION && Date.now() - parsed.timestamp < CACHE_TTL_MS) {
+        cache.set(key, parsed);
+        return parsed.data as T;
+      } else {
+        localStorage.removeItem(`atleta_cache_${key}`);
       }
     }
   } catch { }
@@ -90,6 +103,9 @@ export const setCachedData = (key: string, data: any): void => {
   cache.set(key, entry);
   try {
     sessionStorage.setItem(`atleta_cache_${key}`, JSON.stringify(entry));
+  } catch { }
+  try {
+    localStorage.setItem(`atleta_cache_${key}`, JSON.stringify(entry));
   } catch { }
 };
 
@@ -104,6 +120,14 @@ export const invalidateCache = (prefix?: string): void => {
       }
       toRemove.forEach((k) => sessionStorage.removeItem(k));
     } catch { }
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('atleta_cache_')) toRemove.push(k);
+      }
+      toRemove.forEach((k) => localStorage.removeItem(k));
+    } catch { }
   } else {
     for (const key of cache.keys()) {
       if (key.startsWith(prefix)) {
@@ -117,6 +141,14 @@ export const invalidateCache = (prefix?: string): void => {
         if (k && k.startsWith(`atleta_cache_${prefix}`)) toRemove.push(k);
       }
       toRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch { }
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(`atleta_cache_${prefix}`)) toRemove.push(k);
+      }
+      toRemove.forEach((k) => localStorage.removeItem(k));
     } catch { }
   }
 };
@@ -170,6 +202,14 @@ export const storeAuthSession = (token: string, user: AuthUser, persist: boolean
     localStorage.removeItem(PERSIST_KEY);
   }
   setCachedData('user_me', user);
+
+  // Instantly warm official app cache (including schedules) on login
+  const role = user?.role;
+  if (role !== 'SystemAdmin' && role !== 'System Admin' && role !== 'Admin') {
+    setTimeout(() => {
+      warmOfficialAppCache().catch(() => {});
+    }, 10);
+  }
 };
 
 export const clearAuthSession = (): void => {

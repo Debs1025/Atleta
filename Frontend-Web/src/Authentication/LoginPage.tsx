@@ -6,6 +6,7 @@ import {
   getStoredToken,
   getMe,
   getAdminCoachQueue,
+  warmOfficialAppCache,
 } from '../api/client';
 import { styles } from './styles/LoginPage';
 
@@ -22,6 +23,7 @@ export const LoginPage: React.FC = () => {
   useEffect(() => {
     if (getStoredToken()) {
       setIsAutoLoggingIn(true);
+      warmOfficialAppCache().catch(() => {});
       const minDelay = new Promise((resolve) => setTimeout(resolve, 1000));
       Promise.all([getMe().catch(() => null), minDelay]).then(([user]) => {
         if (!user && !getStoredToken()) {
@@ -55,6 +57,7 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
+      warmOfficialAppCache().catch(() => {});
       navigate('/dashboard');
     } catch (e: any) {
       const msg = e.message || '';
