@@ -330,14 +330,21 @@ export const SchedulePage: React.FC = () => {
     // Synchronously load cache for the newly selected month/year immediately to prevent glitching data
     const cached = getCachedData<OfficialScheduleItem[]>(`official_schedules_${month}_${year}`);
     if (cached && Array.isArray(cached) && cached.length > 0) {
-      setSchedules(cached);
+      const uniqueMap = new Map<string, OfficialScheduleItem>();
+      for (const item of cached) {
+        const canonicalId = String(item.match_id || (item as any).raw_match?.match_id || item.schedule_id || '')
+          .replace(/^#/, '').replace(/^sched_/, '').trim();
+        const key = canonicalId || String(item.schedule_id || Math.random());
+        if (!uniqueMap.has(key)) uniqueMap.set(key, item);
+      }
+      setSchedules(Array.from(uniqueMap.values()));
     }
 
     getMe().then((res) => {
       if (isCurrent && res) setUser(res);
     }).catch(() => {});
 
-    getOfficialSchedules(month, year).then((res) => {
+    getOfficialSchedules(month, year, true).then((res) => {
       if (!isCurrent) return; // Discard stale responses from quickly skipped months
 
       const list = res || [];
