@@ -60,21 +60,25 @@ export const storeAllReadNotificationIds = (ids: string[]): void => {
 };
 
 // In-Memory and Session Client Cache for instant screen-to-screen navigation
-const cache = new Map<string, { data: any; timestamp: number }>();
+const cache = new Map<string, { data: any; timestamp: number; version?: string }>();
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes cache
+const CACHE_VERSION = 'v4_sched_dedup';
 
 export const getCachedData = <T>(key: string): T | null => {
   const item = cache.get(key);
-  if (item && Date.now() - item.timestamp < CACHE_TTL_MS) {
+  if (item && item.version === CACHE_VERSION && Date.now() - item.timestamp < CACHE_TTL_MS) {
     return item.data as T;
   }
   try {
     const sessionItem = sessionStorage.getItem(`atleta_cache_${key}`);
     if (sessionItem) {
       const parsed = JSON.parse(sessionItem);
-      if (parsed && Date.now() - parsed.timestamp < CACHE_TTL_MS) {
+      if (parsed && parsed.version === CACHE_VERSION && Date.now() - parsed.timestamp < CACHE_TTL_MS) {
         cache.set(key, parsed);
         return parsed.data as T;
+      } else {
+        // Discard stale or outdated cache
+        sessionStorage.removeItem(`atleta_cache_${key}`);
       }
     }
   } catch { }
@@ -82,7 +86,7 @@ export const getCachedData = <T>(key: string): T | null => {
 };
 
 export const setCachedData = (key: string, data: any): void => {
-  const entry = { data, timestamp: Date.now() };
+  const entry = { data, timestamp: Date.now(), version: CACHE_VERSION };
   cache.set(key, entry);
   try {
     sessionStorage.setItem(`atleta_cache_${key}`, JSON.stringify(entry));
