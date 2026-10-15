@@ -229,6 +229,8 @@ export interface RaceResultRow {
 export interface MatchAuditDetail {
   match_id: string;
   validation_id: string;
+  matchName?: string;
+  match_name?: string;
   game_name: string;
   sport_type: string;
   league_class: string;
@@ -259,6 +261,8 @@ export interface MatchAuditDetail {
 export interface MatchSummaryItem {
   match_id: string;
   validation_id?: string;
+  matchName?: string;
+  match_name?: string;
   match_class: string;
   sport: string;
   coaches: string;

@@ -7,6 +7,8 @@ export type ValidationStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface MatchLog {
   match_id: string;               // Primary Key, Required
+  matchName?: string;             // User-defined custom match name
+  match_name?: string;            // Snake_case alias for match name
   game_name?: string;             // Human-readable game name (e.g. "CSPC vs CBSUA")
   tournament_id?: string | null;  // Foreign Key -> Tournament_Registry.org_id | Null
   sport_type: SportType;          // Required ("Basketball" | "Swimming" | "Track & Field")

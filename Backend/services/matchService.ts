@@ -626,7 +626,10 @@ export async function submitMatchSession(
     scoresheet_url: payload.scoresheet_url || payload.scoresheetUrl || '',
     scoresheetUrl: payload.scoresheetUrl || payload.scoresheet_url || '',
     notes: payload.notes ? payload.notes.trim() : `OCR Logged: ${homeTeamName} vs ${oppTeamName} (${homeScore} - ${awayScore})`,
-    game_name: payload.game_name || `${homeTeamName} vs ${oppTeamName}`,
+    matchName: (((payload as any).matchName || payload.match_name || payload.game_name || (payload as any).gameName || '') as string).trim() || `${homeTeamName} vs ${oppTeamName}`,
+    match_name: (((payload as any).matchName || payload.match_name || payload.game_name || (payload as any).gameName || '') as string).trim() || `${homeTeamName} vs ${oppTeamName}`,
+    gameName: (((payload as any).matchName || payload.match_name || payload.game_name || (payload as any).gameName || '') as string).trim() || `${homeTeamName} vs ${oppTeamName}`,
+    game_name: (((payload as any).matchName || payload.match_name || payload.game_name || (payload as any).gameName || '') as string).trim() || `${homeTeamName} vs ${oppTeamName}`,
     tournament_id: payload.tournament_id || null,
     assigned_coaches: payload.assigned_coaches || (coachId ? [coachId] : []),
     official_id: payload.official_id || null,
@@ -1727,8 +1730,26 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
     }
     if (detectedHome || detectedAway) {
       updatePayload.teams = [homeTeamName, awayTeamName];
-      updatePayload.match_name = `${homeTeamName} vs ${awayTeamName}`;
-      updatePayload.game_name = `${homeTeamName} vs ${awayTeamName}`;
+      const existingMatchName = String(
+        matchData.matchName ||
+        matchData.match_name ||
+        matchData.game_name ||
+        matchData.gameName ||
+        ''
+      ).trim();
+
+      if (!existingMatchName) {
+        updatePayload.match_name = `${homeTeamName} vs ${awayTeamName}`;
+        updatePayload.game_name = `${homeTeamName} vs ${awayTeamName}`;
+        updatePayload.matchName = `${homeTeamName} vs ${awayTeamName}`;
+        updatePayload.gameName = `${homeTeamName} vs ${awayTeamName}`;
+      } else {
+        // Strictly preserve user-defined custom match name
+        updatePayload.match_name = existingMatchName;
+        updatePayload.game_name = existingMatchName;
+        updatePayload.matchName = existingMatchName;
+        updatePayload.gameName = existingMatchName;
+      }
     }
 
     await db.collection('Match_Logs').doc(matchId).set(updatePayload, { merge: true });
@@ -2597,8 +2618,10 @@ export async function getMatchResultDetails(matchId: string): Promise<any> {
     home_team_name: matchData.home_team_name || teamName,
     away_team_name: matchData.away_team_name || matchData.opponent_team_name || '',
     home_score: matchData.home_score !== undefined ? matchData.home_score : null,
-    away_score: matchData.away_score !== undefined ? matchData.away_score : null,
-    game_name: matchData.game_name || `${matchData.home_team_name || teamName} vs ${matchData.away_team_name || matchData.opponent_team_name || ''}`,
+    matchName: matchData.matchName || matchData.match_name || matchData.game_name || matchData.gameName || `${matchData.home_team_name || teamName} vs ${matchData.away_team_name || matchData.opponent_team_name || ''}`,
+    match_name: matchData.matchName || matchData.match_name || matchData.game_name || matchData.gameName || `${matchData.home_team_name || teamName} vs ${matchData.away_team_name || matchData.opponent_team_name || ''}`,
+    gameName: matchData.matchName || matchData.match_name || matchData.game_name || matchData.gameName || `${matchData.home_team_name || teamName} vs ${matchData.away_team_name || matchData.opponent_team_name || ''}`,
+    game_name: matchData.matchName || matchData.match_name || matchData.game_name || matchData.gameName || `${matchData.home_team_name || teamName} vs ${matchData.away_team_name || matchData.opponent_team_name || ''}`,
     player_stats: matchData.player_stats || [],
     scoresheet_data: matchData.scoresheet_data || null,
     parsed_tables: matchData.parsed_tables || null,

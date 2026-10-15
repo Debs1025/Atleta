@@ -114,11 +114,16 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
 
     const scoresheetUrlVal = raw.scoresheetUrl || raw.scoresheet_url || '';
 
+    const resolvedMatchName = String(raw.matchName || raw.match_name || raw.game_name || raw.gameName || '').trim() || 'Match Game';
+
     const payload: MatchSubmissionPayload = {
       ...raw,
       team_id: raw.team_id || raw.team_name || raw.home_team_name || 'team_home',
       sport_type: normalizedSport as any,
-      match_name: raw.match_name || raw.game_name || 'Match Game',
+      matchName: resolvedMatchName,
+      match_name: resolvedMatchName,
+      gameName: resolvedMatchName,
+      game_name: resolvedMatchName,
       match_type: raw.match_type || raw.game_type || 'Practice',
       match_date: raw.match_date || raw.date_time || new Date().toISOString(),
       location: raw.location || 'Stadium',

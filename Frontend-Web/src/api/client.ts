@@ -1059,7 +1059,10 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         participating_teams: Array.isArray(payload.participating_teams) && payload.participating_teams.length > 0
           ? payload.participating_teams
           : [home, away],
-        game_name: payload.game_name || `${home} vs ${away}`,
+        matchName: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        match_name: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        gameName: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        game_name: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
         coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
         assigned_coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
         scoresheet_url: scoresheetUrlVal,
@@ -1452,10 +1455,28 @@ export const getAuditMatches = async (
         ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase()} / ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
         : 'DATE TBD';
 
+      const customMatchName = String(
+        match.matchName ||
+        match.match_name ||
+        match.game_name ||
+        match.gameName ||
+        raw.matchName ||
+        raw.match_name ||
+        raw.game_name ||
+        raw.gameName ||
+        ''
+      ).trim();
+      const matchNameDisplay = customMatchName || `${homeTeam} vs. ${awayTeam}${matchType}`;
+
       if (combinedMap.has(key)) {
         const existing = combinedMap.get(key)!;
         if (isCertified) existing.status = 'AUDITED';
         existing.raw_match = { ...existing.raw_match, ...match, ...raw };
+        if (customMatchName) {
+          existing.match_name = customMatchName;
+          existing.matchName = customMatchName;
+          existing.match_class = customMatchName;
+        }
         if (
           (!existing.coaches || existing.coaches === 'Official Assigned' || existing.coaches.startsWith('Coach off_')) &&
           coaches &&
@@ -1467,7 +1488,9 @@ export const getAuditMatches = async (
         combinedMap.set(key, {
           match_id: `#${key}`,
           validation_id: raw.validation_id || raw.audit_id || key,
-          match_class: `${homeTeam} vs. ${awayTeam}${matchType}`,
+          match_name: matchNameDisplay,
+          matchName: matchNameDisplay,
+          match_class: matchNameDisplay,
           sport,
           coaches,
           date_time: dateFormatted,
@@ -1840,10 +1863,24 @@ export const getMatchAuditDetail = async (
     const finalHomeTotals = computeTotals(finalHomeRoster, finalHomeScore);
     const finalAwayTotals = computeTotals(finalAwayRoster, finalAwayScore);
 
+    const resolvedGameName = String(
+      match.matchName ||
+      match.match_name ||
+      match.game_name ||
+      match.gameName ||
+      details.matchName ||
+      details.match_name ||
+      details.game_name ||
+      details.gameName ||
+      ''
+    ).trim() || `${homeTeamName} vs ${awayTeamName}`;
+
     const result: import('./types').MatchAuditDetail = {
       match_id: matchId,
       validation_id: validationId,
-      game_name: match.match_name || match.game_name || `${homeTeamName} vs ${awayTeamName}`,
+      matchName: resolvedGameName,
+      match_name: resolvedGameName,
+      game_name: resolvedGameName,
       sport_type: sportType,
       league_class: leagueClass,
       match_date_formatted: matchDateFormatted,

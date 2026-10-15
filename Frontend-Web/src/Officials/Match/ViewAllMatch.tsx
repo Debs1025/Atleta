@@ -35,7 +35,9 @@ const MatchRow = memo(({ item, onClick, isLast }: MatchRowProps) => {
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
     >
       <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
-      <td style={{ ...styles.td, ...styles.tdMatchClass }}>{item.match_class}</td>
+      <td style={{ ...styles.td, ...styles.tdMatchClass }}>
+        {item.raw_match?.matchName || item.raw_match?.match_name || item.raw_match?.game_name || item.raw_match?.gameName || item.match_name || item.match_class}
+      </td>
       <td style={{ ...styles.td, ...styles.tdSport }}>{item.sport}</td>
       <td style={{ ...styles.td, ...styles.tdCoaches }}>{item.coaches}</td>
       <td style={{ ...styles.td, ...styles.tdDateTime }}>{item.date_time}</td>

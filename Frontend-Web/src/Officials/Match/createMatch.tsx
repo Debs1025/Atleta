@@ -27,6 +27,7 @@ import {
   scanMultipleScoresheets,
   setCachedData,
   getCachedData,
+  invalidateCache,
   getSports,
 } from '../../api/client';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow, RaceResultRow, SportConfiguration } from '../../api/types';
@@ -1600,6 +1601,9 @@ export const CreateMatch: React.FC = () => {
         venue: venueLocation,
         court_number: 1,
         participating_teams: participating,
+        matchName: gameName.trim() || `${finalHome} vs ${finalAway}`,
+        match_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+        gameName: gameName.trim() || `${finalHome} vs ${finalAway}`,
         game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
         scoresheet_url: scoresheetUrl || '',
@@ -1644,6 +1648,8 @@ export const CreateMatch: React.FC = () => {
         const cachedDetail: MatchAuditDetail = {
           match_id: cleanMatchId,
           validation_id: actualValidationId,
+          matchName: gameName.trim() || `${finalHome} vs ${finalAway}`,
+          match_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
           game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
           sport_type: normalizedSport,
           league_class: `${normalizedSport.toUpperCase()} • OFFICIAL MATCH`,
@@ -1720,6 +1726,8 @@ export const CreateMatch: React.FC = () => {
         try {
           localStorage.setItem(`atleta_match_detail_${cleanMatchId}`, JSON.stringify(cachedDetail));
         } catch {}
+        invalidateCache('all_official_matches_master');
+        invalidateCache('official_dashboard');
       }
 
       if (parsedMatches.length > 1) {

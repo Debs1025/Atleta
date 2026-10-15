@@ -13,6 +13,9 @@ export interface CreateOfficialMatchDto {
   home_team_name?: string;
   away_team_name?: string;
   opponent_team_name?: string;
+  matchName?: string;
+  match_name?: string;
+  gameName?: string;
   game_name?: string;
   sport_type: SportType;
   match_type?: string;
@@ -132,7 +135,10 @@ export async function createOfficialMatchService(
     match_date: data.match_date,
     location: data.location,
     opponent_team_name: awayName,
-    game_name: data.game_name || `${homeName} vs ${awayName}`,
+    matchName: String((data as any).matchName || data.match_name || data.game_name || (data as any).gameName || '').trim() || `${homeName} vs ${awayName}`,
+    match_name: String((data as any).matchName || data.match_name || data.game_name || (data as any).gameName || '').trim() || `${homeName} vs ${awayName}`,
+    gameName: String((data as any).matchName || data.match_name || data.game_name || (data as any).gameName || '').trim() || `${homeName} vs ${awayName}`,
+    game_name: String((data as any).matchName || data.match_name || data.game_name || (data as any).gameName || '').trim() || `${homeName} vs ${awayName}`,
     game_result: data.game_result || 'TBD',
     notes: data.notes || '',
     scoresheet_url: scoresheetUrlVal,
@@ -167,6 +173,9 @@ export async function createOfficialMatchService(
     validation_id: validationId,
     audit_id: validationId,
     match_id: matchId,
+    matchName: matchLog.matchName,
+    match_name: matchLog.match_name,
+    game_name: matchLog.game_name,
     official_id: officialId || uid,
     requested_by: uid,
     requested_by_coach_id: (matchLog.assigned_coaches && matchLog.assigned_coaches[0]) || uid,

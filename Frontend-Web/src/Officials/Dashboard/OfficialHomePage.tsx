@@ -147,10 +147,25 @@ export const OfficialHomePage: React.FC = () => {
       const rawId = String(match.match_id || item.match_id || `queue_${idx}`).replace(/^#/, '');
       if (isMatchDeleted(rawId)) return;
 
+      const customMatchName = String(
+        match.matchName ||
+        match.match_name ||
+        match.game_name ||
+        match.gameName ||
+        item.matchName ||
+        item.match_name ||
+        item.game_name ||
+        item.gameName ||
+        ''
+      ).trim();
+      const fallbackName = match.home_team_name && match.away_team_name ? `${match.home_team_name} vs. ${match.away_team_name}` : 'Tournament Match';
+
       const fakeSummary: MatchSummaryItem = {
         match_id: `#${rawId}`,
         validation_id: item.audit_id || rawId,
-        match_class: match.home_team_name && match.away_team_name ? `${match.home_team_name} vs. ${match.away_team_name}` : 'Tournament Match',
+        match_name: customMatchName || fallbackName,
+        matchName: customMatchName || fallbackName,
+        match_class: customMatchName || fallbackName,
         sport: match.sport_type || 'Basketball',
         coaches: '',
         date_time: match.match_date || item.requested_at || new Date().toISOString(),
@@ -535,7 +550,9 @@ export const OfficialHomePage: React.FC = () => {
                         onClick={() => navigate(`/matches/${lookupId}`)}
                       >
                         <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
-                        <td style={styles.td}>{item.match_class}</td>
+                        <td style={styles.td}>
+                          {item.raw_match?.matchName || item.raw_match?.match_name || item.raw_match?.game_name || item.raw_match?.gameName || item.match_name || item.match_class}
+                        </td>
                         <td style={styles.td}>{item.sport}</td>
                         <td style={styles.td}>{item.coaches || 'Assigned Coach'}</td>
                         <td style={{ ...styles.td, borderRight: 'none' }}>

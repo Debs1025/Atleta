@@ -66,8 +66,13 @@ export async function getOfficialDashboardMetrics(officialId: string) {
   matchDocs.forEach(mDoc => {
     if (mDoc && mDoc.exists) {
       const data = mDoc.data() || {};
+      const resolvedName = String(data.matchName || data.match_name || data.game_name || data.gameName || '').trim();
       matchesMap.set(mDoc.id, {
         match_id: data.match_id || mDoc.id,
+        matchName: resolvedName,
+        match_name: resolvedName,
+        gameName: resolvedName,
+        game_name: resolvedName,
         home_team_name: data.home_team_name || data.home_team || 'Home Team',
         away_team_name: data.away_team_name || data.away_team || 'Away Team',
         sport_type: data.sport_type || 'Basketball',
@@ -83,10 +88,24 @@ export async function getOfficialDashboardMetrics(officialId: string) {
   const auditQueue = pendingAuditsDocs.map(d => {
     const auditData = d.data();
     const details = matchesMap.get(auditData.match_id) || {};
+    const customMatchName = String(
+      auditData.matchName ||
+      auditData.match_name ||
+      auditData.game_name ||
+      details.matchName ||
+      details.match_name ||
+      details.game_name ||
+      ''
+    ).trim();
+
     return {
       audit_id: auditData.audit_id || d.id,
       match_id: auditData.match_id || details.match_id || d.id,
       validation_id: auditData.validation_id || auditData.audit_id || d.id,
+      matchName: customMatchName,
+      match_name: customMatchName,
+      gameName: customMatchName,
+      game_name: customMatchName,
       requested_by: auditData.requested_by_coach_id || auditData.requested_by || details.logged_by_coach_id || 'Coach',
       requested_by_coach_id: auditData.requested_by_coach_id || auditData.requested_by || details.logged_by_coach_id || 'Coach',
       status: auditData.status || 'Pending',
