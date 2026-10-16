@@ -2522,10 +2522,39 @@ export const fulfillScoresheetRequest = async (
   return data;
 };
 
-export const getScoresheetRequests = async (): Promise<any[]> => {
+export const rejectScoresheetRequest = async (
+  requestId: string,
+  reason?: string
+): Promise<{ request: any }> => {
+  const token = getStoredToken();
+  const cleanReqId = requestId.replace(/^notif_/, '');
+  const res = await fetch(`${BASE_URL}/scoresheets/requests/${cleanReqId}/reject`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ reason: reason || 'Scoresheet request could not be fulfilled at this time.' }),
+  });
+
+  const data = await handleResponse<{ request: any }>(res);
+  storeReadNotificationId(requestId);
+  storeReadNotificationId(`req_${cleanReqId}`);
+  invalidateCache();
+  return data;
+};
+
+export const getScoresheetRequests = async (params?: { status?: string; coachId?: string; matchId?: string }): Promise<any[]> => {
   const token = getStoredToken();
   try {
-    const res = await fetch(`${BASE_URL}/scoresheets/requests`, {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.coachId) query.append('coachId', params.coachId);
+    if (params?.matchId) query.append('matchId', params.matchId);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+
+    const res = await fetch(`${BASE_URL}/scoresheets/requests${qs}`, {
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),

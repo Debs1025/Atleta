@@ -8,7 +8,6 @@ import { AdminHomePage } from './SysAdmin/Dashboard/AdminHomePage';
 import { SportPage } from './SysAdmin/Sports_Management/SportPage';
 import { OfficialHomePage } from './Officials/Dashboard/OfficialHomePage';
 import { SchedulePage } from './Officials/Schedule/SchedulePage';
-import { TournamentBracketPage } from './Officials/Tournament/TournamentBracketPage';
 import { SettingsPage } from './Officials/Settings/SettingsPage';
 import { NotificationPage } from './Officials/Notification/NotificationPage';
 import { ProfilePage } from './Officials/Profile/ProfilePage';
@@ -125,14 +124,6 @@ function App() {
           element={
             <OfficialRoute>
               <SchedulePage />
-            </OfficialRoute>
-          }
-        />
-        <Route
-          path="/brackets"
-          element={
-            <OfficialRoute>
-              <TournamentBracketPage />
             </OfficialRoute>
           }
         />

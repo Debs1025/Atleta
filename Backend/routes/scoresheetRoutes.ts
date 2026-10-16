@@ -5,6 +5,7 @@ import {
   createScoresheetRequestHandler,
   getScoresheetRequestsHandler,
   fulfillScoresheetRequestHandler,
+  rejectScoresheetRequestHandler,
 } from '../controllers/scoresheetRequestController';
 
 const router = Router();
@@ -26,5 +27,11 @@ router.get('/', optionalAuth, getScoresheetRequestsHandler);
 router.post('/requests/:requestId/fulfill', optionalAuth, upload.any(), fulfillScoresheetRequestHandler);
 router.post('/fulfill/:requestId', optionalAuth, upload.any(), fulfillScoresheetRequestHandler);
 router.post('/:matchId/fulfill', optionalAuth, upload.any(), fulfillScoresheetRequestHandler);
+
+// Official rejects request
+router.post('/requests/:requestId/reject', optionalAuth, rejectScoresheetRequestHandler);
+router.post('/reject/:requestId', optionalAuth, rejectScoresheetRequestHandler);
+router.post('/:matchId/reject', optionalAuth, rejectScoresheetRequestHandler);
+router.patch('/requests/:requestId/reject', optionalAuth, rejectScoresheetRequestHandler);
 
 export default router;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, Calendar, Settings, LogOut, AlertCircle, X, Trophy } from 'lucide-react';
+import { Plus, LayoutGrid, Calendar, Settings, LogOut, AlertCircle, X } from 'lucide-react';
 import { clearAuthSession, getOfficialSchedules } from '../../api/client';
 import { styles } from './styles/Sidebar';
 
@@ -13,7 +13,6 @@ interface SidebarProps {
 const NAV_ITEMS = [
   { to: '/dashboard-official', label: 'DASHBOARD', Icon: LayoutGrid, key: 'DASHBOARD' },
   { to: '/schedules', label: 'SCHEDULES', Icon: Calendar, key: 'SCHEDULES' },
-  { to: '/brackets', label: 'BRACKETS', Icon: Trophy, key: 'BRACKETS' },
   { to: '/settings', label: 'SETTINGS', Icon: Settings, key: 'SETTINGS' },
 ] as const;
 

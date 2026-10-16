@@ -612,12 +612,11 @@ export const AdminHomePage: React.FC = () => {
                 <thead>
                   <tr>
                     {[
-                      { label: 'OFFICIAL ID', width: '12%' },
-                      { label: 'LEGAL NAME', width: '20%' },
-                      { label: 'EMAIL ADDRESS', width: '20%' },
-                      { label: 'ORGANIZATION', width: '18%' },
-                      { label: 'LICENSE NO.', width: '10%' },
-                      { label: 'REGISTERED', width: '10%' },
+                      { label: 'OFFICIAL ID', width: '11%' },
+                      { label: 'LEGAL NAME', width: '21%' },
+                      { label: 'ORGANIZATION', width: '21%' },
+                      { label: 'LICENSE NO.', width: '13%' },
+                      { label: 'DATE REGISTERED', width: '14%' },
                       { label: 'STATUS', width: '10%', align: 'center' },
                       { label: 'ACTION', width: '10%', align: 'center' },
                     ].map((col, idx, arr) => (
@@ -638,14 +637,14 @@ export const AdminHomePage: React.FC = () => {
                 <tbody>
                   {loading && officialQueue.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ height: '52px', padding: '16px 18px', textAlign: 'center', boxSizing: 'border-box' }}>
+                      <td colSpan={7} style={{ height: '52px', padding: '16px 18px', textAlign: 'center', boxSizing: 'border-box' }}>
                         <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#0B132B' }} />
                       </td>
                     </tr>
                   ) : displayedOfficials.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={7}
                         style={{
                           height: '52px',
                           padding: '16px 18px',
@@ -683,11 +682,15 @@ export const AdminHomePage: React.FC = () => {
                           <td style={styles.td}>
                             <span style={styles.idText}>{formatOfficialId(item.official_id, (page - 1) * itemsPerPage + idx)}</span>
                           </td>
-                          <td style={{ ...styles.td, fontWeight: 900, textTransform: 'uppercase' }}>
-                            {item.full_name || `${item.first_name || ''} ${item.last_name || ''}`.trim() || 'TOURNAMENT OFFICIAL'}
-                          </td>
-                          <td style={styles.td}>
-                            <span style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>{item.email}</span>
+                          <td style={{ ...styles.td, textTransform: 'uppercase' }}>
+                            <div style={{ fontWeight: 900 }}>
+                              {item.full_name || `${item.first_name || ''} ${item.last_name || ''}`.trim() || 'TOURNAMENT OFFICIAL'}
+                            </div>
+                            {item.email && (
+                              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'none' }}>
+                                {item.email}
+                              </div>
+                            )}
                           </td>
                           <td style={styles.td}>
                             <span style={styles.affiliationText}>

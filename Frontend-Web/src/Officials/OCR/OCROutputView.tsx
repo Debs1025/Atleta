@@ -9,11 +9,9 @@ import {
   Loader2,
   Trophy,
   Layers,
-  User,
 } from 'lucide-react';
 import type { RawOCRDetectedData, DetectedAthleteStat, SportConfiguration } from '../../api/types';
 import { submitVerifiedMatch, getSports } from '../../api/client';
-import { AthleteProfileModal } from '../Components/AthleteProfileModal';
 import { INITIAL_DEFAULT_SPORTS } from '../../SysAdmin/Sports_Management/SportPage';
 import { styles } from './styles/OCROutputView';
 import {
@@ -290,14 +288,6 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     }
     return { homeBadge: 'PENDING', awayBadge: 'PENDING', summary: 'Awaiting match data', finalScore: '0 - 0' };
   }, [homeScore, awayScore, homeTeamName, awayTeamName]);
-
-  const [selectedAthlete, setSelectedAthlete] = useState<{
-    athleteId?: string;
-    athleteName?: string;
-    jerseyNo?: string | number;
-    teamName?: string;
-    stats?: Record<string, any>;
-  } | null>(null);
 
   const mvpAthlete = useMemo(() => {
     if (!athleteStats || athleteStats.length === 0) return null;
@@ -740,64 +730,22 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                   EFF: {typeof mvpAthlete.score === 'number' ? mvpAthlete.score.toFixed(1) : mvpAthlete.score}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedAthlete({
-                  athleteId: mvpAthlete.raw?.athlete_id,
-                  athleteName: mvpAthlete.name,
-                  jerseyNo: mvpAthlete.jersey,
-                  teamName: mvpAthlete.team,
-                  stats: mvpAthlete.raw?.stats || mvpAthlete.raw,
-                })}
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
                   margin: '2px 0 0 0',
                   fontSize: '16px',
                   fontWeight: 800,
                   color: '#0B132B',
-                  cursor: 'pointer',
                   textAlign: 'left',
-                  textDecoration: 'underline',
-                  textDecorationColor: '#D97706',
                 }}
-                title="Click to inspect athlete profile"
               >
                 {mvpAthlete.name} {mvpAthlete.jersey ? `(#${mvpAthlete.jersey})` : ''}
-              </button>
+              </div>
               <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
                 {mvpAthlete.team} • {mvpAthlete.label}
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setSelectedAthlete({
-              athleteId: mvpAthlete.raw?.athlete_id,
-              athleteName: mvpAthlete.name,
-              jerseyNo: mvpAthlete.jersey,
-              teamName: mvpAthlete.team,
-              stats: mvpAthlete.raw?.stats || mvpAthlete.raw,
-            })}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '7px 14px',
-              backgroundColor: '#0B132B',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <User size={13} />
-            <span>VIEW ATHLETE PROFILE</span>
-          </button>
         </div>
       )}
 
@@ -870,31 +818,9 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                         : a.jersey_number ? `#${a.jersey_number}` : '-'}
                     </td>
                     <td style={styles.tdAthleteName}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedAthlete({
-                          athleteId: a.athlete_id,
-                          athleteName: a.player_name,
-                          jerseyNo: a.jersey_number,
-                          teamName: a.team_name,
-                          stats: a.stats || a,
-                        })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          margin: 0,
-                          color: '#0B132B',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          textDecoration: 'underline',
-                          textDecorationColor: '#94A3B8',
-                        }}
-                        title="Click to inspect athlete profile"
-                      >
+                      <span style={{ color: '#0B132B', fontWeight: 800 }}>
                         {a.player_name}
-                      </button>
+                      </span>
                     </td>
                     <td style={styles.tdTeam}>
                       <button
@@ -976,16 +902,6 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         </div>
       </div>
 
-      {/* Official Athlete Profile Inspection Modal */}
-      <AthleteProfileModal
-        isOpen={Boolean(selectedAthlete)}
-        onClose={() => setSelectedAthlete(null)}
-        athleteId={selectedAthlete?.athleteId}
-        athleteName={selectedAthlete?.athleteName}
-        jerseyNo={selectedAthlete?.jerseyNo}
-        teamName={selectedAthlete?.teamName}
-        stats={selectedAthlete?.stats}
-      />
     </div>
   );
 };

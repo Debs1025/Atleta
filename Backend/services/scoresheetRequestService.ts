@@ -11,7 +11,7 @@ export interface ScoresheetRequestDoc {
   matchId: string;
   matchName: string;
   sportType?: string;
-  status: 'pending' | 'fulfilled';
+  status: 'pending' | 'fulfilled' | 'accepted' | 'rejected';
   createdAt: string;
   updatedAt: string;
   scoresheetUrl?: string;
@@ -19,6 +19,10 @@ export interface ScoresheetRequestDoc {
   fulfilledAt?: string;
   fulfilledByOfficialId?: string;
   fulfilledByOfficialName?: string;
+  rejectedAt?: string;
+  rejectedByOfficialId?: string;
+  rejectedByOfficialName?: string;
+  rejectionReason?: string;
   is_read_by_official?: boolean;
   is_read_by_coach?: boolean;
 }
@@ -295,5 +299,99 @@ export async function fulfillScoresheetRequestService(
     ...updatedDoc,
     status: 'fulfilled',
     scoresheetUrl,
+  } as ScoresheetRequestDoc;
+}
+
+/**
+ * Rejects an open scoresheet request and notifies the Coach.
+ */
+export async function rejectScoresheetRequestService(
+  requestId: string,
+  officialInfo: { officialId: string; officialName?: string },
+  reason?: string
+): Promise<ScoresheetRequestDoc> {
+  let reqRef = db.collection('scoresheetRequests').doc(requestId);
+  let reqDoc = await reqRef.get();
+
+  if (!reqDoc.exists) {
+    const matchQuery = await db.collection('scoresheetRequests')
+      .where('matchId', '==', requestId.replace(/^req_/, ''))
+      .limit(1)
+      .get();
+    if (!matchQuery.empty) {
+      reqRef = matchQuery.docs[0].ref;
+      reqDoc = matchQuery.docs[0];
+    }
+  }
+
+  if (!reqDoc.exists) {
+    throw new Error('Scoresheet request not found.');
+  }
+
+  const reqData = reqDoc.data() as ScoresheetRequestDoc;
+  const matchId = reqData.matchId;
+  const now = new Date().toISOString();
+  const officialName = officialInfo.officialName || 'Tournament Official';
+  const rejectReason = reason || 'Scoresheet request could not be fulfilled at this time.';
+
+  const updatedDoc: Partial<ScoresheetRequestDoc> = {
+    status: 'rejected',
+    rejectedAt: now,
+    rejectedByOfficialId: officialInfo.officialId,
+    rejectedByOfficialName: officialName,
+    rejectionReason: rejectReason,
+    is_read_by_official: true,
+    updatedAt: now,
+  };
+
+  const batch = db.batch();
+  batch.update(reqRef, updatedDoc);
+
+  // Update Match_Logs
+  const matchRef = db.collection('Match_Logs').doc(matchId);
+  batch.set(matchRef, {
+    scoresheet_request_status: 'rejected',
+    audit_status: 'REJECTED',
+    verification_status: 'Rejected',
+    updated_at: now,
+  }, { merge: true });
+
+  // Auto-mark official notification as read
+  const notifId = `notif_req_${reqDoc.id}`;
+  batch.set(db.collection('Official_Notifications').doc(notifId), {
+    is_read: true,
+    status: 'rejected',
+    updated_at: now,
+  }, { merge: true });
+
+  // Push notification to Coach
+  const coachNotifId = `coach_notif_${crypto.randomUUID()}`;
+  const coachId = reqData.coachId;
+  const matchName = reqData.matchName || `Match ${matchId}`;
+
+  batch.set(db.collection('Notifications').doc(coachNotifId), {
+    notification_id: coachNotifId,
+    user_id: coachId,
+    recipient_id: coachId,
+    type: 'SCORESHEET_REJECTED',
+    title: `Scoresheet Request Declined: ${matchName}`,
+    message: `${officialName} has declined the scoresheet request for ${matchName}. Reason: ${rejectReason}`,
+    match_id: matchId,
+    matchId,
+    match_name: matchName,
+    request_id: reqDoc.id,
+    requestId: reqDoc.id,
+    is_read: false,
+    status: 'UNREAD',
+    created_at: now,
+    timestamp: now,
+  });
+
+  await batch.commit();
+
+  return {
+    ...reqData,
+    ...updatedDoc,
+    status: 'rejected',
   } as ScoresheetRequestDoc;
 }

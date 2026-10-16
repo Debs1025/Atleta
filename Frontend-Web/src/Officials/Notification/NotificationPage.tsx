@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileText,
   AlertCircle,
+  XCircle,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -16,6 +17,7 @@ import {
   getCachedData,
   getMe,
   fulfillScoresheetRequest,
+  rejectScoresheetRequest,
 } from '../../api/client';
 import type { AuthUser, OfficialNotificationItem } from '../../api/types';
 import { Navbar } from '../Components/Navbar';
@@ -37,8 +39,9 @@ export const NotificationPage: React.FC = () => {
     markSingleRead,
   } = useNotifications();
 
-  // File Upload State for Fulfilling Requests
+  // File Upload & Request Action States
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [successNotifId, setSuccessNotifId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
@@ -78,6 +81,16 @@ export const NotificationPage: React.FC = () => {
 
       await fulfillScoresheetRequest(reqId, file, matchId);
 
+      // Record accepted request into local storage activity tracking
+      try {
+        const rawExisting = localStorage.getItem('atleta_accepted_scoresheet_requests');
+        const existing = rawExisting ? JSON.parse(rawExisting) : [];
+        const coachName = notif.requested_by_coach || notif.coach_name || 'Assigned Coach';
+        const entry = { id: reqId, coachName, timestamp: Date.now() };
+        const updated = [entry, ...existing.filter((e: any) => e.id !== reqId)];
+        localStorage.setItem('atleta_accepted_scoresheet_requests', JSON.stringify(updated));
+      } catch {}
+
       // Auto-mark notification as read on the official side
       markSingleRead(notifId);
       setSuccessNotifId(notifId);
@@ -91,6 +104,35 @@ export const NotificationPage: React.FC = () => {
       setUploadError(err?.message || 'Failed to upload and share scoresheet.');
     } finally {
       setUploadingId(null);
+    }
+  };
+
+  const handleRejectRequest = async (notif: OfficialNotificationItem) => {
+    const notifId = notif.notification_id;
+    const reqId = notif.request_id || notif.reference_id || notifId.replace(/^req_/, '');
+    const coachName = notif.requested_by_coach || notif.coach_name || 'the coach';
+
+    const reason = window.prompt(
+      `Please state the reason for rejecting the scoresheet request from ${coachName}:`,
+      'Scoresheet request could not be fulfilled at this time.'
+    );
+    if (reason === null) return; // User cancelled prompt
+
+    try {
+      setRejectingId(notifId);
+      setUploadError(null);
+
+      await rejectScoresheetRequest(reqId, reason);
+      markSingleRead(notifId);
+
+      setTimeout(() => {
+        refresh();
+      }, 500);
+    } catch (err: any) {
+      console.error('Scoresheet rejection failed:', err);
+      setUploadError(err?.message || 'Failed to reject scoresheet request.');
+    } finally {
+      setRejectingId(null);
     }
   };
 
@@ -220,7 +262,8 @@ export const NotificationPage: React.FC = () => {
             </div>
           ) : (
             <div style={styles.feedList}>
-              {filteredNotifications.map((notif) => {
+              {filteredNotifications.map((notif, idx) => {
+                const itemNumber = idx + 1;
                 const isAudit =
                   notif.type === 'AUDIT_REQUEST' ||
                   notif.type === 'SCORESHEET_REQUEST' ||
@@ -234,7 +277,9 @@ export const NotificationPage: React.FC = () => {
                   const matchContext = notif.match_context || notif.match_name || notif.title || 'Official Match';
                   const sportDiscipline = notif.sport_discipline || notif.sport || 'GENERAL';
                   const isUploadingThis = uploadingId === notif.notification_id;
-                  const isFulfilled = notif.status === 'fulfilled' || Boolean(notif.scoresheet_url);
+                  const isRejectingThis = rejectingId === notif.notification_id;
+                  const isFulfilled = notif.status === 'fulfilled' || notif.status === 'accepted' || Boolean(notif.scoresheet_url);
+                  const isRejected = notif.status === 'rejected';
                   const isSuccess = successNotifId === notif.notification_id;
 
                   return (
@@ -243,12 +288,24 @@ export const NotificationPage: React.FC = () => {
                       style={{
                         ...styles.auditCard,
                         ...(isRead ? styles.auditCardRead : {}),
-                        borderColor: isSuccess ? '#10B981' : isRead ? '#E2E8F0' : '#00C8FF',
-                        borderWidth: isSuccess ? '2px' : '1px',
+                        borderColor: isSuccess ? '#10B981' : isRejected ? '#EF4444' : isRead ? '#E2E8F0' : '#00C8FF',
+                        borderWidth: isSuccess || isRejected ? '2px' : '1px',
                       }}
                     >
                       <div style={styles.cardTopLine}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            backgroundColor: '#0B132B',
+                            color: '#00C8FF',
+                            fontFamily: 'monospace',
+                            fontWeight: 900,
+                            fontSize: '11px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: '1px solid rgba(0, 200, 255, 0.4)',
+                          }}>
+                            #{itemNumber}
+                          </span>
                           <h3 style={isRead ? styles.auditCardTitleRead : styles.auditCardTitle}>
                             SCORESHEET REQUEST: {notif.title.toUpperCase()}
                           </h3>
@@ -266,7 +323,23 @@ export const NotificationPage: React.FC = () => {
                               gap: '4px',
                             }}>
                               <CheckCircle2 style={{ width: 12, height: 12 }} />
-                              FULFILLED & SHARED
+                              ACCEPTED & SHARED
+                            </span>
+                          ) : isRejected ? (
+                            <span style={{
+                              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                              color: '#EF4444',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #EF4444',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}>
+                              <XCircle style={{ width: 12, height: 12 }} />
+                              REJECTED
                             </span>
                           ) : (
                             <span style={{
@@ -323,45 +396,82 @@ export const NotificationPage: React.FC = () => {
 
                       {/* Actions Row */}
                       <div style={{ display: 'flex', gap: '12px', marginTop: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        {/* Direct Upload & Share Button */}
-                        <button
-                          type="button"
-                          disabled={isUploadingThis}
-                          onClick={() => {
-                            fileInputRefs.current[notif.notification_id]?.click();
-                          }}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            backgroundColor: isFulfilled ? '#0F172A' : '#00C8FF',
-                            color: isFulfilled ? '#94A3B8' : '#080F21',
-                            border: isFulfilled ? '1px solid #334155' : 'none',
-                            padding: '8px 16px',
-                            borderRadius: '6px',
-                            fontWeight: 800,
-                            fontSize: '12px',
-                            cursor: isUploadingThis ? 'not-allowed' : 'pointer',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          {isUploadingThis ? (
-                            <>
-                              <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
-                              <span>UPLOADING TO STORAGE & SHARING...</span>
-                            </>
-                          ) : isFulfilled ? (
-                            <>
-                              <Upload style={{ width: 14, height: 14 }} />
-                              <span>REPLACE / RE-UPLOAD SCORESHEET</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload style={{ width: 14, height: 14 }} />
-                              <span>UPLOAD & SHARE SCORESHEET</span>
-                            </>
-                          )}
-                        </button>
+                        {/* Direct Upload & Share Button (Transitions status to Accepted / Fulfilled) */}
+                        {!isRejected && (
+                          <button
+                            type="button"
+                            disabled={isUploadingThis || isRejectingThis}
+                            onClick={() => {
+                              fileInputRefs.current[notif.notification_id]?.click();
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              backgroundColor: isFulfilled ? '#0F172A' : '#00C8FF',
+                              color: isFulfilled ? '#94A3B8' : '#080F21',
+                              border: isFulfilled ? '1px solid #334155' : 'none',
+                              padding: '8px 16px',
+                              borderRadius: '6px',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: (isUploadingThis || isRejectingThis) ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            {isUploadingThis ? (
+                              <>
+                                <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+                                <span>UPLOADING TO STORAGE & SHARING...</span>
+                              </>
+                            ) : isFulfilled ? (
+                              <>
+                                <Upload style={{ width: 14, height: 14 }} />
+                                <span>REPLACE / RE-UPLOAD SCORESHEET</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload style={{ width: 14, height: 14 }} />
+                                <span>UPLOAD & SHARE SCORESHEET</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Rejection Button (for pending requests) */}
+                        {!isFulfilled && !isRejected && (
+                          <button
+                            type="button"
+                            disabled={isUploadingThis || isRejectingThis}
+                            onClick={() => handleRejectRequest(notif)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                              color: '#EF4444',
+                              border: '1px solid #EF4444',
+                              padding: '8px 14px',
+                              borderRadius: '6px',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: (isUploadingThis || isRejectingThis) ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            {isRejectingThis ? (
+                              <>
+                                <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+                                <span>REJECTING...</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle style={{ width: 14, height: 14 }} />
+                                <span>REJECT SCORESHEET REQUEST</span>
+                              </>
+                            )}
+                          </button>
+                        )}
 
                         {/* View Shared File Link */}
                         {notif.scoresheet_url && (
@@ -427,10 +537,24 @@ export const NotificationPage: React.FC = () => {
                     }}
                   >
                     <div style={styles.scheduleTopRow}>
-                      <h3 style={isRead ? styles.scheduleHeaderTitleRead : styles.scheduleHeaderTitle}>
-                        <span style={isRead ? styles.squareBulletRead : styles.squareBullet} />
-                        <span>SCHEDULE UPDATES: {notif.title.toUpperCase()}</span>
-                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          backgroundColor: '#0F172A',
+                          color: '#94A3B8',
+                          fontFamily: 'monospace',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid #334155',
+                        }}>
+                          #{itemNumber}
+                        </span>
+                        <h3 style={isRead ? styles.scheduleHeaderTitleRead : styles.scheduleHeaderTitle}>
+                          <span style={isRead ? styles.squareBulletRead : styles.squareBullet} />
+                          <span>SCHEDULE UPDATES: {notif.title.toUpperCase()}</span>
+                        </h3>
+                      </div>
                       <span style={styles.cardTimestamp}>
                         {formatUtcDateTime(notif.created_at)}
                       </span>

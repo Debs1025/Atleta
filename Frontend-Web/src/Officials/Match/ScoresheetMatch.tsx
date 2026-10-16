@@ -16,9 +16,7 @@ import {
   Trophy,
   ChevronLeft,
   ChevronRight,
-  User,
 } from 'lucide-react';
-import { AthleteProfileModal } from '../Components/AthleteProfileModal';
 import {
   getMatchAuditDetail,
   certifyMatchValidation,
@@ -100,14 +98,6 @@ export const ScoresheetMatch: React.FC = () => {
   const isCertified = Boolean(matchData?.is_certified || isMatchLocallyCertified(cleanId));
 
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
-  const [selectedAthlete, setSelectedAthlete] = useState<{
-    athleteId?: string;
-    athleteName?: string;
-    jerseyNo?: string | number;
-    teamName?: string;
-    position?: string;
-    stats?: Record<string, any>;
-  } | null>(null);
   const [previewPageIndex, setPreviewPageIndex] = useState<number>(0);
 
   useEffect(() => {
@@ -1009,32 +999,9 @@ export const ScoresheetMatch: React.FC = () => {
                       {isEditing && !isCertified ? (
                         <input type="text" value={row.player_name} onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)} style={styles.statInputName} />
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedAthlete({
-                            athleteId: (row as any).athlete_id,
-                            athleteName: row.player_name,
-                            jerseyNo: row.jersey_no,
-                            teamName: teamType === 'home' ? homeTeamDisplayName : awayTeamDisplayName,
-                            position: row.position,
-                            stats: row,
-                          })}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            margin: 0,
-                            color: '#0B132B',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            textDecoration: 'underline',
-                            textDecorationColor: '#94A3B8',
-                          }}
-                          title="Click to view athlete profile"
-                        >
+                        <span style={{ color: '#0B132B', fontWeight: 700 }}>
                           {row.player_name}
-                        </button>
+                        </span>
                       )}
                     </td>
                     {dynamicSportColumns.map((col) => {
@@ -1179,30 +1146,9 @@ export const ScoresheetMatch: React.FC = () => {
                     {isEditing && !isCertified ? (
                       <input type="text" value={row.athlete_name} onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)} style={styles.statInputName} />
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedAthlete({
-                          athleteId: (row as any).athlete_id,
-                          athleteName: row.athlete_name,
-                          teamName: row.team_name,
-                          stats: row,
-                        })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          margin: 0,
-                          color: '#0B132B',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          textDecoration: 'underline',
-                          textDecorationColor: '#94A3B8',
-                        }}
-                        title="Click to view athlete profile"
-                      >
+                      <span style={{ color: '#0B132B', fontWeight: 700 }}>
                         {row.athlete_name}
-                      </button>
+                      </span>
                     )}
                   </td>
                   <td style={styles.statTd}>
@@ -1336,6 +1282,24 @@ export const ScoresheetMatch: React.FC = () => {
                   {isCertified && (
                     <span style={styles.certifiedHeaderBadge}>OFFICIAL MATCH</span>
                   )}
+                  {displayPages.length >= 2 && (
+                    <span style={{
+                      backgroundColor: '#E0F2FE',
+                      color: '#0284C7',
+                      border: '1px solid #BAE6FD',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      letterSpacing: '0.5px',
+                    }}>
+                      <FileText size={12} />
+                      {displayPages.length} PAGES ATTACHED
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1438,64 +1402,22 @@ export const ScoresheetMatch: React.FC = () => {
                         EFF: {typeof mvpPlayer.score === 'number' ? mvpPlayer.score.toFixed(1) : mvpPlayer.score}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAthlete({
-                        athleteId: mvpPlayer.athleteId,
-                        athleteName: mvpPlayer.playerName,
-                        jerseyNo: mvpPlayer.jerseyNo,
-                        teamName: mvpPlayer.teamName,
-                        stats: mvpPlayer.row || {},
-                      })}
+                    <div
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        padding: 0,
                         margin: '2px 0 0 0',
                         fontSize: '16px',
                         fontWeight: 800,
                         color: '#0B132B',
-                        cursor: 'pointer',
                         textAlign: 'left',
-                        textDecoration: 'underline',
-                        textDecorationColor: '#D97706',
                       }}
-                      title="Click to view athlete profile"
                     >
                       {mvpPlayer.playerName} {mvpPlayer.jerseyNo ? `(#${mvpPlayer.jerseyNo})` : ''}
-                    </button>
+                    </div>
                     <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
                       {mvpPlayer.teamName} • {mvpPlayer.metricLabel}
                     </div>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedAthlete({
-                    athleteId: mvpPlayer.athleteId,
-                    athleteName: mvpPlayer.playerName,
-                    jerseyNo: mvpPlayer.jerseyNo,
-                    teamName: mvpPlayer.teamName,
-                    stats: mvpPlayer.row || {},
-                  })}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '7px 14px',
-                    backgroundColor: '#0B132B',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: 6,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <User size={13} />
-                  <span>VIEW PROFILE</span>
-                </button>
               </div>
             )}
 
@@ -1510,7 +1432,27 @@ export const ScoresheetMatch: React.FC = () => {
             {/* Bottom Grid: Scoresheet Dropzone & Notes */}
             <div style={styles.bottomGrid}>
               <div style={styles.boxContainer}>
-                <span style={styles.boxLabel}>MATCH OFFICIAL SCORESHEET</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={styles.boxLabel}>MATCH OFFICIAL SCORESHEET</span>
+                  {displayPages.length >= 2 && (
+                    <span style={{
+                      backgroundColor: '#E0F2FE',
+                      color: '#0284C7',
+                      border: '1px solid #BAE6FD',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      letterSpacing: '0.5px',
+                    }}>
+                      <FileText size={12} />
+                      {displayPages.length} PAGES ATTACHED
+                    </span>
+                  )}
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1983,18 +1925,6 @@ export const ScoresheetMatch: React.FC = () => {
           </div>
         );
       })()}
-
-      {/* Athlete Profile Modal for Tournament Officials */}
-      <AthleteProfileModal
-        isOpen={Boolean(selectedAthlete)}
-        onClose={() => setSelectedAthlete(null)}
-        athleteId={selectedAthlete?.athleteId}
-        athleteName={selectedAthlete?.athleteName}
-        jerseyNo={selectedAthlete?.jerseyNo}
-        teamName={selectedAthlete?.teamName}
-        position={selectedAthlete?.position}
-        stats={selectedAthlete?.stats}
-      />
     </div>
   );
 };

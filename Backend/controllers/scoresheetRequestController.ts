@@ -4,6 +4,7 @@ import {
   createScoresheetRequestService,
   getScoresheetRequestsService,
   fulfillScoresheetRequestService,
+  rejectScoresheetRequestService,
 } from '../services/scoresheetRequestService';
 
 export async function createScoresheetRequestHandler(req: AuthRequest, res: Response): Promise<void> {
@@ -89,5 +90,35 @@ export async function fulfillScoresheetRequestHandler(req: AuthRequest, res: Res
   } catch (error: any) {
     console.error('fulfillScoresheetRequestHandler error:', error);
     res.status(500).json({ error: error?.message || 'Failed to fulfill scoresheet request.' });
+  }
+}
+
+export async function rejectScoresheetRequestHandler(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const requestId = String(req.params?.requestId || req.params?.matchId || req.body?.requestId || req.body?.matchId || '');
+    if (!requestId) {
+      res.status(400).json({ error: 'requestId is required.' });
+      return;
+    }
+
+    const officialId = req.user?.uid || req.body?.officialId || 'off_default';
+    const officialName = req.user
+      ? `${(req.user as any).first_name || ''} ${(req.user as any).last_name || ''}`.trim() || req.user.email || 'Tournament Official'
+      : (req.body?.officialName || 'Tournament Official');
+    const reason = req.body?.reason || req.body?.rejectionReason || 'Scoresheet request could not be fulfilled at this time.';
+
+    const result = await rejectScoresheetRequestService(
+      requestId,
+      { officialId, officialName },
+      reason
+    );
+
+    res.status(200).json({
+      message: 'Scoresheet request declined successfully.',
+      request: result,
+    });
+  } catch (error: any) {
+    console.error('rejectScoresheetRequestHandler error:', error);
+    res.status(500).json({ error: error?.message || 'Failed to decline scoresheet request.' });
   }
 }
