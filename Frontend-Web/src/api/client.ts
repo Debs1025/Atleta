@@ -1292,6 +1292,32 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
     });
   } catch { }
 
+  if (notifications.length === 0 && typeof localStorage !== 'undefined' && !localStorage.getItem('atleta_cleared_notifications')) {
+    notifications.push(
+      {
+        notification_id: 'audit_req_sarah_jenkins',
+        official_id: 'official_sample',
+        type: 'AUDIT_REQUEST',
+        title: 'OFFICIAL STATISTICS VALIDATION',
+        message: 'Verification needed for Section D point differentials from Q3.',
+        requested_by_coach: 'COACH SARAH JENKINS',
+        match_context: 'ADNU VS. UNC - INTRAMURALS 2026',
+        sport_discipline: 'BASKETBALL',
+        is_read: readSet.has('audit_req_sarah_jenkins'),
+        created_at: '2026-04-12T04:00:00.000Z',
+      },
+      {
+        notification_id: 'sched_update_play_game',
+        official_id: 'official_sample',
+        type: 'SCHEDULE_UPDATE',
+        title: 'PLAY GAME TOMORROW',
+        message: "Don't forget that the match between ADNU vs. ADMU at Sports Complex will happen tomorrow at 2:00pm.",
+        is_read: readSet.has('sched_update_play_game'),
+        created_at: '2026-03-12T04:00:00.000Z',
+      }
+    );
+  }
+
   const unread_count = notifications.filter((n) => !n.is_read).length;
 
   const result = { unread_count, notifications };

@@ -70,6 +70,15 @@ export function useNotifications() {
     await markOfficialNotificationAsRead(id);
   };
 
+  const clearHistory = () => {
+    storeAllReadNotificationIds(notifications.map((n) => n.notification_id));
+    setNotifications([]);
+    setUnreadCount(0);
+    try {
+      localStorage.setItem('atleta_cleared_notifications', 'true');
+    } catch {}
+  };
+
   return {
     notifications,
     unreadCount,
@@ -78,5 +87,6 @@ export function useNotifications() {
     refresh: () => fetchNotifications(true),
     markAllRead,
     markSingleRead,
+    clearHistory,
   };
 }

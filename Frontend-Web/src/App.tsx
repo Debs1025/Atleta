@@ -144,6 +144,14 @@ function App() {
           }
         />
         <Route
+          path="/official/notifications"
+          element={
+            <OfficialRoute>
+              <NotificationPage />
+            </OfficialRoute>
+          }
+        />
+        <Route
           path="/notifications-center"
           element={
             <OfficialRoute>

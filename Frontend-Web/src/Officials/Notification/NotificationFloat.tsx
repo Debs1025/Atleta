@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BarChart2, Clock, ArrowRight, Loader2 } from 'lucide-react';
+import { FileText, Clock, ArrowRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { OfficialNotificationItem } from '../../api/types';
 import { styles } from './styles/NotificationFloat';
@@ -149,7 +149,7 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
                 {/* Left Icon Badge */}
                 {isAudit ? (
                   <div style={styles.badgeAudit}>
-                    <BarChart2 style={{ width: 18, height: 18 }} />
+                    <FileText style={{ width: 18, height: 18 }} />
                   </div>
                 ) : (
                   <div style={styles.badgeSchedule}>
@@ -168,7 +168,11 @@ export const NotificationFloat: React.FC<NotificationFloatProps> = ({
                     </span>
                   </div>
 
-                  <h4 style={styles.itemTitle}>{item.title}</h4>
+                  <h4 style={styles.itemTitle}>
+                    {(isAudit && item.requested_by_coach)
+                      ? `${item.requested_by_coach.replace(/^COACH\s+/i, '')} requested stats validation for ${item.sport_discipline || 'the match'}`
+                      : item.title}
+                  </h4>
                   {item.message && (
                     <p style={styles.itemSubtext}>{item.message}</p>
                   )}
