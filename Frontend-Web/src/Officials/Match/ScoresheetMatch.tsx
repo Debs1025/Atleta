@@ -1267,7 +1267,7 @@ export const ScoresheetMatch: React.FC = () => {
               <div style={styles.headerLeft}>
                 <span style={styles.leagueCategory}>{matchData.league_class}</span>
                 <h1 style={styles.matchupTitle}>
-                  {matchData.matchName || matchData.match_name || matchData.game_name || (isIndividualSport
+                  {matchData.matchName || matchData.gameReferenceId || matchData.match_name || matchData.game_name || (isIndividualSport
                     ? `${homeTeamDisplayName} • ${matchData.sport_type}`
                     : `${homeTeamDisplayName} VS. ${awayTeamDisplayName}`)}
                 </h1>

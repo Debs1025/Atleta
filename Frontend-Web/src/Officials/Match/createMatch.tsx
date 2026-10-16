@@ -434,6 +434,10 @@ export const CreateMatch: React.FC = () => {
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [gameName, setGameName] = useState('');
+  const gameNameRef = useRef('');
+  useEffect(() => {
+    gameNameRef.current = gameName;
+  }, [gameName]);
   const [sportCategory, setSportCategory] = useState('Basketball');
   const [sportsList, setSportsList] = useState<SportOptionItem[]>(() => buildCreateSportsList());
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
@@ -731,7 +735,10 @@ export const CreateMatch: React.FC = () => {
     setHomeTeam(target.homeTeam);
     setAwayTeam(target.awayTeam);
     setTeams([target.homeTeam, target.awayTeam]);
-    setGameName(target.gameName);
+    // Strictly preserve user-inputted gameName / reference ID
+    if (!gameNameRef.current.trim()) {
+      setGameName(target.gameName);
+    }
     setHomeRoster(target.homeRoster);
     setAwayRoster(target.awayRoster);
     setRaceResults(target.raceResults);
@@ -1664,6 +1671,8 @@ export const CreateMatch: React.FC = () => {
         match_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
         gameName: gameName.trim() || `${finalHome} vs ${finalAway}`,
         game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
+        gameReferenceId: gameName.trim() || undefined,
+        reference_id: gameName.trim() || undefined,
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
         scoresheet_url: scoresheetUrl || '',
         scoresheetUrl: scoresheetUrl || '',

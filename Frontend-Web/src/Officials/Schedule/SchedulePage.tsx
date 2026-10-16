@@ -226,6 +226,18 @@ const MatchDetailsCard: React.FC<{ match: OfficialScheduleItem }> = ({ match }) 
     '1'
   );
 
+  const userMatchName = String(
+    match?.matchName ||
+    match?.gameReferenceId ||
+    (match as any)?.raw_match?.matchName ||
+    (match as any)?.raw_match?.gameReferenceId ||
+    (match as any)?.raw_match?.game_name ||
+    (match as any)?.raw_match?.gameName ||
+    match?.match_name ||
+    (match as any)?.raw_match?.match_name ||
+    ''
+  ).trim();
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0 }}>
       {/* Live Match Card */}
@@ -234,6 +246,12 @@ const MatchDetailsCard: React.FC<{ match: OfficialScheduleItem }> = ({ match }) 
 
         <div style={styles.matchCardOuter}>
           <div style={styles.sportPill}>{sport}</div>
+
+          {userMatchName && (
+            <div style={{ fontSize: '12px', fontWeight: 900, color: '#0B132B', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.05em' }}>
+              {userMatchName}
+            </div>
+          )}
 
           <div style={styles.teamList}>
             <div style={styles.teamRow}>
@@ -577,12 +595,25 @@ export const SchedulePage: React.FC = () => {
                                   : styles.bbBadge;
 
                               const { home: mHome, away: mAway } = resolveTeamNames(m);
-                              const label = mHome && mAway ? `${mHome} vs. ${mAway}` : mHome || mAway || 'Event';
+                              const raw = m?.raw_match || {};
+                              const userMatchName = String(
+                                m?.matchName ||
+                                m?.gameReferenceId ||
+                                raw?.matchName ||
+                                raw?.gameReferenceId ||
+                                raw?.game_name ||
+                                raw?.gameName ||
+                                m?.match_name ||
+                                raw?.match_name ||
+                                ''
+                              ).trim();
+                              const label = userMatchName || (mHome && mAway ? `${mHome} vs. ${mAway}` : mHome || mAway || 'Event');
 
                               return (
                                 <div
                                   key={m?.schedule_id || idx}
                                   style={{ ...styles.matchBadge, ...badgeStyle }}
+                                  title={label}
                                 >
                                   {code ? <strong>{code} </strong> : null}{label}
                                 </div>

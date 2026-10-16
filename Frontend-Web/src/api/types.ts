@@ -99,6 +99,10 @@ export interface OfficialScheduleItem {
   schedule_id: string;
   match_id: string;
   official_id: string;
+  matchName?: string;
+  match_name?: string;
+  gameName?: string;
+  gameReferenceId?: string;
   venue?: string;
   court_number?: string | number;
   scheduled_time: string;
@@ -231,7 +235,9 @@ export interface MatchAuditDetail {
   validation_id: string;
   matchName?: string;
   match_name?: string;
+  gameName?: string;
   game_name: string;
+  gameReferenceId?: string;
   sport_type: string;
   league_class: string;
   match_date_formatted: string;
@@ -263,6 +269,9 @@ export interface MatchSummaryItem {
   validation_id?: string;
   matchName?: string;
   match_name?: string;
+  gameName?: string;
+  game_name?: string;
+  gameReferenceId?: string;
   match_class: string;
   sport: string;
   coaches: string;

@@ -820,9 +820,27 @@ export const getOfficialSchedules = async (month?: number, year?: number, forceR
     const resolvedOffId = raw.official_id || raw.requested_by || (isMine ? (userMe?.uid || '') : '');
     const cleanScheduledTime = !isNaN(d.getTime()) ? d.toISOString() : dateStr;
 
+    const userMatchName = String(
+      raw.matchName ||
+      raw.gameReferenceId ||
+      raw.game_name ||
+      raw.gameName ||
+      raw.match_name ||
+      m.matchName ||
+      m.gameReferenceId ||
+      m.game_name ||
+      m.gameName ||
+      m.match_name ||
+      ''
+    ).trim();
+
     list.push({
       schedule_id: `sched_${rawId}`,
       match_id: rawId,
+      matchName: userMatchName || `${home} vs. ${away}`,
+      match_name: userMatchName || `${home} vs. ${away}`,
+      gameName: userMatchName || `${home} vs. ${away}`,
+      gameReferenceId: raw.gameReferenceId || userMatchName || undefined,
       official_id: resolvedOffId,
       requested_by: raw.requested_by || (isMine ? (userMe?.uid || '') : ''),
       created_by: raw.created_by || (isMine ? (userMe?.uid || '') : ''),
@@ -1157,10 +1175,11 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         participating_teams: Array.isArray(payload.participating_teams) && payload.participating_teams.length > 0
           ? payload.participating_teams
           : [home, away],
-        matchName: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        match_name: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        gameName: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        game_name: payload.matchName || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        matchName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        match_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        gameName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        game_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+        gameReferenceId: (payload as any).gameReferenceId || payload.matchName || undefined,
         coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
         assigned_coaches: Array.isArray(payload.coaches) ? payload.coaches : [],
         scoresheet_url: scoresheetUrlVal,
@@ -1599,6 +1618,8 @@ export const getAuditMatches = async (
         if (customMatchName) {
           existing.match_name = customMatchName;
           existing.matchName = customMatchName;
+          existing.gameName = customMatchName;
+          existing.gameReferenceId = customMatchName;
           existing.match_class = customMatchName;
         }
         if (
@@ -1614,6 +1635,8 @@ export const getAuditMatches = async (
           validation_id: raw.validation_id || raw.audit_id || key,
           match_name: matchNameDisplay,
           matchName: matchNameDisplay,
+          gameName: matchNameDisplay,
+          gameReferenceId: raw.gameReferenceId || match.gameReferenceId || (customMatchName ? customMatchName : undefined),
           match_class: matchNameDisplay,
           sport,
           coaches,

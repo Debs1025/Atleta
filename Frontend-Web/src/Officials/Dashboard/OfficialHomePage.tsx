@@ -436,7 +436,7 @@ export const OfficialHomePage: React.FC = () => {
                       >
                         <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
                         <td style={styles.td}>
-                          {item.raw_match?.matchName || item.raw_match?.match_name || item.raw_match?.game_name || item.raw_match?.gameName || item.match_name || item.match_class}
+                          {item.matchName || item.gameReferenceId || item.raw_match?.matchName || item.raw_match?.gameReferenceId || item.raw_match?.game_name || item.raw_match?.gameName || item.match_name || "Unnamed Match"}
                         </td>
                         <td style={styles.td}>{item.sport}</td>
                         <td style={styles.td}>{item.coaches || 'Assigned Coach'}</td>
