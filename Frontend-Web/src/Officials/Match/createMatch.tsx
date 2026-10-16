@@ -69,23 +69,13 @@ export const toTitleCaseSport = (name: string): string => {
     .join(' ');
 };
 
-const DEFAULT_SPORT_OPTIONS: SportOptionItem[] = [
-  { id: 'sport_basketball', sportName: 'Basketball', name: 'Basketball' },
-  { id: 'sport_volleyball', sportName: 'Volleyball', name: 'Volleyball' },
-  { id: 'sport_track_field', sportName: 'Track & Field', name: 'Track & Field' },
-  { id: 'sport_swimming', sportName: 'Swimming', name: 'Swimming' },
-  { id: 'sport_pickleball', sportName: 'Pickleball', name: 'Pickleball' },
-  { id: 'sport_soccer', sportName: 'Soccer', name: 'Soccer' },
-  { id: 'sport_badminton', sportName: 'Badminton', name: 'Badminton' },
-];
-
 const buildCreateSportsList = (rawSports?: any[]): SportOptionItem[] => {
   const cached = rawSports || getCachedData<any>('sports_catalog_true')?.sports || getCachedData<any>('sports_catalog_false')?.sports || [];
   const list = Array.isArray(cached) ? cached : [];
 
   const sportsMap = new Map<string, SportOptionItem>();
 
-  // 1. Ingest only active, system-admin-approved sport documents
+  // Ingest ONLY active, system-admin-approved sport documents from database
   list.forEach((s: any) => {
     if (s && s.is_active !== false && s.active !== false) {
       const raw = String(s.sport_name || s.name || s.sportName || '').trim();
@@ -104,16 +94,7 @@ const buildCreateSportsList = (rawSports?: any[]): SportOptionItem[] => {
     }
   });
 
-  // 2. Fallback to default approved sports if not present
-  DEFAULT_SPORT_OPTIONS.forEach((def) => {
-    const normKey = def.sportName.toLowerCase().trim();
-    if (!sportsMap.has(normKey)) {
-      sportsMap.set(normKey, def);
-    }
-  });
-
-  const sports = Array.from(sportsMap.values());
-  return sports.length > 0 ? sports : DEFAULT_SPORT_OPTIONS;
+  return Array.from(sportsMap.values());
 };
 
 export interface ParsedMatchItem {
@@ -457,9 +438,9 @@ export const CreateMatch: React.FC = () => {
   const [sportsList, setSportsList] = useState<SportOptionItem[]>(() => buildCreateSportsList());
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
 
-  // Strict array deduplication keyed by normalized sport name
+  // Strict array deduplication keyed by normalized sport name, sorted alphabetically
   const uniqueSports = useMemo(() => {
-    return Array.from(
+    const deduped = Array.from(
       new Map(
         sportsList.map((sport) => [
           (sport.sportName || sport.name || '').toLowerCase().trim(),
@@ -467,16 +448,21 @@ export const CreateMatch: React.FC = () => {
         ])
       ).values()
     );
+    return deduped.sort((a, b) => a.sportName.localeCompare(b.sportName));
   }, [sportsList]);
 
-  // Keep sportCategory aligned with normalized title-cased names
+  // Keep sportCategory aligned with normalized title-cased names from system admin catalog
   useEffect(() => {
-    if (!sportCategory || uniqueSports.length === 0) return;
+    if (uniqueSports.length === 0) return;
     const match = uniqueSports.find(
-      (s) => s.sportName.toLowerCase().trim() === sportCategory.toLowerCase().trim()
+      (s) => s.sportName.toLowerCase().trim() === (sportCategory || '').toLowerCase().trim()
     );
-    if (match && match.sportName !== sportCategory) {
-      setSportCategory(match.sportName);
+    if (match) {
+      if (match.sportName !== sportCategory) {
+        setSportCategory(match.sportName);
+      }
+    } else {
+      setSportCategory(uniqueSports[0].sportName);
     }
   }, [uniqueSports, sportCategory]);
   const [venue, setVenue] = useState('');
@@ -731,7 +717,7 @@ export const CreateMatch: React.FC = () => {
     }
     getMe().then((res) => setUser(res)).catch(() => {});
     fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
-    getSports(true).then((res) => {
+    getSports(true, true).then((res) => {
       if (res) {
         const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
         setConfiguredSports(list);
@@ -1030,34 +1016,26 @@ export const CreateMatch: React.FC = () => {
       const hasBadmintonSignatures = rawSport.includes('BADM') || allFilenames.includes('badm') || rawPlayers.some((p: any) => Number(p.smash_winners || 0) > 0 || Number(p.net_kills || 0) > 0);
       const hasSoccerSignatures = rawSport.includes('SOCCER') || rawSport.includes('FOOTBALL') || allFilenames.includes('soccer') || allFilenames.includes('football') || rawPlayers.some((p: any) => Number(p.goals || 0) > 0 || Number(p.saves || 0) > 0);
 
-      const findSportName = (term: string, fallback: string) => {
+      const findSportName = (term: string) => {
         const found = sportsList.find((s) => {
           const sName = (typeof s === 'string' ? s : (s.sportName || s.name || '')).toUpperCase();
           return sName.includes(term);
         });
-        return found ? (typeof found === 'string' ? found : (found.sportName || found.name)) : fallback;
+        return found ? (typeof found === 'string' ? found : (found.sportName || found.name)) : null;
       };
 
-      if (hasPickleSignatures) {
-        setSportCategory(findSportName('PICKLE', 'Pickleball'));
-      } else if (hasBadmintonSignatures) {
-        setSportCategory(findSportName('BADM', 'Badminton'));
-      } else if (hasSoccerSignatures) {
-        const foundSoccer = sportsList.find((s) => {
-          const str = (typeof s === 'string' ? s : (s.sportName || s.name || '')).toUpperCase();
-          return str.includes('SOCCER') || str.includes('FOOTBALL');
-        });
-        setSportCategory(foundSoccer ? (typeof foundSoccer === 'string' ? foundSoccer : (foundSoccer.sportName || foundSoccer.name)) : 'Soccer');
-      } else if (hasVballStats || rawSport.includes('VOLLEY')) {
-        setSportCategory(findSportName('VOLLEY', 'Volleyball'));
-      } else if (hasSwimSignatures || rawSport.includes('SWIM')) {
-        setSportCategory(findSportName('SWIM', 'Swimming'));
-      } else if (hasTrackSignatures || rawSport.includes('TRACK') || rawSport.includes('FIELD')) {
-        const foundTrack = sportsList.find((s) => {
-          const str = (typeof s === 'string' ? s : (s.sportName || s.name || '')).toUpperCase();
-          return str.includes('TRACK') || str.includes('FIELD');
-        });
-        setSportCategory(foundTrack ? (typeof foundTrack === 'string' ? foundTrack : (foundTrack.sportName || foundTrack.name)) : 'Track & Field');
+      if (hasPickleSignatures && findSportName('PICKLE')) {
+        setSportCategory(findSportName('PICKLE')!);
+      } else if (hasBadmintonSignatures && findSportName('BADM')) {
+        setSportCategory(findSportName('BADM')!);
+      } else if (hasSoccerSignatures && (findSportName('SOCCER') || findSportName('FOOTBALL'))) {
+        setSportCategory((findSportName('SOCCER') || findSportName('FOOTBALL'))!);
+      } else if ((hasVballStats || rawSport.includes('VOLLEY')) && findSportName('VOLLEY')) {
+        setSportCategory(findSportName('VOLLEY')!);
+      } else if ((hasSwimSignatures || rawSport.includes('SWIM')) && findSportName('SWIM')) {
+        setSportCategory(findSportName('SWIM')!);
+      } else if ((hasTrackSignatures || rawSport.includes('TRACK') || rawSport.includes('FIELD')) && (findSportName('TRACK') || findSportName('FIELD'))) {
+        setSportCategory((findSportName('TRACK') || findSportName('FIELD'))!);
       }
 
       // 2. Dynamic Team Names Extraction
@@ -2142,11 +2120,15 @@ export const CreateMatch: React.FC = () => {
                     className="hover-input"
                     style={styles.select}
                   >
-                    {uniqueSports.map((sport) => (
-                      <option key={sport.id} value={sport.sportName}>
-                        {sport.sportName}
-                      </option>
-                    ))}
+                    {uniqueSports.length === 0 ? (
+                      <option value="" disabled>Loading sports...</option>
+                    ) : (
+                      uniqueSports.map((sport) => (
+                        <option key={sport.id} value={sport.sportName}>
+                          {sport.sportName}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>

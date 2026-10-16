@@ -69,13 +69,6 @@ const buildNormalizedSportsList = (rawSports?: any[]): string[] => {
     }
   });
 
-  ['BASKETBALL', 'TRACK & FIELD', 'SWIMMING'].forEach((def) => {
-    const norm = normalizeSportKey(def);
-    if (!seen.has(norm)) {
-      seen.add(norm);
-      sports.push(def);
-    }
-  });
   return sports;
 };
 
@@ -119,7 +112,7 @@ export const ViewAllMatch: React.FC = () => {
         if (isMounted) setLoading(false);
       });
 
-    getSports().then((res) => {
+    getSports(false, true).then((res) => {
       if (isMounted && res) {
         const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
         setDynamicSports(buildNormalizedSportsList(list));
