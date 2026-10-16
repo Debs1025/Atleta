@@ -12,6 +12,27 @@ import { serverCache } from '../utils/cache';
 
 const primaryDb = db;
 
+export function toTitleCaseSport(name: string): string {
+  if (!name) return '';
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'badminton') return 'Badminton';
+  if (lower === 'basketball') return 'Basketball';
+  if (lower === 'volleyball') return 'Volleyball';
+  if (lower === 'swimming') return 'Swimming';
+  if (lower === 'track & field' || lower === 'track and field') return 'Track & Field';
+  if (lower === 'pickleball') return 'Pickleball';
+  if (lower === 'soccer') return 'Soccer';
+
+  return trimmed
+    .split(/\s+/)
+    .map((word) => {
+      if (word === '&' || word.toLowerCase() === 'and') return '&';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
 export const DEFAULT_SPORTS_CONFIGURATIONS: SportsConfiguration[] = [
   {
     sport_id: 'sport_basketball',
@@ -206,7 +227,7 @@ export async function getAllSportsService(onlyActive: boolean = false): Promise<
 
         const sportObj: SportsConfiguration = {
           sport_id: item.sport_id || item.id || `sport_${normKey.replace(/[^a-z0-9]/g, '_')}`,
-          sport_name: rawName,
+          sport_name: toTitleCaseSport(rawName),
           short_identifier: item.short_identifier || rawName.slice(0, 5).toUpperCase(),
           category: item.category || 'Team',
           is_active: item.is_active !== false,

@@ -42,33 +42,78 @@ import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
 
-const normalizeSportKey = (name: string): string => (name || '').replace(/&/g, 'AND').replace(/\s+/g, ' ').trim().toUpperCase();
+export interface SportOptionItem {
+  id: string;
+  sportName: string;
+  name: string;
+}
 
-const buildCreateSportsList = (rawSports?: any[]): string[] => {
-  const cached = rawSports || getCachedData<any>('sports_catalog_false')?.sports || getCachedData<any>('sports_catalog_true')?.sports || [];
+export const toTitleCaseSport = (name: string): string => {
+  if (!name) return '';
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'badminton') return 'Badminton';
+  if (lower === 'basketball') return 'Basketball';
+  if (lower === 'volleyball') return 'Volleyball';
+  if (lower === 'swimming') return 'Swimming';
+  if (lower === 'track & field' || lower === 'track and field') return 'Track & Field';
+  if (lower === 'pickleball') return 'Pickleball';
+  if (lower === 'soccer') return 'Soccer';
+
+  return trimmed
+    .split(/\s+/)
+    .map((word) => {
+      if (word === '&' || word.toLowerCase() === 'and') return '&';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+};
+
+const DEFAULT_SPORT_OPTIONS: SportOptionItem[] = [
+  { id: 'sport_basketball', sportName: 'Basketball', name: 'Basketball' },
+  { id: 'sport_volleyball', sportName: 'Volleyball', name: 'Volleyball' },
+  { id: 'sport_track_field', sportName: 'Track & Field', name: 'Track & Field' },
+  { id: 'sport_swimming', sportName: 'Swimming', name: 'Swimming' },
+  { id: 'sport_pickleball', sportName: 'Pickleball', name: 'Pickleball' },
+  { id: 'sport_soccer', sportName: 'Soccer', name: 'Soccer' },
+  { id: 'sport_badminton', sportName: 'Badminton', name: 'Badminton' },
+];
+
+const buildCreateSportsList = (rawSports?: any[]): SportOptionItem[] => {
+  const cached = rawSports || getCachedData<any>('sports_catalog_true')?.sports || getCachedData<any>('sports_catalog_false')?.sports || [];
   const list = Array.isArray(cached) ? cached : [];
-  const seen = new Set<string>();
-  const sports: string[] = [];
 
+  const sportsMap = new Map<string, SportOptionItem>();
+
+  // 1. Ingest only active, system-admin-approved sport documents
   list.forEach((s: any) => {
-    if (s && s.active !== false) {
-      const raw = (s.sport_name || s.name || '').trim();
-      const norm = normalizeSportKey(raw);
-      if (norm && !seen.has(norm)) {
-        seen.add(norm);
-        sports.push(raw);
+    if (s && s.is_active !== false && s.active !== false) {
+      const raw = String(s.sport_name || s.name || s.sportName || '').trim();
+      if (!raw) return;
+      const formatted = toTitleCaseSport(raw);
+      const normKey = formatted.toLowerCase().trim();
+      const sportId = String(s.sport_id || s.id || `sport_${normKey.replace(/[^a-z0-9]/g, '_')}`);
+
+      if (!sportsMap.has(normKey)) {
+        sportsMap.set(normKey, {
+          id: sportId,
+          sportName: formatted,
+          name: formatted,
+        });
       }
     }
   });
 
-  ['Basketball', 'Volleyball', 'Track & Field', 'Swimming', 'Pickleball', 'Soccer', 'Badminton'].forEach((def) => {
-    const norm = normalizeSportKey(def);
-    if (!seen.has(norm)) {
-      seen.add(norm);
-      sports.push(def);
+  // 2. Fallback to default approved sports if not present
+  DEFAULT_SPORT_OPTIONS.forEach((def) => {
+    const normKey = def.sportName.toLowerCase().trim();
+    if (!sportsMap.has(normKey)) {
+      sportsMap.set(normKey, def);
     }
   });
-  return sports.length > 0 ? sports : ['Basketball', 'Volleyball', 'Track & Field', 'Swimming', 'Pickleball'];
+
+  const sports = Array.from(sportsMap.values());
+  return sports.length > 0 ? sports : DEFAULT_SPORT_OPTIONS;
 };
 
 export interface ParsedMatchItem {
@@ -131,7 +176,7 @@ const extractMatchDetails = (
   matchData: any,
   fallbackIndex: number,
   fallbackFileName: string,
-  sportsCatalog: string[],
+  sportsCatalog: Array<SportOptionItem | string>,
   initialHomeName?: string,
   initialAwayName?: string
 ): ParsedMatchItem => {
@@ -156,10 +201,11 @@ const extractMatchDetails = (
     const norm = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     const detectedNorm = norm(rawSport);
     const matched = sportsCatalog.find((s) => {
-      const sNorm = norm(s);
+      const sName = typeof s === 'string' ? s : (s.sportName || s.name || '');
+      const sNorm = norm(sName);
       return sNorm === detectedNorm || detectedNorm.includes(sNorm) || sNorm.includes(detectedNorm);
     });
-    if (matched) resolvedSport = matched;
+    if (matched) resolvedSport = typeof matched === 'string' ? matched : (matched.sportName || matched.name || '');
   }
 
   const isInd =
@@ -408,8 +454,31 @@ export const CreateMatch: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [gameName, setGameName] = useState('');
   const [sportCategory, setSportCategory] = useState('Basketball');
-  const [sportsList, setSportsList] = useState<string[]>(() => buildCreateSportsList());
+  const [sportsList, setSportsList] = useState<SportOptionItem[]>(() => buildCreateSportsList());
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
+
+  // Strict array deduplication keyed by normalized sport name
+  const uniqueSports = useMemo(() => {
+    return Array.from(
+      new Map(
+        sportsList.map((sport) => [
+          (sport.sportName || sport.name || '').toLowerCase().trim(),
+          sport,
+        ])
+      ).values()
+    );
+  }, [sportsList]);
+
+  // Keep sportCategory aligned with normalized title-cased names
+  useEffect(() => {
+    if (!sportCategory || uniqueSports.length === 0) return;
+    const match = uniqueSports.find(
+      (s) => s.sportName.toLowerCase().trim() === sportCategory.toLowerCase().trim()
+    );
+    if (match && match.sportName !== sportCategory) {
+      setSportCategory(match.sportName);
+    }
+  }, [uniqueSports, sportCategory]);
   const [venue, setVenue] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
@@ -662,7 +731,7 @@ export const CreateMatch: React.FC = () => {
     }
     getMe().then((res) => setUser(res)).catch(() => {});
     fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
-    getSports().then((res) => {
+    getSports(true).then((res) => {
       if (res) {
         const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
         setConfiguredSports(list);
@@ -840,18 +909,20 @@ export const CreateMatch: React.FC = () => {
         const norm = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         const detectedNorm = norm(rawSport);
         const matched = sportsList.find((s) => {
-          const sNorm = norm(s);
+          const sName = typeof s === 'string' ? s : (s.sportName || s.name || '');
+          const sNorm = norm(sName);
           return sNorm === detectedNorm || detectedNorm.includes(sNorm) || sNorm.includes(detectedNorm);
         });
+        const matchedName = matched ? (typeof matched === 'string' ? matched : (matched.sportName || matched.name)) : '';
 
-        if (matched) {
-          setOcrDetectedSport(matched);
-          if (matched !== sportCategory) {
+        if (matchedName) {
+          setOcrDetectedSport(matchedName);
+          if (matchedName !== sportCategory) {
             setSportMismatchInfo({
-              detectedSport: matched,
+              detectedSport: matchedName,
               currentSport: sportCategory,
             });
-            setSportCategory(matched);
+            setSportCategory(matchedName);
           }
         }
       }
@@ -959,24 +1030,34 @@ export const CreateMatch: React.FC = () => {
       const hasBadmintonSignatures = rawSport.includes('BADM') || allFilenames.includes('badm') || rawPlayers.some((p: any) => Number(p.smash_winners || 0) > 0 || Number(p.net_kills || 0) > 0);
       const hasSoccerSignatures = rawSport.includes('SOCCER') || rawSport.includes('FOOTBALL') || allFilenames.includes('soccer') || allFilenames.includes('football') || rawPlayers.some((p: any) => Number(p.goals || 0) > 0 || Number(p.saves || 0) > 0);
 
+      const findSportName = (term: string, fallback: string) => {
+        const found = sportsList.find((s) => {
+          const sName = (typeof s === 'string' ? s : (s.sportName || s.name || '')).toUpperCase();
+          return sName.includes(term);
+        });
+        return found ? (typeof found === 'string' ? found : (found.sportName || found.name)) : fallback;
+      };
+
       if (hasPickleSignatures) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('PICKLE')) || 'Pickleball';
-        setSportCategory(matched);
+        setSportCategory(findSportName('PICKLE', 'Pickleball'));
       } else if (hasBadmintonSignatures) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('BADM')) || 'Badminton';
-        setSportCategory(matched);
+        setSportCategory(findSportName('BADM', 'Badminton'));
       } else if (hasSoccerSignatures) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('SOCCER') || s.toUpperCase().includes('FOOTBALL')) || 'Soccer';
-        setSportCategory(matched);
+        const foundSoccer = sportsList.find((s) => {
+          const str = (typeof s === 'string' ? s : (s.sportName || s.name || '')).toUpperCase();
+          return str.includes('SOCCER') || str.includes('FOOTBALL');
+        });
+        setSportCategory(foundSoccer ? (typeof foundSoccer === 'string' ? foundSoccer : (foundSoccer.sportName || foundSoccer.name)) : 'Soccer');
       } else if (hasVballStats || rawSport.includes('VOLLEY')) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('VOLLEY')) || 'Volleyball';
-        setSportCategory(matched);
+        setSportCategory(findSportName('VOLLEY', 'Volleyball'));
       } else if (hasSwimSignatures || rawSport.includes('SWIM')) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('SWIM')) || 'Swimming';
-        setSportCategory(matched);
+        setSportCategory(findSportName('SWIM', 'Swimming'));
       } else if (hasTrackSignatures || rawSport.includes('TRACK') || rawSport.includes('FIELD')) {
-        const matched = sportsList.find((s) => s.toUpperCase().includes('TRACK') || s.toUpperCase().includes('FIELD')) || 'Track & Field';
-        setSportCategory(matched);
+        const foundTrack = sportsList.find((s) => {
+          const str = (typeof s === 'string' ? s : (s.sportName || s.name || '')).toUpperCase();
+          return str.includes('TRACK') || str.includes('FIELD');
+        });
+        setSportCategory(foundTrack ? (typeof foundTrack === 'string' ? foundTrack : (foundTrack.sportName || foundTrack.name)) : 'Track & Field');
       }
 
       // 2. Dynamic Team Names Extraction
@@ -2061,9 +2142,9 @@ export const CreateMatch: React.FC = () => {
                     className="hover-input"
                     style={styles.select}
                   >
-                    {sportsList.map((sport) => (
-                      <option key={sport} value={sport}>
-                        {sport}
+                    {uniqueSports.map((sport) => (
+                      <option key={sport.id} value={sport.sportName}>
+                        {sport.sportName}
                       </option>
                     ))}
                   </select>
