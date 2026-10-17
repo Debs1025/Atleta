@@ -42,10 +42,10 @@ export async function requireSystemAdmin(
 
   const token = authHeader.split(' ')[1];
 
+  const jwtSecret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   const secrets = [
-    process.env.JWT_SECRET,
-    'sanamakapasasafinaldefense',
-    'atleta-super-secret-jwt-key-2026',
+    jwtSecret,
+    process.env.JWT_FALLBACK_SECRET,
   ].filter(Boolean) as string[];
 
   let decoded: {

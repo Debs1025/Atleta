@@ -19,10 +19,10 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 
   const token = authHeader.split(' ')[1];
 
+  const jwtSecret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   const secrets = [
-    process.env.JWT_SECRET,
-    'sanamakapasasafinaldefense',
-    'atleta-super-secret-jwt-key-2026',
+    jwtSecret,
+    process.env.JWT_FALLBACK_SECRET,
   ].filter(Boolean) as string[];
 
   let decoded: { uid: string; email: string; role: string } | null = null;
@@ -48,10 +48,10 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
     return next();
   }
   const token = authHeader.split(' ')[1];
+  const jwtSecret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   const secrets = [
-    process.env.JWT_SECRET,
-    'sanamakapasasafinaldefense',
-    'atleta-super-secret-jwt-key-2026',
+    jwtSecret,
+    process.env.JWT_FALLBACK_SECRET,
   ].filter(Boolean) as string[];
 
   for (const secret of secrets) {

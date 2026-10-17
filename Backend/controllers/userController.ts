@@ -371,7 +371,7 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
       const bearerToken = req.headers?.authorization?.replace(/^Bearer\s+/i, '');
       if (bearerToken) {
         try {
-          const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
+          const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
           const decoded = jwt.verify(bearerToken, secret) as any;
           if (decoded?.uid) uid = decoded.uid;
         } catch {

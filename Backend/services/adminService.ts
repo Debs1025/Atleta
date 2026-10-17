@@ -61,7 +61,7 @@ export function generateElevatedAdminToken(
   clearanceLevel: number = 4,
   departmentCode: string = 'SYS_ADMIN'
 ): string {
-  const secret = process.env.JWT_SECRET || 'atleta-super-secret-jwt-key-2026';
+  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any;
   return jwt.sign(
     {

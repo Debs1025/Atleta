@@ -33,7 +33,7 @@ export function normalizeRole(roleInput: string): UserRole {
  * Generate a custom JWT token for a user.
  */
 export function generateToken(uid: string, email: string, role: string): string {
-  const secret = process.env.JWT_SECRET || 'atleta-super-secret-jwt-key-2026';
+  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any;
   return jwt.sign({ uid, email, role }, secret, { expiresIn });
 }
@@ -1325,7 +1325,7 @@ export async function requestPasswordResetService(email: string, clientFrontendU
   // Enforce: Only accounts with email and password authentication can request password resets
   await checkSocialAccountRestriction(uid, userData, 'reset');
 
-  const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
+  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   const resetToken = jwt.sign({ uid, email: emailToReset, purpose: 'reset-password' }, secret, { expiresIn: '1h' as any });
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const requestedAt = new Date().toISOString();
@@ -1387,7 +1387,7 @@ export async function requestPasswordResetService(email: string, clientFrontendU
  * Verify reset token and set new password in Firebase Auth & Firestore.
  */
 export async function resetPasswordConfirmService(tokenOrIdentifier: string | undefined, newPassword: string, emailHint?: string) {
-  const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
+  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
   let uid = '';
 
   // 1. Verify JWT reset token or session Auth token if provided
