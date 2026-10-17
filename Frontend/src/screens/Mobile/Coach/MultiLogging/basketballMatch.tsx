@@ -1,0 +1,329 @@
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Modal,
+} from "react-native";
+import {
+  Ionicons,
+  FontAwesome5,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { styles } from "./styles/basketballMatch";
+import { useMatchSession } from "./MatchSessionContext";
+import { AthleteRosterItem } from "./types";
+import { getSportStatSchema, loadDynamicSportsSchemas } from "./sportStatSchemas";
+
+interface BasketballMatchProps {
+  onClose?: () => void;
+  onSaveMatch?: () => void;
+}
+
+export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchProps) {
+  const insets = useSafeAreaInsets();
+  const { session, updateBasketballStats, setSessionDetails } = useMatchSession();
+  const [dynamicConfigs, setDynamicConfigs] = useState<any[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadDynamicSportsSchemas().then((configs) => {
+      if (mounted && Array.isArray(configs) && configs.length > 0) {
+        setDynamicConfigs(configs);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const schema = getSportStatSchema(session.sport_type, dynamicConfigs);
+
+  // Active & Bench rosters from session
+  const activeRoster = session.active_roster;
+  const benchRoster = session.bench_roster;
+
+  // Selected bench player for substitution
+  const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<AthleteRosterItem | null>(null);
+
+  // Selected player for "MORE" action modal (Restricted popup ONLY)
+  const [selectedActionPlayer, setSelectedActionPlayer] = useState<AthleteRosterItem | null>(null);
+
+  // Handle player selection for rotation substitution swap ONLY
+  const handlePlayerCardPress = (activePlayer: AthleteRosterItem) => {
+    if (selectedBenchPlayer) {
+      // Execute rotation substitution swap
+      const newActive = activeRoster.map((item) =>
+        item.athlete_id === activePlayer.athlete_id
+          ? { ...selectedBenchPlayer, is_active_on_field: true }
+          : item
+      );
+      const newBench = benchRoster.map((item) =>
+        item.athlete_id === selectedBenchPlayer.athlete_id
+          ? { ...activePlayer, is_active_on_field: false }
+          : item
+      );
+
+      setSessionDetails({ active_roster: newActive, bench_roster: newBench });
+      setSelectedBenchPlayer(null);
+    }
+  };
+
+  // Select/unselect bench player
+  const handleBenchPlayerPress = (benchPlayer: AthleteRosterItem) => {
+    if (selectedBenchPlayer?.athlete_id === benchPlayer.athlete_id) {
+      setSelectedBenchPlayer(null);
+    } else {
+      setSelectedBenchPlayer(benchPlayer);
+    }
+  };
+
+  // Stat action handler for direct and modal stat updates
+  const handleStatAction = (
+    statKey: string,
+    delta: number = 1
+  ) => {
+    if (!selectedActionPlayer) return;
+    const targetId = selectedActionPlayer.athlete_id;
+
+    // Update global context
+    updateBasketballStats(targetId, statKey, delta);
+
+    // Update local modal state so UI reflects change instantly
+    setSelectedActionPlayer((prev) => {
+      if (!prev) return null;
+      const currentStats = prev.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
+      const customStats = prev.custom_stats || {};
+      const isStandardKey = ['pts', 'ast', 'reb', 'pf', 'stl', 'to', 'blk'].includes(statKey);
+      const currentVal = isStandardKey
+        ? (currentStats as any)[statKey] || 0
+        : customStats[statKey] || 0;
+      const newVal = Math.max(0, currentVal + delta);
+
+      return {
+        ...prev,
+        basketball_stats: isStandardKey
+          ? {
+              ...currentStats,
+              [statKey]: newVal,
+            }
+          : currentStats,
+        custom_stats: {
+          ...customStats,
+          [statKey]: newVal,
+        },
+      };
+    });
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 10 }]}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        <Text style={styles.brandTitle}>ATLETA</Text>
+        <TouchableOpacity style={styles.closeHeaderBtn} onPress={onClose} activeOpacity={0.7}>
+          <Ionicons name="close" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Sport Banner */}
+      <View style={styles.sportBanner}>
+        <Text style={styles.sportTitle}>{schema.sportDisplayName}</Text>
+      </View>
+
+      {/* Active On-Court Players Stack */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {activeRoster.map((player) => {
+          const stats = player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 };
+          const isSwapTarget = selectedBenchPlayer !== null;
+
+          return (
+            <View
+              key={player.athlete_id}
+              style={[
+                styles.playerCard,
+                isSwapTarget && styles.playerCardSelected,
+              ]}
+            >
+              {/* Player Header & Substitution Indicator */}
+              <TouchableOpacity
+                onPress={() => handlePlayerCardPress(player)}
+                activeOpacity={selectedBenchPlayer ? 0.75 : 1}
+                style={styles.playerCardHeader}
+              >
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+                  <Text style={styles.jerseyNumber}>#{player.jersey_number}</Text>
+                  <Text style={styles.lastName}>{player.last_name}</Text>
+                </View>
+
+                {selectedBenchPlayer ? (
+                  <View style={styles.benchBadge}>
+                    <Text style={styles.benchBadgeText}>SUB #{selectedBenchPlayer.jersey_number}</Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={styles.statsSummary}>
+                      {schema.formatSummary(stats)}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.moreActionsBtn}
+                      onPress={() => setSelectedActionPlayer(player)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={18} color="#00D2FF" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Quick Action Buttons Row (Direct Taps - Dynamic based on selected sport) */}
+              <View style={styles.quickActionRow}>
+                {schema.primaryActions.map((action, aIdx) => (
+                  <TouchableOpacity
+                    key={aIdx}
+                    style={styles.quickActionBtn}
+                    onPress={() => updateBasketballStats(player.athlete_id, action.statKey, action.delta)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.quickActionBtnText}>{action.label}</Text>
+                  </TouchableOpacity>
+                ))}
+
+                {/* Restricted MORE Button: Houses secondary stats & fouls */}
+                <TouchableOpacity
+                  style={[styles.quickActionBtn, { borderColor: "#334155" }]}
+                  onPress={() => setSelectedActionPlayer(player)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.quickActionBtnText, { color: "#94A3B8" }]}>MORE</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {/* Floating Save Action Button */}
+      <TouchableOpacity
+        style={styles.floatingSaveBtn}
+        onPress={onSaveMatch}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="save-outline" size={26} color="#070D19" />
+      </TouchableOpacity>
+
+      {/* Bench Rail Drawer (Bottom Fixed Bar) */}
+      <View style={styles.benchRailContainer}>
+        <View style={styles.benchHeader}>
+          <Text style={styles.benchTitle}>BENCH ({benchRoster.length})</Text>
+          <MaterialCommunityIcons name="swap-vertical" size={22} color="#00D2FF" />
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.benchListScroll}
+        >
+          {benchRoster.map((benchPlayer) => {
+            const isSelected = selectedBenchPlayer?.athlete_id === benchPlayer.athlete_id;
+            return (
+              <TouchableOpacity
+                key={benchPlayer.athlete_id}
+                style={styles.benchTileWrapper}
+                onPress={() => handleBenchPlayerPress(benchPlayer)}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.benchTile,
+                    isSelected && styles.benchTileActive,
+                  ]}
+                >
+                  <Text style={styles.benchJerseyText}>{benchPlayer.jersey_number}</Text>
+                </View>
+                <Text style={styles.benchNameText} numberOfLines={1}>
+                  {benchPlayer.last_name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* RESTRICTED POPUP: Secondary Stats & Corrections (Only opens when clicking MORE) */}
+      <Modal
+        visible={selectedActionPlayer !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedActionPlayer(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                #{selectedActionPlayer?.jersey_number} {selectedActionPlayer?.last_name}
+              </Text>
+              <TouchableOpacity onPress={() => setSelectedActionPlayer(null)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Secondary Stats Grid */}
+            <View style={styles.gridContainer}>
+              {schema.secondaryActions.map((action, sIdx) => (
+                <TouchableOpacity
+                  key={sIdx}
+                  style={styles.actionTile}
+                  onPress={() => handleStatAction(action.statKey, action.delta)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name={action.icon as any} size={26} color={action.color} />
+                  <Text style={[styles.actionTileText, { color: action.color }]}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Quick Multi-Point Field Goals inside More Menu (Only when applicable) */}
+            {schema.multiPointOptions.length > 0 && (
+              <>
+                <Text style={styles.modalSectionTitle}>Multi-Point Shots</Text>
+                <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
+                  {schema.multiPointOptions.map((opt, mIdx) => (
+                    <TouchableOpacity
+                      key={mIdx}
+                      style={[styles.correctionBtn, { flex: 1, borderColor: "#00D2FF", backgroundColor: "rgba(0, 210, 255, 0.1)" }]}
+                      onPress={() => handleStatAction(opt.statKey, opt.delta)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.correctionBtnText, { color: "#00D2FF", textAlign: "center" }]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* Quick Stat Corrections (Decrements) */}
+            <Text style={styles.modalSectionTitle}>Stat Corrections (Undo)</Text>
+            <View style={styles.correctionRow}>
+              {schema.tableHeaders.map((header, hIdx) => (
+                <TouchableOpacity
+                  key={hIdx}
+                  style={styles.correctionBtn}
+                  onPress={() => handleStatAction(header.key as any, -1)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.correctionBtnText}>-1 {header.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+export default BasketballMatchScreen;
