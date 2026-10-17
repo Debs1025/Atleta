@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
-import { getCoachProfileOfflineFirst, getTeamsOfflineFirst, getMatchesOfflineFirst } from "../../../../services/firebaseClient";
+import { getCoachProfileOfflineFirst } from "../../../../services/firebaseClient";
 
 export interface CoachProfileProps {
   visible: boolean;
@@ -91,8 +91,8 @@ export function CoachProfile({
           const [offlineProfileRes, profileRes, teamsRes, matchesRes]: [any, any, any, any] = await Promise.all([
             getCoachProfileOfflineFirst(profileData?.user_id || profileData?.coach_id).catch(() => null),
             requestAuthenticatedJson("/coaches/profile").catch(() => null),
-            getTeamsOfflineFirst().catch(() => null),
-            getMatchesOfflineFirst().catch(() => null),
+            requestAuthenticatedJson("/teams").catch(() => null),
+            requestAuthenticatedJson("/matches").catch(() => null),
           ]);
 
           const combined = profileRes || offlineProfileRes;
@@ -110,10 +110,18 @@ export function CoachProfile({
                 ? "TRACK AND FIELD"
                 : rawSport;
 
+            const currentCoachId = String(profileData?.coach_id || profileData?.user_id || data?.coach_id || data?.user_id || "").replace(/^coach_/, "").toLowerCase();
+            const rawTeams = Array.isArray(teamsRes) ? teamsRes : (Array.isArray(teamsRes?.teams) ? teamsRes.teams : []);
+            const coachTeams = rawTeams.filter((t: any) => {
+              if (!currentCoachId) return true;
+              const tCoach = String(t.coach_id || t.coach_scout_id || "").replace(/^coach_/, "").toLowerCase();
+              return tCoach === currentCoachId;
+            });
+
             let totalAthletesCount = 0;
-            if (Array.isArray(teamsRes) && teamsRes.length > 0) {
+            if (coachTeams.length > 0) {
               const athleteIds = new Set<string>();
-              teamsRes.forEach((t: any) => {
+              coachTeams.forEach((t: any) => {
                 if (Array.isArray(t.roster_list)) {
                   t.roster_list.forEach((r: any) => {
                     const id = r.athlete_id || r.user_id;
@@ -122,21 +130,22 @@ export function CoachProfile({
                 }
               });
               totalAthletesCount = athleteIds.size;
-            }
-            if (!totalAthletesCount && Array.isArray(data.athletes_managed)) {
+            } else if (Array.isArray(data.athletes_managed)) {
               totalAthletesCount = data.athletes_managed.length;
             }
-            if (!totalAthletesCount) {
-              totalAthletesCount = data.system_statistics?.total_athletes || offlineProfileRes?.system_statistics?.total_athletes || 0;
-            }
 
-            let totalMatchesCount = 0;
-            if (Array.isArray(matchesRes) && matchesRes.length > 0) {
-              totalMatchesCount = matchesRes.length;
-            } else if (data.total_matches_logged || data.matches_logged || data.metric_logs) {
-              totalMatchesCount = Number(data.total_matches_logged || data.matches_logged || data.metric_logs);
-            } else {
-              totalMatchesCount = data.system_statistics?.metric_logs || offlineProfileRes?.system_statistics?.metric_logs || 0;
+            const rawMatches = Array.isArray(matchesRes) ? matchesRes : (Array.isArray(matchesRes?.matches) ? matchesRes.matches : []);
+            const coachMatches = rawMatches.filter((m: any) => {
+              if (!currentCoachId) return true;
+              const mCoach = String(m.coach_id || m.logged_by_coach_id || "").replace(/^coach_/, "").toLowerCase();
+              if (mCoach && mCoach === currentCoachId) return true;
+              if (coachTeams.some((t: any) => t.team_id === m.team_id)) return true;
+              return false;
+            });
+
+            let totalMatchesCount = coachMatches.length;
+            if (!totalMatchesCount && (data.total_matches_logged || data.matches_logged)) {
+              totalMatchesCount = Number(data.total_matches_logged || data.matches_logged || 0);
             }
 
             const institution = data.current_institution || offlineProfileRes?.current_institution || profile.current_institution || "";

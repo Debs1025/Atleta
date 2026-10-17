@@ -166,7 +166,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
         };
       });
     }
-    return liveAthletes;
+    return [];
   }, [athletes, liveAthletes]);
 
   const filteredAthletes = useMemo(() => {

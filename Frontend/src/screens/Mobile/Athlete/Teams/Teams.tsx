@@ -183,6 +183,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
 
   const [myCurrentTeamId, setMyCurrentTeamId] = useState<string>("");
   const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>("");
+  const [myJoinedTeamIds, setMyJoinedTeamIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let isMounted = true;
@@ -201,6 +202,32 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           const currentTeamName = myTeamRes?.team?.team_name || myTeamRes?.team_name || "";
           setMyCurrentTeamId(currentTeamId);
           setMyCurrentTeamName(currentTeamName);
+
+          const joinedSet = new Set<string>();
+          if (currentTeamId) joinedSet.add(currentTeamId);
+
+          // Collect from multiple assigned teams
+          const assignedArr = myTeamRes?.assigned_teams || myTeamRes?.teams || [];
+          if (Array.isArray(assignedArr)) {
+            assignedArr.forEach((t: any) => {
+              const tid = t.team_id || t.id;
+              if (tid) joinedSet.add(tid);
+            });
+          }
+
+          // Collect from accepted inquiries
+          const rawInq = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
+          if (Array.isArray(rawInq)) {
+            rawInq.forEach((inq: any) => {
+              const st = (inq.offer_status || inq.status || "").toUpperCase();
+              if (st === "ACCEPTED" || st === "JOINED") {
+                const tid = inq.team_id || inq.scout_id;
+                if (tid) joinedSet.add(tid);
+              }
+            });
+          }
+
+          setMyJoinedTeamIds(joinedSet);
 
           const restTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
           let rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
@@ -478,7 +505,13 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
 
   const filteredTeams = teams.filter((team) => {
     // Hide teams the athlete has already joined so they cannot re-join or see redundant listings
-    if (team.is_my_team || (myCurrentTeamId && (team.team_id === myCurrentTeamId || (team as any).id === myCurrentTeamId))) {
+    if (
+      team.is_my_team ||
+      myJoinedTeamIds.has(team.team_id) ||
+      myJoinedTeamIds.has((team as any).id) ||
+      (myCurrentTeamId && (team.team_id === myCurrentTeamId || (team as any).id === myCurrentTeamId)) ||
+      (myCurrentTeamName && team.team_name && team.team_name.trim().toLowerCase() === myCurrentTeamName.trim().toLowerCase())
+    ) {
       return false;
     }
 

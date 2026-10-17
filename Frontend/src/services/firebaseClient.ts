@@ -466,7 +466,22 @@ export function clearFirebaseClientCaches() {
   matchesLastFetched = 0;
   teamsMemoryCache = null;
   teamsLastFetched = 0;
-  AsyncStorage.removeItem(OFFLINE_SPORTS_CACHE_KEY).catch(() => null);
+  AsyncStorage.multiRemove([
+    OFFLINE_SPORTS_CACHE_KEY,
+    OFFLINE_MATCHES_CACHE_KEY,
+    OFFLINE_ATHLETES_CACHE_KEY,
+    OFFLINE_TEAMS_CACHE_KEY,
+    OFFLINE_ATHLETE_PROFILE_CACHE_KEY,
+    OFFLINE_COACH_PROFILE_CACHE_KEY,
+    "atleta_coach_dashboard_cache",
+    "atleta_discovery_cache",
+    "atleta_offline_coach_profile_cache",
+    "atleta_offline_matches_cache",
+    "atleta_offline_athletes_cache",
+    "atleta_offline_teams_cache",
+    "atleta_official_matches_cache",
+    "atleta_discovery_snapshot_cache",
+  ]).catch(() => null);
 }
 
 async function quickFetchJson(url: string, headers: any, timeoutMs: number = 6000): Promise<any> {
@@ -476,13 +491,6 @@ async function quickFetchJson(url: string, headers: any, timeoutMs: number = 600
     const res = await fetch(url, { headers, signal: controller.signal });
     if (res.ok) return await res.json().catch(() => null);
   } catch (_) {
-    if (!url.includes("atleta-backend.vercel.app")) {
-      try {
-        const cloudUrl = url.replace(/http:\/\/[^/]+(?:\/api\/v1)?/, "https://atleta-backend.vercel.app/api/v1");
-        const cloudRes = await fetch(cloudUrl, { headers, signal: controller.signal });
-        if (cloudRes.ok) return await cloudRes.json().catch(() => null);
-      } catch (_) {}
-    }
     return null;
   } finally {
     clearTimeout(id);

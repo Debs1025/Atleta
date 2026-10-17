@@ -476,13 +476,6 @@ async function quickFetchJson(url: string, headers: any, timeoutMs: number = 600
     const res = await fetch(url, { headers, signal: controller.signal });
     if (res.ok) return await res.json().catch(() => null);
   } catch (_) {
-    if (!url.includes("atleta-backend.vercel.app")) {
-      try {
-        const cloudUrl = url.replace(/http:\/\/[^/]+(?:\/api\/v1)?/, "https://atleta-backend.vercel.app/api/v1");
-        const cloudRes = await fetch(cloudUrl, { headers, signal: controller.signal });
-        if (cloudRes.ok) return await cloudRes.json().catch(() => null);
-      } catch (_) {}
-    }
     return null;
   } finally {
     clearTimeout(id);

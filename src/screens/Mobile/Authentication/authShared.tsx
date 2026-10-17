@@ -45,11 +45,10 @@ const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifes
 const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
 const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
 
-const CLOUD_PROD_API = "https://atleta-backend.vercel.app/api/v1";
-const envApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || "").trim().replace(/\/+$/, "");
+const envApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || runtime.process?.env?.EXPO_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
 const configuredApi = envApi
   ? (envApi.endsWith("/api/v1") ? envApi : `${envApi}/api/v1`)
-  : CLOUD_PROD_API;
+  : "/api/v1";
 
 const rawDevApi = `http://${hostIp}:5000`;
 const CANDIDATE_DEV_API = `${rawDevApi}/api/v1`;
@@ -317,12 +316,12 @@ async function fetchApi(path: string, options: RequestInit) {
       fetch(primaryUrl, { ...options, signal })
     );
   } catch (err) {
-    if (baseUrl !== CLOUD_PROD_API) {
-      activeApiBase = CLOUD_PROD_API;
-      API_BASE = CLOUD_PROD_API;
+    if (configuredApi && configuredApi !== "/api/v1" && baseUrl !== configuredApi) {
+      activeApiBase = configuredApi;
+      API_BASE = configuredApi;
       try {
         response = await withRequestTimeout((signal) =>
-          fetch(`${CLOUD_PROD_API}${path}`, { ...options, signal })
+          fetch(`${configuredApi}${path}`, { ...options, signal })
         );
       } catch (_) {}
     }
