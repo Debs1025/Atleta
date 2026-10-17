@@ -1,0 +1,220 @@
+{
+  "generated_at": "2026-10-16T23:45:00Z",
+  "total_sports": 5,
+  "sports": {
+    "Basketball": {
+      "category": "Team",
+      "primary_metric": "pts",
+      "sort_order": "descending",
+      "single_file": "bball_single.png",
+      "multi_files": [
+        "bball_page1.png",
+        "bball_page2.png"
+      ],
+      "teams": {
+        "home": "ADNU KNIGHTS",
+        "away": "DLSU ARCHERS"
+      },
+      "final_score": {
+        "home": 80,
+        "away": 68
+      },
+      "top_scorer": {
+        "name": "D. RAVENA",
+        "pts": 26
+      },
+      "expected_top_order": [
+        "D. RAVENA",
+        "K. QUIAMBAO",
+        "J. TENG",
+        "E. NWANKWO",
+        "K. MAMBULAC"
+      ],
+      "tallies": {
+        "D. RAVENA": {
+          "p1_pts": 14,
+          "p2_pts": 12,
+          "total_pts": 26
+        },
+        "J. TENG": {
+          "p1_pts": 10,
+          "p2_pts": 12,
+          "total_pts": 22
+        },
+        "K. QUIAMBAO": {
+          "p1_pts": 11,
+          "p2_pts": 13,
+          "total_pts": 24
+        }
+      }
+    },
+    "Swimming": {
+      "category": "Individual",
+      "primary_metric": "finish_time",
+      "sort_order": "ascending",
+      "single_file": "swimming_single.png",
+      "multi_files": [
+        "swimming_page1.png",
+        "swimming_page2.png"
+      ],
+      "event": "MEN'S 100M FREESTYLE",
+      "podium": [
+        {
+          "rank": 1,
+          "medal": "Gold",
+          "athlete": "C. HATCH",
+          "time": "00:50.85",
+          "team": "ADNU DOLPHINS"
+        },
+        {
+          "rank": 2,
+          "medal": "Silver",
+          "athlete": "M. DEL ROSARIO",
+          "time": "00:51.62",
+          "team": "DLSU AQUATICS"
+        },
+        {
+          "rank": 3,
+          "medal": "Bronze",
+          "athlete": "J. RULE",
+          "time": "00:52.40",
+          "team": "UST TIGERSHARKS"
+        }
+      ],
+      "expected_top_order": [
+        "C. HATCH",
+        "M. DEL ROSARIO",
+        "J. RULE",
+        "R. JACINTO",
+        "A. GABRIEL",
+        "K. TAN"
+      ]
+    },
+    "Track & Field": {
+      "category": "Individual",
+      "primary_metric": "finish_time",
+      "sort_order": "ascending",
+      "single_file": "track_single.png",
+      "multi_files": [
+        "track_page1.png",
+        "track_page2.png"
+      ],
+      "event": "MEN'S 100M SPRINT",
+      "podium": [
+        {
+          "rank": 1,
+          "medal": "Gold",
+          "athlete": "E. CRAY",
+          "time": "00:10.12",
+          "team": "ADNU TRACK CLUB"
+        },
+        {
+          "rank": 2,
+          "medal": "Silver",
+          "athlete": "T. CARTER",
+          "time": "00:10.28",
+          "team": "DLSU RUNNERS"
+        },
+        {
+          "rank": 3,
+          "medal": "Bronze",
+          "athlete": "A. DE MESA",
+          "time": "00:10.45",
+          "team": "UST ATHLETICS"
+        }
+      ],
+      "expected_top_order": [
+        "E. CRAY",
+        "T. CARTER",
+        "A. DE MESA",
+        "P. BAUTISTA",
+        "M. ALBA",
+        "S. MENDOZA"
+      ]
+    },
+    "Volleyball": {
+      "category": "Team",
+      "primary_metric": "kills",
+      "sort_order": "descending",
+      "single_file": "volleyball_single.png",
+      "multi_files": [
+        "volleyball_page1.png",
+        "volleyball_page2.png"
+      ],
+      "teams": {
+        "home": "ADNU SPIKERS",
+        "away": "DLSU LADY SPIKERS"
+      },
+      "final_sets": {
+        "home": 3,
+        "away": 1
+      },
+      "top_attacker": {
+        "name": "A. VALDEZ",
+        "kills": 23,
+        "pts": 30
+      },
+      "expected_top_order": [
+        "A. VALDEZ",
+        "A. GALAURAN",
+        "S. CANINO",
+        "M. DE GUZMAN",
+        "R. DE LEON"
+      ],
+      "tallies": {
+        "A. VALDEZ": {
+          "p1_kills": 12,
+          "p2_kills": 11,
+          "total_kills": 23,
+          "total_pts": 30
+        },
+        "A. GALAURAN": {
+          "p1_kills": 10,
+          "p2_kills": 9,
+          "total_kills": 19,
+          "total_pts": 23
+        }
+      }
+    },
+    "Pickleball": {
+      "category": "Team",
+      "primary_metric": "points",
+      "sort_order": "descending",
+      "single_file": "pickleball_single.png",
+      "multi_files": [
+        "pickleball_page1.png",
+        "pickleball_page2.png"
+      ],
+      "teams": {
+        "home": "ADNU SMASHERS",
+        "away": "DLSU PADDLERS"
+      },
+      "final_score": {
+        "home": 2,
+        "away": 0
+      },
+      "top_player": {
+        "name": "B. JOHNS",
+        "points": 28
+      },
+      "expected_top_order": [
+        "B. JOHNS",
+        "T. MCGUFFIN",
+        "C. ALSHON",
+        "F. STAKS"
+      ],
+      "tallies": {
+        "B. JOHNS": {
+          "p1_pts": 15,
+          "p2_pts": 13,
+          "total_pts": 28
+        },
+        "T. MCGUFFIN": {
+          "p1_pts": 12,
+          "p2_pts": 12,
+          "total_pts": 24
+        }
+      }
+    }
+  }
+}

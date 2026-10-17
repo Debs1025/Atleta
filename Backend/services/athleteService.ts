@@ -3,6 +3,7 @@ import { AthleteFullProfile, AthleteDocument } from '../models/athleteModel';
 import { AthleteHomeSummary } from '../models/notificationModel';
 import { eventBus, EVENTS } from '../utils/eventBus';
 import { getAthleteWorkloadSummary } from './workloadService';
+import { getAthleteTeam } from './teamService';
 
 /**
  * Calculate BMI = weight (kg) / height (m)²
@@ -155,6 +156,45 @@ export async function updateAthleteProfile(
     user_id: rawUid,
     updated_at: new Date(),
   };
+
+  const existingData = profileDoc.exists ? (profileDoc.data() || {}) : {};
+  const existingSport = String(existingData.sport_type || existingData.sports_type || existingData.category || '').trim();
+  const rawNewSport = updateData.sport_type || updateData.sports_type || (updateData as any).category;
+  const newSport = rawNewSport !== undefined ? String(rawNewSport).trim() : '';
+
+  if (newSport && existingSport && newSport.toLowerCase() !== existingSport.toLowerCase()) {
+    // Check if athlete is in an active team
+    let hasActiveTeam = Boolean(existingData.team_id || existingData.current_affiliation?.team_id);
+    if (!hasActiveTeam) {
+      const athleteTeam = await getAthleteTeam(canonicalAthleteId).catch(() => null);
+      if (athleteTeam && athleteTeam.team) {
+        hasActiveTeam = true;
+      }
+    }
+
+    if (hasActiveTeam) {
+      const err = new Error('Cannot change primary sport while actively recruited into a team. Please leave the team first.');
+      (err as any).statusCode = 400;
+      throw err;
+    }
+
+    // Preserve / archive historical stats from previous sport
+    const existingHistorical = existingData.historical_stats || {};
+    const currentStats = existingData.stats || {};
+    const currentAnalytics = existingData.analytics || {};
+    const currentMatches = existingData.recent_matches || [];
+
+    payload.historical_stats = {
+      ...existingHistorical,
+      [existingSport]: {
+        archived_at: new Date().toISOString(),
+        sport: existingSport,
+        stats: currentStats,
+        analytics: currentAnalytics,
+        recent_matches: currentMatches,
+      },
+    };
+  }
 
   // Extract user-level fields for synchronizing to Users collection
   const userPayload: Record<string, any> = {

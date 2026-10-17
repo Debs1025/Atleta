@@ -575,3 +575,109 @@ export function calculateDynamicMatchScore(
     scoreUnit,
   };
 }
+
+/**
+ * Parse time string into total seconds for numerical sorting.
+ * Supports MM:SS.ms, HH:MM:SS.ms, SS.ms, etc.
+ */
+export function parseTimeToSeconds(timeVal: any): number {
+  if (timeVal === undefined || timeVal === null) return 999999;
+  if (typeof timeVal === 'number') return timeVal > 0 ? timeVal : 999999;
+  const str = String(timeVal).trim().toLowerCase().replace(/[^\d:.]/g, '');
+  if (!str) return 999999;
+
+  const parts = str.split(':');
+  if (parts.length === 3) {
+    const h = parseFloat(parts[0]) || 0;
+    const m = parseFloat(parts[1]) || 0;
+    const s = parseFloat(parts[2]) || 0;
+    return h * 3600 + m * 60 + s;
+  }
+  if (parts.length === 2) {
+    const m = parseFloat(parts[0]) || 0;
+    const s = parseFloat(parts[1]) || 0;
+    return m * 60 + s;
+  }
+  const s = parseFloat(parts[0]);
+  return isNaN(s) || s <= 0 ? 999999 : s;
+}
+
+/**
+ * Sorts race athletes in ascending order (fastest/lowest time first).
+ * Re-indexes placement_rank: 1, 2, 3... and preserves DQ at the end.
+ */
+export function sortRaceResultsByTime(results: any[]): any[] {
+  if (!Array.isArray(results) || results.length === 0) return [];
+  const list = [...results];
+
+  list.sort((a, b) => {
+    // Disqualified goes to the end
+    if (a.is_disqualified && !b.is_disqualified) return 1;
+    if (!a.is_disqualified && b.is_disqualified) return -1;
+
+    const timeA = parseTimeToSeconds(a.finish_time || a.time || a.mark_time);
+    const timeB = parseTimeToSeconds(b.finish_time || b.time || b.mark_time);
+
+    if (timeA !== timeB) return timeA - timeB;
+
+    const rankA = Number(a.placement_rank || a.rank || 999);
+    const rankB = Number(b.placement_rank || b.rank || 999);
+    return rankA - rankB;
+  });
+
+  return list.map((item, idx) => ({
+    ...item,
+    placement_rank: String(idx + 1),
+  }));
+}
+
+/**
+ * Sorts roster athletes by their sport's primary scoring metric (descending).
+ * Basketball: PTS
+ * Volleyball: KILLS or PTS
+ * Soccer: GOALS or PTS
+ * Badminton: TOTAL PTS or SMASHES
+ * Custom: Highest primary metric
+ */
+export function sortAthletesByPrimaryMetric(
+  athletes: any[],
+  sportType: string,
+  activeSportConfig?: SportConfiguration | null
+): any[] {
+  if (!Array.isArray(athletes) || athletes.length === 0) return [];
+  const norm = (sportType || '').trim().toUpperCase();
+  const list = [...athletes];
+
+  let primaryKey = 'pts';
+  if (norm.includes('BASKET')) {
+    primaryKey = 'pts';
+  } else if (norm.includes('VOLLEY')) {
+    primaryKey = 'kills';
+  } else if (norm.includes('SOCCER') || norm.includes('FOOTBALL')) {
+    primaryKey = 'goals';
+  } else if (norm.includes('BADM')) {
+    primaryKey = 'pts';
+  } else if (norm.includes('PICKLE')) {
+    primaryKey = 'points';
+  } else if (activeSportConfig) {
+    const stats = activeSportConfig.configurable_stats || [];
+    if (stats.length > 0) {
+      primaryKey = stats[0].stat_name_key;
+    }
+  }
+
+  list.sort((a, b) => {
+    let valA = Number(getMetricValue(a, primaryKey, 0)) || 0;
+    let valB = Number(getMetricValue(b, primaryKey, 0)) || 0;
+
+    if (valA === valB && primaryKey !== 'pts' && primaryKey !== 'points') {
+      valA = Number(getMetricValue(a, 'pts', getMetricValue(a, 'points', 0))) || 0;
+      valB = Number(getMetricValue(b, 'pts', getMetricValue(b, 'points', 0))) || 0;
+    }
+
+    return valB - valA;
+  });
+
+  return list;
+}
+

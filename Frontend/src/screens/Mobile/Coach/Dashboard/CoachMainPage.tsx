@@ -595,6 +595,19 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   useEffect(() => {
     let isMounted = true;
 
+    const withSyncTimeout = <T,>(p: Promise<T>, ms = 2400, fallback: T = null as any): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+      ]);
+    };
+
+    const hydrationTimer = setTimeout(() => {
+      if (isMounted) {
+        setIsDashboardLoading(false);
+      }
+    }, 2800);
+
     const fetchCoachDashboardData = async () => {
       try {
         const [
@@ -609,16 +622,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           offlineAthletes,
           offlineProfileRes,
         ]: [any, any, any, any, any, any, any, any, any, any] = await Promise.all([
-          requestAuthenticatedJson("/coaches/profile").catch(() => null),
-          requestAuthenticatedJson("/teams").catch(() => null),
-          requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null),
-          requestAuthenticatedJson("/matches").catch(() => null),
-          requestAuthenticatedJson("/coaches/athletes").catch(() => null),
-          requestAuthenticatedJson("/notifications").catch(() => null),
-          getSportsOfflineFirst().catch(() => []),
-          getMatchesOfflineFirst().catch(() => []),
-          getAthletesOfflineFirst().catch(() => []),
-          getCoachProfileOfflineFirst().catch(() => null),
+          withSyncTimeout(requestAuthenticatedJson("/coaches/profile").catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/teams").catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/matches").catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/coaches/athletes").catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/notifications").catch(() => null)),
+          withSyncTimeout(getSportsOfflineFirst().catch(() => []), 1500, []),
+          withSyncTimeout(getMatchesOfflineFirst().catch(() => []), 1500, []),
+          withSyncTimeout(getAthletesOfflineFirst().catch(() => []), 1500, []),
+          withSyncTimeout(getCoachProfileOfflineFirst().catch(() => null), 1500, null),
         ]);
 
         const allTeamsRes: any = null;
@@ -1180,6 +1193,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
     return () => {
       isMounted = false;
+      clearTimeout(hydrationTimer);
       clearInterval(notifInterval);
     };
   }, []);
@@ -1942,6 +1956,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         <OCRoutput
           rawOCRData={ocrPayload}
           onBack={() => setActiveView("ocr_logging")}
+          onGoHome={() => {
+            setActiveTab("Home");
+            setActiveView("dashboard");
+          }}
           onConfirmSave={async (finalData) => {
             // Accurately compute athlete points sum per team
             const homeAthleteSum = finalData.athlete_overview
@@ -2107,9 +2125,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               }))
             );
 
-            // Immediately redirect straight back to Home/Dashboard view without waiting for network
-            setActiveTab("Home");
-            setActiveView("dashboard");
+            // View redirection is handled after user taps 'Go back to Home' or 3-second delay in OCRoutput modal
 
             // Asynchronous background task: Persist match and player stats to Firestore / Backend silently
             (async () => {

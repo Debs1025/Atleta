@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
     View,
     Text,
@@ -161,6 +161,7 @@ interface OCRoutputProps {
     rawOCRData?: RawOCRDetectedData;
     onBack?: () => void;
     onConfirmSave?: (finalData: RawOCRDetectedData) => void;
+    onGoHome?: () => void;
 }
 
 const DEFAULT_RAW_BASKETBALL_OCR: RawOCRDetectedData = {
@@ -195,6 +196,7 @@ export function OCRoutput({
     rawOCRData = DEFAULT_RAW_BASKETBALL_OCR,
     onBack,
     onConfirmSave,
+    onGoHome,
 }: OCRoutputProps) {
     const insets = useSafeAreaInsets();
     const headerTopPadding = Math.max(insets.top, 16) + 10;
@@ -521,6 +523,30 @@ export function OCRoutput({
         [currentActiveMatch]
     );
 
+    const redirectTimerRef = useRef<any>(null);
+
+    const handleGoHome = useCallback(() => {
+        if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+            redirectTimerRef.current = null;
+        }
+        setShowSuccessModal(false);
+        if (onGoHome) {
+            onGoHome();
+        } else if (onBack) {
+            onBack();
+        }
+    }, [onGoHome, onBack]);
+
+    useEffect(() => {
+        return () => {
+            if (redirectTimerRef.current) {
+                clearTimeout(redirectTimerRef.current);
+                redirectTimerRef.current = null;
+            }
+        };
+    }, []);
+
     // Confirm & Save Action Handler
     const handleSave = useCallback(() => {
         if (onConfirmSave) {
@@ -573,7 +599,15 @@ export function OCRoutput({
                 scoresheet_url: scoresheetUrlVal,
             });
         }
-    }, [currentActiveMatch, athleteStats, onConfirmSave]);
+
+        setShowSuccessModal(true);
+        if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+        }
+        redirectTimerRef.current = setTimeout(() => {
+            handleGoHome();
+        }, 3000);
+    }, [currentActiveMatch, athleteStats, onConfirmSave, handleGoHome]);
 
     return (
         <View style={styles.container}>
@@ -1113,12 +1147,12 @@ export function OCRoutput({
                 </View>
             </ScrollView>
 
-            {/* CUSTOM SUCCESS ALERT MODAL */}
+            {/* SUCCESS INTERCEPTION MODAL */}
             <Modal
                 visible={showSuccessModal}
                 transparent
                 animationType="fade"
-                onRequestClose={() => setShowSuccessModal(false)}
+                onRequestClose={handleGoHome}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.successModalCard}>
@@ -1126,15 +1160,15 @@ export function OCRoutput({
                             <Ionicons name="checkmark-circle" size={44} color="#00C8FF" />
                         </View>
 
-                        <Text style={styles.successModalTitle}>STATISTICS VERIFIED & SAVED</Text>
+                        <Text style={styles.successModalTitle}>Successfully Saved Match</Text>
                         <Text style={styles.successModalSubtitle}>
-                            Raw performance metrics have been successfully verified and saved to the player rosters.
+                            Match performance metrics and athlete statistics have been verified and saved to the roster. Redirecting in 3 seconds...
                         </Text>
 
                         <View style={styles.successSummaryBox}>
                             <View style={styles.summaryChip}>
                                 <Text style={styles.chipLabel}>TEAM</Text>
-                                <Text style={styles.chipValue} numberOfLines={1}>{rawOCRData.team_name}</Text>
+                                <Text style={styles.chipValue} numberOfLines={1}>{rawOCRData.team_name || "ATLETA"}</Text>
                             </View>
                             <View style={styles.summaryChip}>
                                 <Text style={styles.chipLabel}>ATHLETES</Text>
@@ -1144,18 +1178,10 @@ export function OCRoutput({
 
                         <TouchableOpacity
                             style={styles.modalCtaButton}
-                            onPress={() => {
-                                setShowSuccessModal(false);
-                                if (onConfirmSave) {
-                                    onConfirmSave({
-                                        ...currentActiveMatch,
-                                        athlete_overview: athleteStats,
-                                    });
-                                }
-                            }}
+                            onPress={handleGoHome}
                             activeOpacity={0.85}
                         >
-                            <Text style={styles.modalCtaText}>RETURN TO DASHBOARD</Text>
+                            <Text style={styles.modalCtaText}>Go back to Home</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

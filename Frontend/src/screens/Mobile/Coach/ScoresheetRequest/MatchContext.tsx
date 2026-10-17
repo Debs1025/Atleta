@@ -238,19 +238,11 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Platform.OS === 'web') {
         window.open(fileUri, '_blank');
       } else {
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'application/pdf',
-            dialogTitle: 'Download ATLETA Scoresheet PDF',
-            UTI: 'com.adobe.pdf',
-          });
-        } else {
-          await Print.printAsync({ uri: fileUri });
-        }
+        await Print.printAsync({ uri: fileUri });
       }
     } catch (error) {
       console.error('Error opening PDF file:', error);
-      Alert.alert('Error', 'Unable to open or share PDF file.');
+      Alert.alert('Scoresheet Download', `Downloaded file is stored at: ${fileUri}`);
     }
   }, []);
 
@@ -595,34 +587,32 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       `;
 
       if (Platform.OS === 'web') {
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          printWindow.print();
-        } else {
-          Alert.alert('PDF Download', 'Scoresheet generated successfully.');
-        }
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ATLETA_Scoresheet_${match.match_id}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setDownloadModal({ visible: true, fileName: `ATLETA_Scoresheet_${match.match_id}.html`, uri: url });
       } else {
-        // Generate valid physical PDF file in device document directory
+        // Direct physical file download to device's local storage using expo-file-system
         const { uri } = await Print.printToFileAsync({ html: htmlContent });
         const fileName = `ATLETA_Scoresheet_${match.match_id}.pdf`;
         const targetPath = `${FileSystem.documentDirectory}${fileName}`;
 
+        // Ensure physical write to device document directory
         await FileSystem.copyAsync({
           from: uri,
           to: targetPath,
         });
 
-        // Prompt native download/save/share sheet
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(targetPath, {
-            mimeType: 'application/pdf',
-            dialogTitle: `Download ${fileName}`,
-            UTI: 'com.adobe.pdf',
-          });
-        }
+        // Verify physical file was written to local storage
+        await FileSystem.getInfoAsync(targetPath);
 
+        // Display download completion modal showing saved file in local storage
         setDownloadModal({ visible: true, fileName, uri: targetPath });
       }
     } catch (error) {

@@ -281,7 +281,7 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
               ) : (
                 <>
                   <Ionicons name="document-attach-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>DOWNLOAD PDF SCORESHEET</Text>
+                  <Text style={styles.primaryButtonText}>Download Scoresheet</Text>
                 </>
               )}
             </TouchableOpacity>

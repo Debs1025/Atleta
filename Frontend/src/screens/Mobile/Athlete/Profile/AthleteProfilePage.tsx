@@ -29,7 +29,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { requestAuthenticatedJson, requestMultipart, getStoredAuthToken } from "../../Authentication/authShared";
 import { getSportsOfflineFirst, db, storage } from "../../../../services/firebaseClient";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export interface DailySessionLog {
   date: string; // "YYYY-MM-DD"
@@ -178,12 +178,35 @@ export function AthleteProfilePage({
   const [isEditing, setIsEditing] = useState(false);
 
   // Profile form local state
+  const initialFullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.full_name || "";
+  const [fullName, setFullName] = useState(initialFullName);
   const [firstName, setFirstName] = useState(profile.first_name);
   const [lastName, setLastName] = useState(profile.last_name);
   const [birthdate, setBirthdate] = useState(profile.birthdate);
   const [gender, setGender] = useState(profile.gender || "");
   const [province, setProvince] = useState((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
   const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
+  const activeTeamId = (profile as any)?.team_id || (profile as any)?.current_affiliation?.team_id || (profile as any)?.teamId || null;
+  const [hasActiveTeam, setHasActiveTeam] = useState<boolean>(Boolean(activeTeamId));
+
+  React.useEffect(() => {
+    const currentTeam = (profile as any)?.team_id || (profile as any)?.current_affiliation?.team_id;
+    if (currentTeam) {
+      setHasActiveTeam(true);
+      return;
+    }
+    const cleanId = (profile as any)?.athlete_id || (profile as any)?.user_id || (profile as any)?.id;
+    if (cleanId) {
+      requestAuthenticatedJson("/athletes/team")
+        .then((res: any) => {
+          if (res && (res.team_id || res.team?.team_id)) {
+            setHasActiveTeam(true);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [profile]);
+
   const [dynamicCategories, setDynamicCategories] = useState<string[]>(
     categoriesList && categoriesList.length > 0 ? categoriesList : (DEFAULT_CATEGORIES as string[])
   );
@@ -306,19 +329,67 @@ export function AthleteProfilePage({
   );
   const [workloadDrawerOpen, setWorkloadDrawerOpen] = useState(true);
 
+  // Target Weekly Workload assigned by coach
+  const [targetWeeklyWorkload, setTargetWeeklyWorkload] = useState<number | null>(() => {
+    const fromProfile =
+      (profile as any)?.workload_target?.target_7day_effort_pts ??
+      (profile as any)?.workload_analytics?.target_7day_effort_pts ??
+      (profile as any)?.workload?.target_7day_effort_pts ??
+      (profile as any)?.target_weekly_workload;
+    return fromProfile !== undefined && fromProfile !== null ? Number(fromProfile) : null;
+  });
+
   // Interactive Daily Workout Log State
   const [logDuration, setLogDuration] = useState("60");
   const [logHardness, setLogHardness] = useState(7);
   const [logSuccessToast, setLogSuccessToast] = useState("");
   const [showWarningModal, setShowWarningModal] = useState(false);
 
-  // Sync / fetch coach-provided workload logs for the athlete
+  // Sync / fetch coach-provided workload logs and target for the athlete
   React.useEffect(() => {
     if ((profile as any).workload_analytics) {
       setWorkloadData((profile as any).workload_analytics);
     } else {
       setWorkloadData(DEFAULT_WORKLOAD_DATA);
     }
+
+    const rawId = (profile as any)?.athlete_id || (profile as any)?.user_id || (profile as any)?.id;
+    if (!rawId) return;
+    const cleanId = String(rawId).replace(/^ath_/, "");
+    const possibleDocIds = [cleanId, `ath_${cleanId}`];
+
+    // Fetch live target directly from Firestore Athlete_Profiles
+    Promise.all(possibleDocIds.map((id) => getDoc(doc(db, "Athlete_Profiles", id)).catch(() => null)))
+      .then((snaps) => {
+        for (const snap of snaps) {
+          if (snap && snap.exists()) {
+            const data = snap.data();
+            const targetVal =
+              data?.workload_target?.target_7day_effort_pts ??
+              data?.workload_analytics?.target_7day_effort_pts ??
+              data?.workload?.target_7day_effort_pts ??
+              data?.target_weekly_workload;
+            if (targetVal !== undefined && targetVal !== null) {
+              setTargetWeeklyWorkload(Number(targetVal));
+              return;
+            }
+          }
+        }
+      })
+      .catch(() => {});
+
+    // Also fetch via API endpoint /athletes/workload
+    requestAuthenticatedJson("/athletes/workload")
+      .then((res: any) => {
+        const targetVal =
+          res?.workload_target?.target_7day_effort_pts ??
+          res?.target_7day_effort_pts ??
+          res?.workload_analytics?.target_7day_effort_pts;
+        if (targetVal !== undefined && targetVal !== null) {
+          setTargetWeeklyWorkload(Number(targetVal));
+        }
+      })
+      .catch(() => {});
   }, [profile]);
 
   if (loading) {
@@ -881,12 +952,14 @@ export function AthleteProfilePage({
 
   // API Request: save profile updates (PATCH /api/v1/athletes/profile)
   const handleSave = async () => {
-    if (!firstName.trim()) {
+    const cleanFullName = (fullName || `${firstName} ${lastName}`).trim();
+    const nameParts = cleanFullName.split(" ");
+    const resolvedFirst = nameParts[0] || firstName.trim();
+    const resolvedLast = nameParts.slice(1).join(" ") || lastName.trim();
+    const resolvedFullName = cleanFullName || `${resolvedFirst} ${resolvedLast}`.trim();
+
+    if (!resolvedFirst) {
       Alert.alert("Validation Error", "First name is required. Please enter your first name.");
-      return;
-    }
-    if (!lastName.trim()) {
-      Alert.alert("Validation Error", "Last name is required. Please enter your last name.");
       return;
     }
 
@@ -902,8 +975,9 @@ export function AthleteProfilePage({
 
     const updated: AthleteProfile = {
       ...profile,
-      first_name: firstName.trim().toUpperCase(),
-      last_name: lastName.trim().toUpperCase(),
+      first_name: resolvedFirst,
+      last_name: resolvedLast,
+      full_name: resolvedFullName,
       birthdate: safeBirthdate,
       gender: gender,
       province: province,
@@ -938,9 +1012,9 @@ export function AthleteProfilePage({
         const cleanId = String(athleteUid).replace(/^ath_/, "");
         const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
         const firestorePayload = sanitizeForFirestore({
-          first_name: firstName.trim().toUpperCase(),
-          last_name: lastName.trim().toUpperCase(),
-          full_name: `${firstName.trim()} ${lastName.trim()}`.toUpperCase(),
+          first_name: resolvedFirst,
+          last_name: resolvedLast,
+          full_name: resolvedFullName,
           birthdate: safeBirthdate,
           gender: gender || "",
           province: province || "",
@@ -956,9 +1030,9 @@ export function AthleteProfilePage({
         });
 
         const userPayload = sanitizeForFirestore({
-          first_name: firstName.trim().toUpperCase(),
-          last_name: lastName.trim().toUpperCase(),
-          full_name: `${firstName.trim()} ${lastName.trim()}`.toUpperCase(),
+          first_name: resolvedFirst,
+          last_name: resolvedLast,
+          full_name: resolvedFullName,
           avatar_url: avatarUri || "",
           profile_image: avatarUri || "",
           updated_at: new Date().toISOString(),
@@ -990,8 +1064,9 @@ export function AthleteProfilePage({
 
       // 4. Background sync to backend REST API
       requestAuthenticatedJson("/athletes/profile", "PATCH", {
-        first_name: firstName.trim().toUpperCase(),
-        last_name: lastName.trim().toUpperCase(),
+        first_name: resolvedFirst,
+        last_name: resolvedLast,
+        full_name: resolvedFullName,
         height_cm: safeHeight,
         weight_kg: safeWeight,
         wingspan_cm: safeWingspan,
@@ -1017,6 +1092,7 @@ export function AthleteProfilePage({
   const handleCancelEdit = () => {
     setFirstName(profile.first_name);
     setLastName(profile.last_name);
+    setFullName(`${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.full_name || "");
     setBirthdate(profile.birthdate);
     setGender(profile.gender || "");
     setProvince(profile.province || "");
@@ -1030,6 +1106,14 @@ export function AthleteProfilePage({
   };
 
   const selectCategoryOption = (selected: AthleteProfile["category"]) => {
+    if (hasActiveTeam && selected !== category) {
+      setShowCategoryPicker(false);
+      Alert.alert(
+        "Sport Change Blocked",
+        "You cannot change your primary sport while actively recruited into a team. You must leave your current team first."
+      );
+      return;
+    }
     setCategory(selected);
     setShowCategoryPicker(false);
   };
@@ -1129,16 +1213,17 @@ export function AthleteProfilePage({
           >
             <TextInput
               style={styles.textInput}
-              value={`${firstName}${lastName ? " " + lastName : ""}`}
+              value={fullName}
               editable={isEditing}
               onChangeText={(text) => {
+                setFullName(text);
                 const parts = text.trimStart().split(" ");
                 setFirstName(parts[0] || "");
                 setLastName(parts.slice(1).join(" ") || "");
               }}
               placeholder="Enter full name"
               placeholderTextColor="#64748B"
-              autoCapitalize="characters"
+              autoCapitalize="words"
             />
             {isEditing && (
               <Ionicons name="pencil-sharp" size={14} color="#38BDF8" />
@@ -1172,6 +1257,13 @@ export function AthleteProfilePage({
                 isEditing && styles.inputWrapperEditable,
               ]}
               onPress={() => {
+                if (hasActiveTeam) {
+                  Alert.alert(
+                    "Sport Change Blocked",
+                    "You cannot change your primary sport while actively recruited into a team. You must leave your current team first."
+                  );
+                  return;
+                }
                 if (isEditing) {
                   setShowCategoryPicker(true);
                 } else {
@@ -1413,6 +1505,36 @@ export function AthleteProfilePage({
                   </View>
                   <View style={{ position: "absolute", top: 16, left: `${Math.min(95, Math.max(2, (acwrRatio / 2.0) * 100))}%` }}>
                     <Text style={{ color: statusBadgeColor, fontSize: 10, fontWeight: "900" }}>▲</Text>
+                  </View>
+                </View>
+
+                {/* Target Weekly Workload Card */}
+                <View style={{
+                  backgroundColor: "#16233E",
+                  borderRadius: 12,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderColor: "#38BDF8",
+                  marginTop: 10,
+                  marginBottom: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between"
+                }}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase" }}>
+                      Target Weekly Workload
+                    </Text>
+                    <Text style={{ color: "#94A3B8", fontSize: 11, marginTop: 2 }}>
+                      Assigned by coach from performance tracking
+                    </Text>
+                  </View>
+                  <View style={{ backgroundColor: "rgba(56, 189, 248, 0.15)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}>
+                    <Text style={{ color: "#38BDF8", fontSize: 15, fontWeight: "900" }}>
+                      {targetWeeklyWorkload !== null && targetWeeklyWorkload > 0
+                        ? `${targetWeeklyWorkload} Effort Pts`
+                        : "400 Effort Pts"}
+                    </Text>
                   </View>
                 </View>
 

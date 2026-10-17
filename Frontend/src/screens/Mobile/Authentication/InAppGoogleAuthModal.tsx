@@ -11,7 +11,18 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
+
+function getWebView() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const rnw = require('react-native-webview');
+    return rnw ? rnw.WebView : null;
+  } catch {
+    return null;
+  }
+}
 
 function runtimeProcessEnv(key: string): string | undefined {
   const runtime = globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } };
@@ -41,6 +52,10 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
   onError,
 }) => {
   const [loading, setLoading] = useState(true);
+  const WebViewComp = useMemo(() => {
+    if (!visible) return null;
+    return getWebView();
+  }, [visible]);
 
   const googleClientId = useMemo(() => {
     return (
@@ -52,6 +67,11 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
   const facebookAppId = useMemo(() => {
     return (
       runtimeProcessEnv('EXPO_PUBLIC_FACEBOOK_APP_ID') ||
+      runtimeProcessEnv('FACEBOOK_APP_ID') ||
+      (Constants.expoConfig as any)?.facebookAppId ||
+      (Constants.expoConfig as any)?.extra?.facebookAppId ||
+      (Constants as any).manifest2?.extra?.expoClient?.facebookAppId ||
+      (Constants as any).manifest?.facebookAppId ||
       '1478346524097898'
     ).trim();
   }, []);
@@ -177,30 +197,85 @@ export const InAppGoogleAuthModal: React.FC<InAppGoogleAuthModalProps> = ({
         {loading && (
           <View style={styles.loadingBar}>
             <ActivityIndicator size="small" color="#3B82F6" />
-            <Text style={styles.loadingText}>Connecting to Google...</Text>
+            <Text style={styles.loadingText}>Connecting to {provider === "facebook" ? "Facebook" : "Google"}...</Text>
           </View>
         )}
 
         {/* In-App WebView (User never leaves the application) */}
-        <WebView
-          source={{ uri: authUrl }}
-          userAgent={provider === 'google' ? (Platform.OS === 'ios' ? SAFARI_USER_AGENT_IOS : CHROME_USER_AGENT_ANDROID) : undefined}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          sharedCookiesEnabled={true}
-          thirdPartyCookiesEnabled={true}
-          incognito={false}
-          onLoadStart={() => setLoading(true)}
-          onLoadEnd={() => setLoading(false)}
-          onNavigationStateChange={(navState) => {
-            handleInterceptUrl(navState.url);
-          }}
-          onShouldStartLoadWithRequest={(request) => {
-            const intercepted = handleInterceptUrl(request.url);
-            return !intercepted;
-          }}
-          style={styles.webview}
-        />
+        {WebViewComp ? (
+          <WebViewComp
+            source={{ uri: authUrl }}
+            userAgent={Platform.OS === 'ios' ? SAFARI_USER_AGENT_IOS : CHROME_USER_AGENT_ANDROID}
+            originWhitelist={['*']}
+            mixedContentMode="always"
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            sharedCookiesEnabled={true}
+            thirdPartyCookiesEnabled={true}
+            javaScriptCanOpenWindowsAutomatically={true}
+            setSupportMultipleWindows={false}
+            allowsBackForwardNavigationGestures={true}
+            incognito={false}
+            onLoadStart={() => setLoading(true)}
+            onLoadEnd={() => setLoading(false)}
+            onNavigationStateChange={(navState: any) => {
+              handleInterceptUrl(navState.url);
+            }}
+            onShouldStartLoadWithRequest={(request: any) => {
+              const intercepted = handleInterceptUrl(request.url);
+              return !intercepted;
+            }}
+            renderError={(errorName: any) => (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#070D19' }}>
+                <Ionicons name="alert-circle-outline" size={48} color="#EF4444" style={{ marginBottom: 12 }} />
+                <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
+                  Unable to load {provider === 'facebook' ? 'Facebook' : 'Google'}
+                </Text>
+                <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>
+                  {errorName || 'Connection error. Please check your network or try again.'}
+                </Text>
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={{ backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
+                >
+                  <Text style={{ color: '#38BDF8', fontWeight: '700', fontSize: 14 }}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            onError={(syntheticEvent: any) => {
+              const { nativeEvent } = syntheticEvent;
+              if (!handleInterceptUrl(nativeEvent.url)) {
+                console.warn("WebView auth error:", nativeEvent);
+              }
+            }}
+            style={styles.webview}
+          />
+        ) : (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#070D19' }}>
+            <Ionicons name="globe-outline" size={48} color="#38BDF8" style={{ marginBottom: 12 }} />
+            <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
+              Sign in with {provider === 'facebook' ? 'Facebook' : 'Google'}
+            </Text>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  const res = await WebBrowser.openAuthSessionAsync(authUrl, 'atleta://');
+                  if (res.type === 'success' && res.url) {
+                    handleInterceptUrl(res.url);
+                  }
+                } catch (e) {
+                  console.warn("WebBrowser error:", e);
+                }
+              }}
+              style={{ backgroundColor: '#0284C7', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginBottom: 12 }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Open Sign-In Browser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={{ color: '#94A3B8', fontSize: 13 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );

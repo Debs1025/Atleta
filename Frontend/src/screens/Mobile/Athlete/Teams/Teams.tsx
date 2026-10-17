@@ -477,6 +477,11 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
 
   const filteredTeams = teams.filter((team) => {
+    // Hide teams the athlete has already joined so they cannot re-join or see redundant listings
+    if (team.is_my_team || (myCurrentTeamId && (team.team_id === myCurrentTeamId || (team as any).id === myCurrentTeamId))) {
+      return false;
+    }
+
     const matchesSearch =
       team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -533,6 +538,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         <InquireCoachScreen
           coach={coachToDisplay}
           isAlreadyInquired={isAlreadyInquired}
+          athleteCategory={athleteCategory}
           onBack={() => setCurrentScreen(selectedTeam ? "TEAM_DETAILS" : "DIRECTORY")}
           onGoHome={() => setCurrentScreen("DIRECTORY")}
           onGoInquiries={() => setCurrentScreen("INQUIRIES")}

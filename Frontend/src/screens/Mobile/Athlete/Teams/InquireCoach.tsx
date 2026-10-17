@@ -21,6 +21,7 @@ import { doc, setDoc } from "firebase/firestore";
 interface InquireCoachProps {
   coach: CoachProfileSchema;
   isAlreadyInquired?: boolean;
+  athleteCategory?: string;
   onBack: () => void;
   onGoHome: () => void;
   onGoInquiries: () => void;
@@ -29,6 +30,7 @@ interface InquireCoachProps {
 export function InquireCoachScreen({
   coach,
   isAlreadyInquired = false,
+  athleteCategory,
   onBack,
   onGoHome,
   onGoInquiries,
@@ -42,6 +44,18 @@ export function InquireCoachScreen({
   const handleSendInquiry = async () => {
     if (!coach.coach_id && !coach.full_name) {
       return;
+    }
+
+    if (athleteCategory && coach.tags && coach.tags.length > 0) {
+      const normAthleteSport = athleteCategory.toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+      const coachSportTag = (coach.tags[0] || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+      if (coachSportTag && coachSportTag !== "ALL" && !normAthleteSport.includes(coachSportTag) && !coachSportTag.includes(normAthleteSport)) {
+        Alert.alert(
+          "Sport Restriction",
+          `You can only join or inquire with teams matching your active sport (${athleteCategory}).`
+        );
+        return;
+      }
     }
 
     try {

@@ -182,7 +182,7 @@ export const coachSignupSchema = z.object({
     z.number().int().min(0, "Years of experience must be at least 0.").max(60, "Years of experience cannot exceed 60.")
   ),
   current_institution: z.string().trim().min(1, "Current institution is required.").max(255, "Current institution is too long."),
-  regional_affiliation: z.string().trim().min(1, "Regional affiliation is required.").max(255, "Regional affiliation is too long."),
+  regional_affiliation: z.string().trim().max(255, "Regional affiliation is too long.").optional().or(z.literal("")),
   national_sports_league: z.string().trim().max(255, "League name is too long.").optional().or(z.literal("")),
   eligible_documents: z
     .object({
@@ -929,7 +929,11 @@ export async function promptFacebookOAuthAsync(): Promise<FacebookAuthResult> {
 
   const facebookAppId = (
     runtime.process?.env?.EXPO_PUBLIC_FACEBOOK_APP_ID ||
+    runtime.process?.env?.FACEBOOK_APP_ID ||
     (Constants.expoConfig as any)?.facebookAppId ||
+    (Constants.expoConfig as any)?.extra?.facebookAppId ||
+    (Constants as any).manifest2?.extra?.expoClient?.facebookAppId ||
+    (Constants as any).manifest?.facebookAppId ||
     "1478346524097898"
   ).trim();
 

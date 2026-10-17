@@ -57,6 +57,29 @@ export interface CoachEditProfileProps {
   onSave?: (updatedProfile: CoachProfileState) => void;
 }
 
+function normalizeUploadedDocs(rawDocs: any[]): UploadedDocument[] {
+  if (!Array.isArray(rawDocs)) return [];
+  return rawDocs.map((d: any, idx: number) => {
+    if (typeof d === "string") {
+      const ext = d.includes(".") ? d.split(".").pop()?.toUpperCase() : "PDF";
+      return {
+        id: `doc_${idx}_${Date.now()}`,
+        file_name: d,
+        file_type: (ext === "PDF" || ext === "PNG" || ext === "JPG") ? ext : "PDF",
+        file_url: d,
+      };
+    }
+    const fileName = String(d.file_name || d.name || d.title || d.document_name || `Credential_${idx + 1}.pdf`);
+    const ext = fileName.includes(".") ? fileName.split(".").pop()?.toUpperCase() : "PDF";
+    return {
+      id: String(d.id || d.doc_id || `doc_${idx}_${Date.now()}`),
+      file_name: fileName,
+      file_type: (d.file_type || (ext === "PDF" || ext === "PNG" || ext === "JPG" ? ext : "PDF")) as any,
+      file_url: d.file_url || d.url || "",
+    };
+  });
+}
+
 // API Request: update coach profile details (PUT /api/coach/profile)
 export function CoachEditProfile({
   onBack,
@@ -105,9 +128,14 @@ export function CoachEditProfile({
 
   const [avatarUri, setAvatarUri] = useState<string | undefined>(currentProfile.avatar_url);
 
-  const [documents, setDocuments] = useState<UploadedDocument[]>(
-    currentProfile.uploaded_documents || []
+  const initialDocs = normalizeUploadedDocs(
+    currentProfile.uploaded_documents ||
+    (currentProfile as any).credentials ||
+    (currentProfile as any).certifications ||
+    []
   );
+
+  const [documents, setDocuments] = useState<UploadedDocument[]>(initialDocs);
 
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editingDocName, setEditingDocName] = useState<string>("");
@@ -123,8 +151,36 @@ export function CoachEditProfile({
       coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
     });
     setAvatarUri(currentProfile.avatar_url);
-    setDocuments(currentProfile.uploaded_documents || []);
+    const docs = normalizeUploadedDocs(
+      currentProfile.uploaded_documents ||
+      (currentProfile as any).credentials ||
+      (currentProfile as any).certifications ||
+      []
+    );
+    if (docs.length > 0) {
+      setDocuments(docs);
+    }
   }, [currentProfile]);
+
+  // Fetch credentials from API/offline store if not yet populated
+  useEffect(() => {
+    let isMounted = true;
+    if (documents.length === 0) {
+      requestAuthenticatedJson("/coaches/profile")
+        .then((res: any) => {
+          if (!isMounted || !res) return;
+          const raw = res.uploaded_documents || res.credentials || res.certifications || res.documents || [];
+          const fetchedDocs = normalizeUploadedDocs(raw);
+          if (fetchedDocs.length > 0) {
+            setDocuments(fetchedDocs);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleRenameDocument = (docId: string, newName: string) => {
     const trimmed = newName.trim();
@@ -134,9 +190,10 @@ export function CoachEditProfile({
       prev.map((d) => {
         if (d.id !== docId) return d;
 
+        const rawFileName = String(d.file_name || (d as any).name || (d as any).title || "");
         // Preserve file extension if present in original file_name
-        const originalExt = d.file_name.includes(".")
-          ? "." + d.file_name.split(".").pop()
+        const originalExt = rawFileName && rawFileName.includes(".")
+          ? "." + rawFileName.split(".").pop()
           : "";
 
         let finalFileName = trimmed;
@@ -147,7 +204,7 @@ export function CoachEditProfile({
         return {
           ...d,
           file_name: finalFileName,
-          file_type: d.file_type, // Strictly preserve original file_type (PDF / JPG / PNG)
+          file_type: d.file_type || (originalExt ? (originalExt.replace(".", "").toUpperCase() as any) : "PDF"),
         };
       })
     );
@@ -639,7 +696,7 @@ export function CoachEditProfile({
         </View>
 
         {/* CREDENTIALS UPLOADER BOX */}
-        <View style={{ marginTop: 8 }}>
+        <View style={{ marginTop: 28, paddingTop: 4 }}>
           <Text style={styles.inputLabel}>CREDENTIALS</Text>
           <TouchableOpacity
             style={styles.uploaderCard}
@@ -666,6 +723,7 @@ export function CoachEditProfile({
           ) : (
             documents.map((doc) => {
               const isEditingThis = editingDocId === doc.id;
+              const displayName = doc.file_name || (doc as any).name || (doc as any).title || "Credential.pdf";
               return (
                 <View key={doc.id} style={styles.uploadedDocRow}>
                   <View style={styles.uploadedDocLeft}>
@@ -685,7 +743,7 @@ export function CoachEditProfile({
                       />
                     ) : (
                       <Text style={styles.uploadedDocName} numberOfLines={1}>
-                        {doc.file_name}
+                        {displayName}
                       </Text>
                     )}
                   </View>
@@ -710,10 +768,10 @@ export function CoachEditProfile({
                         style={styles.editDocNameBtn}
                         onPress={() => {
                           setEditingDocId(doc.id);
-                          setEditingDocName(doc.file_name);
+                          setEditingDocName(displayName);
                         }}
                         activeOpacity={0.7}
-                        accessibilityLabel={`Edit document name ${doc.file_name}`}
+                        accessibilityLabel={`Edit document name ${displayName}`}
                       >
                         <Ionicons name="pencil-outline" size={18} color="#00C8FF" />
                       </TouchableOpacity>
@@ -721,9 +779,9 @@ export function CoachEditProfile({
 
                     <TouchableOpacity
                       style={styles.trashIconButton}
-                      onPress={() => handleDeleteDocument(doc.id, doc.file_name)}
+                      onPress={() => handleDeleteDocument(doc.id, displayName)}
                       activeOpacity={0.7}
-                      accessibilityLabel={`Delete document ${doc.file_name}`}
+                      accessibilityLabel={`Delete document ${displayName}`}
                     >
                       <Ionicons name="trash-outline" size={18} color="#EF4444" />
                     </TouchableOpacity>

@@ -305,6 +305,7 @@ export async function submitRecruitmentInquiry(
 
   const inquiry: RecruitmentInquiry = {
     scout_id: scoutId,
+    inquiry_id: scoutId,
     athlete_id: athleteId,
     coach_scout_id: coachId,
     initiated_by: athleteId, // Athlete sent the inquiry
@@ -494,6 +495,69 @@ export async function respondToRecruitmentInquiry(
         updateCoachDoc(db.collection('Coach_Profiles').doc(rawCoachId)),
         updateCoachDoc(db.collection('Users').doc(rawCoachId)),
       ]);
+
+      // Update team roster & athlete's assigned team
+      let coachTeamId = '';
+      let coachTeamName = '';
+      let coachTeamSport = sportType;
+
+      const teamsSnap = await db.collection('Teams')
+        .where('coach_id', 'in', [coachId, canonicalCoachId, rawCoachId])
+        .get()
+        .catch(() => null);
+
+      if (teamsSnap && !teamsSnap.empty) {
+        const teamDoc = teamsSnap.docs[0];
+        coachTeamId = teamDoc.id;
+        const teamData = teamDoc.data();
+        coachTeamName = teamData.team_name || teamData.name || '';
+        coachTeamSport = teamData.sport_type || sportType;
+
+        const currentRoster: any[] = Array.isArray(teamData.roster_list) ? teamData.roster_list : [];
+        const inRoster = currentRoster.some((r: any) => {
+          const rId = typeof r === 'string' ? r : (r.athlete_id || r.user_id || r.id);
+          return rId === athleteId || rId === rawAthUid || rId === `ath_${rawAthUid}`;
+        });
+        if (!inRoster) {
+          await teamDoc.ref.set({
+            roster_list: [...currentRoster, athleteEntry],
+            roster_athletes: Array.isArray(teamData.roster_athletes) ? [...teamData.roster_athletes, athleteId] : [athleteId],
+            updated_at: now,
+          }, { merge: true }).catch(() => null);
+        }
+      }
+
+      if (coachTeamId) {
+        const canonicalAthId = athleteId.startsWith('ath_') ? athleteId : `ath_${athleteId}`;
+        const affiliation = {
+          team_id: coachTeamId,
+          team_name: coachTeamName || 'Assigned Team',
+          sport_type: coachTeamSport,
+          recruited_at: now,
+        };
+
+        const updateAthleteTeamDoc = async (ref: FirebaseFirestore.DocumentReference) => {
+          const snap = await ref.get().catch(() => null);
+          if (snap && snap.exists) {
+            const data = snap.data() || {};
+            const prevAssigned: any[] = Array.isArray(data.assigned_teams) ? data.assigned_teams : [];
+            const exists = prevAssigned.some((t: any) => (t.team_id || t.id) === coachTeamId);
+            const assigned_teams = exists ? prevAssigned : [...prevAssigned, affiliation];
+            await ref.set({
+              team_id: coachTeamId,
+              current_affiliation: affiliation,
+              assigned_teams,
+              updated_at: now,
+            }, { merge: true }).catch(() => null);
+          }
+        };
+
+        await Promise.all([
+          updateAthleteTeamDoc(db.collection('Athlete_Profiles').doc(canonicalAthId)),
+          updateAthleteTeamDoc(db.collection('Athlete_Profiles').doc(rawAthUid)),
+          updateAthleteTeamDoc(db.collection('Users').doc(rawAthUid)),
+        ]);
+      }
 
       const isCoachResponding = (userId === rawCoachId || userId === canonicalCoachId || userId === coachId);
       if (isCoachResponding) {

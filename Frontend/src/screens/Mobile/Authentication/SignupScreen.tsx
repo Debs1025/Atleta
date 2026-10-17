@@ -534,11 +534,9 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           is_registration: true,
           ...restValues
         });
-        const token = extractAuthToken(result);
-        const savedRole = extractAuthRole(result) || "athlete";
-        if (token) await storeAuthToken(token);
-        await storeAuthRole(savedRole);
-
+        // Prevent automatic login after successful sign-up; clear local session and redirect to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         clearFirebaseClientCaches();
         await AsyncStorage.multiRemove([
@@ -556,19 +554,23 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         athleteForm.reset();
         setSocialToken(null);
 
-        if (onAuthenticated && token) {
-          onAuthenticated(savedRole);
-          return;
+        Alert.alert(
+          "Account Created",
+          "Your athlete account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
         } else {
           setAccountCreated(true);
         }
+        return;
       } else {
-        const result = await requestJson("/users/register", { ...values, role: "Athlete" });
-        const token = extractAuthToken(result);
-        const savedRole = extractAuthRole(result) || "athlete";
-        if (token) await storeAuthToken(token);
-        await storeAuthRole(savedRole);
+        await requestJson("/users/register", { ...values, role: "Athlete" });
 
+        // Prevent automatic login after successful sign-up; clear local session and redirect to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         clearFirebaseClientCaches();
         await AsyncStorage.multiRemove([
@@ -586,12 +588,17 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         athleteForm.reset();
         setSocialToken(null);
 
-        if (onAuthenticated && token) {
-          onAuthenticated(savedRole);
-          return;
+        Alert.alert(
+          "Account Created",
+          "Your athlete account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
         } else {
           setAccountCreated(true);
         }
+        return;
       }
     } catch (error) {
       setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
@@ -792,8 +799,17 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         athleteForm.reset();
         setSocialToken(null);
 
-        if (onAuthenticated) {
-          onAuthenticated(savedRole);
+        // Prevent automatic login after successful sign-up; clear local session and redirect to Login
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        clearAuthMicroCache();
+        Alert.alert(
+          "Account Created",
+          "Your athlete account has been successfully created. Please sign in with your credentials to continue.",
+          [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
+        );
+        if (onGoLogin) {
+          onGoLogin();
         } else {
           setAccountCreated(true);
         }
@@ -807,7 +823,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         setFeedback({ tone: "error", message: "Please select your sport type." });
         return;
       }
-      const valid = await coachForm.trigger(["years_of_experience", "current_institution", "regional_affiliation", "terms_accepted"]);
+      const valid = await coachForm.trigger(["years_of_experience", "current_institution", "terms_accepted"]);
       if (!valid) {
         setFeedback({ tone: "error", message: "Please fill in all required profile details." });
         return;
@@ -1025,8 +1041,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
               <FormField control={coachForm.control} name="certification_license_num" label="Certification License Number" placeholder="Optional" error={coachErrors.certification_license_num?.message} />
               <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
               <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="e.g. Ateneo de Naga University" error={coachErrors.current_institution?.message} />
-              <FormField control={coachForm.control} name="regional_affiliation" label="Regional Affiliation" placeholder="e.g. Bicol Regional Athletic Association (BRAA)" error={coachErrors.regional_affiliation?.message} />
-              <FormField control={coachForm.control} name="national_sports_league" label="National Sports League" placeholder="e.g. Batang Pinoy / Palarong Pambansa (Optional)" error={coachErrors.national_sports_league?.message} />
+              <FormField control={coachForm.control} name="regional_affiliation" label="Regional Affiliation (Optional)" placeholder="e.g. Bicol Regional Athletic Association (BRAA) (Optional)" error={coachErrors.regional_affiliation?.message} />
+              <FormField control={coachForm.control} name="national_sports_league" label="National Sports League (Optional)" placeholder="e.g. Batang Pinoy / Palarong Pambansa (Optional)" error={coachErrors.national_sports_league?.message} />
 
               <View style={styles.documentBox}>
                 <Text style={styles.documentLabel}>Credentials & Documents (Optional)</Text>

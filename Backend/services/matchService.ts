@@ -774,12 +774,12 @@ export function extractJsonFromAiText(content: string): any {
 }
 
 const OCR_MODEL_WATERFALL = [
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-3.8-flash',
-  'gemini-3-flash-preview',
-  'gemini-flash-lite-latest',
   'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview',
 ];
 
 const DEFAULT_OCR_KEY = Buffer.from('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=', 'base64').toString('utf-8');
@@ -2176,6 +2176,21 @@ export async function scanMultipleScoresheetsStandalone(
   }
   const mergedTeamScores = Array.from(mergedTeamScoresMap.values());
 
+  // Aggregate race results across continuation scoresheets for individual sports (Swimming, Track & Field)
+  const allRaceResults = isContinuation
+    ? parsedMatches.flatMap((m) => m.race_results || m.parsed_tables?.race_results || [])
+    : (primaryMatch?.race_results || primaryMatch?.parsed_tables?.race_results || []);
+
+  const mergedRaceMap = new Map<string, any>();
+  for (const r of allRaceResults) {
+    const aName = String(r.athlete_name || r.name || r.player_name || '').trim().toUpperCase();
+    if (!aName) continue;
+    if (!mergedRaceMap.has(aName)) {
+      mergedRaceMap.set(aName, { ...r });
+    }
+  }
+  const mergedRaceResults = Array.from(mergedRaceMap.values());
+
   const homeScoreItem = mergedTeamScores.find((t) => t.is_home === true) || mergedTeamScores[0];
   const awayScoreItem = mergedTeamScores.find((t) => t.is_home === false) || mergedTeamScores[1];
   const consolidatedFinalScore = (homeScoreItem && awayScoreItem && isContinuation)
@@ -2198,9 +2213,11 @@ export async function scanMultipleScoresheetsStandalone(
     },
     team_scores: mergedTeamScores.length > 0 ? mergedTeamScores : primaryMatch?.team_scores || [],
     player_summary: mergedPlayers.length > 0 ? mergedPlayers : primaryMatch?.player_summary || [],
+    race_results: mergedRaceResults.length > 0 ? mergedRaceResults : (primaryMatch?.race_results || primaryMatch?.parsed_tables?.race_results || []),
     parsed_tables: {
       team_scores: mergedTeamScores,
       player_summary: mergedPlayers,
+      race_results: mergedRaceResults.length > 0 ? mergedRaceResults : (primaryMatch?.race_results || primaryMatch?.parsed_tables?.race_results || []),
     },
   };
 }

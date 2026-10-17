@@ -36,6 +36,8 @@ import {
   getMetricValue,
   setMetricValue,
   parseRobustStatNum,
+  sortRaceResultsByTime,
+  sortAthletesByPrimaryMetric,
   type SportColumnDef,
 } from '../../api/sportSchema';
 import { Navbar } from '../Components/Navbar';
@@ -260,27 +262,27 @@ const extractMatchDetails = (
       : [];
 
     if (rawRaces.length > 0) {
-      raceResults = rawRaces.map((r: any, idx: number) => ({
-        placement_rank: String(r.rank || r.placement_rank || idx + 1),
-        athlete_name: String(r.athlete_name || r.name || `Athlete ${idx + 1}`).toUpperCase(),
-        team_name: r.team_name || r.team || `Delegation ${(idx % 2) + 1}`,
-        distance: r.distance || r.event || '100m',
-        finish_time: r.finish_time || r.time || '00:58.21',
-        split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || '28.12 / 30.30')],
+      raceResults = sortRaceResultsByTime(rawRaces.map((r: any, idx: number) => ({
+        placement_rank: String(r.rank || r.placement_rank || r.place || idx + 1),
+        athlete_name: String(r.athlete_name || r.name || r.player_name || `Athlete ${idx + 1}`).toUpperCase(),
+        team_name: r.team_name || r.team || r.delegation || `Delegation ${(idx % 2) + 1}`,
+        distance: r.distance || r.event || r.event_name || '100m',
+        finish_time: r.finish_time || r.time || r.formatted_time || '00:58.21',
+        split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
         efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
         is_disqualified: Boolean(r.is_disqualified),
-      }));
+      })));
     } else if (rawPlayers.length > 0) {
-      raceResults = rawPlayers.map((p: any, idx: number) => ({
-        placement_rank: String(idx + 1),
-        athlete_name: String(p.player_name || `Athlete ${idx + 1}`).toUpperCase(),
-        team_name: p.team_name || p.team || `Delegation ${(idx % 2) + 1}`,
-        distance: p.event || 'Event 1',
-        finish_time: p.finish_time || p.time || '00:59.00',
-        split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || 'N/A')],
-        efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || 100)) || 100,
-        is_disqualified: false,
-      }));
+      raceResults = sortRaceResultsByTime(rawPlayers.map((p: any, idx: number) => ({
+        placement_rank: String(p.rank || p.place || p.placement_rank || idx + 1),
+        athlete_name: String(p.player_name || p.name || `Athlete ${idx + 1}`).toUpperCase(),
+        team_name: p.team_name || p.team || p.delegation || `Delegation ${(idx % 2) + 1}`,
+        distance: p.event || p.event_name || p.distance || '100m',
+        finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
+        split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
+        efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
+        is_disqualified: Boolean(p.is_disqualified),
+      })));
     }
   } else {
     const totalPlayers = rawPlayers.length;
@@ -410,6 +412,10 @@ const extractMatchDetails = (
     }
   }
 
+  const sortedRaceResults = sortRaceResultsByTime(raceResults);
+  const sortedHomeRoster = sortAthletesByPrimaryMetric(hRows, resolvedSport);
+  const sortedAwayRoster = sortAthletesByPrimaryMetric(aRows, resolvedSport);
+
   return {
     index: fallbackIndex,
     fileName: fallbackFileName,
@@ -417,9 +423,9 @@ const extractMatchDetails = (
     homeTeam: finalHomeTeam,
     awayTeam: finalAwayTeam,
     gameName: `${finalHomeTeam} vs ${finalAwayTeam}`,
-    homeRoster: hRows,
-    awayRoster: aRows,
-    raceResults,
+    homeRoster: sortedHomeRoster,
+    awayRoster: sortedAwayRoster,
+    raceResults: sortedRaceResults,
     scoresheetUrl: matchData?.scoresheet_url,
     ocrDetectedTeamScores,
     ocrFinalScoreStr,
@@ -908,14 +914,15 @@ export const CreateMatch: React.FC = () => {
         });
         const matchedName = matched ? (typeof matched === 'string' ? matched : (matched.sportName || matched.name)) : '';
 
-        if (matchedName) {
-          setOcrDetectedSport(matchedName);
-          if (matchedName !== sportCategory) {
+        const resolvedSport = matchedName || toTitleCaseSport(rawSport);
+        if (resolvedSport) {
+          setOcrDetectedSport(resolvedSport);
+          if (resolvedSport !== sportCategory) {
             setSportMismatchInfo({
-              detectedSport: matchedName,
+              detectedSport: resolvedSport,
               currentSport: sportCategory,
             });
-            setSportCategory(matchedName);
+            setSportCategory(resolvedSport);
           }
         }
       }
@@ -1132,35 +1139,49 @@ export const CreateMatch: React.FC = () => {
 
       if (isInd) {
         const rawRaces: any[] = Array.isArray(ocrRes?.race_results)
-          ? ocrRes.race_results
+          ? [...ocrRes.race_results]
           : Array.isArray(ocrRes?.parsed_tables?.race_results)
-          ? ocrRes.parsed_tables.race_results
+          ? [...ocrRes.parsed_tables.race_results]
           : [];
+
+        if (subMatches.length > 0) {
+          subMatches.forEach((m: any) => {
+            const mRaces = Array.isArray(m?.race_results)
+              ? m.race_results
+              : (Array.isArray(m?.parsed_tables?.race_results) ? m.parsed_tables.race_results : []);
+            mRaces.forEach((r: any) => {
+              const rName = String(r.athlete_name || r.name || r.player_name || '').trim().toUpperCase();
+              if (rName && !rawRaces.some((ex: any) => String(ex.athlete_name || ex.name || ex.player_name || '').trim().toUpperCase() === rName)) {
+                rawRaces.push(r);
+              }
+            });
+          });
+        }
 
         if (rawRaces.length > 0) {
           const formatted: RaceResultRow[] = rawRaces.map((r: any, idx: number) => ({
-            placement_rank: String(r.rank || r.placement_rank || idx + 1),
-            athlete_name: String(r.athlete_name || r.name || `Athlete ${idx + 1}`).toUpperCase(),
+            placement_rank: String(r.rank || r.placement_rank || r.place || idx + 1),
+            athlete_name: String(r.athlete_name || r.name || r.player_name || `Athlete ${idx + 1}`).toUpperCase(),
             team_name: r.team_name || r.team || r.delegation || finalHomeTeam,
-            distance: r.distance || r.event || '100m Freestyle',
-            finish_time: r.finish_time || r.time || '00:58.42',
-            split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || '28.12 / 30.30')],
+            distance: r.distance || r.event || r.event_name || '100m',
+            finish_time: r.finish_time || r.time || r.formatted_time || '00:58.42',
+            split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
             efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
             is_disqualified: Boolean(r.is_disqualified),
           }));
-          setRaceResults(formatted);
+          setRaceResults(sortRaceResultsByTime(formatted));
         } else if (rawPlayers.length > 0) {
           const formatted: RaceResultRow[] = rawPlayers.map((p: any, idx: number) => ({
-            placement_rank: String(idx + 1),
-            athlete_name: String(p.player_name || `Athlete ${idx + 1}`).toUpperCase(),
-            team_name: p.team_name || p.team || `Delegation ${(idx % 2) + 1}`,
-            distance: p.event || 'Event 1',
-            finish_time: p.finish_time || p.time || '00:59.00',
-            split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || 'N/A')],
-            efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || 100)) || 100,
-            is_disqualified: false,
+            placement_rank: String(p.rank || p.place || p.placement_rank || idx + 1),
+            athlete_name: String(p.player_name || p.name || `Athlete ${idx + 1}`).toUpperCase(),
+            team_name: p.team_name || p.team || p.delegation || `Delegation ${(idx % 2) + 1}`,
+            distance: p.event || p.event_name || p.distance || '100m',
+            finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
+            split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
+            efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
+            is_disqualified: Boolean(p.is_disqualified),
           }));
-          setRaceResults(formatted);
+          setRaceResults(sortRaceResultsByTime(formatted));
         }
       } else {
         const hRows: BoxScoreRow[] = [];
@@ -1312,8 +1333,8 @@ export const CreateMatch: React.FC = () => {
           aRows.push(...hRows.splice(half));
         }
 
-        if (hRows.length > 0) setHomeRoster(hRows);
-        if (aRows.length > 0) setAwayRoster(aRows);
+        if (hRows.length > 0) setHomeRoster(sortAthletesByPrimaryMetric(hRows, sportCategory, activeSportConfig));
+        if (aRows.length > 0) setAwayRoster(sortAthletesByPrimaryMetric(aRows, sportCategory, activeSportConfig));
       }
 
       setOcrCompleted(true);
@@ -1967,122 +1988,183 @@ export const CreateMatch: React.FC = () => {
   };
 
   // Render Table for Individual Sports (Swimming / Track & Field)
-  const renderIndividualRaceTable = () => (
-    <div style={styles.tableSection}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={styles.tableSectionTitle}>
-          {sportCategory.toUpperCase()} EVENT RESULTS ({raceResults.length} PARTICIPANTS)
-        </div>
-      </div>
+  const renderIndividualRaceTable = () => {
+    const sortedRaces = sortRaceResultsByTime(raceResults);
+    const top3 = sortedRaces.filter((r) => !r.is_disqualified).slice(0, 3);
 
-      <div style={styles.statsTableFrame}>
-        <table style={styles.statsTable}>
-          <thead>
-            <tr>
-              <th style={{ ...styles.statTh, width: '55px' }}>[ RANK ]</th>
-              <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ ATHLETE NAME ]</th>
-              <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
-              <th style={styles.statTh}>[ EVENT / DISTANCE ]</th>
-              <th style={styles.statTh}>[ FINISH TIME ]</th>
-              <th style={styles.statTh}>[ SPLIT TIMES ]</th>
-              <th style={styles.statTh}>[ EFFICIENCY ]</th>
-              <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {raceResults.length > 0 ? (
-              raceResults.map((row, idx) => (
-                <tr key={`race-${idx}`} style={styles.statTr}>
-                  <td style={styles.statTd}>
-                    <input
-                      type="text"
-                      value={row.placement_rank}
-                      onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)}
-                      style={styles.statInput}
-                    />
-                  </td>
-                  <td style={{ ...styles.statTd, ...styles.statTdName }}>
-                    <input
-                      type="text"
-                      value={row.athlete_name}
-                      onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)}
-                      style={styles.statInputName}
-                    />
-                  </td>
-                  <td style={styles.statTd}>
-                    <input
-                      type="text"
-                      value={row.team_name || ''}
-                      onChange={(e) => updateRaceStat(idx, 'team_name', e.target.value)}
-                      style={styles.statInput}
-                    />
-                  </td>
-                  <td style={styles.statTd}>
-                    <input
-                      type="text"
-                      value={row.distance}
-                      onChange={(e) => updateRaceStat(idx, 'distance', e.target.value)}
-                      style={styles.statInput}
-                    />
-                  </td>
-                  <td style={styles.statTd}>
-                    <input
-                      type="text"
-                      value={row.finish_time}
-                      onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)}
-                      style={styles.statInput}
-                    />
-                  </td>
-                  <td style={styles.statTd}>
-                    <input
-                      type="text"
-                      value={Array.isArray(row.split_times) ? row.split_times.join(' / ') : String(row.split_times || '')}
-                      onChange={(e) => updateRaceStat(idx, 'split_times', e.target.value.split('/').map((s) => s.trim()))}
-                      style={styles.statInput}
-                    />
-                  </td>
-                  <td style={styles.statTd}>
-                    <input
-                      type="number"
-                      value={row.efficiency ?? 100}
-                      onChange={(e) => updateRaceStat(idx, 'efficiency', Number(e.target.value) || 0)}
-                      style={styles.statInput}
-                    />
-                  </td>
-                  <td style={{ ...styles.statTd, borderRight: 'none', textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => removeRaceAthlete(idx)}
-                      style={styles.removeRowBtn}
-                      title="Remove Athlete"
-                    >
-                      <Trash2 style={{ width: 14, height: 14 }} />
-                    </button>
+    return (
+      <div style={styles.tableSection}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={styles.tableSectionTitle}>
+            {sportCategory.toUpperCase()} EVENT RESULTS ({sortedRaces.length} PARTICIPANTS)
+          </div>
+        </div>
+
+        {/* TOP 3 PODIUM FINISHERS HIGHLIGHT */}
+        {top3.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            {top3.map((podium, pIdx) => {
+              const medal = pIdx === 0 ? '🥇 1ST PLACE (GOLD)' : pIdx === 1 ? '🥈 2ND PLACE (SILVER)' : '🥉 3RD PLACE (BRONZE)';
+              const borderCol = pIdx === 0 ? '#EAB308' : pIdx === 1 ? '#94A3B8' : '#F97316';
+              const bgCol = pIdx === 0 ? '#FEFCE8' : pIdx === 1 ? '#F8FAFC' : '#FFF7ED';
+              const textCol = pIdx === 0 ? '#854D0E' : pIdx === 1 ? '#334155' : '#9A3412';
+              return (
+                <div
+                  key={`podium-${pIdx}`}
+                  style={{
+                    border: `2px solid ${borderCol}`,
+                    backgroundColor: bgCol,
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ fontSize: '11px', fontWeight: 900, color: textCol, letterSpacing: '0.05em' }}>
+                    {medal}
+                  </div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#0B132B' }}>
+                    {podium.athlete_name}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginTop: '2px' }}>
+                    <span>{podium.team_name || 'Individual'}</span>
+                    <strong style={{ color: '#0B132B', fontFamily: 'monospace', fontSize: '13px' }}>
+                      {podium.finish_time}
+                    </strong>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={styles.statsTableFrame}>
+          <table style={styles.statsTable}>
+            <thead>
+              <tr>
+                <th style={{ ...styles.statTh, width: '90px' }}>[ RANK ]</th>
+                <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ ATHLETE NAME ]</th>
+                <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
+                <th style={styles.statTh}>[ EVENT / DISTANCE ]</th>
+                <th style={styles.statTh}>[ FINISH TIME ]</th>
+                <th style={styles.statTh}>[ SPLIT TIMES ]</th>
+                <th style={styles.statTh}>[ EFFICIENCY ]</th>
+                <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRaces.length > 0 ? (
+                sortedRaces.map((row, idx) => {
+                  const isGold = idx === 0 && !row.is_disqualified;
+                  const isSilver = idx === 1 && !row.is_disqualified;
+                  const isBronze = idx === 2 && !row.is_disqualified;
+                  const rowBg = isGold ? '#FEFCE840' : isSilver ? '#F8FAFC40' : isBronze ? '#FFF7ED40' : undefined;
+
+                  return (
+                    <tr key={`race-${idx}`} style={{ ...styles.statTr, backgroundColor: rowBg }}>
+                      <td style={styles.statTd}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            backgroundColor: isGold ? '#FEF08A' : isSilver ? '#E2E8F0' : isBronze ? '#FFEDD5' : '#F1F5F9',
+                            color: isGold ? '#854D0E' : isSilver ? '#334155' : isBronze ? '#9A3412' : '#475569',
+                          }}>
+                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || idx + 1}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ ...styles.statTd, ...styles.statTdName }}>
+                        <input
+                          type="text"
+                          value={row.athlete_name}
+                          onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)}
+                          style={{ ...styles.statInputName, fontWeight: (isGold || isSilver || isBronze) ? 800 : 600 }}
+                        />
+                      </td>
+                      <td style={styles.statTd}>
+                        <input
+                          type="text"
+                          value={row.team_name || ''}
+                          onChange={(e) => updateRaceStat(idx, 'team_name', e.target.value)}
+                          style={styles.statInput}
+                        />
+                      </td>
+                      <td style={styles.statTd}>
+                        <input
+                          type="text"
+                          value={row.distance}
+                          onChange={(e) => updateRaceStat(idx, 'distance', e.target.value)}
+                          style={styles.statInput}
+                        />
+                      </td>
+                      <td style={styles.statTd}>
+                        <input
+                          type="text"
+                          value={row.finish_time}
+                          onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)}
+                          style={{
+                            ...styles.statInput,
+                            fontWeight: (isGold || isSilver || isBronze) ? 800 : 600,
+                            color: isGold ? '#854D0E' : '#0B132B',
+                          }}
+                        />
+                      </td>
+                      <td style={styles.statTd}>
+                        <input
+                          type="text"
+                          value={Array.isArray(row.split_times) ? row.split_times.join(' / ') : String(row.split_times || '')}
+                          onChange={(e) => updateRaceStat(idx, 'split_times', e.target.value.split('/').map((s) => s.trim()))}
+                          style={styles.statInput}
+                        />
+                      </td>
+                      <td style={styles.statTd}>
+                        <input
+                          type="number"
+                          value={row.efficiency ?? 100}
+                          onChange={(e) => updateRaceStat(idx, 'efficiency', Number(e.target.value) || 0)}
+                          style={styles.statInput}
+                        />
+                      </td>
+                      <td style={{ ...styles.statTd, borderRight: 'none', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => removeRaceAthlete(idx)}
+                          style={styles.removeRowBtn}
+                          title="Remove Athlete"
+                        >
+                          <Trash2 style={{ width: 14, height: 14 }} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={8} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
+                    No race results extracted yet. Click below to add an athlete row.
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={8} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
-                  No race results extracted yet. Click below to add an athlete row.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <button
-        type="button"
-        onClick={addRaceAthlete}
-        className="hover-btn-outline"
-        style={styles.addRowBtn}
-      >
-        <Plus style={{ width: 13, height: 13 }} />
-        <span>ADD ATHLETE RESULT</span>
-      </button>
-    </div>
-  );
+        <button
+          type="button"
+          onClick={addRaceAthlete}
+          className="hover-btn-outline"
+          style={styles.addRowBtn}
+        >
+          <Plus style={{ width: 13, height: 13 }} />
+          <span>ADD ATHLETE RESULT</span>
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div style={styles.shell}>

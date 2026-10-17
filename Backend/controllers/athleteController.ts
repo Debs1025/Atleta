@@ -81,7 +81,8 @@ export async function updateAthlete(req: Request, res: Response): Promise<void> 
     });
   } catch (error: any) {
     console.error('updateAthlete error:', error);
-    res.status(500).json({ error: 'Internal server error.', details: error?.message || String(error) });
+    const statusCode = error.statusCode || error.status || 500;
+    res.status(statusCode).json({ error: error?.message || 'Internal server error.', details: error?.message || String(error) });
   }
 }
 

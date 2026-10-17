@@ -56,18 +56,23 @@ export function ViewAllPlayers({
     availableSports && availableSports.length > 0 ? availableSports : DEFAULT_SPORT_CATEGORIES
   );
 
+  const [isLoading, setIsLoading] = useState<boolean>(!athletesPool || athletesPool.length === 0);
+
   // Sync props immediately when passed or changed
   useEffect(() => {
     if (athletesPool && athletesPool.length > 0) {
       setLocalPool(athletesPool);
+      setIsLoading(false);
     }
   }, [athletesPool]);
 
   // Instant offline cache fallback (<5ms) if athletesPool is not yet populated
   useEffect(() => {
+    let active = true;
     if (localPool.length === 0) {
       getAthletesOfflineFirst()
         .then((cached) => {
+          if (!active) return;
           if (Array.isArray(cached) && cached.length > 0) {
             const mapped: RosterAthlete[] = cached.map((c: any, idx: number) => ({
               athlete_id: c.athlete_id || c.id || `ath_${idx}`,
@@ -82,8 +87,23 @@ export function ViewAllPlayers({
             setLocalPool((prev) => (prev.length === 0 ? mapped : prev));
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          if (active) setIsLoading(false);
+        });
+    } else {
+      setIsLoading(false);
     }
+
+    // Safety timeout: ensure skeleton loader never hangs if coach has 0 athletes
+    const timer = setTimeout(() => {
+      if (active) setIsLoading(false);
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -226,12 +246,19 @@ export function ViewAllPlayers({
 
         {/* Players List Container */}
         <View style={styles.playersListContainer}>
-          {athletesPool.length === 0 ? (
+          {isLoading ? (
             <SkeletonPlayerRows count={4} />
           ) : filteredPlayers.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="people-outline" size={36} color="#64748B" style={{ marginBottom: 8 }} />
-              <Text style={styles.emptyText}>No matching players found.</Text>
+              <Ionicons name="people-outline" size={40} color="#64748B" style={{ marginBottom: 10 }} />
+              <Text style={[styles.emptyText, { fontSize: 16, fontWeight: "700", color: "#F8FAFC", marginBottom: 4 }]}>
+                No Athletes Found
+              </Text>
+              <Text style={[styles.emptyText, { fontSize: 13, color: "#94A3B8", textAlign: "center" }]}>
+                {searchQuery || activeCategory !== "ALL"
+                  ? "No matching players found for your current filter."
+                  : "You have no athletes assigned to your roster yet."}
+              </Text>
             </View>
           ) : (
             filteredPlayers.map((player, index) => {
