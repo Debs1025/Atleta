@@ -36,6 +36,8 @@ import * as AuthSession from "expo-auth-session";
 
 WebBrowser.maybeCompleteAuthSession();
 
+declare const process: any;
+
 const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
@@ -45,10 +47,21 @@ const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifes
 const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
 const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
 
-const envApi = (runtime.process?.env?.EXPO_PUBLIC_ATLETA_API || runtime.process?.env?.EXPO_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
-const configuredApi = envApi
-  ? (envApi.endsWith("/api/v1") ? envApi : `${envApi}/api/v1`)
-  : "/api/v1";
+const directEnvApi = (
+  typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_ATLETA_API
+    ? process.env.EXPO_PUBLIC_ATLETA_API
+    : typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_API_URL
+    ? process.env.EXPO_PUBLIC_API_URL
+    : runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ||
+      runtime.process?.env?.EXPO_PUBLIC_API_URL ||
+      ""
+).trim().replace(/\/+$/, "");
+
+export const CLOUD_PROD_API = directEnvApi
+  ? (directEnvApi.endsWith("/api/v1") ? directEnvApi : `${directEnvApi}/api/v1`)
+  : "https://atleta-backend.vercel.app/api/v1";
+
+const configuredApi = CLOUD_PROD_API;
 
 const rawDevApi = `http://${hostIp}:5000`;
 const CANDIDATE_DEV_API = `${rawDevApi}/api/v1`;

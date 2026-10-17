@@ -22,7 +22,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
+import { API_BASE, CLOUD_PROD_API, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
 
 try {
   setLogLevel("silent");
@@ -476,6 +476,13 @@ async function quickFetchJson(url: string, headers: any, timeoutMs: number = 600
     const res = await fetch(url, { headers, signal: controller.signal });
     if (res.ok) return await res.json().catch(() => null);
   } catch (_) {
+    if (url.startsWith("http://") && CLOUD_PROD_API && !url.includes("atleta-backend.vercel.app")) {
+      try {
+        const cloudUrl = url.replace(/http:\/\/[^/]+(?:\/api\/v1)?/, CLOUD_PROD_API);
+        const cloudRes = await fetch(cloudUrl, { headers, signal: controller.signal });
+        if (cloudRes.ok) return await cloudRes.json().catch(() => null);
+      } catch (_) {}
+    }
     return null;
   } finally {
     clearTimeout(id);
