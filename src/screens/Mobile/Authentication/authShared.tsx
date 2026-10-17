@@ -47,68 +47,21 @@ const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifes
 const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
 const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
 
-const directEnvApi = (
-  typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_ATLETA_API
-    ? process.env.EXPO_PUBLIC_ATLETA_API
-    : typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_API_URL
-    ? process.env.EXPO_PUBLIC_API_URL
-    : runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ||
-      runtime.process?.env?.EXPO_PUBLIC_API_URL ||
-      ""
-).trim().replace(/\/+$/, "");
-
-export const CLOUD_PROD_API = directEnvApi
-  ? (directEnvApi.endsWith("/api/v1") ? directEnvApi : `${directEnvApi}/api/v1`)
-  : "https://atleta-backend.vercel.app/api/v1";
-
+export const CLOUD_PROD_API = "https://atleta-backend.vercel.app/api/v1";
 const configuredApi = CLOUD_PROD_API;
 
 const rawDevApi = `http://${hostIp}:5000`;
 const CANDIDATE_DEV_API = `${rawDevApi}/api/v1`;
 
-// If in production/EAS build, strictly use configuredApi or CLOUD_PROD_API
-let activeApiBase = !__DEV__ ? configuredApi : (isTunnel ? configuredApi : CANDIDATE_DEV_API);
-export let API_BASE = activeApiBase;
+// Default to production cloud API
+let activeApiBase = CLOUD_PROD_API;
+export let API_BASE = CLOUD_PROD_API;
 
 let hasProbedApi = false;
 export async function getActiveApiBase(): Promise<string> {
-  if (hasProbedApi) return activeApiBase;
-  hasProbedApi = true;
-
-  if (!__DEV__) {
-    activeApiBase = configuredApi;
-    API_BASE = configuredApi;
-    return configuredApi;
-  }
-
-  if (isTunnel) {
-    activeApiBase = configuredApi;
-    API_BASE = configuredApi;
-    return configuredApi;
-  }
-
-  // Quick 1000ms probe to check if local development server is reachable
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1000);
-  try {
-    const probeRes = await fetch(`${CANDIDATE_DEV_API}/sports`, {
-      method: "GET",
-      signal: controller.signal,
-    });
-    if (probeRes.ok || probeRes.status === 401 || probeRes.status === 404) {
-      activeApiBase = CANDIDATE_DEV_API;
-      API_BASE = CANDIDATE_DEV_API;
-      return activeApiBase;
-    }
-  } catch (_) {
-    // Local dev unreachable - immediately switch to Configured / Cloud Prod API
-  } finally {
-    clearTimeout(timer);
-  }
-
-  activeApiBase = configuredApi;
-  API_BASE = configuredApi;
-  return activeApiBase;
+  activeApiBase = CLOUD_PROD_API;
+  API_BASE = CLOUD_PROD_API;
+  return CLOUD_PROD_API;
 }
 
 export const AUTH_TOKEN_KEY = (
@@ -122,7 +75,7 @@ export const AUTH_ROLE_KEY = (
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_role";
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 8000;
+const REQUEST_TIMEOUT_MS = 25000;
 
 // Types
 export type BannerTone = "error" | "success" | "info";
@@ -329,7 +282,7 @@ async function fetchApi(path: string, options: RequestInit) {
       fetch(primaryUrl, { ...options, signal })
     );
   } catch (err) {
-    if (configuredApi && configuredApi !== "/api/v1" && baseUrl !== configuredApi) {
+    if (baseUrl !== configuredApi) {
       activeApiBase = configuredApi;
       API_BASE = configuredApi;
       try {
