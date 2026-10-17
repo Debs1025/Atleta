@@ -73,14 +73,15 @@ if (existingDefault) {
 } else {
   const mainCredential = getFirebaseAdminCredential();
 
+  const defaultProjectId = process.env.FIREBASE_PROJECT_ID || 'atleta-v1';
   try {
     mainApp = initializeApp({
       ...(mainCredential ? { credential: mainCredential } : {}),
-      projectId: 'atleta-v1',
+      projectId: defaultProjectId,
     });
   } catch (err: any) {
-    console.warn('⚠️ Main Firebase App (atleta-v1) initialization warning:', err?.message || err);
-    mainApp = getApps()[0] || initializeApp({ projectId: 'atleta-v1' });
+    console.warn('⚠️ Main Firebase App initialization warning:', err?.message || err);
+    mainApp = getApps()[0] || initializeApp({ projectId: defaultProjectId });
   }
 }
 

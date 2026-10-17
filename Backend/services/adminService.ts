@@ -61,7 +61,10 @@ export function generateElevatedAdminToken(
   clearanceLevel: number = 4,
   departmentCode: string = 'SYS_ADMIN'
 ): string {
-  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured in environment');
+  }
   const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any;
   return jwt.sign(
     {

@@ -782,8 +782,6 @@ const OCR_MODEL_WATERFALL = [
   'gemini-3-flash-preview',
 ];
 
-const DEFAULT_OCR_KEY = Buffer.from('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=', 'base64').toString('utf-8');
-
 /**
  * Universal normalization helper for any athlete stat row extracted by AI Vision OCR.
  * Resolves all synonyms, abbreviations, tally marks, and calculated totals across all sports.
@@ -1388,8 +1386,12 @@ async function callGeminiWithWaterfall(requestBody: any, rawKey?: string, file?:
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in environment');
+  }
   let lastErrorMsg = '';
 
   for (const model of OCR_MODEL_WATERFALL) {
@@ -1511,7 +1513,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
 
   try {
@@ -1803,8 +1805,12 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File, custo
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in environment');
+  }
 
   const mimeType = file.mimetype || 'image/jpeg';
   const filename = file.originalname || 'scoresheet.png';
@@ -2027,8 +2033,12 @@ export async function scanMultipleScoresheetsStandalone(
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in environment');
+  }
 
   console.log(`🚀 [MULTI-OCR] Processing ${files.length} scoresheets separately in parallel...`);
 

@@ -33,7 +33,10 @@ export function normalizeRole(roleInput: string): UserRole {
  * Generate a custom JWT token for a user.
  */
 export function generateToken(uid: string, email: string, role: string): string {
-  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured in environment');
+  }
   const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any;
   return jwt.sign({ uid, email, role }, secret, { expiresIn });
 }
@@ -47,9 +50,9 @@ function hashAdminSecurityKey(key: string): string {
 }
 
 const FIREBASE_API_KEY =
-  process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
   process.env.FIREBASE_API_KEY ||
-  'AIzaSyDTueY4OduMENmSef3BH6ZEmSqXLiQG5Ls';
+  process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
+  '';
 
 export async function createFirebaseAuthUser(params: {
   email: string;
@@ -1325,7 +1328,10 @@ export async function requestPasswordResetService(email: string, clientFrontendU
   // Enforce: Only accounts with email and password authentication can request password resets
   await checkSocialAccountRestriction(uid, userData, 'reset');
 
-  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured in environment');
+  }
   const resetToken = jwt.sign({ uid, email: emailToReset, purpose: 'reset-password' }, secret, { expiresIn: '1h' as any });
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const requestedAt = new Date().toISOString();
@@ -1387,7 +1393,10 @@ export async function requestPasswordResetService(email: string, clientFrontendU
  * Verify reset token and set new password in Firebase Auth & Firestore.
  */
 export async function resetPasswordConfirmService(tokenOrIdentifier: string | undefined, newPassword: string, emailHint?: string) {
-  const secret = process.env.JWT_SECRET || 'atleta-dev-jwt-secret-key';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured in environment');
+  }
   let uid = '';
 
   // 1. Verify JWT reset token or session Auth token if provided
@@ -1398,14 +1407,7 @@ export async function resetPasswordConfirmService(tokenOrIdentifier: string | un
         uid = decoded.uid;
       }
     } catch (err) {
-      try {
-        const decodedUnverified = jwt.decode(tokenOrIdentifier) as any;
-        if (decodedUnverified?.uid) {
-          uid = decodedUnverified.uid;
-        }
-      } catch (_) {
-        console.warn('JWT verification failed, checking Firestore token fallback...');
-      }
+      // Signature invalid: never accept unverified decoded tokens
     }
   }
 
