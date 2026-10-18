@@ -25,6 +25,8 @@ import {
   fetchBrowseTeams,
   scanScoresheetStandalone,
   scanMultipleScoresheets,
+  uploadScoresheetFile,
+  uploadMultipleScoresheetFiles,
   setCachedData,
   getCachedData,
   getSports,
@@ -1775,6 +1777,11 @@ export const CreateMatch: React.FC = () => {
       if (cleanMatchId) {
         if (selectedFiles.length > 0) {
           saveScoresheetFilesToIndexedDB(cleanMatchId, selectedFiles).catch(() => {});
+          if (selectedFiles.length > 1) {
+            uploadMultipleScoresheetFiles(cleanMatchId, selectedFiles).catch(() => {});
+          } else {
+            uploadScoresheetFile(cleanMatchId, selectedFiles[0]).catch(() => {});
+          }
         }
         const cachedDetail: MatchAuditDetail = {
           match_id: cleanMatchId,
@@ -1874,6 +1881,8 @@ export const CreateMatch: React.FC = () => {
           raw_match: {
             ...cachedDetail,
             match_id: cleanMatchId,
+            match_date: isoDate,
+            scheduled_time: isoDate,
             official_id: user?.uid || '',
             created_at: new Date().toISOString(),
           },

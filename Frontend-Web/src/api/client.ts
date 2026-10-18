@@ -10,6 +10,7 @@ import type {
   OfficialScheduleItem,
   CreateMatchPayload,
   AdminLoginPayload,
+  AdminCoachQueueItem,
   AdminCoachQueueResponse,
   AdminOfficialQueueResponse,
   SportConfiguration,
@@ -22,7 +23,7 @@ const rawBase = (envApi && envApi.trim() ? envApi.trim() : '').replace(/\/+$/, '
 export const BASE_URL = rawBase
   ? (rawBase.endsWith('/api/v1') ? rawBase : `${rawBase}/api/v1`)
   : '';
-  
+
 const TOKEN_KEY = 'atleta_official_token';
 const USER_KEY = 'atleta_official_user';
 const PERSIST_KEY = 'atleta_persist_session';
@@ -390,8 +391,24 @@ export const getAdminCoachQueue = async (forceRefresh = false): Promise<AdminCoa
     });
     if (res.ok) {
       const data = await handleResponse<AdminCoachQueueResponse>(res);
-      setCachedData('admin_coach_queue', data);
-      return data;
+      const rawQueue = Array.isArray(data?.queue) ? data.queue : [];
+      const credentialQueue = rawQueue.filter((c: AdminCoachQueueItem) => {
+        const docs = c.professional_documents || (c as any).uploaded_documents || (c as any).certificates;
+        if (Array.isArray(docs) && docs.length > 0) return true;
+        if (typeof (c as any).document_url === 'string' && (c as any).document_url.trim()) return true;
+        if (typeof (c as any).credential_url === 'string' && (c as any).credential_url.trim()) return true;
+        return false;
+      });
+      const filteredData: AdminCoachQueueResponse = {
+        ...data,
+        total_pending: credentialQueue.filter((c: AdminCoachQueueItem) => {
+          const st = (c.account_status || c.status || '').toLowerCase();
+          return st !== 'active' && st !== 'verified' && st !== 'approved' && st !== 'rejected';
+        }).length,
+        queue: credentialQueue,
+      };
+      setCachedData('admin_coach_queue', filteredData);
+      return filteredData;
     }
   } catch { }
 
@@ -1150,58 +1167,81 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
 
   let data: any = null;
   try {
-    const res = await fetch(`${BASE_URL}/matches/official`, {
+    const bodyPayload = {
+      ...rawPayload,
+      match_id: rawPayload.match_id,
+      team_id: home,
+      home_team_id: home,
+      home_team_name: home,
+      opponent_team_name: away,
+      away_team_id: away,
+      sport_type: normalizedSport,
+      match_date: payload.match_date || new Date().toISOString(),
+      location: location,
+      venue: location,
+      court_number: payload.court_number || 1,
+      participating_teams: Array.isArray(payload.participating_teams) && payload.participating_teams.length > 0
+        ? payload.participating_teams
+        : [home, away],
+      matchName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+      match_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+      gameName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+      game_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
+      gameReferenceId: (payload as any).gameReferenceId || payload.matchName || undefined,
+      coaches: Array.isArray(payload.coaches) && payload.coaches.length > 0
+        ? payload.coaches
+        : (Array.isArray(rawPayload.assigned_coaches) && rawPayload.assigned_coaches.length > 0 ? rawPayload.assigned_coaches : (rawPayload.coach_name ? [rawPayload.coach_name] : [])),
+      assigned_coaches: Array.isArray(payload.coaches) && payload.coaches.length > 0
+        ? payload.coaches
+        : (Array.isArray(rawPayload.assigned_coaches) && rawPayload.assigned_coaches.length > 0 ? rawPayload.assigned_coaches : (rawPayload.coach_name ? [rawPayload.coach_name] : [])),
+      scoresheet_url: scoresheetUrlVal,
+      scoresheetUrl: scoresheetUrlVal,
+      player_stats: playerStatsList,
+      playerStats: playerStatsList,
+      race_results: rawPayload.race_results || rawPayload.raceResults,
+      sport_specific_details: rawPayload.sport_specific_details || (rawPayload.race_results ? { race_results: rawPayload.race_results } : undefined),
+      roster_athletes: rosterAthletesList,
+      rosterAthletes: rosterAthletesList,
+      away_roster_athletes: awayRosterAthletesList,
+      awayRosterAthletes: awayRosterAthletesList,
+      home_score: rawPayload.home_score,
+      away_score: rawPayload.away_score,
+      game_result: rawPayload.game_result,
+      final_score: rawPayload.final_score,
+      scoresheet_data: rawPayload.scoresheet_data,
+      notes: rawPayload.notes || '',
+    };
+
+    let res = await fetch(`${BASE_URL}/matches/official`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': idempotencyKey,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({
-        ...rawPayload,
-        match_id: rawPayload.match_id,
-        team_id: home,
-        home_team_id: home,
-        home_team_name: home,
-        opponent_team_name: away,
-        away_team_id: away,
-        sport_type: normalizedSport,
-        match_date: payload.match_date || new Date().toISOString(),
-        location: location,
-        venue: location,
-        court_number: payload.court_number || 1,
-        participating_teams: Array.isArray(payload.participating_teams) && payload.participating_teams.length > 0
-          ? payload.participating_teams
-          : [home, away],
-        matchName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        match_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        gameName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        game_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-        gameReferenceId: (payload as any).gameReferenceId || payload.matchName || undefined,
-        coaches: Array.isArray(payload.coaches) && payload.coaches.length > 0
-          ? payload.coaches
-          : (Array.isArray(rawPayload.assigned_coaches) && rawPayload.assigned_coaches.length > 0 ? rawPayload.assigned_coaches : (rawPayload.coach_name ? [rawPayload.coach_name] : [])),
-        assigned_coaches: Array.isArray(payload.coaches) && payload.coaches.length > 0
-          ? payload.coaches
-          : (Array.isArray(rawPayload.assigned_coaches) && rawPayload.assigned_coaches.length > 0 ? rawPayload.assigned_coaches : (rawPayload.coach_name ? [rawPayload.coach_name] : [])),
-        scoresheet_url: scoresheetUrlVal,
-        scoresheetUrl: scoresheetUrlVal,
-        player_stats: playerStatsList,
-        playerStats: playerStatsList,
-        race_results: rawPayload.race_results || rawPayload.raceResults,
-        sport_specific_details: rawPayload.sport_specific_details || (rawPayload.race_results ? { race_results: rawPayload.race_results } : undefined),
-        roster_athletes: rosterAthletesList,
-        rosterAthletes: rosterAthletesList,
-        away_roster_athletes: awayRosterAthletesList,
-        awayRosterAthletes: awayRosterAthletesList,
-        home_score: rawPayload.home_score,
-        away_score: rawPayload.away_score,
-        game_result: rawPayload.game_result,
-        final_score: rawPayload.final_score,
-        scoresheet_data: rawPayload.scoresheet_data,
-        notes: rawPayload.notes || '',
-      }),
+      body: JSON.stringify(bodyPayload),
     });
+
+    if (res.status === 404) {
+      for (const altEp of [`${BASE_URL}/matches/create`, `${BASE_URL}/matches/submit`, `${BASE_URL}/matches`]) {
+        try {
+          const altRes = await fetch(altEp, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': idempotencyKey,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(bodyPayload),
+          });
+          if (altRes.ok) {
+            res = altRes;
+            break;
+          }
+        } catch {}
+      }
+    }
+
     if (!res.ok) {
       const errText = await res.text();
       throw new Error(`Failed to create official match: ${res.status} ${errText}`);
@@ -2308,7 +2348,7 @@ export const getMatchAuditDetail = async (
           try {
             const parsed = JSON.parse(single);
             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-          } catch {}
+          } catch { }
         }
         if (single.includes('|||')) {
           const parts = single.split('|||').map((s: string) => s.trim()).filter(Boolean);
@@ -2591,13 +2631,17 @@ export const getSports = async (activeOnly = false, forceRefresh = false): Promi
   const cached = getCachedData<SportsListResponse>(cacheKey);
   if (cached && !forceRefresh) return cached;
 
-  const token = getStoredToken();
-  const query = activeOnly ? '?active=true' : '';
+  const queryParts: string[] = [];
+  if (activeOnly) queryParts.push('active=true');
+  if (forceRefresh) queryParts.push(`_t=${Date.now()}`);
+  const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
   const res = await fetch(`${BASE_URL}/sports${query}`, {
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(forceRefresh ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' } : {}),
     },
+    ...(forceRefresh ? { cache: 'no-store' as RequestCache } : {}),
   });
   const data = await handleResponse<SportsListResponse>(res);
   setCachedData(cacheKey, data);
@@ -2630,8 +2674,19 @@ export const createSport = async (payload: CreateSportPayload): Promise<{ messag
   });
 
   const data = await handleResponse<{ message: string; sport: SportConfiguration }>(res);
-  invalidateCache('sports_catalog');
-  invalidateCache('admin_sports_catalog');
+  if (data?.sport) {
+    const adminCat = getCachedData<SportConfiguration[]>('admin_sports_catalog') || [];
+    const updated = [...adminCat.filter((s) => s.sport_id !== data.sport.sport_id), data.sport];
+    setCachedData('admin_sports_catalog', updated);
+    setCachedData('sports_catalog_false', { total_sports: updated.length, sports: updated });
+    setCachedData('sports_catalog_true', {
+      total_sports: updated.filter((s) => s.is_active !== false).length,
+      sports: updated.filter((s) => s.is_active !== false),
+    });
+  } else {
+    invalidateCache('sports_catalog');
+    invalidateCache('admin_sports_catalog');
+  }
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
   } catch { }
@@ -2653,8 +2708,33 @@ export const updateSport = async (
   });
 
   const data = await handleResponse<{ message: string; sport: SportConfiguration }>(res);
-  invalidateCache('sports_catalog');
-  invalidateCache('admin_sports_catalog');
+  const updatedSport = data.sport;
+  if (updatedSport) {
+    const cleanId = (updatedSport.sport_id || sportId).toLowerCase();
+    const updateList = (list?: SportConfiguration[] | null) => {
+      if (!Array.isArray(list)) return [updatedSport];
+      const exists = list.some((s) => (s.sport_id || '').toLowerCase() === cleanId);
+      return exists
+        ? list.map((s) => ((s.sport_id || '').toLowerCase() === cleanId ? { ...s, ...updatedSport } : s))
+        : [...list, updatedSport];
+    };
+    const adminCat = getCachedData<SportConfiguration[]>('admin_sports_catalog');
+    if (adminCat) setCachedData('admin_sports_catalog', updateList(adminCat));
+
+    const catFalse = getCachedData<SportsListResponse>('sports_catalog_false');
+    if (catFalse && Array.isArray(catFalse.sports)) {
+      const up = updateList(catFalse.sports);
+      setCachedData('sports_catalog_false', { total_sports: up.length, sports: up });
+    }
+    const catTrue = getCachedData<SportsListResponse>('sports_catalog_true');
+    if (catTrue && Array.isArray(catTrue.sports)) {
+      const up = updateList(catTrue.sports).filter((s) => s.is_active !== false);
+      setCachedData('sports_catalog_true', { total_sports: up.length, sports: up });
+    }
+  } else {
+    invalidateCache('sports_catalog');
+    invalidateCache('admin_sports_catalog');
+  }
   try {
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
   } catch { }
@@ -2673,28 +2753,39 @@ export const deleteSport = async (
     },
   });
 
-  const data = await handleResponse<{ message: string; sport_id: string }>(res);
-  invalidateCache('sports_catalog');
-  invalidateCache('admin_sports_catalog');
-  invalidateCache('sports');
+  let data: { message: string; sport_id: string };
+  if (res.status === 404) {
+    data = { message: 'Sport already deleted from database.', sport_id: sportId };
+  } else {
+    data = await handleResponse<{ message: string; sport_id: string }>(res);
+  }
+  const cleanId = (data?.sport_id || sportId).toLowerCase();
+
+  const filterList = (list?: SportConfiguration[] | null) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter((s) => {
+      const sId = (s.sport_id || '').toLowerCase();
+      const sName = (s.sport_name || '').toLowerCase();
+      return sId !== cleanId && sName !== cleanId;
+    });
+  };
+
+  const adminCat = getCachedData<SportConfiguration[]>('admin_sports_catalog');
+  if (adminCat) setCachedData('admin_sports_catalog', filterList(adminCat));
+
+  const catFalse = getCachedData<SportsListResponse>('sports_catalog_false');
+  if (catFalse && Array.isArray(catFalse.sports)) {
+    const up = filterList(catFalse.sports);
+    setCachedData('sports_catalog_false', { total_sports: up.length, sports: up });
+  }
+
+  const catTrue = getCachedData<SportsListResponse>('sports_catalog_true');
+  if (catTrue && Array.isArray(catTrue.sports)) {
+    const up = filterList(catTrue.sports);
+    setCachedData('sports_catalog_true', { total_sports: up.length, sports: up });
+  }
 
   try {
-    const cleanId = sportId.toLowerCase();
-    const catFalse = getCachedData<SportsListResponse>('sports_catalog_false');
-    if (catFalse && Array.isArray(catFalse.sports)) {
-      const updated = catFalse.sports.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
-      setCachedData('sports_catalog_false', { total_sports: updated.length, sports: updated });
-    }
-    const catTrue = getCachedData<SportsListResponse>('sports_catalog_true');
-    if (catTrue && Array.isArray(catTrue.sports)) {
-      const updated = catTrue.sports.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
-      setCachedData('sports_catalog_true', { total_sports: updated.length, sports: updated });
-    }
-    const adminCat = getCachedData<SportConfiguration[]>('admin_sports_catalog');
-    if (Array.isArray(adminCat)) {
-      const updated = adminCat.filter((s) => (s.sport_id || '').toLowerCase() !== cleanId);
-      setCachedData('admin_sports_catalog', updated);
-    }
     localStorage.setItem('atleta_sports_last_mutated', String(Date.now()));
   } catch { }
 

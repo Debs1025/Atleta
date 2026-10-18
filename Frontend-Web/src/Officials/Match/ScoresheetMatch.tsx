@@ -33,6 +33,7 @@ import {
   createOfficialMatch,
   invalidateCache,
   getSports,
+  recordDeletedMatch,
 } from '../../api/client';
 import { scanScoresheetStandalone, scanMultipleScoresheets } from '../../api/ocr';
 import { saveScoresheetFilesToIndexedDB, getScoresheetFilesFromIndexedDB } from '../../api/scoresheetStorage';
@@ -388,6 +389,9 @@ export const ScoresheetMatch: React.FC = () => {
         if (data.home_team?.roster_stats?.length) setHomeRoster(sortAthletesByPrimaryMetric(data.home_team.roster_stats, data.sport_type));
         if (data.away_team?.roster_stats?.length) setAwayRoster(sortAthletesByPrimaryMetric(data.away_team.roster_stats, data.sport_type));
         if (data.race_results?.length) setRaceResults(sortRaceResultsByTime(data.race_results));
+      } else {
+        recordDeletedMatch(cleanId);
+        setMatchData(null);
       }
 
       // Check persistent IndexedDB files so fresh live Object URLs are loaded even after refresh/idle

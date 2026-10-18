@@ -71,40 +71,15 @@ export const OfficialHomePage: React.FC = () => {
   const refreshDashboard = () => {
     getOfficialDashboard(true).then((res) => {
       if (res) {
-        setDashboard((prev) => {
-          if (!prev) return res;
-          return {
-            ...res,
-            total_matches: Math.max(res.total_matches || 0, prev.total_matches || 0),
-            completed_audits: Math.max(res.completed_audits || 0, prev.completed_audits || 0),
-          };
-        });
+        setDashboard(res);
         try { localStorage.setItem('atleta_cached_official_dashboard', JSON.stringify(res)); } catch { }
         setDataReady(true);
       }
     }).catch(() => { });
     getAllOfficialMatchesMaster(true).then((res) => {
-      if (res && res.length > 0) {
-        setMasterMatches((prev) => {
-          const map = new Map<string, MatchSummaryItem>();
-          res.forEach((item) => map.set(item.match_id.replace(/^#/, ''), item));
-          (prev || []).forEach((item) => {
-            const k = item.match_id.replace(/^#/, '');
-            if (!map.has(k)) {
-              map.set(k, item);
-            } else {
-              const existing = map.get(k)!;
-              if (item.status === 'AUDITED' || item.raw_match?.is_certified || isMatchLocallyCertified(k)) {
-                existing.status = 'AUDITED';
-                if (existing.raw_match) existing.raw_match.is_certified = true;
-              }
-            }
-          });
-          const merged = Array.from(map.values());
-          try { localStorage.setItem('atleta_cached_official_matches_master', JSON.stringify(merged)); } catch { }
-          return merged;
-        });
-      }
+      const incoming = Array.isArray(res) ? res.filter((m) => !isMatchDeleted(m.match_id)) : [];
+      setMasterMatches(incoming);
+      try { localStorage.setItem('atleta_cached_official_matches_master', JSON.stringify(incoming)); } catch { }
       setDataReady(true);
     }).catch(() => { });
   };
@@ -126,41 +101,16 @@ export const OfficialHomePage: React.FC = () => {
     // 1. Load Matches progressively and cache
     getOfficialDashboard().then((res) => {
       if (res) {
-        setDashboard((prev) => {
-          if (!prev) return res;
-          return {
-            ...res,
-            total_matches: Math.max(res.total_matches || 0, prev.total_matches || 0),
-            completed_audits: Math.max(res.completed_audits || 0, prev.completed_audits || 0),
-          };
-        });
+        setDashboard(res);
         try { localStorage.setItem('atleta_cached_official_dashboard', JSON.stringify(res)); } catch { }
         setDataReady(true);
       }
     }).catch(() => { });
 
     getAllOfficialMatchesMaster().then((res) => {
-      if (res && res.length > 0) {
-        setMasterMatches((prev) => {
-          const map = new Map<string, MatchSummaryItem>();
-          res.forEach((item) => map.set(item.match_id.replace(/^#/, ''), item));
-          (prev || []).forEach((item) => {
-            const k = item.match_id.replace(/^#/, '');
-            if (!map.has(k)) {
-              map.set(k, item);
-            } else {
-              const existing = map.get(k)!;
-              if (item.status === 'AUDITED' || item.raw_match?.is_certified || isMatchLocallyCertified(k)) {
-                existing.status = 'AUDITED';
-                if (existing.raw_match) existing.raw_match.is_certified = true;
-              }
-            }
-          });
-          const merged = Array.from(map.values());
-          try { localStorage.setItem('atleta_cached_official_matches_master', JSON.stringify(merged)); } catch { }
-          return merged;
-        });
-      }
+      const incoming = Array.isArray(res) ? res.filter((m) => !isMatchDeleted(m.match_id)) : [];
+      setMasterMatches(incoming);
+      try { localStorage.setItem('atleta_cached_official_matches_master', JSON.stringify(incoming)); } catch { }
       setLoading(false);
       setDataReady(true);
     }).catch(() => {
@@ -231,6 +181,7 @@ export const OfficialHomePage: React.FC = () => {
       const match = item.match_details || {};
       const rawId = String(match.match_id || item.match_id || `queue_${idx}`).replace(/^#/, '');
       if (isMatchDeleted(rawId)) return;
+      if (!item.match_details && !item.home_team_name) return;
 
       const customMatchName = String(
         match.matchName ||
