@@ -1683,7 +1683,7 @@ export const getAllOfficialMatchesMaster = async (
 export const prefetchAllOfficialAuditMatches = async (): Promise<void> => {
   try {
     // Prime the master dataset first
-    await getAllOfficialMatchesMaster(true);
+    await getAllOfficialMatchesMaster(false);
   } catch (err) {
     console.warn('Background match prefetch failed:', err);
   }

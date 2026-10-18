@@ -727,7 +727,7 @@ export const CreateMatch: React.FC = () => {
     }
     getMe().then((res) => setUser(res)).catch(() => {});
     fetchBrowseTeams().then((res) => setAvailableTeams(res)).catch(() => {});
-    getSports(true, true).then((res) => {
+    getSports(true, false).then((res) => {
       if (res) {
         const list = Array.isArray(res.sports) ? res.sports : (Array.isArray(res) ? res : []);
         setConfiguredSports(list);

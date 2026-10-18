@@ -88,7 +88,7 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
     const playerStats = Array.isArray(raw.player_stats)
       ? raw.player_stats
       : Array.isArray(raw.player_metrics)
-      ? raw.player_metrics.map((p: any) => ({
+        ? raw.player_metrics.map((p: any) => ({
           athlete_id: p.athlete_id,
           player_name: p.athlete_name || p.full_name || p.player_name || 'Athlete',
           jersey_number: p.jersey_number ?? null,
@@ -98,7 +98,7 @@ export async function submitMatch(req: AuthRequest, res: Response): Promise<void
           reb: p.stats?.rebounds ?? p.stats?.reb ?? p.reb ?? 0,
           stats: p.stats || {},
         }))
-      : [];
+        : [];
 
     const playerStatsList = Array.isArray(raw.playerStats) && raw.playerStats.length > 0
       ? raw.playerStats
@@ -195,7 +195,7 @@ function extractFile(req: any): Express.Multer.File | undefined {
         buffer,
         size: buffer.length,
       } as Express.Multer.File;
-    } catch {}
+    } catch { }
   }
 
   // Support CSV string in body
@@ -301,7 +301,7 @@ export async function scanMultiScoresheetsHandler(req: AuthRequest, res: Respons
               buffer,
               size: buffer.length,
             } as Express.Multer.File);
-          } catch {}
+          } catch { }
         }
       }
     }

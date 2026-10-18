@@ -9,12 +9,10 @@ import {
   getOfficialDashboard,
   getAllOfficialMatchesMaster,
   getOfficialSettings,
-  prefetchAllOfficialAuditMatches,
   prefetchMatchAuditDetail,
   isMatchCreatedByOfficial,
   isMatchLocallyCertified,
   isMatchDeleted,
-  warmOfficialAppCache,
   getSports,
   getScoresheetRequests,
 } from '../../api/client';
@@ -181,9 +179,7 @@ export const OfficialHomePage: React.FC = () => {
     }).catch(() => { });
 
     getOfficialSettings().catch(() => { });
-    getSports(false, true).catch(() => { });
-    prefetchAllOfficialAuditMatches().catch(() => { });
-    warmOfficialAppCache().catch(() => { });
+    getSports().catch(() => { });
 
     getScoresheetRequests({ status: 'fulfilled' }).then((reqs) => {
       if (Array.isArray(reqs)) {
@@ -497,7 +493,6 @@ export const OfficialHomePage: React.FC = () => {
               to="/matches"
               className="hover-view-all"
               style={styles.viewAllLink}
-              onMouseEnter={() => prefetchAllOfficialAuditMatches()}
             >
               VIEW ALL <ExternalLink style={{ width: 12, height: 12 }} />
             </Link>

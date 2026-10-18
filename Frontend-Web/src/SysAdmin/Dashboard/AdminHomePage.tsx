@@ -115,7 +115,7 @@ export const AdminHomePage: React.FC = () => {
 
   const loadCoachQueue = async () => {
     try {
-      const res = await getAdminCoachQueue(true);
+      const res = await getAdminCoachQueue(false);
       const incoming = Array.isArray(res?.queue) ? res.queue : [];
       setCoachQueue((prev) => {
         const map = new Map<string, AdminCoachQueueItem>();
@@ -135,7 +135,7 @@ export const AdminHomePage: React.FC = () => {
 
   const loadOfficialQueue = async () => {
     try {
-      const res = await getAdminOfficialQueue(true);
+      const res = await getAdminOfficialQueue(false);
       const incoming = Array.isArray(res?.queue) ? res.queue : [];
       setOfficialQueue((prev) => {
         const map = new Map<string, AdminOfficialQueueItem>();

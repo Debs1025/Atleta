@@ -159,7 +159,7 @@ export async function seedDefaultSportsIfEmpty(): Promise<void> {
           await deleteBatch.commit();
           console.log(`🧹 Cleaned up ${snap.size} legacy documents from duplicate '${col}' collection`);
         }
-      } catch {}
+      } catch { }
     }
 
     // Clean up any legacy '*_default' documents from Sports_Configurations
@@ -179,7 +179,7 @@ export async function seedDefaultSportsIfEmpty(): Promise<void> {
           console.log(`🧹 Cleaned up ${deleteCount} legacy '_default' sport documents from Sports_Configurations`);
         }
       }
-    } catch {}
+    } catch { }
   } catch (err: any) {
     console.warn('⚠️ seedDefaultSportsIfEmpty warning:', err?.message || err);
   }
@@ -194,7 +194,7 @@ export async function getAllSportsService(onlyActive: boolean = false): Promise<
   const allSports = await serverCache.getOrSet(
     'sports_configurations_catalog_all',
     async () => {
-      await seedDefaultSportsIfEmpty().catch(() => {});
+      await seedDefaultSportsIfEmpty().catch(() => { });
 
       let rawSports: any[] = [];
 
@@ -307,7 +307,7 @@ export async function createSportService(
       console.log(`ℹ️ [IDEMPOTENCY REPLAY] Returning cached result for key '${key}'`);
       return idempotencyDoc.data()!.response;
     }
-  } catch {}
+  } catch { }
 
   // 2. Fetch existing sports to check uniqueness
   const existingSports = await getAllSportsService();
@@ -368,7 +368,7 @@ export async function createSportService(
   // Invalidate in-memory sports catalog cache
   try {
     serverCache.invalidateTags(['sports', 'catalog']);
-  } catch {}
+  } catch { }
 
   // Log administrative audit entry
   logAdminAudit({
@@ -454,7 +454,7 @@ export async function updateSportService(
   // Invalidate in-memory sports catalog cache
   try {
     serverCache.invalidateTags(['sports', 'catalog']);
-  } catch {}
+  } catch { }
 
   // Log administrative audit entry
   logAdminAudit({
@@ -575,14 +575,14 @@ export async function deleteSportService(
   // Delete all matching documents
   for (const item of docsToDelete) {
     try {
-      await item.ref.delete().catch(() => {});
-    } catch {}
+      await item.ref.delete().catch(() => { });
+    } catch { }
   }
 
   // Invalidate server cache
   try {
     serverCache.invalidateTags(['sports', 'catalog']);
-  } catch {}
+  } catch { }
 
   // Log administrative audit entry
   logAdminAudit({

@@ -370,7 +370,7 @@ export const SportPage: React.FC = () => {
       navigate('/dashboard-official', { replace: true });
       return;
     }
-    loadCatalog(true);
+    loadCatalog(false);
 
     const onSportsUpdated = () => {
       loadCatalog(true);
