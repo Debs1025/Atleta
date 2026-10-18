@@ -22,7 +22,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
+import { API_BASE, CLOUD_PROD_API, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
 
 try {
   setLogLevel("silent");
@@ -52,12 +52,12 @@ const runtime = globalThis as typeof globalThis & {
 };
 
 const firebaseConfig = {
-  apiKey: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_API_KEY || runtime.process?.env?.FIREBASE_API_KEY || "AIzaSyDTueY4OduMENmSef3BH6ZEmSqXLiQG5Ls",
-  authDomain: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || runtime.process?.env?.FIREBASE_AUTH_DOMAIN || "atleta-v1.firebaseapp.com",
-  projectId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_PROJECT_ID || runtime.process?.env?.FIREBASE_PROJECT_ID || "atleta-v1",
-  storageBucket: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || runtime.process?.env?.FIREBASE_STORAGE_BUCKET || "atleta-v1.appspot.com",
-  messagingSenderId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || runtime.process?.env?.FIREBASE_MESSAGING_SENDER_ID || "1:203586668533:web:30fba3838ff5f78e9302bc",
-  appId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_APP_ID || runtime.process?.env?.FIREBASE_APP_ID || "G-6ZF67G2PK2",
+  apiKey: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_API_KEY || runtime.process?.env?.FIREBASE_API_KEY || "",
+  authDomain: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || runtime.process?.env?.FIREBASE_AUTH_DOMAIN || "",
+  projectId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_PROJECT_ID || runtime.process?.env?.FIREBASE_PROJECT_ID || "",
+  storageBucket: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || runtime.process?.env?.FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || runtime.process?.env?.FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_APP_ID || runtime.process?.env?.FIREBASE_APP_ID || "",
 };
 
 const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -466,7 +466,22 @@ export function clearFirebaseClientCaches() {
   matchesLastFetched = 0;
   teamsMemoryCache = null;
   teamsLastFetched = 0;
-  AsyncStorage.removeItem(OFFLINE_SPORTS_CACHE_KEY).catch(() => null);
+  AsyncStorage.multiRemove([
+    OFFLINE_SPORTS_CACHE_KEY,
+    OFFLINE_MATCHES_CACHE_KEY,
+    OFFLINE_ATHLETES_CACHE_KEY,
+    OFFLINE_TEAMS_CACHE_KEY,
+    OFFLINE_ATHLETE_PROFILE_CACHE_KEY,
+    OFFLINE_COACH_PROFILE_CACHE_KEY,
+    "atleta_coach_dashboard_cache",
+    "atleta_discovery_cache",
+    "atleta_offline_coach_profile_cache",
+    "atleta_offline_matches_cache",
+    "atleta_offline_athletes_cache",
+    "atleta_offline_teams_cache",
+    "atleta_official_matches_cache",
+    "atleta_discovery_snapshot_cache",
+  ]).catch(() => null);
 }
 
 async function quickFetchJson(url: string, headers: any, timeoutMs: number = 6000): Promise<any> {
@@ -476,9 +491,9 @@ async function quickFetchJson(url: string, headers: any, timeoutMs: number = 600
     const res = await fetch(url, { headers, signal: controller.signal });
     if (res.ok) return await res.json().catch(() => null);
   } catch (_) {
-    if (!url.includes("atleta-backend.vercel.app")) {
+    if (url.startsWith("http://") && CLOUD_PROD_API && !url.includes("atleta-backend.vercel.app")) {
       try {
-        const cloudUrl = url.replace(/http:\/\/[^/]+(?:\/api\/v1)?/, "https://atleta-backend.vercel.app/api/v1");
+        const cloudUrl = url.replace(/http:\/\/[^/]+(?:\/api\/v1)?/, CLOUD_PROD_API);
         const cloudRes = await fetch(cloudUrl, { headers, signal: controller.signal });
         if (cloudRes.ok) return await cloudRes.json().catch(() => null);
       } catch (_) {}

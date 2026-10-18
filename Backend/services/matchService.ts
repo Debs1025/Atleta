@@ -108,8 +108,8 @@ export function calculateIndividualSportMetrics(stats: Record<string, any>): {
   const splitTimesMs = Array.isArray(stats.split_times_ms)
     ? stats.split_times_ms.map(Number)
     : Array.isArray(stats.split_times)
-      ? stats.split_times
-      : [];
+    ? stats.split_times
+    : [];
   const isDisqualified = !!stats.is_disqualified;
 
   let efficiency = 0;
@@ -497,7 +497,7 @@ export async function submitMatchSession(
     // Ensure Athlete Profile exists in Athlete_Profiles and update their career averages
     const athleteRef = db.collection('Athlete_Profiles').doc(athleteId);
     const athleteDoc = await athleteRef.get();
-
+    
     const gamePts = Number(rawStats.points ?? rawStats.pts ?? (item as any).pts ?? (item as any).points ?? 0);
     const gameAst = Number(rawStats.assists ?? rawStats.ast ?? (item as any).ast ?? (item as any).assists ?? 0);
     const gameReb = Number(rawStats.rebounds ?? rawStats.reb ?? (item as any).reb ?? (item as any).rebounds ?? 0);
@@ -553,15 +553,15 @@ export async function submitMatchSession(
       const currentAvg = currentData.averages || currentData.stats || {};
       const prevGames = Number(currentAvg.games_played || 1);
       const newGames = prevGames + 1;
-
+      
       const prevPpg = Number(currentAvg.ppg || currentAvg.pts || gamePts);
       const prevApg = Number(currentAvg.apg || currentAvg.ast || gameAst);
       const prevRpg = Number(currentAvg.rpg || currentAvg.reb || gameReb);
-
+      
       const newPpg = Number(((prevPpg * prevGames + gamePts) / newGames).toFixed(1));
       const newApg = Number(((prevApg * prevGames + gameAst) / newGames).toFixed(1));
       const newRpg = Number(((prevRpg * prevGames + gameReb) / newGames).toFixed(1));
-
+      
       const prevTrends: number[] = Array.isArray(currentData.scoring_trends_last_10)
         ? currentData.scoring_trends_last_10
         : [prevPpg];
@@ -781,8 +781,6 @@ const OCR_MODEL_WATERFALL = [
   'gemini-3.1-flash-lite',
   'gemini-3-flash-preview',
 ];
-
-const DEFAULT_OCR_KEY = Buffer.from('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=', 'base64').toString('utf-8');
 
 /**
  * Universal normalization helper for any athlete stat row extracted by AI Vision OCR.
@@ -1212,173 +1210,173 @@ function parseScoresheetWithTesseract(file?: Express.Multer.File): string {
       } catch {
         try {
           rawText = execSync(`tesseract "${tmpPath}" stdout`, { encoding: 'utf-8', timeout: 15000 });
-        } catch { }
+        } catch {}
       }
     } catch (e: any) {
       console.warn('⚠️ [Tesseract OCR] Execution failed:', e.message);
     } finally {
       try {
         if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-      } catch { }
+      } catch {}
     }
   } else {
     console.warn('⚠️ [Tesseract OCR] Tesseract binary not installed on host environment. Utilizing structured fallback template.');
   }
 
   const upperAll = (rawText || file.originalname || '').toUpperCase();
-  let sportType = 'BASKETBALL';
-  if (upperAll.includes('SOCCER') || upperAll.includes('FOOTBALL')) sportType = 'SOCCER';
-  else if (upperAll.includes('BADMINTON')) sportType = 'BADMINTON';
-  else if (upperAll.includes('VOLLEY')) sportType = 'VOLLEYBALL';
-  else if (upperAll.includes('SWIM')) sportType = 'SWIMMING';
-  else if (upperAll.includes('TRACK') || upperAll.includes('FIELD')) sportType = 'TRACK AND FIELD';
-  else if (upperAll.includes('PICKLE')) sportType = 'PICKLEBALL';
+    let sportType = 'BASKETBALL';
+    if (upperAll.includes('SOCCER') || upperAll.includes('FOOTBALL')) sportType = 'SOCCER';
+    else if (upperAll.includes('BADMINTON')) sportType = 'BADMINTON';
+    else if (upperAll.includes('VOLLEY')) sportType = 'VOLLEYBALL';
+    else if (upperAll.includes('SWIM')) sportType = 'SWIMMING';
+    else if (upperAll.includes('TRACK') || upperAll.includes('FIELD')) sportType = 'TRACK AND FIELD';
+    else if (upperAll.includes('PICKLE')) sportType = 'PICKLEBALL';
 
-  let homeTeam = 'Home Team';
-  let awayTeam = 'Away Team';
-  let homeScore = 0;
-  let awayScore = 0;
+    let homeTeam = 'Home Team';
+    let awayTeam = 'Away Team';
+    let homeScore = 0;
+    let awayScore = 0;
 
-  const vsMatch = rawText.match(/(?:MATCH|TIE|GAME):\s*([A-Za-z0-9\s]+?)\s+vs\s+([A-Za-z0-9\s]+)/i);
-  const homeAwayMatch = rawText.match(/HOME:\s*([A-Za-z0-9\s]+?)(?:\((\d+)\))?\s+vs\s+AWAY:\s*([A-Za-z0-9\s]+?)(?:\((\d+)\))?/i);
-  const scoreMatch = rawText.match(/(?:FINAL SCORE|Running Score):\s*([A-Za-z0-9\s]+?)\s+(\d+)\s*[-–]\s*(\d+)\s*([A-Za-z0-9\s]+)/i);
+    const vsMatch = rawText.match(/(?:MATCH|TIE|GAME):\s*([A-Za-z0-9\s]+?)\s+vs\s+([A-Za-z0-9\s]+)/i);
+    const homeAwayMatch = rawText.match(/HOME:\s*([A-Za-z0-9\s]+?)(?:\((\d+)\))?\s+vs\s+AWAY:\s*([A-Za-z0-9\s]+?)(?:\((\d+)\))?/i);
+    const scoreMatch = rawText.match(/(?:FINAL SCORE|Running Score):\s*([A-Za-z0-9\s]+?)\s+(\d+)\s*[-–]\s*(\d+)\s*([A-Za-z0-9\s]+)/i);
 
-  if (homeAwayMatch) {
-    homeTeam = homeAwayMatch[1].trim();
-    if (homeAwayMatch[2]) homeScore = parseInt(homeAwayMatch[2], 10);
-    awayTeam = homeAwayMatch[3].trim();
-    if (homeAwayMatch[4]) awayScore = parseInt(homeAwayMatch[4], 10);
-  } else if (scoreMatch) {
-    homeTeam = scoreMatch[1].trim();
-    homeScore = parseInt(scoreMatch[2], 10);
-    awayTeam = scoreMatch[4].replace(/\s*\(SETS\)/i, '').trim();
-    awayScore = parseInt(scoreMatch[3], 10);
-  } else if (vsMatch) {
-    homeTeam = vsMatch[1].trim();
-    awayTeam = vsMatch[2].trim();
-  }
+    if (homeAwayMatch) {
+      homeTeam = homeAwayMatch[1].trim();
+      if (homeAwayMatch[2]) homeScore = parseInt(homeAwayMatch[2], 10);
+      awayTeam = homeAwayMatch[3].trim();
+      if (homeAwayMatch[4]) awayScore = parseInt(homeAwayMatch[4], 10);
+    } else if (scoreMatch) {
+      homeTeam = scoreMatch[1].trim();
+      homeScore = parseInt(scoreMatch[2], 10);
+      awayTeam = scoreMatch[4].replace(/\s*\(SETS\)/i, '').trim();
+      awayScore = parseInt(scoreMatch[3], 10);
+    } else if (vsMatch) {
+      homeTeam = vsMatch[1].trim();
+      awayTeam = vsMatch[2].trim();
+    }
 
-  const lines = rawText.split('\n').map((l: string) => l.trim()).filter(Boolean);
-  const players: any[] = [];
+    const lines = rawText.split('\n').map((l: string) => l.trim()).filter(Boolean);
+    const players: any[] = [];
 
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/[|#\[\]_]/g, ' ').replace(/\s+/g, ' ').trim();
+    for (const rawLine of lines) {
+      const line = rawLine.replace(/[|#\[\]_]/g, ' ').replace(/\s+/g, ' ').trim();
 
-    if (sportType === 'BADMINTON') {
-      const teamCandidates = [homeTeam, awayTeam, 'ATENEO BLUE SHUTTLERS', 'UST GROWLING TIGERS', 'UST TIGERS', 'ATENEO', 'UST']
-        .filter(Boolean)
-        .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('|');
-      const badmReg = new RegExp(
-        `^(\\d{1,2})\\s+([M|W][S|D]\\s*\\d?)\\s+(.*?)\\s+(${teamCandidates})\\s+(\\d)\\s+([\\d\\s,-]+?)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)$`,
-        'i'
-      );
-      let parts = line.match(badmReg);
-      if (!parts) {
-        // Fallback if team is not in predefined list: require player name to be 2+ words or initials + word
-        parts = line.match(/^(\d{1,2})\s+([M|W][S|D]\s*\d?)\s+([A-Za-z\.\s'-]{3,25})\s+([A-Za-z\s'-]{3,30})\s+(\d)\s+([\d\s,-]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/i);
+      if (sportType === 'BADMINTON') {
+        const teamCandidates = [homeTeam, awayTeam, 'ATENEO BLUE SHUTTLERS', 'UST GROWLING TIGERS', 'UST TIGERS', 'ATENEO', 'UST']
+          .filter(Boolean)
+          .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|');
+        const badmReg = new RegExp(
+          `^(\\d{1,2})\\s+([M|W][S|D]\\s*\\d?)\\s+(.*?)\\s+(${teamCandidates})\\s+(\\d)\\s+([\\d\\s,-]+?)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)$`,
+          'i'
+        );
+        let parts = line.match(badmReg);
+        if (!parts) {
+          // Fallback if team is not in predefined list: require player name to be 2+ words or initials + word
+          parts = line.match(/^(\d{1,2})\s+([M|W][S|D]\s*\d?)\s+([A-Za-z\.\s'-]{3,25})\s+([A-Za-z\s'-]{3,30})\s+(\d)\s+([\d\s,-]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/i);
+        }
+        if (parts) {
+          players.push({
+            jersey_number: parseInt(parts[1], 10),
+            position: parts[2].replace(/\s+/g, '').toUpperCase(),
+            player_name: parts[3].trim(),
+            team_name: parts[4].trim(),
+            games_won: parseInt(parts[5], 10),
+            sets: parseInt(parts[5], 10),
+            game_scores: parts[6].trim(),
+            points: parseInt(parts[7], 10),
+            pts: parseInt(parts[7], 10),
+            smash_winners: parseInt(parts[8], 10),
+            net_kills: parseInt(parts[9], 10),
+            unforced_errors: parseInt(parts[10], 10),
+            service_faults: parseInt(parts[11], 10),
+          });
+          continue;
+        }
       }
-      if (parts) {
-        players.push({
-          jersey_number: parseInt(parts[1], 10),
-          position: parts[2].replace(/\s+/g, '').toUpperCase(),
-          player_name: parts[3].trim(),
-          team_name: parts[4].trim(),
-          games_won: parseInt(parts[5], 10),
-          sets: parseInt(parts[5], 10),
-          game_scores: parts[6].trim(),
-          points: parseInt(parts[7], 10),
-          pts: parseInt(parts[7], 10),
-          smash_winners: parseInt(parts[8], 10),
-          net_kills: parseInt(parts[9], 10),
-          unforced_errors: parseInt(parts[10], 10),
-          service_faults: parseInt(parts[11], 10),
-        });
-        continue;
+
+      const m = line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+(.*?)\s+([\d\s.-]+)$/i)
+             || line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+([\d\s.-]+)$/i);
+
+      if (m) {
+        const jersey = parseInt(m[1], 10);
+        const name = m[2].trim();
+        const pos = m[3].trim().toUpperCase();
+        let team = homeTeam;
+        let numStr = '';
+        if (m[5]) {
+          team = m[4].trim() || homeTeam;
+          numStr = m[5].trim();
+        } else {
+          numStr = m[4].trim();
+        }
+        const nums = numStr.split(/\s+/).map((n: string) => parseFloat(n) || 0);
+
+        const pObj: any = {
+          jersey_number: jersey,
+          player_name: name,
+          position: pos,
+          team_name: team,
+        };
+
+        if (sportType === 'SOCCER') {
+          pObj.goals = nums[0] || 0;
+          pObj.assists = nums[1] || 0;
+          pObj.shots = nums[2] || 0;
+          pObj.shots_on_target = nums[3] || 0;
+          pObj.saves = nums[4] || 0;
+          pObj.tackles = nums[5] || 0;
+          pObj.fouls = nums[6] || 0;
+          pObj.yellow_cards = nums[7] || 0;
+          pObj.red_cards = nums[8] || 0;
+          pObj.minutes = nums[9] || 0;
+          pObj.points = pObj.goals;
+        } else if (sportType === 'BADMINTON') {
+          pObj.points = nums[0] || 0;
+          pObj.games_won = nums[1] || 0;
+          pObj.smash_winners = nums[2] || 0;
+          pObj.net_kills = nums[3] || 0;
+          pObj.service_faults = nums[4] || 0;
+          pObj.unforced_errors = nums[5] || 0;
+        } else if (sportType === 'VOLLEYBALL') {
+          pObj.kills = nums[0] || 0;
+          pObj.attack_errors = nums[1] || 0;
+          pObj.attack_attempts = nums[2] || 0;
+          pObj.hitting_pct = nums[3] || 0;
+          pObj.service_aces = nums[4] || 0;
+          pObj.digs = nums[5] || 0;
+          pObj.block_points = nums[6] || 0;
+          pObj.assists = nums[7] || 0;
+          pObj.points = nums[8] || (pObj.kills + pObj.service_aces + pObj.block_points);
+        } else {
+          pObj.points = nums[0] || 0;
+          pObj.rebounds = nums[1] || 0;
+          pObj.assists = nums[2] || 0;
+          pObj.steals = nums[3] || 0;
+          pObj.blocks = nums[4] || 0;
+        }
+
+        players.push(pObj);
       }
     }
 
-    const m = line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+(.*?)\s+([\d\s.-]+)$/i)
-      || line.match(/^(\d{1,2})\s+([A-Za-z\.\s'-]{2,25})\s+(PG|SG|SF|PF|C|G|F|OH|MB|S|L|OP|FW|MF|DF|GK|MS|WS|MD|WD|XD)\s+([\d\s.-]+)$/i);
+    const fallbackJson = {
+      match_info: {
+        sport_type: sportType,
+        home_team_name: homeTeam,
+        opponent_team_name: awayTeam,
+        game_result: homeScore >= awayScore ? 'WIN' : 'LOSE',
+        final_score: `${homeScore} - ${awayScore}`,
+      },
+      team_scores: [
+        { team: homeTeam, score: homeScore, is_home: true },
+        { team: awayTeam, score: awayScore, is_home: false }
+      ],
+      player_summary: players
+    };
 
-    if (m) {
-      const jersey = parseInt(m[1], 10);
-      const name = m[2].trim();
-      const pos = m[3].trim().toUpperCase();
-      let team = homeTeam;
-      let numStr = '';
-      if (m[5]) {
-        team = m[4].trim() || homeTeam;
-        numStr = m[5].trim();
-      } else {
-        numStr = m[4].trim();
-      }
-      const nums = numStr.split(/\s+/).map((n: string) => parseFloat(n) || 0);
-
-      const pObj: any = {
-        jersey_number: jersey,
-        player_name: name,
-        position: pos,
-        team_name: team,
-      };
-
-      if (sportType === 'SOCCER') {
-        pObj.goals = nums[0] || 0;
-        pObj.assists = nums[1] || 0;
-        pObj.shots = nums[2] || 0;
-        pObj.shots_on_target = nums[3] || 0;
-        pObj.saves = nums[4] || 0;
-        pObj.tackles = nums[5] || 0;
-        pObj.fouls = nums[6] || 0;
-        pObj.yellow_cards = nums[7] || 0;
-        pObj.red_cards = nums[8] || 0;
-        pObj.minutes = nums[9] || 0;
-        pObj.points = pObj.goals;
-      } else if (sportType === 'BADMINTON') {
-        pObj.points = nums[0] || 0;
-        pObj.games_won = nums[1] || 0;
-        pObj.smash_winners = nums[2] || 0;
-        pObj.net_kills = nums[3] || 0;
-        pObj.service_faults = nums[4] || 0;
-        pObj.unforced_errors = nums[5] || 0;
-      } else if (sportType === 'VOLLEYBALL') {
-        pObj.kills = nums[0] || 0;
-        pObj.attack_errors = nums[1] || 0;
-        pObj.attack_attempts = nums[2] || 0;
-        pObj.hitting_pct = nums[3] || 0;
-        pObj.service_aces = nums[4] || 0;
-        pObj.digs = nums[5] || 0;
-        pObj.block_points = nums[6] || 0;
-        pObj.assists = nums[7] || 0;
-        pObj.points = nums[8] || (pObj.kills + pObj.service_aces + pObj.block_points);
-      } else {
-        pObj.points = nums[0] || 0;
-        pObj.rebounds = nums[1] || 0;
-        pObj.assists = nums[2] || 0;
-        pObj.steals = nums[3] || 0;
-        pObj.blocks = nums[4] || 0;
-      }
-
-      players.push(pObj);
-    }
-  }
-
-  const fallbackJson = {
-    match_info: {
-      sport_type: sportType,
-      home_team_name: homeTeam,
-      opponent_team_name: awayTeam,
-      game_result: homeScore >= awayScore ? 'WIN' : 'LOSE',
-      final_score: `${homeScore} - ${awayScore}`,
-    },
-    team_scores: [
-      { team: homeTeam, score: homeScore, is_home: true },
-      { team: awayTeam, score: awayScore, is_home: false }
-    ],
-    player_summary: players
-  };
-
-  return JSON.stringify(fallbackJson);
+    return JSON.stringify(fallbackJson);
 }
 
 async function callGeminiWithWaterfall(requestBody: any, rawKey?: string, file?: Express.Multer.File): Promise<string> {
@@ -1388,8 +1386,12 @@ async function callGeminiWithWaterfall(requestBody: any, rawKey?: string, file?:
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in environment');
+  }
   let lastErrorMsg = '';
 
   for (const model of OCR_MODEL_WATERFALL) {
@@ -1475,7 +1477,7 @@ export async function uploadScoresheetFileToStorage(matchId: string, file: Expre
         .toBuffer();
       encodeMime = 'image/jpeg';
     }
-  } catch { }
+  } catch {}
 
   return `data:${encodeMime};base64,${bufferToEncode.toString('base64')}`;
 }
@@ -1504,14 +1506,14 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
   // Ensure dotenv is loaded so GEMINI_API_KEY is available
   try {
     require('dotenv').config();
-  } catch { }
+  } catch {}
 
   const geminiKey = (customKey ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
 
   try {
@@ -1592,7 +1594,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
     const rawPlayerSummary: any[] = Array.isArray(aiParsed.player_summary)
       ? aiParsed.player_summary
       : (Array.isArray(aiParsed.players) ? aiParsed.players : (Array.isArray(aiParsed.roster) ? aiParsed.roster : []));
-
+    
     const teamScores: any[] = Array.isArray(aiParsed.team_scores)
       ? aiParsed.team_scores
       : (Array.isArray(aiParsed.teams) ? aiParsed.teams : []);
@@ -1612,7 +1614,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
         if (teamDoc.exists) {
           roster = teamDoc.data()?.roster_list || [];
         }
-      } catch { }
+      } catch {}
     }
 
     // Format all OCR extracted players into rich player_stats with complete metrics
@@ -1763,7 +1765,7 @@ export async function processScoresheetOCR(matchId: string, file?: Express.Multe
           await auditDoc.ref.set({ scoresheet_url: scoresheetUrl, updated_at: now }, { merge: true });
         }
       }
-    } catch (_) { }
+    } catch (_) {}
 
     return {
       match_id: matchId,
@@ -1796,15 +1798,19 @@ export async function scanScoresheetStandalone(file?: Express.Multer.File, custo
 
   try {
     require('dotenv').config();
-  } catch { }
+  } catch {}
 
   const geminiKey = (customKey ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in environment');
+  }
 
   const mimeType = file.mimetype || 'image/jpeg';
   const filename = file.originalname || 'scoresheet.png';
@@ -2020,15 +2026,19 @@ export async function scanMultipleScoresheetsStandalone(
 
   try {
     require('dotenv').config();
-  } catch { }
+  } catch {}
 
   const geminiKey = (customKey ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     process.env.GEMINI_KEY ||
-    DEFAULT_OCR_KEY
+    ''
   ).trim().replace(/^["']|["']$/g, '');
+
+  if (!geminiKey) {
+    throw new Error('GEMINI_API_KEY is not configured in environment');
+  }
 
   console.log(`🚀 [MULTI-OCR] Processing ${files.length} scoresheets separately in parallel...`);
 
@@ -2343,7 +2353,7 @@ export async function getMatchBoxscore(matchId: string): Promise<BoxscoreRespons
       if (!auditSnap.empty) {
         boxScoresheetUrl = auditSnap.docs[0].data()?.scoresheet_url || '';
       }
-    } catch (_) { }
+    } catch (_) {}
   }
 
   return {
@@ -2399,7 +2409,7 @@ export async function getMatchResultDetails(matchId: string): Promise<any> {
           resolvedNotes = auditData?.context_notes || '';
         }
       }
-    } catch (_) { }
+    } catch (_) {}
   }
 
   // Fetch team summary

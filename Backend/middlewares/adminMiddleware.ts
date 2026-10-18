@@ -41,12 +41,11 @@ export async function requireSystemAdmin(
 
 
   const token = authHeader.split(' ')[1];
-
-  const secrets = [
-    process.env.JWT_SECRET,
-    'sanamakapasasafinaldefense',
-    'atleta-super-secret-jwt-key-2026',
-  ].filter(Boolean) as string[];
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    res.status(500).json({ error: 'Server authentication configuration error: JWT_SECRET missing.' });
+    return;
+  }
 
   let decoded: {
     uid: string;
@@ -57,12 +56,9 @@ export async function requireSystemAdmin(
     is_elevated?: boolean;
   } | null = null;
 
-  for (const secret of secrets) {
-    try {
-      decoded = jwt.verify(token, secret) as any;
-      if (decoded) break;
-    } catch (_) {}
-  }
+  try {
+    decoded = jwt.verify(token, jwtSecret) as any;
+  } catch (_) {}
 
   if (!decoded) {
     await logAdminAudit({

@@ -28,6 +28,10 @@ let discoveryMemoryCache: {
   lastFetched: number;
 } | null = null;
 
+export function clearDiscoveryMemoryCache() {
+  discoveryMemoryCache = null;
+}
+
 interface DiscoveryContextType {
   athletes: AthleteDiscoveryItem[];
   rankingAthletes: AthleteDiscoveryItem[];

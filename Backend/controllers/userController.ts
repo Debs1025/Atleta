@@ -369,14 +369,12 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
     let uid = req.user?.uid;
     if (!uid) {
       const bearerToken = req.headers?.authorization?.replace(/^Bearer\s+/i, '');
-      if (bearerToken) {
+      if (bearerToken && process.env.JWT_SECRET) {
         try {
-          const secret = process.env.JWT_SECRET || 'sanamakapasasafinaldefense';
-          const decoded = jwt.verify(bearerToken, secret) as any;
+          const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET) as any;
           if (decoded?.uid) uid = decoded.uid;
         } catch {
-          const decoded = jwt.decode(bearerToken) as any;
-          if (decoded?.uid) uid = decoded.uid;
+          // Token verification failed
         }
       }
     }

@@ -2,11 +2,14 @@
   "expo": {
     "name": "Atleta",
     "slug": "atleta",
-    "owner": "gerardpelonio303511",
-    "scheme": ["com.anonymous.atleta", "atleta"],
+    "owner": "gerardpelonio303511s-team",
+    "scheme": [
+      "com.anonymous.atleta",
+      "atleta"
+    ],
     "facebookAppId": "1478346524097898",
     "facebookDisplayName": "Atleta",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,6 +19,7 @@
     },
     "android": {
       "package": "com.anonymous.atleta",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0D14"
@@ -42,7 +46,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "c2ca7287-61b9-4328-b58c-4db6ce73f513"
+        "projectId": "751724d9-de98-427d-bd38-d74c5fcad6bd"
       }
     },
     "ios": {
