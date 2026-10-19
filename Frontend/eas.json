@@ -15,8 +15,6 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_ATLETA_API": "https://atleta-backend.vercel.app",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "$EXPO_PUBLIC_FIREBASE_API_KEY",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "atleta-v1.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "atleta-v1",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "atleta-v1.appspot.com",
@@ -37,8 +35,6 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_ATLETA_API": "https://atleta-backend.vercel.app",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "$EXPO_PUBLIC_FIREBASE_API_KEY",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "atleta-v1.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "atleta-v1",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "atleta-v1.appspot.com",
