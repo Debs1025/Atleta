@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { requestAuthenticatedJson, requestMultipart } from "../../Authentication/authShared";
+import { downloadOrShareScoresheet } from "../../../../services/scoresheetFileHelper";
 
 export type NotificationType = "RECRUITMENT_INQUIRY" | "ACTION_REQUIRED" | "SCORESHEET_SHARED";
 
@@ -742,11 +743,9 @@ export function NotificationPage({
                               gap: 6,
                             },
                           ]}
-                          onPress={() => {
+                          onPress={async () => {
                             if (item.scoresheet_url) {
-                              Linking.openURL(item.scoresheet_url).catch(() => {
-                                Alert.alert("Scoresheet", "Unable to open link: " + item.scoresheet_url);
-                              });
+                              await downloadOrShareScoresheet(item.scoresheet_url, item.title || "Scoresheet");
                             }
                           }}
                         >

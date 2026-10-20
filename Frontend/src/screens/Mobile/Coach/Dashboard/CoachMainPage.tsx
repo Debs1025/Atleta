@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Linking,
   RefreshControl,
+  Image,
 } from "react-native";
 import styles from "./styles/CoachMainPage";
 import { StatusBar } from "expo-status-bar";
@@ -18,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson, getStoredAuthToken, API_BASE, clearAuthMicroCache } from "../../Authentication/authShared";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { downloadOrShareScoresheet } from "../../../../services/scoresheetFileHelper";
 
 // Data Types & Mock Testing Data
 import {
@@ -240,6 +242,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [scoresheetPreview, setScoresheetPreview] = useState<{ visible: boolean; url: string; matchName: string } | null>(null);
+  const [isDownloadingScoresheet, setIsDownloadingScoresheet] = useState(false);
 
   // Accreditation Gate State
   const [accountStatus, setAccountStatus] = useState<string>("Active");
@@ -3035,9 +3039,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                               onPress={() => {
                                 const url = notif.scoresheet_url || notif.scoresheetUrl;
                                 if (url) {
-                                  Linking.openURL(url).catch(() => {
-                                    Alert.alert("Scoresheet", "Unable to open scoresheet link: " + url);
-                                  });
+                                  setShowNotificationsModal(false);
+                                  setTimeout(() => {
+                                    setScoresheetPreview({
+                                      visible: true,
+                                      url,
+                                      matchName: notif.match_name || notif.matchName || notif.title || "Official Match",
+                                    });
+                                  }, 150);
+                                } else {
+                                  Alert.alert("Scoresheet", "No scoresheet file attached to this notification.");
                                 }
                               }}
                             >
@@ -3129,6 +3140,106 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 </View>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Fullscreen In-App Scoresheet Preview & Download Modal */}
+      <Modal
+        visible={Boolean(scoresheetPreview?.visible)}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setScoresheetPreview(null);
+          setShowNotificationsModal(true);
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(3, 7, 18, 0.96)", justifyContent: "center", alignItems: "center", padding: 16 }}>
+          <View style={{ width: "100%", height: "92%", backgroundColor: "#0F172A", borderRadius: 16, borderWidth: 1, borderColor: "#1E293B", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#1E293B", backgroundColor: "#0A0D14" }}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1 }}>VERIFIED OFFICIAL SCORESHEET</Text>
+                <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "700" }} numberOfLines={1}>
+                  {scoresheetPreview?.matchName || "Official Match"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setScoresheetPreview(null);
+                  setShowNotificationsModal(true);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{ backgroundColor: "rgba(255,255,255,0.08)", padding: 6, borderRadius: 20 }}
+              >
+                <Ionicons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* High-Resolution Scoresheet Image Preview */}
+            <View style={{ flex: 1, backgroundColor: "#070D19", justifyContent: "center", alignItems: "center", padding: 8 }}>
+              {scoresheetPreview?.url ? (
+                <Image
+                  source={{ uri: scoresheetPreview.url }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={{ alignItems: "center" }}>
+                  <Ionicons name="document-text-outline" size={48} color="#64748B" />
+                  <Text style={{ color: "#94A3B8", marginTop: 8 }}>Unable to preview scoresheet.</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{ padding: 14, backgroundColor: "#0A0D14", borderTopWidth: 1, borderTopColor: "#1E293B", gap: 10 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#10B981",
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+                disabled={isDownloadingScoresheet}
+                onPress={async () => {
+                  if (!scoresheetPreview?.url) return;
+                  setIsDownloadingScoresheet(true);
+                  await downloadOrShareScoresheet(scoresheetPreview.url, scoresheetPreview.matchName);
+                  setIsDownloadingScoresheet(false);
+                }}
+              >
+                {isDownloadingScoresheet ? (
+                  <ActivityIndicator size="small" color="#080F21" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={18} color="#080F21" />
+                    <Text style={{ color: "#080F21", fontWeight: "800", fontSize: 14 }}>
+                      SAVE / DOWNLOAD TO DEVICE
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#1E293B",
+                  borderWidth: 1,
+                  borderColor: "#334155",
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                }}
+                onPress={() => {
+                  setScoresheetPreview(null);
+                  setShowNotificationsModal(true);
+                }}
+              >
+                <Text style={{ color: "#94A3B8", fontWeight: "700", fontSize: 13 }}>BACK TO NOTIFICATIONS</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

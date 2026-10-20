@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import styles from './styles/officialMatchPreview';
 import { useMatchContext, OfficialMatchRecord, PlayerBoxScoreMetric } from './MatchContext';
+import { downloadOrShareScoresheet } from '../../../../services/scoresheetFileHelper';
 
 interface OfficialMatchPreviewProps {
   matchId: string;
@@ -291,11 +292,9 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
               <TouchableOpacity
                 style={[styles.primaryButton, { backgroundColor: '#10B981', marginTop: 10 }]}
                 activeOpacity={0.85}
-                onPress={() => {
+                onPress={async () => {
                   if (match.scoresheet_url) {
-                    Linking.openURL(match.scoresheet_url).catch(() => {
-                      Alert.alert('Scoresheet', 'Unable to open scoresheet link: ' + match.scoresheet_url);
-                    });
+                    await downloadOrShareScoresheet(match.scoresheet_url, `${match.home_team_name}_vs_${match.away_team_name}`);
                   }
                 }}
               >
