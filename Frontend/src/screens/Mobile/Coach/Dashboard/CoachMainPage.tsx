@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { requestAuthenticatedJson, getStoredAuthToken, API_BASE, clearAuthMicroCache } from "../../Authentication/authShared";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { downloadOrShareScoresheet } from "../../../../services/scoresheetFileHelper";
+import { downloadScoresheetToDevice, shareScoresheetFile } from "../../../../services/scoresheetFileHelper";
 
 // Data Types & Mock Testing Data
 import {
@@ -3208,7 +3208,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 onPress={async () => {
                   if (!scoresheetPreview?.url) return;
                   setIsDownloadingScoresheet(true);
-                  await downloadOrShareScoresheet(scoresheetPreview.url, scoresheetPreview.matchName);
+                  await downloadScoresheetToDevice(scoresheetPreview.url, scoresheetPreview.matchName);
                   setIsDownloadingScoresheet(false);
                 }}
               >
@@ -3218,27 +3218,54 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   <>
                     <Ionicons name="download-outline" size={18} color="#080F21" />
                     <Text style={{ color: "#080F21", fontWeight: "800", fontSize: 14 }}>
-                      SAVE / DOWNLOAD TO DEVICE
+                      DOWNLOAD TO DEVICE
                     </Text>
                   </>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: "#1E293B",
-                  borderWidth: 1,
-                  borderColor: "#334155",
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                }}
-                onPress={() => {
-                  setScoresheetPreview(null);
-                  setShowNotificationsModal(true);
-                }}
-              >
-                <Text style={{ color: "#94A3B8", fontWeight: "700", fontSize: 13 }}>BACK TO NOTIFICATIONS</Text>
-              </TouchableOpacity>
+              
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: "rgba(0, 200, 255, 0.12)",
+                    borderWidth: 1,
+                    borderColor: "#00C8FF",
+                    paddingVertical: 10,
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                  onPress={async () => {
+                    if (!scoresheetPreview?.url) return;
+                    await shareScoresheetFile(scoresheetPreview.url, scoresheetPreview.matchName);
+                  }}
+                >
+                  <Ionicons name="share-social-outline" size={16} color="#00C8FF" />
+                  <Text style={{ color: "#00C8FF", fontWeight: "700", fontSize: 13 }}>SHARE</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#1E293B",
+                    borderWidth: 1,
+                    borderColor: "#334155",
+                    paddingVertical: 10,
+                    borderRadius: 10,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  onPress={() => {
+                    setScoresheetPreview(null);
+                    setShowNotificationsModal(true);
+                  }}
+                >
+                  <Text style={{ color: "#94A3B8", fontWeight: "700", fontSize: 13 }}>BACK</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>

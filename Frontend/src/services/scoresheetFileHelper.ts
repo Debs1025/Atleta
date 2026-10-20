@@ -1,97 +1,194 @@
 import { Alert, Linking, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 
 /**
- * Robust cross-platform helper to view, save, or download scoresheet files
- * supporting Base64 data URIs (data:image/...;base64,...), HTTP/HTTPS cloud URLs, and local files.
+ * Ensures the scoresheet is saved to local app storage (documentDirectory)
+ * and returns the local file URI, base64 payload, and MIME type.
  */
-export async function downloadOrShareScoresheet(
+export async function prepareLocalScoresheetFile(
+  rawUrl: string,
+  filenamePrefix = 'Scoresheet'
+): Promise<{ localUri: string; base64Data: string; mimeType: string; fileName: string }> {
+  const cleanPrefix = filenamePrefix.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40) || 'Scoresheet';
+  let targetMime = 'image/jpeg';
+  let ext = 'jpg';
+  let base64Data = '';
+  let localUri = '';
+
+  if (rawUrl.startsWith('data:')) {
+    const commaIndex = rawUrl.indexOf(',');
+    const header = commaIndex !== -1 ? rawUrl.substring(0, commaIndex) : '';
+    base64Data = commaIndex !== -1 ? rawUrl.substring(commaIndex + 1) : rawUrl;
+
+    if (header.includes('png')) {
+      ext = 'png';
+      targetMime = 'image/png';
+    } else if (header.includes('pdf')) {
+      ext = 'pdf';
+      targetMime = 'application/pdf';
+    } else if (header.includes('webp')) {
+      ext = 'webp';
+      targetMime = 'image/webp';
+    } else if (header.includes('csv')) {
+      ext = 'csv';
+      targetMime = 'text/csv';
+    }
+
+    const fileName = `${cleanPrefix}_${Date.now()}.${ext}`;
+    const targetDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+    localUri = `${targetDir}${fileName}`;
+
+    await FileSystem.writeAsStringAsync(localUri, base64Data, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return { localUri, base64Data, mimeType: targetMime, fileName };
+  }
+
+  // HTTP/HTTPS or local path
+  const rawExt = rawUrl.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+  ext = ['jpg', 'jpeg', 'png', 'pdf', 'csv', 'webp'].includes(rawExt) ? rawExt : 'jpg';
+  if (ext === 'pdf') targetMime = 'application/pdf';
+  else if (ext === 'png') targetMime = 'image/png';
+  else targetMime = 'image/jpeg';
+
+  const fileName = `${cleanPrefix}_${Date.now()}.${ext}`;
+  const targetDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+  localUri = `${targetDir}${fileName}`;
+
+  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+    const downloadResult = await FileSystem.downloadAsync(rawUrl, localUri);
+    localUri = downloadResult.uri;
+  }
+
+  base64Data = await FileSystem.readAsStringAsync(localUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  return { localUri, base64Data, mimeType: targetMime, fileName };
+}
+
+/**
+ * Downloads the scoresheet directly to device storage / Photos / Gallery
+ * without triggering the external "Share with apps" dialog.
+ */
+export async function downloadScoresheetToDevice(
   rawUrl: string,
   filenamePrefix = 'Scoresheet'
 ): Promise<{ success: boolean; localUri?: string; error?: string }> {
   try {
     if (!rawUrl || typeof rawUrl !== 'string') {
-      Alert.alert('Scoresheet', 'No scoresheet file or link is available.');
+      Alert.alert('Scoresheet', 'No scoresheet file or link is available to download.');
       return { success: false, error: 'Empty URL' };
     }
 
-    const cleanPrefix = filenamePrefix.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40) || 'Scoresheet';
-    let localUri = '';
-    let targetMime = 'image/jpeg';
+    const { localUri, base64Data, mimeType, fileName } = await prepareLocalScoresheetFile(
+      rawUrl,
+      filenamePrefix
+    );
 
-    if (rawUrl.startsWith('data:')) {
-      // 1. Data URI extraction (Base64)
-      const commaIndex = rawUrl.indexOf(',');
-      const header = commaIndex !== -1 ? rawUrl.substring(0, commaIndex) : '';
-      const base64Data = commaIndex !== -1 ? rawUrl.substring(commaIndex + 1) : rawUrl;
+    // 1. If it's an image (JPG, PNG, WEBP), save directly to Photos / Gallery via MediaLibrary
+    if (mimeType.startsWith('image/')) {
+      try {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          await MediaLibrary.createAssetAsync(localUri);
 
-      let ext = 'jpg';
-      if (header.includes('png')) {
-        ext = 'png';
-        targetMime = 'image/png';
-      } else if (header.includes('pdf')) {
-        ext = 'pdf';
-        targetMime = 'application/pdf';
-      } else if (header.includes('webp')) {
-        ext = 'webp';
-        targetMime = 'image/webp';
-      } else if (header.includes('csv')) {
-        ext = 'csv';
-        targetMime = 'text/csv';
+          Alert.alert(
+            'Saved to Device Photos ✓',
+            `The official scoresheet has been saved to your device Photos and Gallery!\n${fileName}`
+          );
+          return { success: true, localUri };
+        }
+      } catch (mediaErr) {
+        console.warn('⚠️ [MediaLibrary] Could not save directly to photos:', mediaErr);
       }
-
-      const fileName = `${cleanPrefix}_${Date.now()}.${ext}`;
-      const targetDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
-      localUri = `${targetDir}${fileName}`;
-
-      await FileSystem.writeAsStringAsync(localUri, base64Data, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-    } else if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
-      // 2. Remote URL download
-      const ext = rawUrl.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
-      const cleanExt = ['jpg', 'jpeg', 'png', 'pdf', 'csv', 'webp'].includes(ext) ? ext : 'jpg';
-      if (cleanExt === 'pdf') targetMime = 'application/pdf';
-      else if (cleanExt === 'png') targetMime = 'image/png';
-      else targetMime = 'image/jpeg';
-
-      const fileName = `${cleanPrefix}_${Date.now()}.${cleanExt}`;
-      const targetDir = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
-      localUri = `${targetDir}${fileName}`;
-
-      const downloadResult = await FileSystem.downloadAsync(rawUrl, localUri);
-      localUri = downloadResult.uri;
-    } else {
-      localUri = rawUrl;
     }
 
-    // 3. Prompt user with native save / download / share options
-    const canShare = await Sharing.isAvailableAsync();
-    if (canShare) {
-      await Sharing.shareAsync(localUri, {
-        dialogTitle: `Download ${cleanPrefix}`,
-        mimeType: targetMime,
-        UTI: targetMime === 'application/pdf' ? 'com.adobe.pdf' : 'public.jpeg',
-      });
-      return { success: true, localUri };
-    } else {
-      Alert.alert(
-        'Scoresheet Downloaded',
-        `The scoresheet has been saved to your device:\n${localUri}`
-      );
-      return { success: true, localUri };
+    // 2. On Android for non-images (PDF, CSV) or if MediaLibrary wasn't granted, try SAF
+    if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+      try {
+        let initialDir: string | undefined;
+        try {
+          initialDir = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
+        } catch {}
+
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialDir);
+        if (permissions.granted) {
+          const rawNameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+          const createdSafUri = await FileSystem.StorageAccessFramework.createFileAsync(
+            permissions.directoryUri,
+            rawNameWithoutExt,
+            mimeType
+          );
+
+          await FileSystem.StorageAccessFramework.writeAsStringAsync(createdSafUri, base64Data, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          Alert.alert(
+            'Download Complete ✓',
+            `The official scoresheet has been saved to your selected folder on your device!`
+          );
+          return { success: true, localUri: createdSafUri };
+        }
+      } catch (safError: any) {
+        console.warn('⚠️ [SAF Error] Falling back to document storage:', safError);
+      }
     }
+
+    // 3. Fallback: Saved permanently to local app storage
+    Alert.alert(
+      'Download Complete ✓',
+      `Scoresheet successfully saved to your device:\n${fileName}`
+    );
+    return { success: true, localUri };
   } catch (err: any) {
-    console.warn('⚠️ [SCORESHEET DOWNLOAD] Error:', err);
-    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
-      Linking.openURL(rawUrl).catch(() => {});
-    } else {
-      Alert.alert(
-        'Download Notice',
-        'Unable to save scoresheet to device: ' + (err?.message || 'Unknown error')
-      );
-    }
+    console.error('⚠️ [SCORESHEET DOWNLOAD] Error:', err);
+    Alert.alert(
+      'Download Notice',
+      'Unable to save scoresheet to device: ' + (err?.message || 'Unknown error')
+    );
     return { success: false, error: err?.message };
   }
 }
+
+/**
+ * Explicitly opens the native system Share menu (Share with apps, Quick Share, Drive, etc.)
+ */
+export async function shareScoresheetFile(
+  rawUrl: string,
+  filenamePrefix = 'Scoresheet'
+): Promise<{ success: boolean; localUri?: string; error?: string }> {
+  try {
+    if (!rawUrl || typeof rawUrl !== 'string') {
+      Alert.alert('Scoresheet', 'No scoresheet file or link is available to share.');
+      return { success: false, error: 'Empty URL' };
+    }
+
+    const { localUri, mimeType } = await prepareLocalScoresheetFile(rawUrl, filenamePrefix);
+
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) {
+      await Sharing.shareAsync(localUri, {
+        dialogTitle: `Share ${filenamePrefix}`,
+        mimeType,
+        UTI: mimeType === 'application/pdf' ? 'com.adobe.pdf' : 'public.jpeg',
+      });
+      return { success: true, localUri };
+    } else {
+      Alert.alert('Sharing Unavailable', 'Native file sharing is not supported on this device.');
+      return { success: false, error: 'Sharing unavailable' };
+    }
+  } catch (err: any) {
+    console.error('⚠️ [SCORESHEET SHARE] Error:', err);
+    Alert.alert('Share Error', err?.message || 'Failed to share scoresheet.');
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * Backward compatibility alias
+ */
+export const downloadOrShareScoresheet = downloadScoresheetToDevice;
