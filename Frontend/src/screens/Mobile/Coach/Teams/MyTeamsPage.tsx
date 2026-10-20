@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
 import styles from "./styles/MyTeamsPage";
 import { Ionicons } from "@expo/vector-icons";
@@ -46,6 +47,8 @@ interface MyTeamsPageProps {
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
   onNotificationPress?: () => void;
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
   unreadNotificationCount?: number;
 }
 
@@ -60,6 +63,8 @@ export function MyTeamsPage({
   onSettingsPress,
   onProfilePress,
   onNotificationPress,
+  onRefresh,
+  isRefreshing = false,
   unreadNotificationCount = 0,
 }: MyTeamsPageProps) {
   const insets = useSafeAreaInsets();
@@ -85,6 +90,8 @@ export function MyTeamsPage({
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress || onLogout}
         onNotificationPress={onNotificationPress}
+        onRefreshPress={onRefresh}
+        isRefreshing={isRefreshing}
         unreadNotificationCount={unreadNotificationCount}
       />
 
@@ -95,6 +102,16 @@ export function MyTeamsPage({
           { paddingTop: headerTopPadding + 74, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={Boolean(isRefreshing)}
+              onRefresh={onRefresh}
+              tintColor="#00C8FF"
+              colors={["#00C8FF"]}
+            />
+          ) : undefined
+        }
       >
         {/* Title Block */}
         <View style={styles.titleBlock}>

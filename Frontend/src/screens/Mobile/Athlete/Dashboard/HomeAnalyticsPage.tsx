@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -89,6 +90,8 @@ export interface AthleteProfile {
 interface HomeAnalyticsPageProps {
   profile: AthleteProfile;
   loading?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   onNavigateToProfile?: () => void;
   onNavigateToCoaches?: () => void;
   onNavigateToTeamProfile?: () => void;
@@ -98,6 +101,8 @@ interface HomeAnalyticsPageProps {
 export function HomeAnalyticsPage({
   profile,
   loading = false,
+  onRefresh,
+  isRefreshing,
   onNavigateToProfile,
   onNavigateToCoaches,
   onNavigateToTeamProfile,
@@ -168,6 +173,16 @@ export function HomeAnalyticsPage({
       nestedScrollEnabled={true}
       overScrollMode="never"
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!isRefreshing}
+            onRefresh={onRefresh}
+            tintColor="#00C8FF"
+            colors={["#00C8FF"]}
+          />
+        ) : undefined
+      }
     >
       {/* Category / Sport Badge */}
       <View style={styles.categoryBadge}>

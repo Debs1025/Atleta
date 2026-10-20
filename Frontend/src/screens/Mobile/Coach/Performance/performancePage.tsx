@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,18 +20,22 @@ interface PerformancePageProps {
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
   onNotificationPress?: () => void;
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
   unreadNotificationCount?: number;
   athletes?: AthletePerformanceProfile[];
   avatarUrl?: string | null;
 }
 
-const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING"];
+const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "SWIMMING", "TRACK AND FIELD"];
 
 export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
   onSettingsPress,
   onProfilePress,
   onNotificationPress,
+  onRefresh,
+  isRefreshing = false,
   unreadNotificationCount = 0,
   athletes = [],
   avatarUrl,
@@ -189,6 +194,16 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           { paddingTop: headerTopPadding + 74, paddingBottom: 150 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={Boolean(isRefreshing)}
+              onRefresh={onRefresh}
+              tintColor="#00C8FF"
+              colors={["#00C8FF"]}
+            />
+          ) : undefined
+        }
       >
         <Text style={styles.pageTitle}>Performance</Text>
         <Text style={styles.pageSubtitle}>
@@ -343,6 +358,8 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress}
         onNotificationPress={onNotificationPress}
+        onRefreshPress={onRefresh}
+        isRefreshing={isRefreshing}
         unreadNotificationCount={unreadNotificationCount}
       />
     </View>

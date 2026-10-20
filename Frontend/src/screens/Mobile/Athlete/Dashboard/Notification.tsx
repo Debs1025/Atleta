@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -94,6 +95,7 @@ export function NotificationPage({
     externalNotifications || []
   );
   const [loading, setLoading] = useState(!externalNotifications);
+  const [refreshing, setRefreshing] = useState(false);
   const [filterTab, setFilterTab] = useState<"ALL" | "INQUIRIES" | "DOCUMENTS" | "UNREAD">("ALL");
 
   // Modal States
@@ -108,24 +110,15 @@ export function NotificationPage({
   } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  useEffect(() => {
-    if (externalNotifications && externalNotifications.length > 0) {
-      setNotifications(externalNotifications);
-      setLoading(false);
-      return;
-    }
+  const fetchAllData = useCallback(async (isRefresh = false) => {
+    try {
+      if (!isRefresh) setLoading(true);
+      const [notifRes, inqRes]: [any, any] = await Promise.all([
+        requestAuthenticatedJson("/notifications").catch(() => null),
+        requestAuthenticatedJson("/inquiries").catch(() => null),
+      ]);
 
-    let isMounted = true;
-    const fetchAllData = async () => {
-      try {
-        setLoading(true);
-        const [notifRes, inqRes]: [any, any] = await Promise.all([
-          requestAuthenticatedJson("/notifications").catch(() => null),
-          requestAuthenticatedJson("/inquiries").catch(() => null),
-        ]);
-
-        if (isMounted) {
-          const items: NotificationItem[] = [];
+      const items: NotificationItem[] = [];
           const apiInquiries = inqRes?.inquiries || (Array.isArray(inqRes) ? inqRes : []);
           const apiNotifs = notifRes?.notifications || (Array.isArray(notifRes) ? notifRes : []);
           const processedInquiryIds = new Set<string>();
@@ -258,19 +251,33 @@ export function NotificationPage({
 
           setNotifications(items);
           if (onNotificationsChange) onNotificationsChange(items);
-        }
       } catch (err) {
         // Fallback
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
-    };
+    },
+    [onNotificationsChange]
+  );
 
-    fetchAllData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchAllData(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    if (externalNotifications && externalNotifications.length > 0) {
+      setNotifications(externalNotifications);
+      setLoading(false);
+      return;
+    }
+
+    fetchAllData(false);
+  }, [externalNotifications, fetchAllData]);
 
   const updateFeed = (updated: NotificationItem[]) => {
     setNotifications(updated);
@@ -508,11 +515,25 @@ export function NotificationPage({
           <Text style={styles.headerTitle}>NOTIFICATIONS</Text>
         </View>
 
-        {unreadCount > 0 && (
-          <Pressable style={styles.markReadButton} onPress={handleMarkAllAsRead}>
-            <Text style={styles.markReadText}>Mark all as read</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Pressable
+            onPress={handleRefresh}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ padding: 4 }}
+            accessibilityLabel="Refresh Notifications"
+          >
+            <Ionicons
+              name="refresh-outline"
+              size={22}
+              color={refreshing ? "#00C8FF" : "#94A3B8"}
+            />
           </Pressable>
-        )}
+          {unreadCount > 0 && (
+            <Pressable style={styles.markReadButton} onPress={handleMarkAllAsRead}>
+              <Text style={styles.markReadText}>Mark all as read</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* FILTER CHIPS */}
@@ -559,6 +580,14 @@ export function NotificationPage({
           nestedScrollEnabled={true}
           overScrollMode="never"
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#00C8FF"
+              colors={["#00C8FF"]}
+            />
+          }
         >
           {displayNotifications.length === 0 ? (
             <View style={{ alignItems: "center", justifyContent: "center", paddingHorizontal: 20 }}>

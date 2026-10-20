@@ -7,6 +7,7 @@ import {
   View,
   Animated,
   Image,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -74,6 +75,8 @@ export function CoachProfile({
 
   const [profile, setProfile] = useState<CoachProfileState>(profileData || DEFAULT_COACH_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const fetchProfileRef = useRef<(forceFresh?: boolean) => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
     if (profileData) {
@@ -85,7 +88,7 @@ export function CoachProfile({
     let isMounted = true;
     if (visible) {
       setIsLoading(true);
-      const fetchProfile = async () => {
+      const fetchProfile = async (forceFresh = false) => {
         try {
           // Fetch from Firestore-backed offline first & backend API in parallel
           const [offlineProfileRes, profileRes, teamsRes, matchesRes]: [any, any, any, any] = await Promise.all([
@@ -218,6 +221,7 @@ export function CoachProfile({
         }
       };
 
+      fetchProfileRef.current = fetchProfile;
       fetchProfile();
     }
 
@@ -263,6 +267,18 @@ export function CoachProfile({
               styles.scrollContent,
               { paddingTop: headerTopPadding + 64, paddingBottom: 50 },
             ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={async () => {
+                  setIsRefreshing(true);
+                  await fetchProfileRef.current(true);
+                  setIsRefreshing(false);
+                }}
+                tintColor="#00C8FF"
+                colors={["#00C8FF"]}
+              />
+            }
           >
             {/* AVATAR & HERO HEADER */}
             <View style={styles.heroSection}>

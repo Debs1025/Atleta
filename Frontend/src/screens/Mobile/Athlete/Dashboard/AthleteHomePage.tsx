@@ -15,6 +15,7 @@ import { getAthleteProfileOfflineFirst, db } from "../../../../services/firebase
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
+import { Ionicons } from "@expo/vector-icons";
 
 const OFFLINE_ATHLETE_PROFILE_CACHE_KEY = "atleta_offline_athlete_profile_cache";
 
@@ -85,6 +86,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [hideParentBars, setHideParentBars] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (activeTab !== "HOME") {
@@ -613,6 +615,15 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     }
   }, []);
 
+  const handleAthleteRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshAthleteData(false);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshAthleteData]);
+
   useEffect(() => {
     // 1. Immediately hydrate cached profile so dashboard is responsive in <10ms
     (async () => {
@@ -801,25 +812,39 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               ATLETA
             </Text>
           </View>
-          <Pressable
-            style={styles.notificationButton}
-            onPress={() => setShowNotifications(true)}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel="Notifications"
-          >
-            <Image
-              source={require("../../../../assets/notification.png")}
-              style={styles.notificationIcon}
-              resizeMode="contain"
-            />
-            {unreadCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Pressable
+              style={styles.notificationButton}
+              onPress={handleAthleteRefresh}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="Refresh Athlete Dashboard"
+            >
+              <Ionicons
+                name="refresh-outline"
+                size={22}
+                color={isRefreshing ? "#00C8FF" : "#94A3B8"}
+              />
+            </Pressable>
+            <Pressable
+              style={styles.notificationButton}
+              onPress={() => setShowNotifications(true)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="Notifications"
+            >
+              <Image
+                source={require("../../../../assets/notification.png")}
+                style={styles.notificationIcon}
+                resizeMode="contain"
+              />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -853,6 +878,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             <HomeAnalyticsPage
               profile={profile}
               loading={loading}
+              onRefresh={handleAthleteRefresh}
+              isRefreshing={isRefreshing}
               onNavigateToProfile={() => setActiveTab("PROFILE")}
               onNavigateToCoaches={() => setActiveTab("COACHES")}
               onNavigateToTeamProfile={() => {
@@ -873,6 +900,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             onUpdateProfile={handleUpdateProfile}
             onLogout={onLogout}
             loading={loading}
+            onRefresh={handleAthleteRefresh}
+            isRefreshing={isRefreshing}
           />
         )}
 
@@ -881,6 +910,8 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             onNavigateTab={(tab) => setActiveTab(tab)}
             onScreenStateChange={(isSubScreen) => setHideParentBars(isSubScreen)}
             athleteCategory={profile.category}
+            onRefresh={handleAthleteRefresh}
+            isRefreshing={isRefreshing}
           />
         )}
       </View>

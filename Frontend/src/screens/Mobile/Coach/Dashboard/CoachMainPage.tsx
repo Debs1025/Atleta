@@ -10,6 +10,7 @@ import {
   View,
   ActivityIndicator,
   Linking,
+  RefreshControl,
 } from "react-native";
 import styles from "./styles/CoachMainPage";
 import { StatusBar } from "expo-status-bar";
@@ -194,6 +195,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>([]);
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
@@ -596,7 +598,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     })();
   }, []);
 
-  // Live Backend Data Fetching on Mount
+  // Live Backend Data Fetching on Mount & Refresh
+  const fetchDashboardDataRef = React.useRef<(forceFresh?: boolean) => Promise<void>>(() => Promise.resolve());
+
   useEffect(() => {
     let isMounted = true;
 
@@ -627,17 +631,19 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           matchesRes,
           coachAthletesRes,
           notifsRes,
+          proposalsRes,
           sportsRes,
           offlineMatches,
           offlineAthletes,
           offlineProfileRes,
-        ]: [any, any, any, any, any, any, any, any, any, any] = await Promise.all([
+        ]: [any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
           withSyncTimeout(requestAuthenticatedJson("/coaches/profile", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/teams", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/sync/coach-snapshot", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/matches", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/coaches/athletes", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/notifications", "GET", undefined, forceFresh).catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/scouting/proposals/list", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(getSportsOfflineFirst(forceFresh).catch(() => []), 6000, []),
           withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 2000, []),
           withSyncTimeout(getAthletesOfflineFirst(undefined, forceFresh).catch(() => []), 1500, []),
@@ -772,14 +778,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const cleanEffectiveCoachId = String(currentCoachId).replace(/^coach_/, "").toLowerCase();
 
           const isOwnedByCoach = (ath: any) => {
-            if (!cleanEffectiveCoachId) return false;
+            if (!cleanEffectiveCoachId) return true;
             const athCoachId = String(ath.coach_id || ath.coach_scout_id || ath.recruited_by_coach_id || ath.added_by_coach_id || ath.recruited_by || "").replace(/^coach_/, "").toLowerCase();
-            return Boolean(athCoachId && athCoachId === cleanEffectiveCoachId);
+            return !athCoachId || athCoachId === cleanEffectiveCoachId;
           };
 
-          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes)
+          const rawCoachAthletes: any[] = Array.isArray(coachAthletesRes?.athletes) && coachAthletesRes.athletes.length > 0
             ? coachAthletesRes.athletes
-            : Array.isArray(syncRes?.handled_athletes)
+            : Array.isArray(syncRes?.handled_athletes) && syncRes.handled_athletes.length > 0
             ? syncRes.handled_athletes.filter(isOwnedByCoach)
             : (Array.isArray(offlineAthletes) ? offlineAthletes.filter(isOwnedByCoach) : []);
 
@@ -842,6 +848,46 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             if (k) {
               const prev = richCoachAthletesMap.get(k) || {};
               richCoachAthletesMap.set(k, { ...prev, ...ca });
+            }
+          });
+
+          // Ingest scouted proposals so any newly scouted player shows up immediately on coach dashboard
+          const rawProposals: any[] = Array.isArray(proposalsRes)
+            ? proposalsRes
+            : Array.isArray(proposalsRes?.proposals)
+            ? proposalsRes.proposals
+            : [];
+
+          rawProposals.forEach((p: any) => {
+            const pAthId = p.athlete_id || (p.athlete_details && p.athlete_details.athlete_id);
+            const pNorm = normalizeId(pAthId);
+            if (!pNorm) return;
+            const aDetails = p.athlete_details || {};
+            const fName = aDetails.first_name || '';
+            const lName = aDetails.last_name || '';
+            const fullName = p.athlete_name || (fName ? `${fName} ${lName}`.trim() : 'Athlete');
+
+            const scoutObj = {
+              athlete_id: pAthId || `ath_${pNorm}`,
+              user_id: pNorm,
+              first_name: fName || 'Athlete',
+              last_name: lName,
+              full_name: fullName,
+              sport_type: (p.sport_category || aDetails.sport_type || 'BASKETBALL').toUpperCase(),
+              position: aDetails.position || 'Unassigned',
+              jersey_number: aDetails.jersey_number || '0',
+              coach_id: cleanEffectiveCoachId,
+              coach_scout_id: cleanEffectiveCoachId,
+              is_scouted: true,
+              scout_status: p.offer_status || 'PENDING',
+              recruitment_status: p.offer_status === 'ACCEPTED' ? 'Active Roster' : `Scouted (${p.offer_status || 'Pending'})`,
+            };
+
+            if (!richCoachAthletesMap.has(pNorm)) {
+              richCoachAthletesMap.set(pNorm, scoutObj);
+            }
+            if (!rawCoachAthletes.some((ca: any) => normalizeId(ca.athlete_id || ca.user_id) === pNorm)) {
+              rawCoachAthletes.push(scoutObj);
             }
           });
 
@@ -1180,6 +1226,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       }
     };
 
+    fetchDashboardDataRef.current = fetchCoachDashboardData;
     fetchCoachDashboardData();
 
     const notifInterval = setInterval(async () => {
@@ -1211,6 +1258,22 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       clearInterval(notifInterval);
     };
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchDashboardDataRef.current(true);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Automatically refresh when switching back to Home tab or Dashboard view
+  useEffect(() => {
+    if (activeTab === "Home" && activeView === "dashboard") {
+      fetchDashboardDataRef.current(false);
+    }
+  }, [activeTab, activeView]);
 
   // Real-time listener for coach's scoresheet requests (updates when tournament official fulfills and uploads)
   useEffect(() => {
@@ -2349,6 +2412,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             showsVerticalScrollIndicator={false}
             overScrollMode="never"
             scrollEventThrottle={16}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#00C8FF"
+                colors={["#00C8FF"]}
+              />
+            }
           >
             {/* Greeting Block */}
             <View style={styles.greetingSection}>
@@ -2439,6 +2510,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             onSettingsPress={() => setActiveView("settings")}
             onProfilePress={() => setShowProfileModal(true)}
             onNotificationPress={() => setShowNotificationsModal(true)}
+            onRefreshPress={handleRefresh}
+            isRefreshing={isRefreshing}
             unreadNotificationCount={unreadNotifCount}
           />
         </>
@@ -2460,6 +2533,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
           onNotificationPress={() => setShowNotificationsModal(true)}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
           unreadNotificationCount={unreadNotifCount}
         />
       )}
@@ -2480,6 +2555,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onUpdateRosterPlayerDetails={handleUpdateRosterPlayerDetails}
           onRemovePlayer={handleRemovePlayer}
           onAddPlayers={handleAddPlayersToTeam}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
         />
       )}
 
@@ -2492,6 +2569,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onBack={() => setActiveView("dashboard")}
           onSelectAthlete={(player) => handleViewStats(player)}
           onLogout={onLogout}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
         />
       )}
 
@@ -2525,6 +2604,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
           onNotificationPress={() => setShowNotificationsModal(true)}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
           unreadNotificationCount={unreadNotifCount}
         />
       )}

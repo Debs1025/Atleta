@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -50,13 +51,14 @@ export interface AthleteProfilePageProps {
   onLogout?: () => void;
   loading?: boolean;
   categoriesList?: Array<AthleteProfile["category"]>;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 const DEFAULT_CATEGORIES: Array<AthleteProfile["category"]> = [
   "BASKETBALL",
-  "VOLLEYBALL",
-  "TRACK AND FIELD",
   "SWIMMING",
+  "TRACK AND FIELD",
 ];
 
 const DEFAULT_WORKLOAD_DATA: WorkloadAnalyticsData = {
@@ -173,6 +175,8 @@ export function AthleteProfilePage({
   onLogout,
   loading = false,
   categoriesList = DEFAULT_CATEGORIES,
+  onRefresh,
+  isRefreshing,
 }: AthleteProfilePageProps) {
   // Edit Mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -1126,6 +1130,16 @@ export function AthleteProfilePage({
       nestedScrollEnabled={true}
       overScrollMode="never"
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!isRefreshing}
+            onRefresh={onRefresh}
+            tintColor="#00C8FF"
+            colors={["#00C8FF"]}
+          />
+        ) : undefined
+      }
     >
       {/* Section Heading & Edit Button Bar */}
       <View style={styles.sectionHeaderRow}>

@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Animated,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -79,6 +80,8 @@ interface TeamsProps {
   onNavigateTab?: (tabName: "HOME" | "COACHES" | "PROFILE") => void;
   onScreenStateChange?: (isSubScreen: boolean) => void;
   athleteCategory?: string;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
@@ -133,7 +136,7 @@ const getInitialSport = (cat?: string) => {
   return norm;
 };
 
-export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: TeamsProps) {
+export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onRefresh, isRefreshing }: TeamsProps) {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>("DIRECTORY");
   const [teams, setTeams] = useState<TeamSchema[]>([]);
   const [inquiries, setInquiries] = useState<InquirySchema[]>([]);
@@ -143,6 +146,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   const [selectedSport, setSelectedSport] = useState<string>("ALL");
   const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(DEFAULT_SPORT_CHIPS);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
 
   useEffect(() => {
@@ -184,20 +188,17 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
   const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>("");
   const [myJoinedTeamIds, setMyJoinedTeamIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchDirectoryAndInquiries = async () => {
-      try {
-        setLoading(true);
-        const [offlineTeams, teamsRes, inquiriesRes, myTeamRes]: [any, any, any, any] = await Promise.all([
-          getTeamsOfflineFirst().catch(() => []),
-          requestAuthenticatedJson("/teams").catch(() => null),
-          requestAuthenticatedJson("/inquiries").catch(() => null),
-          requestAuthenticatedJson("/athletes/team").catch(() => null),
-        ]);
+  const fetchDirectoryAndInquiries = useCallback(async (isRefresh = false) => {
+    try {
+      if (!isRefresh) setLoading(true);
+      const [offlineTeams, teamsRes, inquiriesRes, myTeamRes]: [any, any, any, any] = await Promise.all([
+        getTeamsOfflineFirst().catch(() => []),
+        requestAuthenticatedJson("/teams").catch(() => null),
+        requestAuthenticatedJson("/inquiries").catch(() => null),
+        requestAuthenticatedJson("/athletes/team").catch(() => null),
+      ]);
 
-        if (isMounted) {
-          const currentTeamId = myTeamRes?.team?.team_id || myTeamRes?.team_id || "";
+        const currentTeamId = myTeamRes?.team?.team_id || myTeamRes?.team_id || "";
           const currentTeamName = myTeamRes?.team?.team_name || myTeamRes?.team_name || "";
           setMyCurrentTeamId(currentTeamId);
           setMyCurrentTeamName(currentTeamName);
@@ -344,22 +345,29 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
           if (finalList.length > 0) {
             await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(finalList)).catch(() => null);
           }
-        }
       } catch (err) {
-        if (isMounted) {
-          setTeams([]);
-          setInquiries([]);
-        }
+        setTeams([]);
+        setInquiries([]);
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
-    };
+    },
+    []
+  );
 
-    fetchDirectoryAndInquiries();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchDirectoryAndInquiries(true);
+      if (onRefresh) onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchDirectoryAndInquiries, onRefresh]);
+
+  useEffect(() => {
+    fetchDirectoryAndInquiries(false);
+  }, [fetchDirectoryAndInquiries]);
 
   useEffect(() => {
     if (loading) {
@@ -595,6 +603,14 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory }: T
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing || !!isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#00C8FF"
+            colors={["#00C8FF"]}
+          />
+        }
       >
         {/* Search Row */}
         <View style={styles.searchRow}>

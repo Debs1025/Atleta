@@ -14,6 +14,7 @@ import { styles } from './styles/scoutAthlete';
 import { AthleteDiscoveryItem } from './discoveryTypes';
 
 import { requestAuthenticatedJson } from '../../Authentication/authShared';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ScoutAthleteProps {
   onBack: () => void;
@@ -52,6 +53,8 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         inquiry_type: "RECRUITMENT",
         message: `Coach submitted a scouting inquiry for ${currentAthlete.full_name}`,
       });
+      // Invalidate coach dashboard caches so returning to dashboard immediately displays fresh roster
+      await AsyncStorage.removeItem('atleta_coach_dashboard_cache_v2').catch(() => null);
     } catch (err) {
       console.warn("Backend scouting inquiry error:", err);
     }

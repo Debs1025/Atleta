@@ -9,6 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
 import styles from "./styles/ManageTeamPage";
 import { Ionicons } from "@expo/vector-icons";
@@ -132,6 +133,8 @@ interface ManageTeamPageProps {
   ) => void;
   onRemovePlayer: (teamId: string, athleteId: string) => void;
   onAddPlayers: (teamId: string, newAthletes: RosterAthlete[]) => void;
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
 }
 
 export function ManageTeamPage({
@@ -145,6 +148,8 @@ export function ManageTeamPage({
   onUpdateRosterPlayerDetails,
   onRemovePlayer,
   onAddPlayers,
+  onRefresh,
+  isRefreshing = false,
 }: ManageTeamPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
@@ -267,6 +272,16 @@ export function ManageTeamPage({
           { paddingTop: headerTopPadding + 70, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={Boolean(isRefreshing)}
+              onRefresh={onRefresh}
+              tintColor="#00C8FF"
+              colors={["#00C8FF"]}
+            />
+          ) : undefined
+        }
       >
 
         {/* Team Metadata Card */}

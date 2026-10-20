@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  RefreshControl,
 } from "react-native";
 import styles from "./styles/ViewAllPlayers";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,6 +37,8 @@ interface ViewAllPlayersProps {
   onSelectAthlete?: (player: RosterAthlete) => void;
   onLogout?: () => void;
   availableSports?: string[];
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
 }
 
 // API Request: fetch all roster athletes across managed teams (GET /api/coach/athletes)
@@ -45,6 +48,8 @@ export function ViewAllPlayers({
   onBack,
   onSelectAthlete,
   availableSports,
+  onRefresh,
+  isRefreshing = false,
 }: ViewAllPlayersProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
@@ -159,6 +164,16 @@ export function ViewAllPlayers({
           { paddingTop: headerTopPadding + 54, paddingBottom: 120 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={Boolean(isRefreshing)}
+              onRefresh={onRefresh}
+              tintColor="#00C8FF"
+              colors={["#00C8FF"]}
+            />
+          ) : undefined
+        }
       >
         {/* Search Input Bar */}
         <View style={styles.searchBarContainer}>
