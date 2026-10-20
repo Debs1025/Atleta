@@ -157,25 +157,11 @@ export function InquiriesScreen({ inquiries: propInquiries, onBack }: InquiriesP
   return (
     <View style={styles.container}>
       {/* Top Header Bar */}
-      <View style={[styles.headerBar, { paddingTop: headerTopPadding, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Pressable onPress={onBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-          </Pressable>
-          <Text style={styles.headerTitle}>ATLETA</Text>
-        </View>
-        <Pressable
-          onPress={handleRefresh}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={{ padding: 6 }}
-          accessibilityLabel="Refresh Inquiries"
-        >
-          <Ionicons
-            name="refresh-outline"
-            size={22}
-            color={refreshing ? "#00C8FF" : "#94A3B8"}
-          />
+      <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </Pressable>
+        <Text style={styles.headerTitle}>ATLETA</Text>
       </View>
 
       {loading ? (

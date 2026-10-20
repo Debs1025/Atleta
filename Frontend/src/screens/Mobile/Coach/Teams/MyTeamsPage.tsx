@@ -90,29 +90,30 @@ export function MyTeamsPage({
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress || onLogout}
         onNotificationPress={onNotificationPress}
-        onRefreshPress={onRefresh}
-        isRefreshing={isRefreshing}
         unreadNotificationCount={unreadNotificationCount}
       />
 
-      {/* SCROLLABLE PAGE BODY */}
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: headerTopPadding + 74, paddingBottom: 120 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={Boolean(isRefreshing)}
-              onRefresh={onRefresh}
-              tintColor="#00C8FF"
-              colors={["#00C8FF"]}
-            />
-          ) : undefined
-        }
-      >
+      <View style={{ flex: 1, paddingTop: headerTopPadding + 74 }}>
+        {/* SCROLLABLE PAGE BODY */}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 120 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={Boolean(isRefreshing)}
+                onRefresh={onRefresh}
+                tintColor="#00C8FF"
+                colors={["#00C8FF"]}
+              />
+            ) : undefined
+          }
+        >
         {/* Title Block */}
         <View style={styles.titleBlock}>
           <Text style={styles.pageTitle}>My Teams</Text>
@@ -203,6 +204,7 @@ export function MyTeamsPage({
           </TouchableOpacity>
         )}
       </ScrollView>
+    </View>
 
       {/* Create Team Flow Modal */}
       <Modal

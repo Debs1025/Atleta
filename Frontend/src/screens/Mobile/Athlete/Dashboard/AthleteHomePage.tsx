@@ -812,39 +812,25 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               ATLETA
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Pressable
-              style={styles.notificationButton}
-              onPress={handleAthleteRefresh}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityLabel="Refresh Athlete Dashboard"
-            >
-              <Ionicons
-                name="refresh-outline"
-                size={22}
-                color={isRefreshing ? "#00C8FF" : "#94A3B8"}
-              />
-            </Pressable>
-            <Pressable
-              style={styles.notificationButton}
-              onPress={() => setShowNotifications(true)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityLabel="Notifications"
-            >
-              <Image
-                source={require("../../../../assets/notification.png")}
-                style={styles.notificationIcon}
-                resizeMode="contain"
-              />
-              {unreadCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          </View>
+          <Pressable
+            style={styles.notificationButton}
+            onPress={() => setShowNotifications(true)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel="Notifications"
+          >
+            <Image
+              source={require("../../../../assets/notification.png")}
+              style={styles.notificationIcon}
+              resizeMode="contain"
+            />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </View>
       )}
 

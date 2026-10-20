@@ -13,21 +13,16 @@ export interface AtletaHeaderProps {
   onSettingsPress?: () => void;
   onProfilePress?: () => void;
   onNotificationPress?: () => void;
-  onRefreshPress?: () => void;
-  isRefreshing?: boolean;
   unreadNotificationCount?: number;
   avatarUrl?: string | null;
 }
 
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
-import { ActivityIndicator } from "react-native";
 
 export function AtletaHeader({
   onSettingsPress,
   onProfilePress,
   onNotificationPress,
-  onRefreshPress,
-  isRefreshing = false,
   unreadNotificationCount = 0,
   avatarUrl,
 }: AtletaHeaderProps) {
@@ -47,22 +42,6 @@ export function AtletaHeader({
           <Text style={styles.brandTitle}>ATLETA</Text>
         </View>
         <View style={styles.headerRight}>
-          {onRefreshPress && (
-            <TouchableOpacity
-              style={styles.iconCircleButton}
-              onPress={onRefreshPress}
-              activeOpacity={0.8}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Refresh"
-              disabled={isRefreshing}
-            >
-              {isRefreshing ? (
-                <ActivityIndicator size="small" color="#00C8FF" />
-              ) : (
-                <Ionicons name="refresh-outline" size={19} color="#00C8FF" />
-              )}
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             style={[styles.iconCircleButton, styles.notificationCircleButton]}
             onPress={onNotificationPress}

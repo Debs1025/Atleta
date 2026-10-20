@@ -2403,24 +2403,33 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* COACH HOME DASHBOARD */}
       {activeView === "dashboard" && (
         <>
-          {/* SCROLLABLE DASHBOARD BODY */}
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingTop: headerTopPadding + 76, paddingBottom: 150 },
-            ]}
-            showsVerticalScrollIndicator={false}
-            overScrollMode="never"
-            scrollEventThrottle={16}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor="#00C8FF"
-                colors={["#00C8FF"]}
-              />
-            }
-          >
+          <AtletaHeader
+            avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+            onSettingsPress={() => setActiveView("settings")}
+            onProfilePress={() => setShowProfileModal(true)}
+            onNotificationPress={() => setShowNotificationsModal(true)}
+            unreadNotificationCount={unreadNotifCount}
+          />
+          <View style={{ flex: 1, paddingTop: headerTopPadding + 74 }}>
+            {/* SCROLLABLE DASHBOARD BODY */}
+            <ScrollView
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: 150 },
+              ]}
+              showsVerticalScrollIndicator={false}
+              overScrollMode="never"
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor="#00C8FF"
+                  colors={["#00C8FF"]}
+                />
+              }
+            >
             {/* Greeting Block */}
             <View style={styles.greetingSection}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -2503,19 +2512,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               </View>
             </View>
           </ScrollView>
-
-          {/* FIXED HEADER BAR */}
-          <AtletaHeader
-            avatarUrl={coachProfile.avatar_url || coach.avatar_url}
-            onSettingsPress={() => setActiveView("settings")}
-            onProfilePress={() => setShowProfileModal(true)}
-            onNotificationPress={() => setShowNotificationsModal(true)}
-            onRefreshPress={handleRefresh}
-            isRefreshing={isRefreshing}
-            unreadNotificationCount={unreadNotifCount}
-          />
-        </>
-      )}
+        </View>
+      </>
+    )}
 
       {/* MY TEAMS PAGE */}
       {activeView === "teams_list" && (

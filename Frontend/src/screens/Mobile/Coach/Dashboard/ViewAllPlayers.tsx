@@ -157,24 +157,27 @@ export function ViewAllPlayers({
         </View>
       </View>
 
-      {/* SCROLLABLE CONTENT */}
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: headerTopPadding + 54, paddingBottom: 120 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={Boolean(isRefreshing)}
-              onRefresh={onRefresh}
-              tintColor="#00C8FF"
-              colors={["#00C8FF"]}
-            />
-          ) : undefined
-        }
-      >
+      <View style={{ flex: 1, paddingTop: headerTopPadding + 54 }}>
+        {/* SCROLLABLE CONTENT */}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 120 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={Boolean(isRefreshing)}
+                onRefresh={onRefresh}
+                tintColor="#00C8FF"
+                colors={["#00C8FF"]}
+              />
+            ) : undefined
+          }
+        >
         {/* Search Input Bar */}
         <View style={styles.searchBarContainer}>
           <Ionicons name="search-outline" size={18} color="#64748B" style={{ marginRight: 10 }} />
@@ -279,7 +282,8 @@ export function ViewAllPlayers({
         </View>
       </ScrollView>
     </View>
-  );
+  </View>
+);
 }
 
 

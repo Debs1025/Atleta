@@ -515,25 +515,11 @@ export function NotificationPage({
           <Text style={styles.headerTitle}>NOTIFICATIONS</Text>
         </View>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Pressable
-            onPress={handleRefresh}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={{ padding: 4 }}
-            accessibilityLabel="Refresh Notifications"
-          >
-            <Ionicons
-              name="refresh-outline"
-              size={22}
-              color={refreshing ? "#00C8FF" : "#94A3B8"}
-            />
+        {unreadCount > 0 && (
+          <Pressable style={styles.markReadButton} onPress={handleMarkAllAsRead}>
+            <Text style={styles.markReadText}>Mark all as read</Text>
           </Pressable>
-          {unreadCount > 0 && (
-            <Pressable style={styles.markReadButton} onPress={handleMarkAllAsRead}>
-              <Text style={styles.markReadText}>Mark all as read</Text>
-            </Pressable>
-          )}
-        </View>
+        )}
       </View>
 
       {/* FILTER CHIPS */}

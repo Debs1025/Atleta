@@ -188,23 +188,33 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: headerTopPadding + 74, paddingBottom: 150 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={Boolean(isRefreshing)}
-              onRefresh={onRefresh}
-              tintColor="#00C8FF"
-              colors={["#00C8FF"]}
-            />
-          ) : undefined
-        }
-      >
+      <AtletaHeader
+        avatarUrl={avatarUrl}
+        onSettingsPress={onSettingsPress}
+        onProfilePress={onProfilePress}
+        onNotificationPress={onNotificationPress}
+        unreadNotificationCount={unreadNotificationCount}
+      />
+      <View style={{ flex: 1, paddingTop: headerTopPadding + 74 }}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 150 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={Boolean(isRefreshing)}
+                onRefresh={onRefresh}
+                tintColor="#00C8FF"
+                colors={["#00C8FF"]}
+              />
+            ) : undefined
+          }
+        >
         <Text style={styles.pageTitle}>Performance</Text>
         <Text style={styles.pageSubtitle}>
           Performance Metrics and Player Analytics
@@ -353,17 +363,9 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           </TouchableOpacity>
         )}
       </ScrollView>
-      <AtletaHeader
-        avatarUrl={avatarUrl}
-        onSettingsPress={onSettingsPress}
-        onProfilePress={onProfilePress}
-        onNotificationPress={onNotificationPress}
-        onRefreshPress={onRefresh}
-        isRefreshing={isRefreshing}
-        unreadNotificationCount={unreadNotificationCount}
-      />
     </View>
-  );
+  </View>
+);
 };
 
 export default PerformancePage;
