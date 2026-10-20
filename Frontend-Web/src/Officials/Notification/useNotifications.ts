@@ -79,10 +79,10 @@ export function useNotifications() {
   const [loading, setLoading] = useState<boolean>(() => !getCachedData('official_notifications'));
   const [error, setError] = useState<string | null>(null);
 
-  const fetchNotifications = useCallback(async (forceRefresh = false) => {
+  const fetchNotifications = useCallback(async (forceRefresh = true) => {
     try {
       const cached = getCachedData('official_notifications');
-      if (!cached) setLoading(true);
+      if (!cached && notifications.length === 0) setLoading(true);
       setError(null);
       const res = await getOfficialNotifications(forceRefresh);
       const notifs = filterActive(res.notifications || []);
@@ -94,10 +94,22 @@ export function useNotifications() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [notifications.length]);
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(true);
+
+    const interval = setInterval(() => {
+      fetchNotifications(true);
+    }, 8000);
+
+    const onFocus = () => fetchNotifications(true);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [fetchNotifications]);
 
   const markAllRead = async () => {

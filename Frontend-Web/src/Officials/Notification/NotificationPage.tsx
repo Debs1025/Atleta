@@ -94,8 +94,8 @@ export const NotificationPage: React.FC = () => {
 
   const handleFileUpload = async (notif: OfficialNotificationItem, file: File) => {
     const notifId = notif.notification_id;
-    const reqId = notif.request_id || notif.reference_id || notifId.replace(/^req_/, '');
-    const matchId = notif.match_id || notif.reference_id || reqId;
+    const reqId = notif.request_id || notif.requestId || notif.reference_id || notifId.replace(/^notif_req_/, '').replace(/^req_/, '');
+    const matchId = notif.match_id || notif.matchId || notif.reference_id || reqId;
     const coachName = notif.requested_by_coach || notif.coach_name || 'Assigned Coach';
     const matchName = notif.match_context || notif.match_name || 'Match';
 
@@ -135,7 +135,7 @@ export const NotificationPage: React.FC = () => {
     if (!rejectModalNotif) return;
     const notif = rejectModalNotif;
     const notifId = notif.notification_id;
-    const reqId = notif.request_id || notif.reference_id || notifId.replace(/^req_/, '');
+    const reqId = notif.request_id || notif.requestId || notif.reference_id || notifId.replace(/^notif_req_/, '').replace(/^req_/, '');
 
     try {
       setRejectingId(notifId);
@@ -154,6 +154,26 @@ export const NotificationPage: React.FC = () => {
     }
   };
 
+  const isAuditNotification = (n: OfficialNotificationItem): boolean => {
+    const typeStr = String(n.type || '').toUpperCase();
+    const titleLower = String(n.title || '').toLowerCase();
+    const msgLower = String(n.message || '').toLowerCase();
+    return (
+      typeStr.includes('AUDIT') ||
+      typeStr.includes('SCORESHEET') ||
+      typeStr.includes('REQUEST') ||
+      titleLower.includes('audit') ||
+      titleLower.includes('scoresheet') ||
+      titleLower.includes('stats') ||
+      msgLower.includes('scoresheet') ||
+      msgLower.includes('audit') ||
+      Boolean(n.request_id)
+    );
+  };
+
+  const auditCount = notifications.filter(isAuditNotification).length;
+  const scheduleCount = notifications.filter((n) => !isAuditNotification(n)).length;
+
   const filteredNotifications = [...notifications]
     .sort((a, b) => {
       const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
@@ -161,12 +181,7 @@ export const NotificationPage: React.FC = () => {
       return timeB - timeA;
     })
     .filter((n) => {
-      const isAudit =
-        n.type === 'AUDIT_REQUEST' ||
-        n.type === 'SCORESHEET_REQUEST' ||
-        n.title.toLowerCase().includes('audit') ||
-        n.title.toLowerCase().includes('scoresheet') ||
-        n.title.toLowerCase().includes('stats');
+      const isAudit = isAuditNotification(n);
       if (activeTab === 'AUDIT') return isAudit;
       if (activeTab === 'SCHEDULE') return !isAudit;
       return true;
@@ -247,7 +262,7 @@ export const NotificationPage: React.FC = () => {
                   ...(activeTab === 'AUDIT' ? styles.tabBtnActive : {}),
                 }}
               >
-                AUDIT REQUESTS
+                AUDIT REQUESTS {auditCount > 0 ? `(${auditCount})` : ''}
               </button>
 
               <button
@@ -258,7 +273,7 @@ export const NotificationPage: React.FC = () => {
                   ...(activeTab === 'SCHEDULE' ? styles.tabBtnActive : {}),
                 }}
               >
-                SCHEDULE UPDATES
+                SCHEDULE UPDATES {scheduleCount > 0 ? `(${scheduleCount})` : ''}
               </button>
             </div>
 
@@ -299,12 +314,7 @@ export const NotificationPage: React.FC = () => {
           ) : (
             <div style={styles.feedList}>
               {filteredNotifications.map((notif) => {
-                const isAudit =
-                  notif.type === 'AUDIT_REQUEST' ||
-                  notif.type === 'SCORESHEET_REQUEST' ||
-                  notif.title.toLowerCase().includes('audit') ||
-                  notif.title.toLowerCase().includes('scoresheet') ||
-                  notif.title.toLowerCase().includes('stats');
+                const isAudit = isAuditNotification(notif);
 
                 if (isAudit) {
                   const coachName = (notif.requested_by_coach || notif.coach_name || notif.requested_by || 'Coach').toUpperCase();

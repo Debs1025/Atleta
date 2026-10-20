@@ -296,6 +296,26 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // 3. Transmit to deployed backend via authenticated request or direct fetch
+    const scoresheetPayload = {
+      ...payload,
+      matchId,
+      matchName: targetMatch ? `${targetMatch.home_team_name} vs. ${targetMatch.away_team_name}` : `Match ${matchId}`,
+      teamId: targetMatch?.team_id || 'team_default',
+      sportType: targetMatch?.sport_type || 'BASKETBALL',
+    };
+
+    try {
+      await requestAuthenticatedJson('/scoresheets/request', 'POST', scoresheetPayload);
+    } catch (_) {
+      try {
+        await fetch(`${API_BASE}/scoresheets/request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scoresheetPayload),
+        });
+      } catch (_) {}
+    }
+
     try {
       await requestAuthenticatedJson(`/matches/${matchId}/audit-request`, 'POST', payload);
     } catch (err: any) {

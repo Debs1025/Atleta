@@ -1325,17 +1325,19 @@ export async function submitScoresheetRequestOfflineFirst(payload: {
       Accept: 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
-    await fetch(`${API_BASE}/scoresheets/request`, {
+    const res = await fetch(`${API_BASE}/scoresheets/request`, {
       method: 'POST',
       headers,
       body: JSON.stringify(docData),
-    }).catch(() => {
-      return fetch(`${API_BASE}/matches/${matchId}/audit-request`, {
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      await fetch(`${API_BASE}/matches/${matchId}/audit-request`, {
         method: 'POST',
         headers,
         body: JSON.stringify(docData),
-      });
-    });
+      }).catch(() => null);
+    }
   } catch (_) {}
 
   return docData;
