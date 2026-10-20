@@ -76,18 +76,25 @@ export const DiscoveryPlayer: React.FC<{
                         )}
                       </View>
 
-                      {currentTeam ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
-                          <Ionicons name="shield-checkmark" size={12} color="#38BDF8" />
-                          <Text style={{ color: '#38BDF8', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
-                            Team: {currentTeam}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                        <View style={{ backgroundColor: 'rgba(56, 189, 248, 0.12)', borderColor: 'rgba(56, 189, 248, 0.3)', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ color: '#38BDF8', fontSize: 11, fontWeight: '800' }}>
+                            #{athlete.jersey_number || '0'}
                           </Text>
                         </View>
-                      ) : (
-                        <Text style={{ color: '#94A3B8', fontSize: 12, marginTop: 2 }}>
-                          #{athlete.jersey_number || '2'} • {athlete.province || 'Camarines Sur'}, Bicol
-                        </Text>
-                      )}
+                        {currentTeam ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
+                            <Ionicons name="shield-checkmark" size={12} color="#38BDF8" />
+                            <Text style={{ color: '#38BDF8', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
+                              {currentTeam}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={{ color: '#94A3B8', fontSize: 12 }} numberOfLines={1}>
+                            {athlete.province || 'Camarines Sur'}, Bicol
+                          </Text>
+                        )}
+                      </View>
                     </View>
                   </View>
 

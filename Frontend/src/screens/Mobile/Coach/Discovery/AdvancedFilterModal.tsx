@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -170,11 +171,31 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
   const handleReset = () => {
     const resetFilters: AdvancedAthleteFilters = {
       ...DEFAULT_ADVANCED_FILTERS,
+      jerseyNumber: '',
       sortBy: getDefaultMetricForSport(activeSportFilter),
     };
     setDraftFilters(resetFilters);
     setAdvancedFilters(resetFilters);
   };
+
+  const availableJerseyNumbers = useMemo(() => {
+    const normSport = (activeSportFilter || '').toUpperCase().trim();
+    const set = new Set<string>();
+    athletes
+      .filter((a) => (a.sport_category || '').toUpperCase().trim() === normSport)
+      .forEach((a) => {
+        if (a.jersey_number !== undefined && a.jersey_number !== null) {
+          const clean = String(a.jersey_number).replace(/^#/, '').trim();
+          if (clean) set.add(clean);
+        }
+      });
+    return Array.from(set).sort((a, b) => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
+  }, [activeSportFilter, athletes]);
 
   const positions = useMemo(() => {
     const normSport = (activeSportFilter || '').toUpperCase().trim();
@@ -284,6 +305,98 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
                   );
                 })}
               </View>
+            </View>
+
+            {/* Jersey Number Section */}
+            <View style={modalStyles.filterSection}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={modalStyles.sectionLabel}>JERSEY NUMBER</Text>
+                {draftFilters.jerseyNumber ? (
+                  <TouchableOpacity
+                    onPress={() => setDraftFilters((prev) => ({ ...prev, jerseyNumber: '' }))}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={{ color: '#38BDF8', fontSize: 12, fontWeight: '700' }}>Clear</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={modalStyles.jerseyInputContainer}>
+                <View style={modalStyles.jerseyHashBadge}>
+                  <Text style={modalStyles.jerseyHashText}>#</Text>
+                </View>
+                <TextInput
+                  style={modalStyles.jerseyInput}
+                  placeholder="Enter jersey number (e.g. 23, 7)"
+                  placeholderTextColor="#64748B"
+                  value={draftFilters.jerseyNumber || ''}
+                  onChangeText={(text) =>
+                    setDraftFilters((prev) => ({ ...prev, jerseyNumber: text.replace(/^#/, '').trim() }))
+                  }
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  maxLength={4}
+                />
+                {draftFilters.jerseyNumber ? (
+                  <TouchableOpacity
+                    style={modalStyles.jerseyInputClear}
+                    onPress={() => setDraftFilters((prev) => ({ ...prev, jerseyNumber: '' }))}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {availableJerseyNumbers.length > 0 && (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={modalStyles.subSectionLabel}>Quick Select</Text>
+                  <View style={[modalStyles.chipsWrap, { marginTop: 6 }]}>
+                    <TouchableOpacity
+                      style={[
+                        modalStyles.chip,
+                        !draftFilters.jerseyNumber && modalStyles.chipActive,
+                      ]}
+                      onPress={() => setDraftFilters((prev) => ({ ...prev, jerseyNumber: '' }))}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          modalStyles.chipText,
+                          !draftFilters.jerseyNumber && modalStyles.chipTextActive,
+                        ]}
+                      >
+                        All
+                      </Text>
+                    </TouchableOpacity>
+                    {availableJerseyNumbers.map((num) => {
+                      const isSelected =
+                        (draftFilters.jerseyNumber || '').trim().toLowerCase() === num.toLowerCase();
+                      return (
+                        <TouchableOpacity
+                          key={num}
+                          style={[modalStyles.chip, isSelected && modalStyles.chipActive]}
+                          onPress={() =>
+                            setDraftFilters((prev) => ({
+                              ...prev,
+                              jerseyNumber: isSelected ? '' : num,
+                            }))
+                          }
+                          activeOpacity={0.75}
+                        >
+                          <Text
+                            style={[
+                              modalStyles.chipText,
+                              isSelected && modalStyles.chipTextActive,
+                            ]}
+                          >
+                            #{num}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* 3. Key Stats Thresholds */}
@@ -576,6 +689,34 @@ const modalStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  jerseyInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  jerseyHashBadge: {
+    marginRight: 8,
+  },
+  jerseyHashText: {
+    color: '#00C8FF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  jerseyInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    paddingVertical: 0,
+  },
+  jerseyInputClear: {
+    padding: 4,
   },
 });
 

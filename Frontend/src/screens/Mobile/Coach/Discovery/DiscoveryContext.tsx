@@ -96,6 +96,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (advancedFilters.minEff > 0) count++;
     if (advancedFilters.heightRange !== 'ALL') count++;
     if (advancedFilters.weightRange !== 'ALL') count++;
+    if (advancedFilters.jerseyNumber && advancedFilters.jerseyNumber.trim()) count++;
     const defaultSort = getDefaultMetricForSport(activeSportFilter);
     if (advancedFilters.sortBy && advancedFilters.sortBy !== defaultSort) count++;
     return count;

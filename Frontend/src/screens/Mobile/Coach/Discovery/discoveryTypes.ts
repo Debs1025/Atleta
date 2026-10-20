@@ -178,6 +178,7 @@ export function getDefaultMetricForSport(sport?: string): RankingSortMetric {
 
 export interface AdvancedAthleteFilters {
   position: string;
+  jerseyNumber?: string;
   minPpg: number;
   minPer: number;
   minEff: number;
@@ -188,6 +189,7 @@ export interface AdvancedAthleteFilters {
 
 export const DEFAULT_ADVANCED_FILTERS: AdvancedAthleteFilters = {
   position: 'ALL',
+  jerseyNumber: '',
   minPpg: 0,
   minPer: 0,
   minEff: 0,
@@ -267,6 +269,15 @@ export function matchesAthleteFilters(
     return false;
   }
 
+  // 1.5 Jersey Number Filter
+  if (filters.jerseyNumber && filters.jerseyNumber.trim()) {
+    const targetJersey = filters.jerseyNumber.trim().replace(/^#/, '').toLowerCase();
+    const athleteJersey = String(athlete.jersey_number ?? '').trim().replace(/^#/, '').toLowerCase();
+    if (targetJersey && athleteJersey !== targetJersey) {
+      return false;
+    }
+  }
+
   // 2. Key Stat Thresholds
   if (filters.minPpg > 0 && Number(athlete.stats?.ppg || 0) < filters.minPpg) {
     return false;
@@ -338,11 +349,21 @@ export function matchesAthleteFilters(
         return true;
       }
 
+      const cleanQ = q.replace(/^#/, '').trim();
+      const cleanJersey = String(athlete.jersey_number ?? '').trim().replace(/^#/, '').toLowerCase();
+
       return (
         athlete.full_name.toLowerCase().includes(q) ||
         athlete.province.toLowerCase().includes(q) ||
         athlete.position_tag.toLowerCase().includes(q) ||
-        athlete.recruitment_status.toLowerCase().includes(q)
+        athlete.recruitment_status.toLowerCase().includes(q) ||
+        (cleanJersey.length > 0 && (
+          cleanJersey === cleanQ ||
+          cleanJersey === q ||
+          `#${cleanJersey}` === q ||
+          `jersey ${cleanJersey}`.includes(q) ||
+          cleanJersey.includes(cleanQ)
+        ))
       );
     }
   }
