@@ -96,7 +96,7 @@ const DAYS_OF_WEEK = ["S", "M", "T", "W", "T", "F", "S"];
 const YEARS_LIST = Array.from({ length: 57 }, (_, i) => 1970 + i);
 
 const genderOptions = ["Male", "Female"] as const;
-const DEFAULT_SPORT_OPTIONS = ["Basketball", "Track and Field", "Swimming", "Volleyball"];
+const DEFAULT_SPORT_OPTIONS = ["Basketball", "Swimming", "Track and Field"];
 
 const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
   role: "athlete",

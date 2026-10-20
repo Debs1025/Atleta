@@ -84,9 +84,8 @@ interface TeamsProps {
 const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
   { label: "ALL", value: "ALL" },
   { label: "BASKETBALL", value: "BASKETBALL" },
-  { label: "VOLLEYBALL", value: "VOLLEYBALL" },
-  { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
   { label: "SWIMMING", value: "SWIMMING" },
+  { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
 ];
 
 const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {

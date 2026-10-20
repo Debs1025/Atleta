@@ -204,10 +204,8 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [activeSportFilter, setActiveSportFilter] = useState<string>("ALL");
   const [dynamicSports, setDynamicSports] = useState<string[]>([
     "BASKETBALL",
-    "VOLLEYBALL",
-    "TRACK AND FIELD",
     "SWIMMING",
-    "PICKLEBALL",
+    "TRACK AND FIELD",
   ]);
   const [showFabOverlay, setShowFabOverlay] = useState(false);
   const [showTeamDetailsModal, setShowTeamDetailsModal] = useState(false);
@@ -580,7 +578,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             }
           }
           if (Array.isArray(cached.dynamicSports) && cached.dynamicSports.length > 0) {
-            setDynamicSports(cached.dynamicSports);
+            const sanitized = cached.dynamicSports.filter((s: string) => {
+              const u = String(s).toUpperCase().trim();
+              return u !== 'VOLLEYBALL' && u !== 'PICKLEBALL';
+            });
+            if (sanitized.length > 0) {
+              setDynamicSports(sanitized);
+            }
           }
 
           // Instantly dismiss loading screen if any cached data is available (<10ms)
@@ -634,8 +638,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           withSyncTimeout(requestAuthenticatedJson("/matches", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/coaches/athletes", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/notifications", "GET", undefined, forceFresh).catch(() => null)),
-          withSyncTimeout(getSportsOfflineFirst(forceFresh).catch(() => []), 1500, []),
-          withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 1500, []),
+          withSyncTimeout(getSportsOfflineFirst(forceFresh).catch(() => []), 6000, []),
+          withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 2000, []),
           withSyncTimeout(getAthletesOfflineFirst(undefined, forceFresh).catch(() => []), 1500, []),
           withSyncTimeout(getCoachProfileOfflineFirst().catch(() => null), 1500, null),
         ]);
@@ -1138,6 +1142,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const seen = new Set<string>();
             const mappedSports: string[] = [];
             sportsRes.forEach((s: any) => {
+              if (s.is_active === false || s.active === false) return;
               const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
               if (!raw || seen.has(raw)) return;
               seen.add(raw);
@@ -1146,6 +1151,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             if (mappedSports.length > 0) {
               resolvedSportsList = mappedSports;
               setDynamicSports(mappedSports);
+              if (activeSportFilter !== "ALL" && !mappedSports.includes(activeSportFilter.toUpperCase())) {
+                setActiveSportFilter("ALL");
+              }
             }
           }
 

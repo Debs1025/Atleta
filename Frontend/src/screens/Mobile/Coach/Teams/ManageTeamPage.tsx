@@ -18,9 +18,8 @@ import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 const DEFAULT_AVAILABLE_SPORTS = [
   "BASKETBALL",
-  "VOLLEYBALL",
-  "TRACK AND FIELD",
   "SWIMMING",
+  "TRACK AND FIELD",
 ];
 
 export const SPORT_POSITIONS_MAP: Record<string, { code: string; label: string }[]> = {

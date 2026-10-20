@@ -474,6 +474,7 @@ export function clearFirebaseClientCaches() {
     OFFLINE_ATHLETE_PROFILE_CACHE_KEY,
     OFFLINE_COACH_PROFILE_CACHE_KEY,
     "atleta_coach_dashboard_cache",
+    "atleta_coach_dashboard_cache_v2",
     "atleta_discovery_cache",
     "atleta_offline_coach_profile_cache",
     "atleta_offline_matches_cache",
@@ -482,6 +483,41 @@ export function clearFirebaseClientCaches() {
     "atleta_official_matches_cache",
     "atleta_discovery_snapshot_cache",
   ]).catch(() => null);
+}
+
+/**
+ * Purge deleted sports from AsyncStorage caches so deleted sports never persist.
+ */
+export async function purgeDeletedSportsFromCache(activeSportNames: string[]): Promise<void> {
+  if (!Array.isArray(activeSportNames) || activeSportNames.length === 0) return;
+  const activeUpperSet = new Set(activeSportNames.map((s) => String(s).toUpperCase().trim()));
+
+  try {
+    // 1. Purge from OFFLINE_SPORTS_CACHE_KEY
+    const cachedSports = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
+    if (cachedSports) {
+      const parsed = JSON.parse(cachedSports);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((s: any) => {
+          const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+          return activeUpperSet.has(raw);
+        });
+        await AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(cleaned)).catch(() => null);
+      }
+    }
+
+    // 2. Purge from coach dashboard cache
+    const coachRaw = await AsyncStorage.getItem("atleta_coach_dashboard_cache_v2");
+    if (coachRaw) {
+      const parsedCoach = JSON.parse(coachRaw);
+      if (parsedCoach && Array.isArray(parsedCoach.dynamicSports)) {
+        parsedCoach.dynamicSports = parsedCoach.dynamicSports.filter((s: string) =>
+          activeUpperSet.has(String(s).toUpperCase().trim())
+        );
+        await AsyncStorage.setItem("atleta_coach_dashboard_cache_v2", JSON.stringify(parsedCoach)).catch(() => null);
+      }
+    }
+  } catch (_) {}
 }
 
 async function quickFetchJson(url: string, headers: any, timeoutMs: number = 6000): Promise<any> {
@@ -525,16 +561,18 @@ async function revalidateAthletesInBackground(): Promise<void> {
 async function revalidateSportsInBackground(): Promise<void> {
   try {
     const token = await getStoredAuthToken();
-    const data = await quickFetchJson(`${API_BASE}/sports`, {
+    const data = await quickFetchJson(`${API_BASE}/sports?active=true`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }, 6000);
 
     const list = Array.isArray(data?.sports) ? data.sports : Array.isArray(data) ? data : [];
-    if (list.length > 0) {
-      sportsMemoryCache = list;
+    if (data && (Array.isArray(data.sports) || Array.isArray(data))) {
+      const activeList = list.filter((s: any) => s.is_active !== false && s.active !== false);
+      sportsMemoryCache = activeList;
       sportsLastFetched = Date.now();
-      await AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+      await AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(activeList)).catch(() => null);
+      purgeDeletedSportsFromCache(activeList.map((s: any) => s.sport_name || s.name || s.id)).catch(() => null);
     }
   } catch (_) {}
 }
@@ -647,39 +685,33 @@ export async function getAthletesOfflineFirst(sportCategory?: string, forceRefre
  * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
 export async function getSportsOfflineFirst(forceRefresh: boolean = false): Promise<any[]> {
-  // 1. If not forcing refresh and memory cache is fresh (<30s), return it
-  if (!forceRefresh && sportsMemoryCache && sportsMemoryCache.length > 0 && Date.now() - sportsLastFetched < 30000) {
+  // 1. If not forcing refresh and memory cache is fresh (<15s), return it
+  if (!forceRefresh && sportsMemoryCache && sportsMemoryCache.length > 0 && Date.now() - sportsLastFetched < 15000) {
     return sportsMemoryCache;
   }
 
   // 2. Network Fetch with Snappy Timeout (6.0s)
   try {
     const token = await getStoredAuthToken();
-    const data = await quickFetchJson(`${API_BASE}/sports`, {
+    const data = await quickFetchJson(`${API_BASE}/sports?active=true`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }, 6000);
 
-    const list = Array.isArray(data?.sports)
-      ? data.sports
-      : Array.isArray(data)
-      ? data
-      : [];
-    if (list.length > 0) {
+    if (data && (Array.isArray(data.sports) || Array.isArray(data))) {
+      const list = Array.isArray(data.sports) ? data.sports : data;
       const activeList = list.filter((s: any) => s.is_active !== false && s.active !== false);
       sportsMemoryCache = activeList;
       sportsLastFetched = Date.now();
       AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(activeList)).catch(() => null);
+      purgeDeletedSportsFromCache(activeList.map((s: any) => s.sport_name || s.name || s.id)).catch(() => null);
       return activeList;
     }
   } catch (_) {}
 
-  // 3. Firestore persistent local/remote query
+  // 3. Firestore persistent local/remote query (only if network completely failed)
   try {
-    let snap = await getDocs(collection(db, "Sports_Configurations"));
-    if (snap.empty) {
-      snap = await getDocs(collection(db, "sports_configurations"));
-    }
+    const snap = await getDocs(collection(db, "Sports_Configurations"));
     if (!snap.empty) {
       const list = snap.docs
         .map((d) => ({
@@ -701,7 +733,7 @@ export async function getSportsOfflineFirst(forceRefresh: boolean = false): Prom
     const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         const activeList = parsed.filter((s: any) => s.is_active !== false && s.active !== false);
         sportsMemoryCache = activeList;
         sportsLastFetched = Date.now();

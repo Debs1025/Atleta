@@ -15,7 +15,7 @@ import { RosterAthlete, Team } from "../DataTypes";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 import { SkeletonPlayerRows } from "../Components/AtletaLoadingIndicator";
 
-const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "VOLLEYBALL", "TRACK AND FIELD", "SWIMMING"];
+const DEFAULT_SPORT_CATEGORIES = ["ALL", "BASKETBALL", "SWIMMING", "TRACK AND FIELD"];
 
 const fontPlatform = Platform.select({
   ios: "System",
@@ -64,6 +64,16 @@ export function ViewAllPlayers({
     setIsLoading(false);
   }, [athletesPool]);
 
+  // Sync availableSports from parent if updated
+  useEffect(() => {
+    if (availableSports && availableSports.length > 0) {
+      setCategories(availableSports);
+      if (activeCategory !== "ALL" && !availableSports.includes(activeCategory.toUpperCase())) {
+        setActiveCategory("ALL");
+      }
+    }
+  }, [availableSports, activeCategory]);
+
   useEffect(() => {
     let isMounted = true;
     getSportsOfflineFirst()
@@ -72,34 +82,24 @@ export function ViewAllPlayers({
         const seen = new Set<string>();
         const mapped: string[] = ["ALL"];
         sports.forEach((s: any) => {
+          if (s.is_active === false || s.active === false) return;
           const raw = String(s.sport_name || s.name || s.id || "").toUpperCase().trim();
           if (!raw || seen.has(raw)) return;
           seen.add(raw);
           mapped.push(raw);
         });
-        athletesPool.forEach((a) => {
-          const raw = String(a.sport_type || "").toUpperCase().trim();
-          if (raw && !seen.has(raw)) {
-            seen.add(raw);
-            mapped.push(raw);
-          }
-        });
-        teams.forEach((t) => {
-          const raw = String(t.sport_type || "").toUpperCase().trim();
-          if (raw && !seen.has(raw)) {
-            seen.add(raw);
-            mapped.push(raw);
-          }
-        });
         if (mapped.length > 1) {
           setCategories(mapped);
+          if (activeCategory !== "ALL" && !mapped.includes(activeCategory.toUpperCase())) {
+            setActiveCategory("ALL");
+          }
         }
       })
       .catch((err: any) => console.warn("Could not fetch dynamic sports for ViewAllPlayers:", err));
     return () => {
       isMounted = false;
     };
-  }, [athletesPool, teams]);
+  }, []);
 
   // Map athlete ID to team name dynamically
   const athleteTeamMap = useMemo(() => {

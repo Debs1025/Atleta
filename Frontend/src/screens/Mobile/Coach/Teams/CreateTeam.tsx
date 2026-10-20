@@ -14,9 +14,8 @@ import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
 
 const DEFAULT_SPORT_CATEGORIES = [
   "BASKETBALL",
-  "VOLLEYBALL",
-  "TRACK AND FIELD",
   "SWIMMING",
+  "TRACK AND FIELD",
 ];
 
 export interface CreateTeamProps {
@@ -44,6 +43,7 @@ export function CreateTeam({
       .then((fetched: any) => {
         if (!isMounted || !Array.isArray(fetched) || fetched.length === 0) return;
         const mapped = fetched
+          .filter((s: any) => s.is_active !== false && s.active !== false)
           .map((s: any) => String(s.sport_name || s.name || s.short_identifier || '').toUpperCase().trim())
           .filter(Boolean);
         const unique = Array.from(new Set(mapped));

@@ -46,9 +46,8 @@ function safeBase64Decode(str: string): string {
 
 const DEFAULT_SPORT_OPTIONS: CoachProfileState["sports_focus"][] = [
   "BASKETBALL",
-  "VOLLEYBALL",
-  "TRACK AND FIELD",
   "SWIMMING",
+  "TRACK AND FIELD",
 ];
 
 export interface CoachEditProfileProps {
