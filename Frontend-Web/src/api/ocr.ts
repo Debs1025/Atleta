@@ -103,11 +103,22 @@ export const compressImageForOcr = (
 };
 
 const FALLBACK_DIRECT_KEY = atob('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=');
-const DIRECT_GEMINI_KEY =
+
+export function sanitizeGeminiKey(raw?: string): string {
+  if (!raw) return FALLBACK_DIRECT_KEY;
+  let k = String(raw).trim().replace(/^["']|["']$/g, '');
+  // Auto-correct common typographical corruption: LDXYIUI0 -> LDXIUI0
+  if (k.includes('LDXYIUI0')) {
+    k = k.replace('LDXYIUI0', 'LDXIUI0');
+  }
+  return k || FALLBACK_DIRECT_KEY;
+}
+
+const DIRECT_GEMINI_KEY = sanitizeGeminiKey(
   (import.meta as any).env?.VITE_GEMINI_API_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
-  (import.meta as any).env?.VITE_GOOGLE_GEMINI_API_KEY ||
-  FALLBACK_DIRECT_KEY;
+  (import.meta as any).env?.VITE_GOOGLE_GEMINI_API_KEY
+);
 
 export function normalizeScoresheetResult(parsed: any): any {
   if (!parsed || typeof parsed !== 'object') return parsed;
@@ -326,11 +337,15 @@ Return the extraction in this exact JSON structure:
   ]
 }`;
 
+  let activeKey = sanitizeGeminiKey(DIRECT_GEMINI_KEY);
+  let triedFallback = false;
   let lastErr = '';
-  for (const model of models) {
+
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     try {
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${DIRECT_GEMINI_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`,
         {
           method: 'POST',
           headers: {
@@ -357,6 +372,14 @@ Return the extraction in this exact JSON structure:
           }),
         }
       );
+
+      if (resp.status === 401 && !triedFallback && activeKey !== FALLBACK_DIRECT_KEY) {
+        console.warn(`⚠️ [OCR] Direct Gemini key returned 401. Auto-switching to verified fallback key...`);
+        activeKey = FALLBACK_DIRECT_KEY;
+        triedFallback = true;
+        i--;
+        continue;
+      }
 
       if (resp.ok) {
         const json: any = await resp.json();
