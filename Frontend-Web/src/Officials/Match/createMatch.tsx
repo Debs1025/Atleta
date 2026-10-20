@@ -1035,10 +1035,22 @@ export const CreateMatch: React.FC = () => {
             }
           });
         });
-      } else if (Array.isArray(ocrRes?.player_summary) && ocrRes.player_summary.length > 0) {
-        rawPlayers = [...ocrRes.player_summary];
-      } else if (Array.isArray(ocrRes?.parsed_tables?.player_summary) && ocrRes.parsed_tables.player_summary.length > 0) {
-        rawPlayers = [...ocrRes.parsed_tables.player_summary];
+      } else {
+        const candidatePlayers =
+          ocrRes?.player_summary ||
+          ocrRes?.parsed_tables?.player_summary ||
+          ocrRes?.player_box_scores ||
+          ocrRes?.parsed_tables?.player_box_scores ||
+          ocrRes?.player_stats ||
+          ocrRes?.parsed_tables?.player_stats ||
+          ocrRes?.players ||
+          ocrRes?.parsed_tables?.players ||
+          ocrRes?.roster ||
+          ocrRes?.parsed_tables?.roster ||
+          [];
+        if (Array.isArray(candidatePlayers) && candidatePlayers.length > 0) {
+          rawPlayers = [...candidatePlayers];
+        }
       }
 
       // Check attribute signatures to refine sport detection
@@ -1099,11 +1111,16 @@ export const CreateMatch: React.FC = () => {
         });
         teamScoresArr = Array.from(teamScoreMap.values());
       } else {
-        teamScoresArr = Array.isArray(ocrRes?.team_scores)
-          ? ocrRes.team_scores
-          : Array.isArray(ocrRes?.parsed_tables?.team_scores)
-          ? ocrRes.parsed_tables.team_scores
-          : [];
+        const rawScores = ocrRes?.team_scores || ocrRes?.parsed_tables?.team_scores || ocrRes?.teams || ocrRes?.parsed_tables?.teams;
+        if (Array.isArray(rawScores)) {
+          teamScoresArr = rawScores;
+        } else if (rawScores && typeof rawScores === 'object') {
+          teamScoresArr = Object.entries(rawScores).map(([team, score]: any, i) => ({
+            team,
+            score: Number(score) || 0,
+            is_home: i === 0,
+          }));
+        }
       }
 
       if (teamScoresArr.length > 0) {
@@ -1122,8 +1139,30 @@ export const CreateMatch: React.FC = () => {
         } else if (teamScoresArr.length >= 2) {
           setOcrFinalScoreStr(`${teamScoresArr[0].score} - ${teamScoresArr[1].score}`);
         }
-      } else if (ocrRes?.match_info?.final_score) {
-        setOcrFinalScoreStr(String(ocrRes.match_info.final_score).trim());
+      } else {
+        const rawFinalScore =
+          ocrRes?.match_info?.final_score ||
+          ocrRes?.final_score ||
+          ocrRes?.match_details?.final_score ||
+          ocrRes?.scoresheet_data?.final_score;
+
+        if (rawFinalScore) {
+          if (typeof rawFinalScore === 'string') {
+            const digitMatch = rawFinalScore.match(/(\d+)\s*[-–]\s*(\d+)/);
+            if (digitMatch) {
+              setOcrFinalScoreStr(`${digitMatch[1]} - ${digitMatch[2]}`);
+            } else {
+              setOcrFinalScoreStr(rawFinalScore.trim());
+            }
+          } else if (typeof rawFinalScore === 'object') {
+            const vals = Object.values(rawFinalScore);
+            if (vals.length >= 2) {
+              setOcrFinalScoreStr(`${vals[0]} - ${vals[1]}`);
+            }
+          }
+        } else if (teamScoresArr.length >= 2) {
+          setOcrFinalScoreStr(`${teamScoresArr[0].score} - ${teamScoresArr[1].score}`);
+        }
       }
 
       const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
@@ -1149,6 +1188,8 @@ export const CreateMatch: React.FC = () => {
       const rawDetectedHome = String(
         ocrRes?.match_info?.home_team_name ||
         ocrRes?.match_info?.home_team ||
+        ocrRes?.home_team_name ||
+        ocrRes?.home_team ||
         homeScoreItem?.team ||
         teamScoresArr[0]?.team ||
         firstPlayerTeam ||
@@ -1158,6 +1199,8 @@ export const CreateMatch: React.FC = () => {
       const rawDetectedAway = String(
         ocrRes?.match_info?.opponent_team_name ||
         ocrRes?.match_info?.away_team ||
+        ocrRes?.opponent_team_name ||
+        ocrRes?.away_team ||
         awayScoreItem?.team ||
         teamScoresArr[1]?.team ||
         secondPlayerTeam ||
