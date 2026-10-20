@@ -45,15 +45,21 @@ const runtime = globalThis as typeof globalThis & {
 const isExpoExecution = Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Constants.appOwnership === "expo";
 const expoHostUri = Constants.expoConfig?.hostUri || (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost || (Constants as any)?.manifest?.debuggerHost || "";
 const isTunnel = expoHostUri.includes("exp.direct") || expoHostUri.includes("ngrok") || !expoHostUri;
-const hostIp = (expoHostUri ? expoHostUri.split(":")[0] : "").trim() || "192.168.1.34";
+export const DEPLOYED_BACKEND_URL = "https://atleta-backend.vercel.app";
 
-const configuredApi = (
+const rawConfiguredApi = (
+  (typeof process !== "undefined" ? process.env?.EXPO_PUBLIC_ATLETA_API || process.env?.EXPO_PUBLIC_API_URL : undefined) ||
   runtime.process?.env?.EXPO_PUBLIC_ATLETA_API ||
   runtime.process?.env?.EXPO_PUBLIC_API_URL ||
-  ""
+  DEPLOYED_BACKEND_URL
 ).trim().replace(/\/+$/, "");
 
-export const CLOUD_PROD_API = configuredApi ? `${configuredApi}/api/v1` : "/api/v1";
+// Always connect to deployed backend, never allow localhost or relative paths on mobile
+const sanitizedApi = (rawConfiguredApi.includes("localhost") || rawConfiguredApi.includes("127.0.0.1") || rawConfiguredApi.includes("192.168.") || !rawConfiguredApi.startsWith("http"))
+  ? DEPLOYED_BACKEND_URL
+  : rawConfiguredApi;
+
+export const CLOUD_PROD_API = sanitizedApi.endsWith("/api/v1") ? sanitizedApi : `${sanitizedApi}/api/v1`;
 export const API_BASE = CLOUD_PROD_API;
 
 export async function getActiveApiBase(): Promise<string> {
