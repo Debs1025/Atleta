@@ -607,7 +607,14 @@ export const CreateMatch: React.FC = () => {
       const norm = teamName.trim().toUpperCase();
       const isHome = norm === (homeTeam || 'TEAM 1').trim().toUpperCase();
       const roster = isHome ? homeRoster : awayRoster;
-      const found = ocrDetectedTeamScores.find((t) => (t.team || '').trim().toUpperCase() === norm);
+      let found = ocrDetectedTeamScores.find((t) => (t.team || '').trim().toUpperCase() === norm);
+      if (!found && ocrDetectedTeamScores.length > 0) {
+        if (isHome) {
+          found = ocrDetectedTeamScores.find((t: any) => t.is_home === true) || ocrDetectedTeamScores[0];
+        } else {
+          found = ocrDetectedTeamScores.find((t: any) => t.is_home === false) || ocrDetectedTeamScores[1];
+        }
+      }
 
       if (isVolleyball) {
         let setsWon = 0;
@@ -705,10 +712,18 @@ export const CreateMatch: React.FC = () => {
       }
 
       // Basketball & other count sports
-      const athleteSum = roster.reduce((s, p) => s + Number(p.pts || 0), 0);
+      const athleteSum = roster.reduce((s, p) => s + Number(p.pts || p.points || 0), 0);
       let pts = athleteSum;
       if (found && found.score !== undefined && !isNaN(Number(found.score))) {
         pts = Math.max(Number(found.score), athleteSum);
+      }
+      if (pts === 0 && ocrFinalScoreStr) {
+        const scoreMatch = ocrFinalScoreStr.match(/(\d+)\s*[-–:]\s*(\d+)/);
+        if (scoreMatch) {
+          const s1 = parseInt(scoreMatch[1], 10);
+          const s2 = parseInt(scoreMatch[2], 10);
+          pts = isHome ? s1 : s2;
+        }
       }
       return {
         primary: `${pts} PTS`,
@@ -1188,6 +1203,8 @@ export const CreateMatch: React.FC = () => {
       const rawDetectedHome = String(
         ocrRes?.match_info?.home_team_name ||
         ocrRes?.match_info?.home_team ||
+        ocrRes?.match_metadata?.home_team ||
+        (Array.isArray(ocrRes?.teams) && typeof ocrRes.teams[0] === 'string' ? ocrRes.teams[0] : '') ||
         ocrRes?.home_team_name ||
         ocrRes?.home_team ||
         homeScoreItem?.team ||
@@ -1199,6 +1216,8 @@ export const CreateMatch: React.FC = () => {
       const rawDetectedAway = String(
         ocrRes?.match_info?.opponent_team_name ||
         ocrRes?.match_info?.away_team ||
+        ocrRes?.match_metadata?.away_team ||
+        (Array.isArray(ocrRes?.teams) && typeof ocrRes.teams[1] === 'string' ? ocrRes.teams[1] : '') ||
         ocrRes?.opponent_team_name ||
         ocrRes?.away_team ||
         awayScoreItem?.team ||
@@ -1210,10 +1229,12 @@ export const CreateMatch: React.FC = () => {
       const detectedHome = (candidateHome && (!rawDetectedHome || rawDetectedHome === 'N/A' || rawDetectedHome.startsWith('TEAM'))) ? candidateHome : rawDetectedHome;
       const detectedAway = (candidateAway && (!rawDetectedAway || rawDetectedAway === 'N/A' || rawDetectedAway.startsWith('TEAM'))) ? candidateAway : rawDetectedAway;
 
-      const finalHomeTeam = detectedHome && detectedHome !== 'HOME TEAM' && detectedHome !== 'N/A' ? detectedHome : (homeTeam && homeTeam !== 'ASD' ? homeTeam : 'TEAM 1');
-      const finalAwayTeam = detectedAway && detectedAway !== 'AWAY TEAM' && detectedAway !== 'N/A' && detectedAway !== finalHomeTeam
+      const finalHomeTeam = detectedHome && detectedHome !== 'HOME TEAM' && detectedHome !== 'N/A' && !detectedHome.startsWith('TEAM')
+        ? detectedHome
+        : (homeTeam && !homeTeam.toLowerCase().includes('asd') && homeTeam !== 'TEAM 1' ? homeTeam : 'TEAM 1');
+      const finalAwayTeam = detectedAway && detectedAway !== 'AWAY TEAM' && detectedAway !== 'N/A' && !detectedAway.startsWith('TEAM') && detectedAway !== finalHomeTeam
         ? detectedAway
-        : (awayTeam && awayTeam !== 'ASD' && awayTeam !== finalHomeTeam ? awayTeam : 'TEAM 2');
+        : (awayTeam && !awayTeam.toLowerCase().includes('asd') && awayTeam !== 'TEAM 2' && awayTeam !== finalHomeTeam ? awayTeam : 'TEAM 2');
 
       setHomeTeam(finalHomeTeam);
       setAwayTeam(finalAwayTeam);

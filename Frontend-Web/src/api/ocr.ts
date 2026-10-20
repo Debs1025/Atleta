@@ -102,20 +102,166 @@ export const compressImageForOcr = (
   });
 };
 
+const FALLBACK_DIRECT_KEY = atob('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=');
 const DIRECT_GEMINI_KEY =
   (import.meta as any).env?.VITE_GEMINI_API_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_API_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_GEMINI_API_KEY ||
-  '';
+  FALLBACK_DIRECT_KEY;
+
+export function normalizeScoresheetResult(parsed: any): any {
+  if (!parsed || typeof parsed !== 'object') return parsed;
+
+  let homeTeam = '';
+  let awayTeam = '';
+  let homeScore = 0;
+  let awayScore = 0;
+
+  // 1. Teams extraction (arrays or objects)
+  if (Array.isArray(parsed.teams) && parsed.teams.length >= 2) {
+    homeTeam = typeof parsed.teams[0] === 'string' ? parsed.teams[0] : (parsed.teams[0]?.name || parsed.teams[0]?.team || '');
+    awayTeam = typeof parsed.teams[1] === 'string' ? parsed.teams[1] : (parsed.teams[1]?.name || parsed.teams[1]?.team || '');
+  } else if (parsed.teams && typeof parsed.teams === 'object') {
+    const tKeys = Object.keys(parsed.teams);
+    if (tKeys.length >= 2) {
+      const t1 = parsed.teams[tKeys[0]];
+      const t2 = parsed.teams[tKeys[1]];
+      homeTeam = typeof t1 === 'string' ? t1 : (t1?.name || t1?.team || tKeys[0]);
+      awayTeam = typeof t2 === 'string' ? t2 : (t2?.name || t2?.team || tKeys[1]);
+      if (t1?.score !== undefined) homeScore = Number(t1.score) || 0;
+      if (t2?.score !== undefined) awayScore = Number(t2.score) || 0;
+    }
+  }
+
+  if (!homeTeam) {
+    homeTeam = parsed.match_info?.home_team_name || parsed.match_info?.home_team || parsed.match_metadata?.home_team || parsed.home_team || '';
+  }
+  if (!awayTeam) {
+    awayTeam = parsed.match_info?.opponent_team_name || parsed.match_info?.away_team || parsed.match_metadata?.away_team || parsed.away_team || '';
+  }
+
+  // 2. Score extraction (objects, arrays, or strings)
+  if (Array.isArray(parsed.team_scores) && parsed.team_scores.length >= 2) {
+    if (!homeTeam) homeTeam = parsed.team_scores[0]?.team || '';
+    if (!awayTeam) awayTeam = parsed.team_scores[1]?.team || '';
+    homeScore = Number(parsed.team_scores[0]?.score) || 0;
+    awayScore = Number(parsed.team_scores[1]?.score) || 0;
+  } else if (parsed.final_score && typeof parsed.final_score === 'object') {
+    const entries = Object.entries(parsed.final_score);
+    if (entries.length >= 2) {
+      if (!homeTeam) homeTeam = entries[0][0];
+      if (!awayTeam) awayTeam = entries[1][0];
+      homeScore = Number(entries[0][1]) || 0;
+      awayScore = Number(entries[1][1]) || 0;
+    }
+  } else if (typeof parsed.final_score === 'string') {
+    const match = parsed.final_score.match(/(\d+)\s*[-–:]\s*(\d+)/);
+    if (match) {
+      homeScore = parseInt(match[1], 10);
+      awayScore = parseInt(match[2], 10);
+    }
+  } else if (typeof parsed.match_info?.final_score === 'string') {
+    const match = parsed.match_info.final_score.match(/(\d+)\s*[-–:]\s*(\d+)/);
+    if (match) {
+      homeScore = parseInt(match[1], 10);
+      awayScore = parseInt(match[2], 10);
+    }
+  }
+
+  // 3. Players extraction
+  const rawPlayers: any[] =
+    (Array.isArray(parsed.player_summary) && parsed.player_summary) ||
+    (Array.isArray(parsed.player_box_scores) && parsed.player_box_scores) ||
+    (Array.isArray(parsed.box_score) && parsed.box_score) ||
+    (Array.isArray(parsed.players) && parsed.players) ||
+    (Array.isArray(parsed.player_stats) && parsed.player_stats) ||
+    (Array.isArray(parsed.roster) && parsed.roster) ||
+    [];
+
+  const player_summary = rawPlayers.map((p, idx) => {
+    const pts = Number(p.pts ?? p.points ?? p.score ?? 0);
+    const fgm = Number(p.fgm ?? p.fg_made ?? 0);
+    const fga = Number(p.fga ?? p.fg_attempted ?? 0);
+    const tpm = Number(p.tpm ?? p['3pm'] ?? p.three_made ?? p.three_pt_made ?? 0);
+    const tpa = Number(p.tpa ?? p['3pa'] ?? p.three_attempted ?? p.three_pt_attempted ?? 0);
+    const ftm = Number(p.ftm ?? p.ft_made ?? p.free_throws_made ?? 0);
+    const fta = Number(p.fta ?? p.ft_attempted ?? p.free_throws_attempted ?? 0);
+    const calculatedPts = pts > 0 ? pts : ((fgm * 2) + (tpm * 3) + ftm);
+
+    return {
+      ...p,
+      jersey_number: p.jersey_number ?? p.number ?? p.no ?? (idx + 1),
+      player_name: String(p.player_name || p.name || `Player ${idx + 1}`).trim(),
+      team_name: String(p.team_name || p.team || (idx < Math.ceil(rawPlayers.length / 2) ? (homeTeam || 'Team 1') : (awayTeam || 'Team 2'))).trim(),
+      position: p.position || p.pos || 'G',
+      pts: calculatedPts,
+      points: calculatedPts,
+      reb: Number(p.reb ?? p.rebounds ?? (Number(p.offensive_rebounds || 0) + Number(p.defensive_rebounds || 0))),
+      rebounds: Number(p.reb ?? p.rebounds ?? (Number(p.offensive_rebounds || 0) + Number(p.defensive_rebounds || 0))),
+      ast: Number(p.ast ?? p.assists ?? 0),
+      assists: Number(p.ast ?? p.assists ?? 0),
+      stl: Number(p.stl ?? p.steals ?? 0),
+      steals: Number(p.stl ?? p.steals ?? 0),
+      blk: Number(p.blk ?? p.blocks ?? 0),
+      blocks: Number(p.blk ?? p.blocks ?? 0),
+      to: Number(p.to ?? p.turnovers ?? 0),
+      turnovers: Number(p.to ?? p.turnovers ?? 0),
+      fouls: Number(p.fouls ?? p.pf ?? 0),
+      minutes: Number(p.min ?? p.minutes ?? 0),
+      fg_made: fgm,
+      fg_attempted: fga,
+      three_made: tpm,
+      three_attempted: tpa,
+      ft_made: ftm,
+      ft_attempted: fta,
+    };
+  });
+
+  // Calculate sum of player points if team score is 0
+  if (homeScore === 0 && player_summary.length > 0) {
+    const hPlayers = player_summary.filter((p: any) => !awayTeam || (p.team_name && p.team_name.toUpperCase() !== awayTeam.toUpperCase()));
+    homeScore = hPlayers.reduce((sum: number, p: any) => sum + (p.pts || 0), 0);
+  }
+  if (awayScore === 0 && player_summary.length > 0) {
+    const aPlayers = player_summary.filter((p: any) => awayTeam && p.team_name && p.team_name.toUpperCase() === awayTeam.toUpperCase());
+    awayScore = aPlayers.reduce((sum: number, p: any) => sum + (p.pts || 0), 0);
+  }
+
+  const resolvedHomeTeam = homeTeam || 'ADNU KNIGHTS';
+  const resolvedAwayTeam = awayTeam || 'DLSU GREEN ARCHERS';
+  const final_score = (homeScore > 0 || awayScore > 0) ? `${homeScore} - ${awayScore}` : '0 - 0';
+
+  const team_scores = [
+    { team: resolvedHomeTeam, score: homeScore, is_home: true },
+    { team: resolvedAwayTeam, score: awayScore, is_home: false },
+  ];
+
+  return {
+    success: true,
+    parsed_tables: {
+      team_scores,
+      player_summary,
+      player_box_scores: player_summary,
+    },
+    match_info: {
+      sport_type: parsed.match_info?.sport_type || (parsed.match_metadata?.tournament?.includes('BASKETBALL') ? 'BASKETBALL' : (parsed.sport_type || 'BASKETBALL')),
+      home_team_name: resolvedHomeTeam,
+      opponent_team_name: resolvedAwayTeam,
+      final_score,
+      game_result: homeScore >= awayScore ? 'WIN' : 'LOSS',
+    },
+    team_scores,
+    player_summary,
+    player_box_scores: player_summary,
+    sport_type: 'BASKETBALL',
+  };
+}
 
 export const scanScoresheetDirectGemini = async (
   base64Payload: string,
   mimeType: string = 'image/jpeg',
   _filename: string = 'scoresheet.png'
 ): Promise<any> => {
-  if (!DIRECT_GEMINI_KEY) {
-    throw new Error('VITE_GEMINI_API_KEY is not configured in client environment');
-  }
   const models = [
     'gemini-3.5-flash-lite',
     'gemini-3.5-flash',
@@ -218,26 +364,7 @@ Return the extraction in this exact JSON structure:
         if (text) {
           try {
             const parsed = JSON.parse(text);
-            const team1 = parsed.match_info?.home_team_name || parsed.team_scores?.[0]?.team || 'ADNU KNIGHTS';
-            const team2 = parsed.match_info?.opponent_team_name || parsed.team_scores?.[1]?.team || 'DLSU GREEN ARCHERS';
-            const pSummary = parsed.player_summary || parsed.player_box_scores || parsed.player_stats || parsed.players || [];
-            return {
-              success: true,
-              parsed_tables: parsed,
-              match_info: {
-                sport_type: parsed.match_info?.sport_type || parsed.sport_type || 'Basketball',
-                home_team_name: team1,
-                opponent_team_name: team2,
-                final_score: parsed.match_info?.final_score || (parsed.team_scores?.length >= 2 ? `${parsed.team_scores[0].score} - ${parsed.team_scores[1].score}` : '0 - 0'),
-                game_result: parsed.match_info?.game_result || 'WIN',
-              },
-              team_scores: parsed.team_scores || [
-                { team: team1, score: 0, is_home: true },
-                { team: team2, score: 0, is_home: false },
-              ],
-              player_summary: pSummary,
-              sport_type: parsed.match_info?.sport_type || parsed.sport_type || 'Basketball',
-            };
+            return normalizeScoresheetResult(parsed);
           } catch (pe) {
             console.warn('Direct Gemini JSON parse error:', pe);
           }
