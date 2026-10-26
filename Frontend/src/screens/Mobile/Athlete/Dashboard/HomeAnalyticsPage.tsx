@@ -84,6 +84,13 @@ export interface AthleteProfile {
   eligible_documents?: EligibleDocument[];
   auth_provider?: string;
   sport_type?: string;
+  player_status?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  playerStatus?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  injury_notes?: string;
+  injuryNotes?: string;
+  excel_tags?: string[];
+  excelTags?: string[];
+  specialties?: string[];
   [key: string]: any;
 }
 

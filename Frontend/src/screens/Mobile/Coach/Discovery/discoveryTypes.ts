@@ -41,6 +41,13 @@ export interface AthleteDiscoveryItem {
   has_coach?: boolean;
   is_scouted?: boolean;
   scout_status?: 'PENDING' | 'ACCEPTED' | 'DECLINED' | string;
+  player_status?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  playerStatus?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  injury_notes?: string;
+  injuryNotes?: string;
+  excel_tags?: string[];
+  excelTags?: string[];
+  specialties?: string[];
 }
 
 export interface ScoutingProposalItem {

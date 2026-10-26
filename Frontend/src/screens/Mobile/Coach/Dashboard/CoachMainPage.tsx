@@ -147,6 +147,10 @@ const PlayerRowItem = React.memo(
 
     const playerTeamName = (player as any).team_name;
 
+    const playerStatus = (player.player_status || player.playerStatus || 'Active').trim();
+    const statusLower = playerStatus.toLowerCase();
+    const excelTags: string[] = player.excel_tags || player.excelTags || (player as any).specialties || [];
+
     return (
       <View style={[styles.playerRow, !isLast && styles.playerRowBorder]}>
         <View style={styles.playerTextContainer}>
@@ -159,10 +163,97 @@ const PlayerRowItem = React.memo(
                 </Text>
               </View>
             )}
+            {(() => {
+              if (statusLower === 'injured') {
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: '#EF4444', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, gap: 3 }}>
+                    <Ionicons name="medkit" size={10} color="#EF4444" />
+                    <Text style={{ color: '#EF4444', fontSize: 9, fontWeight: '900' }}>INJURED</Text>
+                  </View>
+                );
+              } else if (statusLower === 'recovering') {
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 158, 11, 0.2)', borderColor: '#F59E0B', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, gap: 3 }}>
+                    <Ionicons name="fitness-outline" size={10} color="#F59E0B" />
+                    <Text style={{ color: '#F59E0B', fontSize: 9, fontWeight: '900' }}>RECOVERING</Text>
+                  </View>
+                );
+              } else if (statusLower === 'day-to-day') {
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(249, 115, 22, 0.2)', borderColor: '#F97316', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, gap: 3 }}>
+                    <Ionicons name="time-outline" size={10} color="#F97316" />
+                    <Text style={{ color: '#F97316', fontSize: 9, fontWeight: '900' }}>DAY-TO-DAY</Text>
+                  </View>
+                );
+              } else if (statusLower === 'prone to injury') {
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(168, 85, 247, 0.2)', borderColor: '#A855F7', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, gap: 3 }}>
+                    <Ionicons name="warning-outline" size={10} color="#A855F7" />
+                    <Text style={{ color: '#A855F7', fontSize: 9, fontWeight: '900' }}>PRONE TO INJURY</Text>
+                  </View>
+                );
+              }
+              return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, gap: 3 }}>
+                  <Ionicons name="checkmark-circle" size={9} color="#10B981" />
+                  <Text style={{ color: '#10B981', fontSize: 9, fontWeight: '800' }}>ACTIVE</Text>
+                </View>
+              );
+            })()}
           </View>
           <Text style={styles.playerSubtitle}>
             {formattedPos} • #{player.jersey_number}
           </Text>
+
+          {/* Specialties / Excel tags */}
+          {Array.isArray(excelTags) && excelTags.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+              {excelTags.slice(0, 3).map((tag, tIdx) => (
+                <View
+                  key={tIdx}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    borderColor: 'rgba(245, 158, 11, 0.35)',
+                    borderWidth: 1,
+                    paddingHorizontal: 5,
+                    paddingVertical: 1,
+                    borderRadius: 4,
+                  }}
+                >
+                  <Ionicons name="sparkles" size={8} color="#F59E0B" style={{ marginRight: 3 }} />
+                  <Text style={{ color: '#FCD34D', fontSize: 9, fontWeight: '700' }}>{tag}</Text>
+                </View>
+              ))}
+              {excelTags.length > 3 && (
+                <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4 }}>
+                  <Text style={{ color: '#94A3B8', fontSize: 9, fontWeight: '700' }}>+{excelTags.length - 3}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Active Injury Notes */}
+          {Boolean(player.injury_notes && statusLower !== 'active') && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              borderColor: 'rgba(239, 68, 68, 0.25)',
+              borderWidth: 1,
+              borderRadius: 4,
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+              marginTop: 4,
+              gap: 4,
+            }}>
+              <Ionicons name="medkit-outline" size={10} color="#F87171" />
+              <Text style={{ color: '#FCA5A5', fontSize: 10, flex: 1 }} numberOfLines={1}>
+                {player.injury_notes}
+              </Text>
+            </View>
+          )}
         </View>
 
         <TouchableOpacity
@@ -512,6 +603,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         psa_verified: Boolean(a.eligibility_documents?.psa_verified || a.documents?.psa_birth_certificate?.status === 'Verified'),
         residency_verified: Boolean(a.eligibility_documents?.proof_of_residency || a.eligibility_documents?.residency_verified || a.documents?.proof_of_residency?.status === 'Verified'),
       },
+      player_status: a.player_status || a.playerStatus || 'Active',
+      playerStatus: a.player_status || a.playerStatus || 'Active',
+      injury_notes: a.injury_notes || a.injuryNotes || '',
+      injuryNotes: a.injury_notes || a.injuryNotes || '',
+      excel_tags: a.excel_tags || a.excelTags || a.specialties || [],
+      excelTags: a.excel_tags || a.excelTags || a.specialties || [],
+      specialties: a.excel_tags || a.excelTags || a.specialties || [],
     };
   };
 

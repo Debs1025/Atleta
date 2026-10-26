@@ -5,9 +5,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
+import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Path,
@@ -40,6 +44,53 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
+
+  // Local state for condition tracking
+  const [currentStatus, setCurrentStatus] = useState<string>(athlete.player_status || athlete.playerStatus || 'Active');
+  const [currentNotes, setCurrentNotes] = useState<string>(athlete.injury_notes || athlete.injuryNotes || '');
+  const [showConditionModal, setShowConditionModal] = useState<boolean>(false);
+  const [modalStatus, setModalStatus] = useState<string>(currentStatus);
+  const [modalNotes, setModalNotes] = useState<string>(currentNotes);
+  const [isSavingCondition, setIsSavingCondition] = useState<boolean>(false);
+
+  const STATUS_OPTIONS = [
+    { label: 'Active', value: 'Active', color: '#10B981', icon: 'checkmark-circle' },
+    { label: 'Injured', value: 'Injured', color: '#EF4444', icon: 'medkit' },
+    { label: 'Recovering', value: 'Recovering', color: '#F59E0B', icon: 'fitness-outline' },
+    { label: 'Day-to-Day', value: 'Day-to-Day', color: '#F97316', icon: 'time-outline' },
+    { label: 'Prone to Injury', value: 'Prone to Injury', color: '#A855F7', icon: 'warning-outline' },
+  ];
+
+  const handleSaveCondition = async () => {
+    setIsSavingCondition(true);
+    try {
+      const athId = athlete.athlete_id || athlete.user_id;
+      const cleanId = String(athId).replace(/^ath_/, '');
+      const payload = {
+        player_status: modalStatus,
+        injury_notes: modalNotes.trim(),
+      };
+
+      // Call athlete update API
+      await requestAuthenticatedJson(`/athletes/${cleanId}`, 'PATCH', payload).catch(() =>
+        requestAuthenticatedJson('/athletes/profile', 'PATCH', payload)
+      ).catch(() => null);
+
+      setCurrentStatus(modalStatus);
+      setCurrentNotes(modalNotes.trim());
+      athlete.player_status = modalStatus;
+      athlete.playerStatus = modalStatus;
+      athlete.injury_notes = modalNotes.trim();
+      athlete.injuryNotes = modalNotes.trim();
+
+      setShowConditionModal(false);
+      Alert.alert('Status Updated', `Player status updated to ${modalStatus}.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to update player condition.');
+    } finally {
+      setIsSavingCondition(false);
+    }
+  };
 
   const calculateDynamicPER = (avg: any): string => {
     if (typeof avg?.per_score === "number" && avg.per_score > 0) {
@@ -340,6 +391,127 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           <Text style={styles.heroBirthdate}>
             Birthdate: {athlete.birthdate}
           </Text>
+
+          {/* Condition & Medical Status Pill with Coach Tagging Action */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            {(() => {
+              const lower = currentStatus.toLowerCase();
+              let badgeBg = 'rgba(16, 185, 129, 0.15)';
+              let badgeBorder = '#10B981';
+              let badgeColor = '#10B981';
+              let iconName: any = 'checkmark-circle';
+
+              if (lower === 'injured') {
+                badgeBg = 'rgba(239, 68, 68, 0.2)';
+                badgeBorder = '#EF4444';
+                badgeColor = '#EF4444';
+                iconName = 'medkit';
+              } else if (lower === 'recovering') {
+                badgeBg = 'rgba(245, 158, 11, 0.2)';
+                badgeBorder = '#F59E0B';
+                badgeColor = '#F59E0B';
+                iconName = 'fitness-outline';
+              } else if (lower === 'day-to-day') {
+                badgeBg = 'rgba(249, 115, 22, 0.2)';
+                badgeBorder = '#F97316';
+                badgeColor = '#F97316';
+                iconName = 'time-outline';
+              } else if (lower === 'prone to injury') {
+                badgeBg = 'rgba(168, 85, 247, 0.2)';
+                badgeBorder = '#A855F7';
+                badgeColor = '#A855F7';
+                iconName = 'warning-outline';
+              }
+
+              return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: badgeBg, borderColor: badgeBorder, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, gap: 5 }}>
+                  <Ionicons name={iconName} size={12} color={badgeColor} />
+                  <Text style={{ color: badgeColor, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 }}>
+                    {currentStatus.toUpperCase()}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                borderColor: 'rgba(56, 189, 248, 0.35)',
+                borderWidth: 1,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 6,
+                gap: 4,
+              }}
+              onPress={() => {
+                setModalStatus(currentStatus);
+                setModalNotes(currentNotes);
+                setShowConditionModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={12} color="#38BDF8" />
+              <Text style={{ color: '#38BDF8', fontSize: 11, fontWeight: '700' }}>Tag Condition</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Active Injury Condition Notes */}
+          {Boolean(currentNotes && currentStatus.toLowerCase() !== 'active') && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              borderColor: 'rgba(239, 68, 68, 0.3)',
+              borderWidth: 1,
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              marginTop: 10,
+              marginHorizontal: 12,
+              gap: 6,
+            }}>
+              <Ionicons name="medkit-outline" size={14} color="#F87171" />
+              <Text style={{ color: '#FCA5A5', fontSize: 11, fontWeight: '600', flex: 1, textAlign: 'center' }}>
+                {currentNotes}
+              </Text>
+            </View>
+          )}
+
+          {/* Playstyle / Specialties (Where Player Excels) */}
+          {(() => {
+            const excelTags = athlete.excel_tags || athlete.excelTags || (athlete as any).specialties || [];
+            if (!Array.isArray(excelTags) || excelTags.length === 0) return null;
+            return (
+              <View style={{ marginTop: 12, alignItems: 'center' }}>
+                <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 6 }}>
+                  PLAYER SPECIALTIES & PLAYSTYLE
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, paddingHorizontal: 12 }}>
+                  {excelTags.map((tag: string, idx: number) => (
+                    <View
+                      key={idx}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                        borderColor: '#F59E0B',
+                        borderWidth: 1,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                        gap: 4,
+                      }}
+                    >
+                      <Ionicons name="sparkles" size={11} color="#F59E0B" />
+                      <Text style={{ color: '#FCD34D', fontSize: 11, fontWeight: '800' }}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            );
+          })()}
 
           <View style={styles.sublineTagsRow}>
             <View style={styles.tagBadge}>
@@ -665,6 +837,107 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           </View>
         </View>
       </ScrollView>
+
+      {/* Modal for Authorized Coach / Medical Staff to Tag Injury & Condition */}
+      <Modal
+        visible={showConditionModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConditionModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#0F172A', borderRadius: 16, borderWidth: 1, borderColor: '#1E293B', padding: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="medkit" size={20} color="#38BDF8" />
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>Tag Player Condition</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowConditionModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8, fontWeight: '700' }}>
+              SELECT AVAILABILITY STATUS
+            </Text>
+            <View style={{ gap: 8, marginBottom: 16 }}>
+              {STATUS_OPTIONS.map((opt) => {
+                const isSelected = modalStatus.toLowerCase() === opt.value.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.15)' : '#1E293B',
+                      borderColor: isSelected ? opt.color : 'rgba(255,255,255,0.08)',
+                      borderWidth: 1.5,
+                      borderRadius: 10,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                    }}
+                    onPress={() => setModalStatus(opt.value)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name={opt.icon as any} size={16} color={opt.color} />
+                      <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: isSelected ? '800' : '600' }}>
+                        {opt.label}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark" size={16} color={opt.color} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 6, fontWeight: '700' }}>
+              INJURY & RECOVERY NOTES (OPTIONAL)
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: '#1E293B',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                borderRadius: 10,
+                color: '#FFFFFF',
+                fontSize: 13,
+                padding: 12,
+                minHeight: 70,
+                textAlignVertical: 'top',
+                marginBottom: 20,
+              }}
+              placeholder="e.g. Mild hamstring strain in scrimmage. Expected return: 7 days."
+              placeholderTextColor="#64748B"
+              value={modalNotes}
+              onChangeText={setModalNotes}
+              multiline
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#1E293B', alignItems: 'center' }}
+                onPress={() => setShowConditionModal(false)}
+                disabled={isSavingCondition}
+              >
+                <Text style={{ color: '#94A3B8', fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#00C8FF', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                onPress={handleSaveCondition}
+                disabled={isSavingCondition}
+              >
+                {isSavingCondition ? (
+                  <ActivityIndicator size="small" color="#0F172A" />
+                ) : (
+                  <Text style={{ color: '#0F172A', fontWeight: '800' }}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

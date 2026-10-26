@@ -107,6 +107,13 @@ export interface RosterAthlete {
   workload_analytics?: any;
   eligibility_documents?: any;
   documents?: any;
+  player_status?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  playerStatus?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  injury_notes?: string;
+  injuryNotes?: string;
+  excel_tags?: string[];
+  excelTags?: string[];
+  specialties?: string[];
 }
 
 export interface Team {
@@ -292,6 +299,13 @@ export interface AthletePerformanceProfile {
     residency_verified: boolean;
   };
   workload_analytics: WorkloadTargetState;
+  player_status?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  playerStatus?: 'Active' | 'Injured' | 'Prone to Injury' | 'Recovering' | 'Day-to-Day' | string;
+  injury_notes?: string;
+  injuryNotes?: string;
+  excel_tags?: string[];
+  excelTags?: string[];
+  specialties?: string[];
 }
 
 export interface MatchHistoryItem {

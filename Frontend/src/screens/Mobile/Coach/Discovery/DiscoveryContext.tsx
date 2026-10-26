@@ -175,6 +175,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 team_name: tName,
                 coach_name: hCoach,
                 has_coach: true,
+                player_status: r.player_status || r.playerStatus || 'Active',
+                injury_notes: r.injury_notes || r.injuryNotes || '',
+                excel_tags: r.excel_tags || r.excelTags || r.specialties || [],
               };
             })
             : [];
@@ -387,6 +390,15 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               existing.is_scouted = true;
               if (scoutStatus) existing.scout_status = scoutStatus;
             }
+            if (a.player_status || a.playerStatus) {
+              existing.player_status = a.player_status || a.playerStatus;
+            }
+            if (a.injury_notes || a.injuryNotes) {
+              existing.injury_notes = a.injury_notes || a.injuryNotes;
+            }
+            if (a.excel_tags || a.excelTags || a.specialties) {
+              existing.excel_tags = a.excel_tags || a.excelTags || a.specialties;
+            }
             return;
           }
 
@@ -445,6 +457,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             has_coach: hasCoach,
             is_scouted: isScouted,
             scout_status: scoutStatus,
+            player_status: a.player_status || a.playerStatus || 'Active',
+            injury_notes: a.injury_notes || a.injuryNotes || '',
+            excel_tags: a.excel_tags || a.excelTags || a.specialties || [],
           };
 
           mappedAthletes.push(newAthleteItem);

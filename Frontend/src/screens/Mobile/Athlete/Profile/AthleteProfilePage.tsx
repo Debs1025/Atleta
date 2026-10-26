@@ -96,6 +96,67 @@ const REQUIRED_DOCUMENT_SLOTS: Array<{
   { id: "doc_school_id", title: "Valid School / Student ID", category: "SCHOOL_ID" },
 ];
 
+const SPORT_EXCEL_PRESETS: Record<string, string[]> = {
+  BASKETBALL: [
+    "Point Guard",
+    "Sharpshooter",
+    "Lockdown Defender",
+    "Rebounding Specialist",
+    "Playmaker",
+    "Rim Protector",
+    "Slashing Guard",
+    "Pick & Roll Maestro",
+    "Post Scorer",
+    "Fast Break Threat",
+    "Clutch Shooter",
+  ],
+  SWIMMING: [
+    "Sprint Specialist",
+    "Distance Specialist",
+    "Freestyle",
+    "Backstroke",
+    "Butterfly",
+    "Breaststroke",
+    "IM Specialist",
+    "Relay Anchor",
+    "Underwater Specialist",
+  ],
+  "TRACK AND FIELD": [
+    "100m Sprinter",
+    "200m/400m Sprinter",
+    "Hurdler",
+    "Long Jump",
+    "High Jump",
+    "Relay Anchor",
+    "Endurance Runner",
+    "Fast Starter",
+  ],
+  VOLLEYBALL: [
+    "Outside Hitter",
+    "Middle Blocker",
+    "Setter",
+    "Libero",
+    "Opposite Hitter",
+    "Ace Server",
+    "Defensive Specialist",
+  ],
+  PICKLEBALL: [
+    "Dink Specialist",
+    "Third Shot Drop Master",
+    "Kitchen Dominator",
+    "Power Server",
+    "Fast Hands Speedup",
+  ],
+};
+
+const PLAYER_STATUS_OPTIONS = [
+  { value: 'Active', label: 'Active', color: '#10B981', icon: 'checkmark-circle' as const, desc: 'Cleared and ready for full training and competition.' },
+  { value: 'Injured', label: 'Injured', color: '#EF4444', icon: 'medkit' as const, desc: 'Sidelined due to current active injury.' },
+  { value: 'Recovering', label: 'Recovering', color: '#F59E0B', icon: 'fitness-outline' as const, desc: 'Under active rehabilitation or restricted training.' },
+  { value: 'Day-to-Day', label: 'Day-to-Day', color: '#F97316', icon: 'time-outline' as const, desc: 'Condition evaluated daily before participation.' },
+  { value: 'Prone to Injury', label: 'Prone to Injury', color: '#A855F7', icon: 'warning-outline' as const, desc: 'Precautionary tracking for chronic/recurring soreness.' },
+];
+
 function normalizeDocuments(input: any): EligibleDocument[] {
   const existingList: EligibleDocument[] = [];
 
@@ -257,6 +318,20 @@ export function AthleteProfilePage({
     normalizeDocuments(profile.eligible_documents || (profile as any).documents)
   );
 
+  // Player condition & specialties state
+  const [playerStatus, setPlayerStatus] = useState<string>(
+    profile.player_status || profile.playerStatus || 'Active'
+  );
+  const [injuryNotes, setInjuryNotes] = useState<string>(
+    profile.injury_notes || profile.injuryNotes || ''
+  );
+  const [excelTags, setExcelTags] = useState<string[]>(
+    Array.isArray(profile.excel_tags || profile.excelTags || (profile as any).specialties)
+      ? (profile.excel_tags || profile.excelTags || (profile as any).specialties)
+      : []
+  );
+  const [customTagInput, setCustomTagInput] = useState<string>('');
+
   React.useEffect(() => {
     if (isEditing) return;
     setFirstName(profile.first_name);
@@ -269,6 +344,13 @@ export function AthleteProfilePage({
     setWeightKg(profile.weight_kg);
     setWingspanCm(profile.wingspan_cm);
     setAvatarUri(profile.avatar_url || (profile as any).avatar_uri);
+    setPlayerStatus(profile.player_status || profile.playerStatus || 'Active');
+    setInjuryNotes(profile.injury_notes || profile.injuryNotes || '');
+    setExcelTags(
+      Array.isArray(profile.excel_tags || profile.excelTags || (profile as any).specialties)
+        ? (profile.excel_tags || profile.excelTags || (profile as any).specialties)
+        : []
+    );
 
     const norm = normalizeDocuments(profile.eligible_documents || (profile as any).documents);
     const hasUploadedInProfile = norm.some((d) => d.status === "UPLOADED" || d.fileUri);
@@ -991,6 +1073,13 @@ export function AthleteProfilePage({
       wingspan_cm: safeWingspan,
       avatar_url: avatarUri,
       eligible_documents: documents,
+      player_status: playerStatus,
+      playerStatus: playerStatus,
+      injury_notes: injuryNotes.trim(),
+      injuryNotes: injuryNotes.trim(),
+      excel_tags: excelTags,
+      excelTags: excelTags,
+      specialties: excelTags,
     };
 
     setIsSavingProfile(true);
@@ -1030,6 +1119,13 @@ export function AthleteProfilePage({
           avatar_url: avatarUri || "",
           eligible_documents: documents || [],
           documents: documents || [],
+          player_status: playerStatus,
+          playerStatus: playerStatus,
+          injury_notes: injuryNotes.trim(),
+          injuryNotes: injuryNotes.trim(),
+          excel_tags: excelTags,
+          excelTags: excelTags,
+          specialties: excelTags,
           updated_at: new Date().toISOString(),
         });
 
@@ -1039,6 +1135,13 @@ export function AthleteProfilePage({
           full_name: resolvedFullName,
           avatar_url: avatarUri || "",
           profile_image: avatarUri || "",
+          player_status: playerStatus,
+          playerStatus: playerStatus,
+          injury_notes: injuryNotes.trim(),
+          injuryNotes: injuryNotes.trim(),
+          excel_tags: excelTags,
+          excelTags: excelTags,
+          specialties: excelTags,
           updated_at: new Date().toISOString(),
         });
 
@@ -1081,6 +1184,13 @@ export function AthleteProfilePage({
         birthdate: safeBirthdate,
         avatar_url: avatarUri,
         eligible_documents: documents,
+        player_status: playerStatus,
+        playerStatus: playerStatus,
+        injury_notes: injuryNotes.trim(),
+        injuryNotes: injuryNotes.trim(),
+        excel_tags: excelTags,
+        excelTags: excelTags,
+        specialties: excelTags,
       }).catch(() => null);
 
       Alert.alert("Profile Updated", "Your athlete credentials and profile details have been saved successfully.");
@@ -1106,6 +1216,14 @@ export function AthleteProfilePage({
     setWingspanCm(profile.wingspan_cm);
     setAvatarUri(profile.avatar_url || (profile as any).avatar_uri);
     setDocuments(normalizeDocuments(profile.eligible_documents || (profile as any).documents));
+    setPlayerStatus(profile.player_status || profile.playerStatus || 'Active');
+    setInjuryNotes(profile.injury_notes || profile.injuryNotes || '');
+    setExcelTags(
+      Array.isArray(profile.excel_tags || profile.excelTags || (profile as any).specialties)
+        ? (profile.excel_tags || profile.excelTags || (profile as any).specialties)
+        : []
+    );
+    setCustomTagInput('');
     setIsEditing(false);
   };
 
@@ -1686,6 +1804,309 @@ export function AthleteProfilePage({
               </View>
             </View>
           )}
+        </View>
+
+        {/* ─── Item 1.c: Player Condition & Medical / Injury Status ─── */}
+        <View style={{ marginTop: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="medkit-outline" size={16} color="#38BDF8" />
+              <Text style={styles.fieldLabel}>PLAYER CONDITION & INJURY STATUS</Text>
+            </View>
+            {!isEditing && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ color: '#64748B', fontSize: 11 }}>Tap Edit Profile to update</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={{
+            backgroundColor: '#0F172A',
+            borderRadius: 14,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: isEditing ? '#38BDF8' : '#1E293B',
+          }}>
+            {isEditing ? (
+              <View>
+                <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: '700', marginBottom: 8, letterSpacing: 0.5 }}>
+                  SELECT CURRENT AVAILABILITY
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                  {PLAYER_STATUS_OPTIONS.map((opt) => {
+                    const isSelected = playerStatus.toLowerCase() === opt.value.toLowerCase();
+                    return (
+                      <Pressable
+                        key={opt.value}
+                        onPress={() => setPlayerStatus(opt.value)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.15)' : '#1E293B',
+                          borderColor: isSelected ? opt.color : 'rgba(255,255,255,0.08)',
+                          borderWidth: 1.5,
+                          borderRadius: 8,
+                          paddingHorizontal: 10,
+                          paddingVertical: 7,
+                        }}
+                      >
+                        <Ionicons name={opt.icon} size={14} color={opt.color} />
+                        <Text style={{ color: isSelected ? '#FFFFFF' : '#CBD5E1', fontSize: 12, fontWeight: isSelected ? '800' : '600' }}>
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: '700', marginBottom: 6, letterSpacing: 0.5 }}>
+                  INJURY DETAILS & RECOVERY TIMELINE
+                </Text>
+                <TextInput
+                  style={{
+                    backgroundColor: '#1E293B',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    color: '#FFFFFF',
+                    fontSize: 13,
+                    padding: 10,
+                    minHeight: 60,
+                    textAlignVertical: 'top',
+                  }}
+                  placeholder="e.g. Mild ankle sprain, undergoing physical therapy. Return timeline: 7 days."
+                  placeholderTextColor="#64748B"
+                  value={injuryNotes}
+                  onChangeText={setInjuryNotes}
+                  multiline
+                />
+              </View>
+            ) : (
+              <View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {(() => {
+                    const matched = PLAYER_STATUS_OPTIONS.find(o => o.value.toLowerCase() === playerStatus.toLowerCase()) || PLAYER_STATUS_OPTIONS[0];
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          backgroundColor: `${matched.color}20`,
+                          borderColor: matched.color,
+                          borderWidth: 1,
+                          paddingHorizontal: 9,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                        }}>
+                          <Ionicons name={matched.icon} size={13} color={matched.color} />
+                          <Text style={{ color: matched.color, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 }}>
+                            {matched.label.toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={{ color: '#94A3B8', fontSize: 12, flex: 1 }} numberOfLines={1}>
+                          {matched.desc}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+
+                {Boolean(injuryNotes && injuryNotes.trim().length > 0) && (
+                  <View style={{
+                    marginTop: 10,
+                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                    borderColor: 'rgba(239, 68, 68, 0.25)',
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    padding: 10,
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                  }}>
+                    <Ionicons name="medkit-outline" size={16} color="#F87171" style={{ marginTop: 1 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#F87171', fontSize: 11, fontWeight: '800', marginBottom: 2 }}>
+                        MEDICAL & RECOVERY DETAILS
+                      </Text>
+                      <Text style={{ color: '#FCA5A5', fontSize: 12, lineHeight: 17 }}>
+                        {injuryNotes}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ─── Item 1.c: Playstyle & Specialties ("Where You Excel") ─── */}
+        <View style={{ marginTop: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="sparkles" size={15} color="#F59E0B" />
+              <Text style={styles.fieldLabel}>PLAYSTYLE & WHERE YOU EXCEL</Text>
+            </View>
+            <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '700' }}>
+              {excelTags.length} Active {excelTags.length === 1 ? 'Tag' : 'Tags'}
+            </Text>
+          </View>
+
+          <View style={{
+            backgroundColor: '#0F172A',
+            borderRadius: 14,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: isEditing ? '#F59E0B' : '#1E293B',
+          }}>
+            <Text style={{ color: '#94A3B8', fontSize: 11, marginBottom: 10 }}>
+              Tag your strengths (e.g. Sharpshooter, Lockdown Defender) so coaches immediately spot your key playstyle.
+            </Text>
+
+            {/* Selected Tags Display */}
+            {excelTags.length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: isEditing ? 12 : 0 }}>
+                {excelTags.map((tag, idx) => (
+                  <View
+                    key={idx}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                      borderColor: '#F59E0B',
+                      borderWidth: 1,
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                      gap: 4,
+                    }}
+                  >
+                    <Ionicons name="sparkles" size={11} color="#F59E0B" />
+                    <Text style={{ color: '#FCD34D', fontSize: 12, fontWeight: '800' }}>{tag}</Text>
+                    {isEditing && (
+                      <Pressable
+                        onPress={() => setExcelTags(excelTags.filter((_, i) => i !== idx))}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close-circle" size={14} color="#FCD34D" style={{ marginLeft: 2 }} />
+                      </Pressable>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              !isEditing && (
+                <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+                  <Text style={{ color: '#64748B', fontSize: 12, fontStyle: 'italic' }}>
+                    No specialties declared yet. Tap Edit Profile to highlight where you excel!
+                  </Text>
+                </View>
+              )
+            )}
+
+            {/* In Edit Mode: Preset Selector and Custom Tag Input */}
+            {isEditing && (
+              <View style={{ borderTopColor: 'rgba(255,255,255,0.06)', borderTopWidth: 1, paddingTop: 10, marginTop: 4 }}>
+                <Text style={{ color: '#CBD5E1', fontSize: 11, fontWeight: '700', marginBottom: 6 }}>
+                  PRESETS FOR {category.toUpperCase()}:
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                  {(() => {
+                    const normCat = category.toUpperCase().replace(/&/g, 'AND');
+                    const presets = SPORT_EXCEL_PRESETS[normCat] || SPORT_EXCEL_PRESETS['BASKETBALL'];
+                    return presets.map((preset) => {
+                      const isSelected = excelTags.some(t => t.toLowerCase() === preset.toLowerCase());
+                      return (
+                        <Pressable
+                          key={preset}
+                          onPress={() => {
+                            if (isSelected) {
+                              setExcelTags(excelTags.filter(t => t.toLowerCase() !== preset.toLowerCase()));
+                            } else {
+                              setExcelTags([...excelTags, preset]);
+                            }
+                          }}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: isSelected ? '#F59E0B' : '#1E293B',
+                            borderColor: isSelected ? '#FCD34D' : 'rgba(255,255,255,0.08)',
+                            borderWidth: 1,
+                            borderRadius: 6,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                          }}
+                        >
+                          <Ionicons
+                            name={isSelected ? "checkmark-circle" : "add-circle-outline"}
+                            size={12}
+                            color={isSelected ? "#0F172A" : "#94A3B8"}
+                          />
+                          <Text style={{
+                            color: isSelected ? "#0F172A" : "#E2E8F0",
+                            fontSize: 11,
+                            fontWeight: isSelected ? "800" : "600",
+                          }}>
+                            {preset}
+                          </Text>
+                        </Pressable>
+                      );
+                    });
+                  })()}
+                </View>
+
+                {/* Custom Specialty Adder */}
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#1E293B',
+                      borderColor: 'rgba(255,255,255,0.1)',
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      color: '#FFFFFF',
+                      fontSize: 12,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                    }}
+                    placeholder="Add custom playstyle / strength..."
+                    placeholderTextColor="#64748B"
+                    value={customTagInput}
+                    onChangeText={setCustomTagInput}
+                    onSubmitEditing={() => {
+                      const trimmed = customTagInput.trim();
+                      if (trimmed && !excelTags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+                        setExcelTags([...excelTags, trimmed]);
+                        setCustomTagInput('');
+                      }
+                    }}
+                  />
+                  <Pressable
+                    style={{
+                      backgroundColor: customTagInput.trim() ? '#F59E0B' : '#334155',
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                    }}
+                    onPress={() => {
+                      const trimmed = customTagInput.trim();
+                      if (trimmed && !excelTags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+                        setExcelTags([...excelTags, trimmed]);
+                        setCustomTagInput('');
+                      }
+                    }}
+                    disabled={!customTagInput.trim()}
+                  >
+                    <Text style={{ color: customTagInput.trim() ? '#0F172A' : '#94A3B8', fontWeight: '800', fontSize: 12 }}>
+                      Add
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Current Affiliation Card */}
