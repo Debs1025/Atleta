@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "Atleta",
+    "slug": "atleta",
+    "owner": "gerardpelonio303511s-team",
+    "scheme": [
+      "com.anonymous.atleta",
+      "atleta"
+    ],
+    "facebookAppId": "1478346524097898",
+    "facebookDisplayName": "Atleta",
+    "version": "0.1.2",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#070D19"
+    },
+    "android": {
+      "package": "com.anonymous.atleta",
+      "versionCode": 3,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0D14"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to allow scoresheet and document uploads."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "751724d9-de98-427d-bd38-d74c5fcad6bd"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.anonymous.atleta"
+    }
+  }
+}
