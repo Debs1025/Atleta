@@ -309,13 +309,16 @@ export function AthleteProfilePage({
   }, [profile.past_teams]);
 
   React.useEffect(() => {
-    requestAuthenticatedJson("/athletes/past-teams")
-      .then((res: any) => {
-        if (res && Array.isArray(res.past_teams)) {
-          setPastTeamsList(res.past_teams);
-        }
-      })
-      .catch(() => {});
+    // Zero-quota optimization: reuse profile.past_teams from parent if available, only fetch if empty or user explicitly pulled to refresh
+    if (isRefreshing || !Array.isArray(profile.past_teams) || profile.past_teams.length === 0) {
+      requestAuthenticatedJson("/athletes/past-teams")
+        .then((res: any) => {
+          if (res && Array.isArray(res.past_teams)) {
+            setPastTeamsList(res.past_teams);
+          }
+        })
+        .catch(() => {});
+    }
   }, [isRefreshing]);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -1792,7 +1795,10 @@ export function AthleteProfilePage({
                   </Text>
                 </View>
               ) : (
-                pastTeamsList.map((pastTeam, idx) => (
+                pastTeamsList.map((pastTeam, idx) => {
+                  const isSuspended = String(pastTeam.status || "").toLowerCase() === "suspended";
+                  const badgeColor = isSuspended ? "#F59E0B" : "#EF4444";
+                  return (
                   <View
                     key={pastTeam.team_id || idx}
                     style={{
@@ -1800,16 +1806,16 @@ export function AthleteProfilePage({
                       borderRadius: 14,
                       padding: 14,
                       borderWidth: 1,
-                      borderColor: "#EF4444",
+                      borderColor: badgeColor,
                       marginBottom: 12,
                     }}
                   >
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                          <View style={{ backgroundColor: "#EF4444", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <View style={{ backgroundColor: badgeColor, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                             <Text style={{ color: "#FFFFFF", fontSize: 9, fontWeight: "900" }}>
-                              {pastTeam.status ? String(pastTeam.status).toUpperCase() : "TERMINATED"}
+                              {pastTeam.status ? String(pastTeam.status).toUpperCase() : "SUSPENDED"}
                             </Text>
                           </View>
                           <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>
@@ -1877,7 +1883,8 @@ export function AthleteProfilePage({
                       </View>
                     </View>
                   </View>
-                ))
+                );
+              })
               )}
             </View>
           )}
