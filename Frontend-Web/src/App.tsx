@@ -15,6 +15,8 @@ import { ViewAllMatch } from './Officials/Match/ViewAllMatch';
 import { ScoresheetMatch } from './Officials/Match/ScoresheetMatch';
 import { CreateMatch } from './Officials/Match/createMatch';
 import { OCRLoggingPage } from './Officials/OCR/OCRLoggingPage';
+import { TournamentListPage } from './Officials/Tournament/TournamentListPage';
+import { TournamentBracketPage } from './Officials/Tournament/TournamentBracketPage';
 
 function App() {
   return (
@@ -116,6 +118,22 @@ function App() {
           element={
             <OfficialRoute>
               <OCRLoggingPage />
+            </OfficialRoute>
+          }
+        />
+        <Route
+          path="/tournaments"
+          element={
+            <OfficialRoute>
+              <TournamentListPage />
+            </OfficialRoute>
+          }
+        />
+        <Route
+          path="/tournaments/:bracketId"
+          element={
+            <OfficialRoute>
+              <TournamentBracketPage />
             </OfficialRoute>
           }
         />
