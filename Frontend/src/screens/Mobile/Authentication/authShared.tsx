@@ -315,9 +315,9 @@ async function fetchApi(path: string, options: RequestInit) {
     ...(options.headers || {}),
   };
 
-  const doRequest = async (targetUrl: string) => {
+  try {
     const response = await withRequestTimeout((signal) =>
-      fetch(targetUrl, { ...options, headers, signal })
+      fetch(primaryUrl, { ...options, headers, signal })
     );
 
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
@@ -336,23 +336,8 @@ async function fetchApi(path: string, options: RequestInit) {
     }
 
     return payload;
-  };
-
-  try {
-    return await doRequest(primaryUrl);
   } catch (err: any) {
-    if (err && (err.message === "Network request failed" || String(err).includes("Network request failed"))) {
-      try {
-        const fallbackUrl = `http://10.0.2.2:5000/api/v1${path}`;
-        return await doRequest(fallbackUrl);
-      } catch (_) {
-        try {
-          const fallbackLocalUrl = `http://127.0.0.1:5000/api/v1${path}`;
-          return await doRequest(fallbackLocalUrl);
-        } catch (_) {}
-      }
-    }
-    console.error("fetchApi error on URL:", primaryUrl, err);
+    console.error("fetchApi error connecting to deployed backend:", primaryUrl, err?.message || err);
     throw err;
   }
 }
