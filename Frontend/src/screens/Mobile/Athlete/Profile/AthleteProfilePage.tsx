@@ -298,6 +298,25 @@ export function AthleteProfilePage({
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [docsDrawerOpen, setDocsDrawerOpen] = useState(false);
   const [pastTeamsDrawerOpen, setPastTeamsDrawerOpen] = useState(true);
+  const [pastTeamsList, setPastTeamsList] = useState<any[]>(
+    Array.isArray(profile.past_teams) ? profile.past_teams : []
+  );
+
+  React.useEffect(() => {
+    if (Array.isArray(profile.past_teams)) {
+      setPastTeamsList(profile.past_teams);
+    }
+  }, [profile.past_teams]);
+
+  React.useEffect(() => {
+    requestAuthenticatedJson("/athletes/past-teams")
+      .then((res: any) => {
+        if (res && Array.isArray(res.past_teams)) {
+          setPastTeamsList(res.past_teams);
+        }
+      })
+      .catch(() => {});
+  }, [isRefreshing]);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -1698,20 +1717,28 @@ export function AthleteProfilePage({
           <Text style={styles.fieldLabel}>CURRENT AFFILIATION</Text>
           <View style={styles.affiliationCard}>
             <View style={styles.affiliationLeft}>
-              <View style={styles.shieldIconWrapper}>
-                <Ionicons name="shield-outline" size={22} color="#38BDF8" />
+              <View style={[styles.shieldIconWrapper, (!hasActiveTeam || !profile.current_affiliation?.team_id || profile.current_affiliation?.team_name?.toLowerCase().includes("unassigned")) && { backgroundColor: "rgba(100, 116, 139, 0.15)" }]}>
+                <Ionicons
+                  name="shield-outline"
+                  size={22}
+                  color={hasActiveTeam && profile.current_affiliation?.team_id && !profile.current_affiliation?.team_name?.toLowerCase().includes("unassigned") ? "#38BDF8" : "#64748B"}
+                />
               </View>
               <View style={styles.affiliationTextGroup}>
                 <Text style={styles.teamNameText}>
-                  {profile.current_affiliation.team_name}
+                  {hasActiveTeam && profile.current_affiliation?.team_id && !profile.current_affiliation?.team_name?.toLowerCase().includes("unassigned")
+                    ? profile.current_affiliation.team_name
+                    : "No Team Assigned"}
                 </Text>
                 <Text style={styles.sportTagText}>
-                  {profile.current_affiliation.sport_type} TEAM
+                  {hasActiveTeam && profile.current_affiliation?.team_id && !profile.current_affiliation?.team_name?.toLowerCase().includes("unassigned")
+                    ? `${profile.current_affiliation.sport_type || profile.category || "ATHLETIC"} TEAM`
+                    : `FREE AGENT • ${profile.category || "ATHLETE"}`}
                 </Text>
               </View>
             </View>
 
-            {profile.current_affiliation.is_verified && (
+            {hasActiveTeam && profile.current_affiliation?.team_id && !profile.current_affiliation?.team_name?.toLowerCase().includes("unassigned") && profile.current_affiliation.is_verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={22} color="#38BDF8" />
               </View>
@@ -1720,32 +1747,52 @@ export function AthleteProfilePage({
         </View>
 
         {/* Past Teams History Section */}
-        {Array.isArray(profile.past_teams) && profile.past_teams.length > 0 && (
-          <View style={styles.drawerContainer}>
-            <Pressable
-              style={styles.drawerHeader}
-              onPress={() => setPastTeamsDrawerOpen(!pastTeamsDrawerOpen)}
-            >
-              <View style={styles.drawerTitleRow}>
-                <Ionicons name="time-outline" size={16} color="#EF4444" />
-                <Text style={styles.drawerTitleText}>
-                  Past Teams History ({profile.past_teams.length} Teams)
-                </Text>
-              </View>
-              <Ionicons
-                name={pastTeamsDrawerOpen ? "chevron-up" : "chevron-down"}
-                size={18}
-                color="#EF4444"
-              />
-            </Pressable>
+        <View style={styles.drawerContainer}>
+          <Pressable
+            style={styles.drawerHeader}
+            onPress={() => setPastTeamsDrawerOpen(!pastTeamsDrawerOpen)}
+          >
+            <View style={styles.drawerTitleRow}>
+              <Ionicons name="time-outline" size={16} color="#EF4444" />
+              <Text style={styles.drawerTitleText}>
+                Past Teams History ({pastTeamsList.length} Team{pastTeamsList.length === 1 ? "" : "s"})
+              </Text>
+            </View>
+            <Ionicons
+              name={pastTeamsDrawerOpen ? "chevron-up" : "chevron-down"}
+              size={18}
+              color="#EF4444"
+            />
+          </Pressable>
 
-            {pastTeamsDrawerOpen && (
-              <View style={styles.drawerContent}>
-                <Text style={{ color: "#94A3B8", fontSize: 11, marginBottom: 12 }}>
-                  Historical record of your stats, averages, and accomplishments from teams you were terminated or released from.
-                </Text>
+          {pastTeamsDrawerOpen && (
+            <View style={styles.drawerContent}>
+              <Text style={{ color: "#94A3B8", fontSize: 11, marginBottom: 12 }}>
+                Historical record of your stats, averages, and accomplishments from teams you were terminated or released from.
+              </Text>
 
-                {profile.past_teams.map((pastTeam, idx) => (
+              {pastTeamsList.length === 0 ? (
+                <View
+                  style={{
+                    alignItems: "center",
+                    paddingVertical: 20,
+                    paddingHorizontal: 16,
+                    backgroundColor: "#161B26",
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: "#1E293B",
+                  }}
+                >
+                  <Ionicons name="time-outline" size={32} color="#64748B" style={{ marginBottom: 8 }} />
+                  <Text style={{ color: "#F8FAFC", fontSize: 13, fontWeight: "700", marginBottom: 4 }}>
+                    No Past Teams Recorded
+                  </Text>
+                  <Text style={{ color: "#94A3B8", fontSize: 11, textAlign: "center", lineHeight: 16 }}>
+                    When you are transferred, released, or terminated from an athletic team roster, your complete historical game stats, tenure, and records with that team will be preserved here.
+                  </Text>
+                </View>
+              ) : (
+                pastTeamsList.map((pastTeam, idx) => (
                   <View
                     key={pastTeam.team_id || idx}
                     style={{
@@ -1761,10 +1808,12 @@ export function AthleteProfilePage({
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
                           <View style={{ backgroundColor: "#EF4444", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                            <Text style={{ color: "#FFFFFF", fontSize: 9, fontWeight: "900" }}>TERMINATED</Text>
+                            <Text style={{ color: "#FFFFFF", fontSize: 9, fontWeight: "900" }}>
+                              {pastTeam.status ? String(pastTeam.status).toUpperCase() : "TERMINATED"}
+                            </Text>
                           </View>
                           <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>
-                            {pastTeam.sport_type}
+                            {pastTeam.sport_type || profile.category || "ATHLETIC"}
                           </Text>
                         </View>
                         <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "900" }}>
@@ -1774,7 +1823,7 @@ export function AthleteProfilePage({
                           Coach {pastTeam.coach_name || "Head Coach"} • #{pastTeam.jersey_number ?? "--"} • {pastTeam.position || "Player"}
                         </Text>
                         <Text style={{ color: "#64748B", fontSize: 10, marginTop: 2 }}>
-                          Tenure: {new Date(pastTeam.joined_at || "").toLocaleDateString()} - {new Date(pastTeam.terminated_at || "").toLocaleDateString()}
+                          Tenure: {pastTeam.joined_at ? new Date(pastTeam.joined_at).toLocaleDateString() : "N/A"} - {pastTeam.terminated_at ? new Date(pastTeam.terminated_at).toLocaleDateString() : "N/A"}
                         </Text>
                       </View>
                     </View>
@@ -1828,11 +1877,11 @@ export function AthleteProfilePage({
                       </View>
                     </View>
                   </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
+                ))
+              )}
+            </View>
+          )}
+        </View>
 
         {/* Upload Eligible Documents */}
         <View style={styles.drawerContainer}>

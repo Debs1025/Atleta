@@ -102,7 +102,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       if (isInitialLoad) {
         setLoading(true);
       }
-      const [homeRes, profileRes, statsRes, workloadRes, notifRes, inqRes, teamRes]: [any, any, any, any, any, any, any] = await Promise.all([
+      const [homeRes, profileRes, statsRes, workloadRes, notifRes, inqRes, teamRes, pastTeamsRes]: [any, any, any, any, any, any, any, any] = await Promise.all([
         requestAuthenticatedJson("/athletes/home").catch(() => null),
         requestAuthenticatedJson("/athletes/profile").catch(() => null),
         requestAuthenticatedJson("/athletes/stats/all").catch(() => null),
@@ -110,6 +110,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         requestAuthenticatedJson("/notifications").catch(() => null),
         requestAuthenticatedJson("/inquiries").catch(() => null),
         requestAuthenticatedJson("/athletes/team").catch(() => null),
+        requestAuthenticatedJson("/athletes/past-teams").catch(() => null),
       ]);
 
       let homeData = homeRes;
@@ -516,11 +517,13 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             : (profile?.eligible_documents && profile.eligible_documents.length > 0)
               ? profile.eligible_documents
               : [],
-          past_teams: (homeData?.past_teams && homeData.past_teams.length > 0)
-            ? homeData.past_teams
-            : (profileRes?.past_teams && profileRes.past_teams.length > 0)
-              ? profileRes.past_teams
-              : (raw.past_teams || []),
+          past_teams: (pastTeamsRes?.past_teams && pastTeamsRes.past_teams.length > 0)
+            ? pastTeamsRes.past_teams
+            : (homeData?.past_teams && homeData.past_teams.length > 0)
+              ? homeData.past_teams
+              : (profileRes?.past_teams && profileRes.past_teams.length > 0)
+                ? profileRes.past_teams
+                : (raw.past_teams || []),
           auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
         };
         setProfile(mappedProfile);
