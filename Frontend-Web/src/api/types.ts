@@ -158,6 +158,7 @@ export interface CreateMatchPayload {
   away_score?: number;
   game_result?: string;
   final_score?: string;
+  injuries?: any[];
   [key: string]: any;
 }
 
@@ -337,6 +338,8 @@ export interface AdminCoachQueueItem {
   first_name?: string;
   last_name?: string;
   email?: string;
+  certification_license_num?: string;
+  coach_license_number?: string;
   sport_type?: string;
   years_of_experience?: number;
   current_institution?: string;

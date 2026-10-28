@@ -175,7 +175,7 @@ export const coachSignupSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   contact_number: contactSchema,
-  certification_license_num: z.string().trim().max(100, "License number is too long.").optional().or(z.literal("")),
+  certification_license_num: z.string().trim().min(1, "Coach license number is required.").max(100, "License number is too long."),
   years_of_experience: z.preprocess(
     (val) => (val === "" || val === null || val === undefined ? 0 : Number(val)),
     z.number().int().min(0, "Years of experience must be at least 0.").max(60, "Years of experience cannot exceed 60.")
@@ -307,7 +307,7 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
 }
 
 async function fetchApi(path: string, options: RequestInit) {
-  const url = `${CLOUD_PROD_API}${path}`;
+  const primaryUrl = `${CLOUD_PROD_API}${path}`;
 
   const headers = {
     "Cache-Control": "no-cache",
@@ -315,26 +315,46 @@ async function fetchApi(path: string, options: RequestInit) {
     ...(options.headers || {}),
   };
 
-  const response = await withRequestTimeout((signal) =>
-    fetch(url, { ...options, headers, signal })
-  );
+  const doRequest = async (targetUrl: string) => {
+    const response = await withRequestTimeout((signal) =>
+      fetch(targetUrl, { ...options, headers, signal })
+    );
 
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
-  if (!response.ok) {
-    let serverMessage: string | undefined = typeof payload.error === "string" ? payload.error : typeof payload.message === "string" ? payload.message : undefined;
-    if (typeof payload.details === "string" && payload.details.trim().length > 0 && !payload.details.includes("node:internal") && !payload.details.includes("    at ")) {
-      serverMessage = payload.details;
+    if (!response.ok) {
+      let serverMessage: string | undefined = typeof payload.error === "string" ? payload.error : typeof payload.message === "string" ? payload.message : undefined;
+      if (typeof payload.details === "string" && payload.details.trim().length > 0 && !payload.details.includes("node:internal") && !payload.details.includes("    at ")) {
+        serverMessage = payload.details;
+      }
+      if (!serverMessage && Array.isArray(payload.errors) && payload.errors.length > 0) {
+        serverMessage = (payload.errors[0] as { message?: string }).message;
+      }
+      const error = new Error(serverMessage ?? "Something went wrong.") as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
-    if (!serverMessage && Array.isArray(payload.errors) && payload.errors.length > 0) {
-      serverMessage = (payload.errors[0] as { message?: string }).message;
+
+    return payload;
+  };
+
+  try {
+    return await doRequest(primaryUrl);
+  } catch (err: any) {
+    if (err && (err.message === "Network request failed" || String(err).includes("Network request failed"))) {
+      try {
+        const fallbackUrl = `http://10.0.2.2:5000/api/v1${path}`;
+        return await doRequest(fallbackUrl);
+      } catch (_) {
+        try {
+          const fallbackLocalUrl = `http://127.0.0.1:5000/api/v1${path}`;
+          return await doRequest(fallbackLocalUrl);
+        } catch (_) {}
+      }
     }
-    const error = new Error(serverMessage ?? "Something went wrong.") as Error & { status?: number };
-    error.status = response.status;
-    throw error;
+    console.error("fetchApi error on URL:", primaryUrl, err);
+    throw err;
   }
-
-  return payload;
 }
 
 

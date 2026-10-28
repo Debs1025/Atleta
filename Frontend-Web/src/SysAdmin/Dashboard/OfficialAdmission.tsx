@@ -66,7 +66,7 @@ export const OfficialAdmission: React.FC<OfficialAdmissionProps> = ({
         is_approved: true,
       }));
       onUpdate(currentOfficial.official_id, 'Approved', true);
-      setActionSuccess('Official sign-up approved. Access granted to official dashboard.');
+      setActionSuccess('Official sign-up approved. Verification email sent to official.');
       setTimeout(() => {
         setActionSuccess(null);
         onClose();
@@ -96,7 +96,7 @@ export const OfficialAdmission: React.FC<OfficialAdmissionProps> = ({
         rejection_reason: rejectReason.trim(),
       }));
       onUpdate(currentOfficial.official_id, 'Rejected', false);
-      setActionSuccess('Official sign-up application declined.');
+      setActionSuccess('Official sign-up application declined. Notification email sent to official.');
       setTimeout(() => {
         setActionSuccess(null);
         onClose();
