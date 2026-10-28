@@ -687,13 +687,15 @@ export function ManageTeamPage({
               <Ionicons name="trash-outline" size={24} color="#EF4444" />
             </View>
 
-            <Text style={styles.confirmTitle}>Remove Player from Team?</Text>
+            <Text style={styles.confirmTitle}>Terminate / Release Player?</Text>
             <Text style={styles.confirmMessage}>
-              Are you sure you want to remove{" "}
+              Are you sure you want to terminate{" "}
               <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
                 {playerToRemove?.full_name} (#{playerToRemove?.jersey_number})
               </Text>{" "}
               from <Text style={{ color: "#00C8FF", fontWeight: "800" }}>{team.team_name}</Text>?
+              {"\n\n"}
+              The player's complete performance statistics and achievements earned with this team will be preserved in their past teams career history.
             </Text>
 
             <View style={styles.confirmButtonRow}>
@@ -710,7 +712,7 @@ export function ManageTeamPage({
                 onPress={handleConfirmRemovePlayer}
                 activeOpacity={0.8}
               >
-                <Text style={styles.removeConfirmText}>YES, REMOVE</Text>
+                <Text style={styles.removeConfirmText}>YES, TERMINATE</Text>
               </TouchableOpacity>
             </View>
           </View>

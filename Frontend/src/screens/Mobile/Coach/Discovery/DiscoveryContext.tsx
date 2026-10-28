@@ -12,6 +12,7 @@ import {
   matchesAthleteFilters,
   getDefaultMetricForSport,
 } from './discoveryTypes';
+import { extractVerticalLeapInches } from './playerBadgeEngine';
 import { requestAuthenticatedJson, clearAuthMicroCache } from '../../Authentication/authShared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMatchesOfflineFirst } from '../../../../services/firebaseClient';
@@ -161,7 +162,10 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   height_ft: r.height_ft || "-",
                   weight_lbs: r.weight_lbs || "-",
                   wingspan_ft: r.wingspan_ft || "-",
+                  vertical_leap_in: r.vertical_leap_in || (r.vertical_jump_in ? `${r.vertical_jump_in}"` : "30\""),
+                  vertical_leap_cm: r.vertical_leap_cm || (r.vertical_jump_cm ? Number(r.vertical_jump_cm) : 76),
                 },
+                vertical_leap: extractVerticalLeapInches(r),
                 stats: r.stats || { ppg: 0, rpg: 0, ast: 0, fg_pct: 0 },
                 calculated_per: r.per || 25,
                 efficiency_pct: r.efficiency_pct || 75,
@@ -411,6 +415,12 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
           const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
           const wingspanCm = a.physical_attributes?.wingspan_cm || a.physical_profile?.wingspan_cm || a.wingspan_cm;
+          const verticalCm = Number(a.physical_attributes?.vertical_cm || a.physical_profile?.vertical_cm || a.vertical_cm || a.vertical_jump_cm || 0);
+          const verticalInches = extractVerticalLeapInches({
+            ...a,
+            vertical_cm: verticalCm,
+            physical_attributes: { ...(a.physical_attributes || {}), vertical_cm: verticalCm },
+          });
 
           const positionTag = a.position || (a.sport_type ? a.sport_type : 'Player');
 
@@ -425,7 +435,12 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               height_ft: a.biometrics?.height_ft || (heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : '-'),
               weight_lbs: a.biometrics?.weight_lbs || (weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : '-'),
               wingspan_ft: a.biometrics?.wingspan_ft || (wingspanCm ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"` : '-'),
+              vertical_leap_in: a.biometrics?.vertical_leap_in || `${verticalInches}"`,
+              vertical_leap_cm: verticalCm || Math.round(verticalInches * 2.54),
             },
+            vertical_leap: verticalInches,
+            vertical_leap_in: verticalInches,
+            vertical_leap_cm: verticalCm || Math.round(verticalInches * 2.54),
             stats: {
               ppg,
               rpg,

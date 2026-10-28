@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Image,
   Pressable,
@@ -7,9 +7,52 @@ import {
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import styles from "./styles/HomeAnalyticsPage";
 import { Coach } from "../Teams/Teams";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { AthleteBadgesShowcase } from "./AthleteBadgesShowcase";
+
+export interface PastTeamStatsSummary {
+  matches_played: number;
+  total_points: number;
+  ppg: number;
+  total_rebounds: number;
+  rpg: number;
+  total_assists: number;
+  apg: number;
+  total_steals: number;
+  spg: number;
+  total_blocks: number;
+  bpg: number;
+  total_turnovers?: number;
+  total_fouls?: number;
+  fg_pct: number;
+  three_pct: number;
+  ft_pct: number;
+  efficiency_rating: number;
+  wins?: number;
+  losses?: number;
+  best_time?: string | number;
+  top_sprint_time?: string | number;
+}
+
+export interface PastTeamAffiliation {
+  team_id: string;
+  team_name: string;
+  sport_type: string;
+  division?: string;
+  logo_url?: string;
+  coach_name?: string;
+  coach_id?: string;
+  jersey_number?: number | string | null;
+  position?: string;
+  joined_at?: string;
+  terminated_at?: string;
+  status: 'Terminated' | 'Former' | 'Released';
+  termination_reason?: string;
+  stats_summary: PastTeamStatsSummary;
+}
 
 export interface TeamAffiliation {
   team_id: string;
@@ -74,6 +117,9 @@ export interface AthleteProfile {
   height_cm: number;
   weight_kg: number;
   wingspan_cm: number;
+  vertical_cm?: number;
+  vertical_jump_cm?: number;
+  vertical_leap_in?: number;
   recruitment_status?: string;
   leaderboard_rank?: number | string;
   achievements?: string[];
@@ -91,6 +137,7 @@ export interface AthleteProfile {
   excel_tags?: string[];
   excelTags?: string[];
   specialties?: string[];
+  past_teams?: PastTeamAffiliation[];
   [key: string]: any;
 }
 
@@ -115,7 +162,9 @@ export function HomeAnalyticsPage({
   onNavigateToTeamProfile,
   onViewCoachProfile,
 }: HomeAnalyticsPageProps) {
+  const scrollViewRef = useRef<ScrollView>(null);
   const [dynamicSports, setDynamicSports] = useState<any[]>([]);
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>("ALL");
 
   useEffect(() => {
     let isMounted = true;
@@ -140,8 +189,13 @@ export function HomeAnalyticsPage({
   const rawPAverages = rawP?.averages || {};
   const analytics = profile?.analytics || {};
 
-  // Resolve active sport name
+  // Resolve active past team if filter is active
+  const pastTeamsList: PastTeamAffiliation[] = Array.isArray(profile?.past_teams) ? profile.past_teams : [];
+  const activePastTeam = pastTeamsList.find((t) => t.team_id === selectedTeamFilter);
+
+  // Resolve active sport name (use past team's sport if filtered)
   const rawSportName = String(
+    (activePastTeam?.sport_type) ||
     profile?.category ||
     profile?.sport_type ||
     rawP?.sport_type ||
@@ -166,14 +220,57 @@ export function HomeAnalyticsPage({
     is_verified: false,
   };
 
+  // Build stats when filtering by past team
+  const displayStats = activePastTeam
+    ? {
+        points_per_game: activePastTeam.stats_summary?.ppg || 0,
+        ppg: activePastTeam.stats_summary?.ppg || 0,
+        assists_per_game: activePastTeam.stats_summary?.apg || 0,
+        apg: activePastTeam.stats_summary?.apg || 0,
+        rebounds_per_game: activePastTeam.stats_summary?.rpg || 0,
+        rpg: activePastTeam.stats_summary?.rpg || 0,
+        steals_per_game: activePastTeam.stats_summary?.spg || 0,
+        blocks_per_game: activePastTeam.stats_summary?.bpg || 0,
+        field_goal_percentage: activePastTeam.stats_summary?.fg_pct || 0,
+        free_throw_percentage: activePastTeam.stats_summary?.ft_pct || 0,
+        three_pt_percentage: activePastTeam.stats_summary?.three_pct || 0,
+        efficiency_rating: activePastTeam.stats_summary?.efficiency_rating || 0,
+        games_played: activePastTeam.stats_summary?.matches_played || 0,
+        last_5_games_scores: activePastTeam.stats_summary?.ppg ? [activePastTeam.stats_summary.ppg] : [],
+      }
+    : rawPStats;
+
+  const displayAverages = activePastTeam
+    ? {
+        ppg: activePastTeam.stats_summary?.ppg || 0,
+        apg: activePastTeam.stats_summary?.apg || 0,
+        rpg: activePastTeam.stats_summary?.rpg || 0,
+        fg_percentage: activePastTeam.stats_summary?.fg_pct || 0,
+        free_throw_percentage: activePastTeam.stats_summary?.ft_pct || 0,
+        efficiency_rating: activePastTeam.stats_summary?.efficiency_rating || 0,
+      }
+    : rawPAverages;
+
+  const displayAnalytics = activePastTeam
+    ? {
+        points_per_game: activePastTeam.stats_summary?.ppg || 0,
+        assists_per_game: activePastTeam.stats_summary?.apg || 0,
+        rebounds_per_game: activePastTeam.stats_summary?.rpg || 0,
+        field_goal_percentage: activePastTeam.stats_summary?.fg_pct || 0,
+        free_throw_percentage: activePastTeam.stats_summary?.ft_pct || 0,
+        last_5_games_scores: activePastTeam.stats_summary?.ppg ? [activePastTeam.stats_summary.ppg] : [],
+      }
+    : analytics;
+
   // Build Sport Layout Config
-  const layout = deriveSportDashboardLayout(upperSport, rawSportName, analytics, rawPStats, rawPAverages, matchedAdminSport);
+  const layout = deriveSportDashboardLayout(upperSport, rawSportName, displayAnalytics, displayStats, displayAverages, matchedAdminSport);
 
   const activeScores = layout.scores || [];
   const maxScore = activeScores.length > 0 ? Math.max(...activeScores, 0) : 0;
 
   return (
     <ScrollView
+      ref={scrollViewRef}
       style={styles.dashboardContainer}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
@@ -196,11 +293,189 @@ export function HomeAnalyticsPage({
         <Text style={styles.categoryBadgeText}>{layout.badge}</Text>
       </View>
 
-      {/* Section Heading */}
+      {/* Section Heading & Team Filter Controls */}
       <View style={styles.sectionHeadingContainer}>
-        <Text style={styles.mainTitle}>Personal Analytics</Text>
-        <View style={styles.activeUnderline} />
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <View>
+            <Text style={styles.mainTitle}>
+              {activePastTeam ? `${activePastTeam.team_name} Stats` : "Personal Analytics"}
+            </Text>
+            <View style={[styles.activeUnderline, activePastTeam && { backgroundColor: "#EF4444" }]} />
+          </View>
+        </View>
       </View>
+
+      {/* --- PAST TEAMS STATS FILTER BAR --- */}
+      {pastTeamsList.length > 0 && (
+        <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Ionicons name="filter-circle-outline" size={16} color="#38BDF8" />
+              <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase" }}>
+                FILTER STATS BY TEAM
+              </Text>
+            </View>
+            {selectedTeamFilter !== "ALL" && (
+              <Pressable
+                onPress={() => setSelectedTeamFilter("ALL")}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              >
+                <Ionicons name="refresh-outline" size={13} color="#94A3B8" />
+                <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>Reset All</Text>
+              </Pressable>
+            )}
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {/* OVERALL CAREER / CURRENT TEAM PILL */}
+            <Pressable
+              onPress={() => setSelectedTeamFilter("ALL")}
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 20,
+                backgroundColor: selectedTeamFilter === "ALL" ? "#38BDF8" : "#111C35",
+                borderWidth: 1,
+                borderColor: selectedTeamFilter === "ALL" ? "#38BDF8" : "#223354",
+              }}
+            >
+              <Text
+                style={{
+                  color: selectedTeamFilter === "ALL" ? "#080F21" : "#94A3B8",
+                  fontSize: 12,
+                  fontWeight: "800",
+                }}
+              >
+                {profile.current_affiliation?.team_name && profile.current_affiliation.team_name !== "Unassigned Team"
+                  ? `Active: ${profile.current_affiliation.team_name}`
+                  : "Overall Career"}
+              </Text>
+            </Pressable>
+
+            {/* PAST TEAMS PILLS */}
+            {pastTeamsList.map((pastTeam, idx) => {
+              const isSelected = selectedTeamFilter === pastTeam.team_id;
+              return (
+                <Pressable
+                  key={pastTeam.team_id || idx}
+                  onPress={() => setSelectedTeamFilter(pastTeam.team_id)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 20,
+                    backgroundColor: isSelected ? "#EF4444" : "#111C35",
+                    borderWidth: 1,
+                    borderColor: isSelected ? "#EF4444" : "#EF444455",
+                  }}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={12}
+                    color={isSelected ? "#FFFFFF" : "#EF4444"}
+                  />
+                  <Text
+                    style={{
+                      color: isSelected ? "#FFFFFF" : "#FCA5A5",
+                      fontSize: 12,
+                      fontWeight: "800",
+                    }}
+                  >
+                    {pastTeam.team_name} (Past)
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* --- PAST TEAM STATS ACTIVE BANNER --- */}
+      {activePastTeam && (
+        <View style={{
+          backgroundColor: "#161B26",
+          borderRadius: 16,
+          padding: 16,
+          borderWidth: 1.5,
+          borderColor: "#EF4444",
+          marginBottom: 16,
+        }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <View style={{ backgroundColor: "#EF4444", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 }}>
+                    TERMINATED FROM TEAM
+                  </Text>
+                </View>
+                <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "600" }}>
+                  {activePastTeam.sport_type}
+                </Text>
+              </View>
+              <Text style={{ color: "#FFFFFF", fontSize: 20, fontWeight: "900" }}>
+                {activePastTeam.team_name}
+              </Text>
+              <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }}>
+                Coach {activePastTeam.coach_name || "Head Coach"} • Jersey #{activePastTeam.jersey_number ?? "--"} • {activePastTeam.position || "Player"}
+              </Text>
+              <Text style={{ color: "#64748B", fontSize: 11, marginTop: 4 }}>
+                Left: {new Date(activePastTeam.terminated_at || "").toLocaleDateString()}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setSelectedTeamFilter("ALL")}
+              style={{ padding: 6 }}
+            >
+              <Ionicons name="close-circle-outline" size={24} color="#EF4444" />
+            </Pressable>
+          </View>
+
+          {/* Quick Summary Strip */}
+          <View style={{
+            flexDirection: "row",
+            justifyContent: "space-around",
+            backgroundColor: "#0D1321",
+            borderRadius: 10,
+            paddingVertical: 10,
+            marginTop: 12,
+            borderWidth: 1,
+            borderColor: "#1E293B",
+          }}>
+            <View style={{ alignItems: "center" }}>
+              <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800" }}>GAMES</Text>
+              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "900", marginTop: 2 }}>
+                {activePastTeam.stats_summary?.matches_played || 0}
+              </Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: "#1E293B" }} />
+            <View style={{ alignItems: "center" }}>
+              <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800" }}>TOTAL PTS</Text>
+              <Text style={{ color: "#38BDF8", fontSize: 16, fontWeight: "900", marginTop: 2 }}>
+                {activePastTeam.stats_summary?.total_points || 0}
+              </Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: "#1E293B" }} />
+            <View style={{ alignItems: "center" }}>
+              <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800" }}>PPG</Text>
+              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "900", marginTop: 2 }}>
+                {activePastTeam.stats_summary?.ppg || 0}
+              </Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: "#1E293B" }} />
+            <View style={{ alignItems: "center" }}>
+              <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800" }}>PER</Text>
+              <Text style={{ color: "#34D399", fontSize: 16, fontWeight: "900", marginTop: 2 }}>
+                {activePastTeam.stats_summary?.efficiency_rating || 0}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* --- SPORT-SPECIFIC PRIMARY METRICS GRID --- */}
       <View style={styles.metricsGridRow}>
@@ -338,6 +613,9 @@ export function HomeAnalyticsPage({
         )}
       </View>
 
+      {/* --- BADGES YOU'VE UNLOCKED (ACHIEVEMENT SHOWCASE & PROGRESS BARS) --- */}
+      <AthleteBadgesShowcase athlete={profile} />
+
       {/* --- TEAM & COACH SECTION --- */}
       <View style={styles.sectionBlock}>
         <View style={styles.sectionTitleRow}>
@@ -436,6 +714,106 @@ export function HomeAnalyticsPage({
             </View>
           )}
         </View>
+
+        {/* --- PAST TEAMS HISTORY SECTION --- */}
+        {pastTeamsList.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.cyanAccentBar, { backgroundColor: "#EF4444" }]} />
+              <Text style={styles.sectionTitleText}>PAST TEAMS &amp; CAREER HISTORY</Text>
+            </View>
+            <Text style={{ color: "#94A3B8", fontSize: 12, marginBottom: 12 }}>
+              Historical stats and records from teams you were previously part of.
+            </Text>
+
+            {pastTeamsList.map((pastTeam, idx) => (
+              <View
+                key={pastTeam.team_id || idx}
+                style={{
+                  backgroundColor: "#111C35",
+                  borderRadius: 16,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: selectedTeamFilter === pastTeam.team_id ? "#EF4444" : "#1E2C4A",
+                  marginBottom: 12,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "900" }}>
+                        {pastTeam.team_name}
+                      </Text>
+                      <View style={{ backgroundColor: "rgba(239, 68, 68, 0.2)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: "#F87171", fontSize: 9, fontWeight: "900" }}>TERMINATED</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: "#94A3B8", fontSize: 11, marginTop: 2 }}>
+                      Coach {pastTeam.coach_name || "Head Coach"} • #{pastTeam.jersey_number ?? "--"} ({pastTeam.position || "Player"})
+                    </Text>
+                    <Text style={{ color: "#64748B", fontSize: 10, marginTop: 2 }}>
+                      Left: {new Date(pastTeam.terminated_at || "").toLocaleDateString()}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Team Stats Summary Grid */}
+                <View style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  backgroundColor: "#0A1124",
+                  borderRadius: 10,
+                  padding: 10,
+                  marginTop: 10,
+                }}>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ color: "#64748B", fontSize: 9, fontWeight: "700" }}>GAMES</Text>
+                    <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "900" }}>{pastTeam.stats_summary?.matches_played || 0}</Text>
+                  </View>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ color: "#64748B", fontSize: 9, fontWeight: "700" }}>PPG</Text>
+                    <Text style={{ color: "#38BDF8", fontSize: 14, fontWeight: "900" }}>{pastTeam.stats_summary?.ppg || 0}</Text>
+                  </View>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ color: "#64748B", fontSize: 9, fontWeight: "700" }}>RPG</Text>
+                    <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "900" }}>{pastTeam.stats_summary?.rpg || 0}</Text>
+                  </View>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ color: "#64748B", fontSize: 9, fontWeight: "700" }}>APG</Text>
+                    <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "900" }}>{pastTeam.stats_summary?.apg || 0}</Text>
+                  </View>
+                  <View style={{ alignItems: "center" }}>
+                    <Text style={{ color: "#64748B", fontSize: 9, fontWeight: "700" }}>FG%</Text>
+                    <Text style={{ color: "#34D399", fontSize: 14, fontWeight: "900" }}>{pastTeam.stats_summary?.fg_pct || 0}%</Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  onPress={() => {
+                    setSelectedTeamFilter(pastTeam.team_id);
+                    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+                  }}
+                  style={{
+                    backgroundColor: selectedTeamFilter === pastTeam.team_id ? "#EF4444" : "rgba(56, 189, 248, 0.15)",
+                    borderRadius: 8,
+                    paddingVertical: 8,
+                    alignItems: "center",
+                    marginTop: 10,
+                  }}
+                >
+                  <Text style={{
+                    color: selectedTeamFilter === pastTeam.team_id ? "#FFFFFF" : "#38BDF8",
+                    fontSize: 11,
+                    fontWeight: "800",
+                    letterSpacing: 0.5,
+                  }}>
+                    {selectedTeamFilter === pastTeam.team_id ? "CURRENTLY FILTERED" : "FILTER THIS TEAM'S STATS"}
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );

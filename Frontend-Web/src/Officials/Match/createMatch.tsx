@@ -52,6 +52,17 @@ export interface SportOptionItem {
   name: string;
 }
 
+export interface MatchInjuryEntry {
+  id: string;
+  player_name: string;
+  team: string;
+  quarter_or_set?: string;
+  injury_type: string;
+  status: 'Out' | 'Day-to-Day' | 'Sidelined' | 'Questionable';
+  notes?: string;
+  is_ocr_detected?: boolean;
+}
+
 export const toTitleCaseSport = (name: string): string => {
   if (!name) return '';
   const trimmed = name.trim();
@@ -599,6 +610,35 @@ export const CreateMatch: React.FC = () => {
   // Dynamic Scoreboard State (from OCR extraction and live edits)
   const [ocrDetectedTeamScores, setOcrDetectedTeamScores] = useState<{ team: string; score: number }[]>([]);
   const [ocrFinalScoreStr, setOcrFinalScoreStr] = useState<string | null>(null);
+
+  // Match Injuries / Sidelined Athletes State (Manual + OCR auto-detected)
+  const [matchInjuries, setMatchInjuries] = useState<MatchInjuryEntry[]>([]);
+
+  const handleAddInjury = useCallback(() => {
+    setMatchInjuries((prev) => [
+      ...prev,
+      {
+        id: `inj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        player_name: '',
+        team: homeTeam || 'Home',
+        quarter_or_set: '',
+        injury_type: 'Ankle Sprain',
+        status: 'Out',
+        notes: '',
+        is_ocr_detected: false,
+      },
+    ]);
+  }, [homeTeam]);
+
+  const handleUpdateInjury = useCallback((id: string, field: keyof MatchInjuryEntry, val: any) => {
+    setMatchInjuries((prev) =>
+      prev.map((inj) => (inj.id === id ? { ...inj, [field]: val } : inj))
+    );
+  }, []);
+
+  const handleRemoveInjury = useCallback((id: string) => {
+    setMatchInjuries((prev) => prev.filter((inj) => inj.id !== id));
+  }, []);
 
   // Dynamic Score Calculation (Aligned with Mobile getDynamicTeamScore)
   const getDynamicTeamScore = useCallback(
@@ -1439,6 +1479,26 @@ export const CreateMatch: React.FC = () => {
         if (aRows.length > 0) setAwayRoster(sortAthletesByPrimaryMetric(aRows, sportCategory, activeSportConfig));
       }
 
+      // Extract injuries / sidelined players detected from scoresheet OCR
+      const detectedInjuries = Array.isArray(ocrRes?.injuries)
+        ? ocrRes.injuries
+        : (Array.isArray(ocrRes?.parsed_tables?.injuries) ? ocrRes.parsed_tables.injuries : []);
+
+      if (detectedInjuries.length > 0) {
+        setMatchInjuries(
+          detectedInjuries.map((inj: any, idx: number) => ({
+            id: `ocr_inj_${idx}_${Date.now()}`,
+            player_name: String(inj.player_name || inj.name || '').trim(),
+            team: String(inj.team || inj.team_name || finalHomeTeam || 'Home').trim(),
+            quarter_or_set: String(inj.quarter_or_set || inj.quarter || inj.period || '').trim(),
+            injury_type: String(inj.injury_type || inj.injury || 'Ankle Sprain').trim(),
+            status: ((inj.status as any) || 'Out'),
+            notes: String(inj.notes || '').trim(),
+            is_ocr_detected: true,
+          }))
+        );
+      }
+
       setOcrCompleted(true);
     } catch (scanErr: any) {
       console.warn('Standalone OCR error:', scanErr);
@@ -1856,6 +1916,7 @@ export const CreateMatch: React.FC = () => {
         race_results: isIndividualSport ? raceResults : undefined,
         raceResults: isIndividualSport ? raceResults : undefined,
         sport_specific_details: isIndividualSport ? { race_results: raceResults } : undefined,
+        injuries: matchInjuries.filter((inj) => inj.player_name.trim().length > 0),
         notes: notes.trim(),
         home_score: homeDynamicScore.num,
         away_score: awayDynamicScore.num,
@@ -3118,10 +3179,238 @@ export const CreateMatch: React.FC = () => {
               </div>
             )}
 
-            {/* Section 04: NOTES */}
+            {/* Section 04: INJURIES & SIDELINED PLAYERS */}
             <div style={styles.sectionCard}>
               <div style={styles.sectionHeaderRow}>
-                <h3 style={styles.sectionHeading}>04. NOTES</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle style={{ width: 17, height: 17, color: '#E11D48' }} />
+                  <h3 style={styles.sectionHeading}>04. INJURIES & SIDELINED PLAYERS</h3>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {matchInjuries.some((inj) => inj.is_ocr_detected) && (
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 900,
+                        padding: '4px 8px',
+                        backgroundColor: '#FFF1F2',
+                        color: '#E11D48',
+                        border: '1px solid #FECDD3',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      ⚡ OCR DETECTED ({matchInjuries.filter((i) => i.is_ocr_detected).length})
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddInjury}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      backgroundColor: '#0B132B',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      borderRadius: '2px',
+                    }}
+                  >
+                    <Plus style={{ width: 13, height: 13 }} />
+                    ADD INJURY LOG
+                  </button>
+                </div>
+              </div>
+
+              {matchInjuries.length === 0 ? (
+                <div
+                  style={{
+                    padding: '24px 16px',
+                    textAlign: 'center',
+                    border: '1.5px dashed #CBD5E1',
+                    borderRadius: '4px',
+                    backgroundColor: '#F8FAFC',
+                  }}
+                >
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+                    No injured or sidelined players recorded for this match.
+                  </p>
+                  <p style={{ margin: '4px 0 14px', fontSize: '11px', color: '#94A3B8' }}>
+                    Log any athlete injuries sustained during this match manually, or let OCR auto-detect them from scoresheet remarks.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleAddInjury}
+                    style={{
+                      padding: '6px 14px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1.5px solid #0B132B',
+                      boxShadow: '2px 2px 0px #0B132B',
+                      color: '#0B132B',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + ADD INJURED / SIDELINED PLAYER
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1.3fr 1fr 1.7fr 1.2fr 2fr 36px',
+                      gap: '8px',
+                      fontSize: '10px',
+                      fontWeight: 900,
+                      color: '#64748B',
+                      textTransform: 'uppercase',
+                      padding: '0 4px',
+                    }}
+                  >
+                    <span>Player Name</span>
+                    <span>Team</span>
+                    <span>Period/Quarter</span>
+                    <span>Injury Type</span>
+                    <span>Status</span>
+                    <span>Notes / Treatment</span>
+                    <span></span>
+                  </div>
+
+                  {matchInjuries.map((inj) => (
+                    <div
+                      key={inj.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '2fr 1.3fr 1fr 1.7fr 1.2fr 2fr 36px',
+                        gap: '8px',
+                        alignItems: 'center',
+                        padding: '8px 10px',
+                        border: '1.5px solid #0B132B',
+                        backgroundColor: inj.is_ocr_detected ? '#FFFBEB' : '#FFFFFF',
+                        boxShadow: '2px 2px 0px #0B132B',
+                      }}
+                    >
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          placeholder="e.g. John Doe"
+                          value={inj.player_name}
+                          onChange={(e) => handleUpdateInjury(inj.id, 'player_name', e.target.value)}
+                          style={{ ...styles.input, fontSize: '12px', padding: '6px 8px' }}
+                          list="roster-players-datalist"
+                        />
+                        {inj.is_ocr_detected && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              right: '6px',
+                              top: '7px',
+                              fontSize: '8px',
+                              fontWeight: 900,
+                              color: '#D97706',
+                              backgroundColor: '#FEF3C7',
+                              padding: '1px 4px',
+                              borderRadius: '2px',
+                            }}
+                          >
+                            OCR
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={inj.team}
+                        onChange={(e) => handleUpdateInjury(inj.id, 'team', e.target.value)}
+                        style={{ ...styles.select, fontSize: '12px', padding: '6px 8px' }}
+                      >
+                        <option value={homeTeam || 'Home'}>{homeTeam || 'Home Team'}</option>
+                        <option value={awayTeam || 'Away'}>{awayTeam || 'Away Team'}</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        placeholder="Q2 / Set 1"
+                        value={inj.quarter_or_set || ''}
+                        onChange={(e) => handleUpdateInjury(inj.id, 'quarter_or_set', e.target.value)}
+                        style={{ ...styles.input, fontSize: '12px', padding: '6px 8px' }}
+                      />
+
+                      <select
+                        value={inj.injury_type}
+                        onChange={(e) => handleUpdateInjury(inj.id, 'injury_type', e.target.value)}
+                        style={{ ...styles.select, fontSize: '12px', padding: '6px 8px' }}
+                      >
+                        <option value="Ankle Sprain">Ankle Sprain</option>
+                        <option value="Knee Sprain / Contusion">Knee Sprain / Contusion</option>
+                        <option value="Hamstring Strain">Hamstring Strain</option>
+                        <option value="Groin / Quadriceps Strain">Groin / Quad Strain</option>
+                        <option value="Muscle Cramps">Severe Cramps</option>
+                        <option value="Concussion Protocol">Concussion Protocol</option>
+                        <option value="Shoulder / Arm Injury">Shoulder / Arm Injury</option>
+                        <option value="Wrist / Finger Dislocation">Wrist / Finger Dislocation</option>
+                        <option value="Laceration / Bleeding">Laceration / Bleeding</option>
+                        <option value="Fatigue / Heat Exhaustion">Heat Exhaustion / Fatigue</option>
+                        <option value="Other / Medical Withdrawal">Other / Medical Withdrawal</option>
+                      </select>
+
+                      <select
+                        value={inj.status}
+                        onChange={(e) => handleUpdateInjury(inj.id, 'status', e.target.value as any)}
+                        style={{ ...styles.select, fontSize: '12px', padding: '6px 8px' }}
+                      >
+                        <option value="Out">Out for Game</option>
+                        <option value="Sidelined">Sidelined</option>
+                        <option value="Day-to-Day">Day-to-Day</option>
+                        <option value="Questionable">Questionable</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        placeholder="e.g. Left ankle iced, did not return"
+                        value={inj.notes || ''}
+                        onChange={(e) => handleUpdateInjury(inj.id, 'notes', e.target.value)}
+                        style={{ ...styles.input, fontSize: '12px', padding: '6px 8px' }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveInjury(inj.id)}
+                        style={{
+                          backgroundColor: '#FFF1F2',
+                          border: '1px solid #FECDD3',
+                          color: '#E11D48',
+                          padding: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          borderRadius: '3px',
+                        }}
+                        title="Remove injury record"
+                      >
+                        <Trash2 style={{ width: 13, height: 13 }} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <datalist id="roster-players-datalist">
+                    {[...homeRoster, ...awayRoster].map((p, idx) => (
+                      <option key={`${p.player_name}_${idx}`} value={p.player_name} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
+            </div>
+
+            {/* Section 05: NOTES */}
+            <div style={styles.sectionCard}>
+              <div style={styles.sectionHeaderRow}>
+                <h3 style={styles.sectionHeading}>05. NOTES</h3>
                 <FileText style={styles.headerIcon} />
               </div>
 

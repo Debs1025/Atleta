@@ -760,6 +760,10 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     custom_stats: { ...a },
                 }));
 
+                const detectedInjuries = Array.isArray(dataObj.injuries)
+                    ? dataObj.injuries
+                    : (Array.isArray(responseData?.injuries) ? responseData.injuries : []);
+
                 return {
                     team_name: homeTeamName,
                     opponent_team_name: oppTeamName,
@@ -769,6 +773,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                         { team: homeTeamName, score: hScore },
                         { team: oppTeamName, score: aScore },
                     ],
+                    injuries: detectedInjuries,
                     teams: detectedTeamNames,
                     sport_type: detectedSport as any,
                     file_name: dataObj.file_name || dataObj.filename,

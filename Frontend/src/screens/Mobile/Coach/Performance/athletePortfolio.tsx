@@ -26,6 +26,10 @@ import Svg, {
 
 import { AthletePerformanceProfile, MatchHistoryItem } from "../DataTypes";
 import { styles } from "./styles/athletePortfolio";
+import {
+  computePlayerArchetypeBadges,
+  extractVerticalLeapInches,
+} from "../Discovery/playerBadgeEngine";
 
 interface AthletePortfolioProps {
   athlete: AthletePerformanceProfile;
@@ -479,33 +483,40 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
             </View>
           )}
 
-          {/* Playstyle / Specialties (Where Player Excels) */}
+          {/* Stats-Derived Archetype Badges */}
           {(() => {
-            const excelTags = athlete.excel_tags || athlete.excelTags || (athlete as any).specialties || [];
-            if (!Array.isArray(excelTags) || excelTags.length === 0) return null;
+            const archetypeBadges = computePlayerArchetypeBadges(athlete);
             return (
-              <View style={{ marginTop: 12, alignItems: 'center' }}>
-                <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 6 }}>
-                  PLAYER SPECIALTIES & PLAYSTYLE
-                </Text>
+              <View style={{ marginTop: 14, alignItems: 'center', width: '100%' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                  <Ionicons name="sparkles" size={12} color="#00C8FF" />
+                  <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                    STATS-DERIVED PLAYSTYLE ARCHETYPES
+                  </Text>
+                </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, paddingHorizontal: 12 }}>
-                  {excelTags.map((tag: string, idx: number) => (
+
+                  {/* Archetype Badges */}
+                  {archetypeBadges.map((badge) => (
                     <View
-                      key={idx}
+                      key={badge.id}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                        borderColor: '#F59E0B',
+                        backgroundColor: badge.bgColor,
+                        borderColor: badge.borderColor,
                         borderWidth: 1,
                         paddingHorizontal: 8,
-                        paddingVertical: 3,
+                        paddingVertical: 4,
                         borderRadius: 6,
                         gap: 4,
                       }}
                     >
-                      <Ionicons name="sparkles" size={11} color="#F59E0B" />
-                      <Text style={{ color: '#FCD34D', fontSize: 11, fontWeight: '800' }}>{tag}</Text>
+                      <Ionicons name={badge.icon as any} size={11} color={badge.color} />
+                      <Text style={{ color: badge.color, fontSize: 11, fontWeight: '800' }}>{badge.label}</Text>
+                      <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
+                        <Text style={{ color: '#F1F5F9', fontSize: 9, fontWeight: '700' }}>{badge.metricProof}</Text>
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -704,9 +715,9 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
             </Text>
           </View>
           <View style={styles.physicalRow}>
-            <Text style={styles.physicalLabel}>Vertical</Text>
+            <Text style={styles.physicalLabel}>Vertical Leap</Text>
             <Text style={styles.physicalValue}>
-              {athlete.biometrics.vertical_jump_in || "-"}
+              {athlete.biometrics.vertical_jump_in || (athlete.biometrics as any).vertical_leap_in || `${extractVerticalLeapInches(athlete)}"`}
             </Text>
           </View>
         </View>

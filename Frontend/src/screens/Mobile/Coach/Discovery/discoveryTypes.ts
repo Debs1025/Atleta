@@ -9,7 +9,12 @@ export interface AthleteDiscoveryItem {
     height_ft: string; // "6'2""
     weight_lbs: string; // "185 lbs"
     wingspan_ft: string; // "6'5""
+    vertical_leap_in?: string; // e.g. "34\""
+    vertical_leap_cm?: number;
   };
+  vertical_leap?: number;
+  vertical_leap_in?: number;
+  vertical_leap_cm?: number;
   stats: {
     ppg?: number;
     rpg?: number;

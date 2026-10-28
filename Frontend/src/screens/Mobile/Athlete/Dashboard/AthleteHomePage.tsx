@@ -397,6 +397,10 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           height_cm: Number(phys.height_cm ?? phys.height ?? raw.height_cm ?? raw.height ?? 0),
           weight_kg: Number(phys.weight_kg ?? phys.weight ?? raw.weight_kg ?? raw.weight ?? 0),
           wingspan_cm: Number(phys.wingspan_cm ?? phys.wingspan ?? raw.wingspan_cm ?? raw.wingspan ?? 0),
+          vertical_cm: Number(phys.vertical_cm ?? phys.vertical_jump_cm ?? raw.vertical_cm ?? raw.vertical_jump_cm ?? 0),
+          vertical_leap_in: Number(phys.vertical_leap_in ?? raw.vertical_leap_in ?? raw.vertical_leap ?? (phys.vertical_cm ? Math.round(Number(phys.vertical_cm) / 2.54) : 0)),
+          stats: raw.stats || {},
+          averages: raw.averages || {},
           recruitment_status: raw.recruitment_status || "AVAILABLE",
           leaderboard_rank: raw.leaderboard_rank || "N/A",
           current_affiliation: {
@@ -512,6 +516,11 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             : (profile?.eligible_documents && profile.eligible_documents.length > 0)
               ? profile.eligible_documents
               : [],
+          past_teams: (homeData?.past_teams && homeData.past_teams.length > 0)
+            ? homeData.past_teams
+            : (profileRes?.past_teams && profileRes.past_teams.length > 0)
+              ? profileRes.past_teams
+              : (raw.past_teams || []),
           auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
         };
         setProfile(mappedProfile);

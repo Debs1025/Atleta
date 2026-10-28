@@ -15,6 +15,10 @@ import { AthleteDiscoveryItem } from './discoveryTypes';
 
 import { requestAuthenticatedJson } from '../../Authentication/authShared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  computePlayerArchetypeBadges,
+  extractVerticalLeapInches,
+} from './playerBadgeEngine';
 
 interface ScoutAthleteProps {
   onBack: () => void;
@@ -187,7 +191,52 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
             <Text style={styles.biometricLabel}>WINGSPAN</Text>
             <Text style={styles.biometricValue}>{currentAthlete.biometrics?.wingspan_ft || "6'5\""}</Text>
           </View>
+          <View style={styles.biometricDivider} />
+          <View style={styles.biometricCol}>
+            <Text style={styles.biometricLabel}>VERTICAL</Text>
+            <Text style={styles.biometricValue}>
+              {currentAthlete.biometrics?.vertical_leap_in || `${extractVerticalLeapInches(currentAthlete)}"`}
+            </Text>
+          </View>
         </View>
+
+        {/* Stats-Derived Archetype Badges */}
+        {(() => {
+          const archetypeBadges = computePlayerArchetypeBadges(currentAthlete);
+          return (
+            <View style={{ marginBottom: 18 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                <Ionicons name="sparkles" size={12} color="#00C8FF" />
+                <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                  STATS-DERIVED PLAYSTYLE ARCHETYPES
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+
+                {/* Archetype Badges */}
+                {archetypeBadges.map((b) => (
+                  <View key={b.id} style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: b.bgColor,
+                    borderColor: b.borderColor,
+                    borderWidth: 1,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 6,
+                    gap: 4,
+                  }}>
+                    <Ionicons name={b.icon as any} size={11} color={b.color} />
+                    <Text style={{ color: b.color, fontSize: 11, fontWeight: '800' }}>{b.label}</Text>
+                    <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
+                      <Text style={{ color: '#F1F5F9', fontSize: 9, fontWeight: '700' }}>{b.metricProof}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Performance Analytics Section */}
         <Text style={styles.sectionTitle}>PERFORMANCE ANALYTICS</Text>
