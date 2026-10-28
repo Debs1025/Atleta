@@ -3243,10 +3243,140 @@ export const saveTournamentBracket = async (bracket: Partial<TournamentBracket>)
     body: JSON.stringify(bracket),
   });
   const data = await handleResponse<{ bracket: TournamentBracket }>(res);
+  invalidateCache('tournament_brackets');
   try {
     localStorage.setItem(`atleta_cached_bracket_${bracket.sport_type || 'all'}`, JSON.stringify([data.bracket]));
   } catch { }
   return data.bracket;
+};
+
+export const updateTournamentBracket = async (
+  bracketId: string,
+  updates: Partial<TournamentBracket>
+): Promise<TournamentBracket> => {
+  const token = getStoredToken();
+  let updatedBracket: TournamentBracket | null = null;
+
+  // Retrieve existing bracket to guarantee stages and bracket_id are preserved
+  let existingBracket: TournamentBracket | null = null;
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('atleta_cached_bracket_')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list: TournamentBracket[] = JSON.parse(raw);
+          const found = list.find((b) => b.bracket_id === bracketId);
+          if (found) {
+            existingBracket = found;
+            break;
+          }
+        }
+      }
+    }
+  } catch { }
+
+  const preservedStages =
+    (updates.stages && updates.stages.length > 0)
+      ? updates.stages
+      : (existingBracket?.stages && existingBracket.stages.length > 0)
+        ? existingBracket.stages
+        : (updates.stages || []);
+
+  const payload: Partial<TournamentBracket> & { bracket_id: string } = {
+    ...(existingBracket || {}),
+    ...updates,
+    bracket_id: updates.bracket_id || bracketId,
+    stages: preservedStages,
+  };
+
+  try {
+    const res = await fetch(`${BASE_URL}/tournaments/brackets/${bracketId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.bracket || data;
+      if (raw) {
+        updatedBracket = {
+          ...raw,
+          bracket_id: bracketId,
+          stages: (raw.stages && raw.stages.length > 0) ? raw.stages : preservedStages,
+        };
+      }
+    }
+  } catch { }
+
+  invalidateCache('tournament_brackets');
+
+  // Update in localStorage caches
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('atleta_cached_bracket_')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list: TournamentBracket[] = JSON.parse(raw);
+          const idx = list.findIndex((b) => b.bracket_id === bracketId);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...payload, ...(updatedBracket || {}), updated_at: new Date().toISOString() };
+            if (!updatedBracket) updatedBracket = list[idx];
+            localStorage.setItem(key, JSON.stringify(list));
+          }
+        }
+      }
+    }
+  } catch { }
+
+  if (!updatedBracket) {
+    updatedBracket = {
+      bracket_id: bracketId,
+      tournament_name: updates.tournament_name || existingBracket?.tournament_name || 'Tournament',
+      sport_type: updates.sport_type || existingBracket?.sport_type || 'BASKETBALL',
+      format: updates.format || existingBracket?.format || 'single_elimination',
+      status: updates.status || existingBracket?.status || 'Active',
+      stages: preservedStages,
+      created_at: existingBracket?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...updates,
+    } as TournamentBracket;
+  }
+
+  return updatedBracket;
+};
+
+export const deleteTournamentBracket = async (bracketId: string): Promise<boolean> => {
+  const token = getStoredToken();
+  try {
+    await fetch(`${BASE_URL}/tournaments/brackets/${bracketId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch { }
+
+  invalidateCache('tournament_brackets');
+
+  // Remove from localStorage caches
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('atleta_cached_bracket_')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list: TournamentBracket[] = JSON.parse(raw);
+          const filtered = list.filter((b) => b.bracket_id !== bracketId);
+          localStorage.setItem(key, JSON.stringify(filtered));
+        }
+      }
+    }
+  } catch { }
+
+  return true;
 };
 
 export const advanceBracketTeam = async (
@@ -3271,6 +3401,7 @@ export const advanceBracketTeam = async (
     }),
   });
   const data = await handleResponse<{ bracket: TournamentBracket }>(res);
+  invalidateCache('tournament_brackets');
   return data.bracket;
 };
 
