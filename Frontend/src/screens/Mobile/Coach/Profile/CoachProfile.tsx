@@ -201,8 +201,8 @@ export function CoachProfile({
               regional_affiliation: regionalAffiliation,
               national_sports_league: nationalLeague,
               regional_affiliations: {
-                association_name: regionalAffiliation || nationalLeague || "",
-                office_name: institution || "",
+                association_name: regionalAffiliation || "",
+                office_name: nationalLeague || "",
               },
               credentials: normalizedCreds,
               uploaded_documents: normalizedDocs,
@@ -302,7 +302,10 @@ export function CoachProfile({
             {/* CURRENT INSTITUTION CARD */}
             <View style={styles.cardContainer}>
               <Text style={styles.cyanSubLabel}>CURRENT INSTITUTION</Text>
-              <View style={styles.affiliationItemRow}>
+              <Text style={styles.fieldSubDescription}>
+                Academic institution or athletic club (e.g., Ateneo de Naga University)
+              </Text>
+              <View style={[styles.affiliationItemRow, { marginBottom: 0 }]}>
                 <Ionicons name="business-outline" size={18} color="#00C8FF" />
                 <Text style={styles.affiliationItemText}>
                   {profile.current_institution || "No Institution Specified"}
@@ -312,19 +315,28 @@ export function CoachProfile({
 
             {/* REGIONAL AFFILIATION CARD */}
             <View style={styles.cardContainer}>
-              <Text style={styles.cyanSubLabel}>REGIONAL AFFILIATION & LEAGUE</Text>
-
-              <View style={styles.affiliationItemRow}>
+              <Text style={styles.cyanSubLabel}>REGIONAL AFFILIATION</Text>
+              <Text style={styles.fieldSubDescription}>
+                Regional athletic board or local conference (e.g., Bicol Region Athletics Association / Bicol League)
+              </Text>
+              <View style={[styles.affiliationItemRow, { marginBottom: 0 }]}>
                 <Ionicons name="location-outline" size={18} color="#00C8FF" />
                 <Text style={styles.affiliationItemText}>
-                  {profile.regional_affiliation || profile.regional_affiliations?.association_name || "No Regional Affiliation"}
+                  {profile.regional_affiliation || "No Regional Affiliation Specified"}
                 </Text>
               </View>
+            </View>
 
+            {/* NATIONAL SPORTS LEAGUE CARD */}
+            <View style={styles.cardContainer}>
+              <Text style={styles.cyanSubLabel}>NATIONAL SPORTS LEAGUE</Text>
+              <Text style={styles.fieldSubDescription}>
+                National collegiate or professional league, if applicable (e.g., UAAP, NCAA, SBP, PVL)
+              </Text>
               <View style={[styles.affiliationItemRow, { marginBottom: 0 }]}>
                 <Ionicons name="trophy-outline" size={18} color="#00C8FF" />
                 <Text style={styles.affiliationItemText}>
-                  {profile.national_sports_league || profile.regional_affiliations?.office_name || "No League Specified"}
+                  {profile.national_sports_league || "No National League Specified"}
                 </Text>
               </View>
             </View>

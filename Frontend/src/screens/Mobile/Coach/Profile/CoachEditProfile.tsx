@@ -122,8 +122,8 @@ export function CoachEditProfile({
     contact_number: currentProfile.contact_number || (currentProfile as any).phone || "",
     sports_focus: currentProfile.sports_focus,
     current_institution: currentProfile.current_institution || "",
-    regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
-    national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
+    regional_affiliation: currentProfile.regional_affiliation || "",
+    national_sports_league: currentProfile.national_sports_league || "",
     coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
   });
 
@@ -151,8 +151,8 @@ export function CoachEditProfile({
       contact_number: currentProfile.contact_number || (currentProfile as any).phone || "",
       sports_focus: currentProfile.sports_focus,
       current_institution: currentProfile.current_institution || "",
-      regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
-      national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
+      regional_affiliation: currentProfile.regional_affiliation || "",
+      national_sports_league: currentProfile.national_sports_league || "",
       coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
     });
     setContactNumberError("");
@@ -697,6 +697,7 @@ export function CoachEditProfile({
         {/* CURRENT INSTITUTION */}
         <View style={styles.formFieldContainer}>
           <Text style={styles.inputLabel}>CURRENT INSTITUTION</Text>
+          <Text style={styles.inputHelperText}>Academic institution or athletic club</Text>
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
@@ -712,12 +713,13 @@ export function CoachEditProfile({
         {/* REGIONAL AFFILIATION */}
         <View style={styles.formFieldContainer}>
           <Text style={styles.inputLabel}>REGIONAL AFFILIATION</Text>
+          <Text style={styles.inputHelperText}>Regional athletic board or local conference</Text>
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
               value={form.regional_affiliation}
               onChangeText={(text) => setForm((prev) => ({ ...prev, regional_affiliation: text }))}
-              placeholder="e.g. Bicol Regional Athletic Association (BRAA)"
+              placeholder="e.g. Bicol Region Athletics Association / Bicol League"
               placeholderTextColor="#64748B"
               autoCapitalize="words"
             />
@@ -727,12 +729,13 @@ export function CoachEditProfile({
         {/* NATIONAL SPORTS LEAGUE */}
         <View style={styles.formFieldContainer}>
           <Text style={styles.inputLabel}>NATIONAL SPORTS LEAGUE</Text>
+          <Text style={styles.inputHelperText}>National collegiate or professional league (if applicable)</Text>
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
               value={form.national_sports_league}
               onChangeText={(text) => setForm((prev) => ({ ...prev, national_sports_league: text }))}
-              placeholder="e.g. Batang Pinoy / Palarong Pambansa"
+              placeholder="e.g. UAAP, NCAA, SBP, PVL"
               placeholderTextColor="#64748B"
               autoCapitalize="words"
             />

@@ -1150,8 +1150,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               regional_affiliation: effectiveProfile?.regional_affiliation || "",
               national_sports_league: effectiveProfile?.national_sports_league || "",
               regional_affiliations: {
-                association_name: effectiveProfile?.regional_affiliation || effectiveProfile?.national_sports_league || "National Sports League",
-                office_name: effectiveProfile?.current_institution || "University Athletics",
+                association_name: effectiveProfile?.regional_affiliation || "",
+                office_name: effectiveProfile?.national_sports_league || "",
               },
               credentials: effectiveProfile?.credentials || effectiveProfile?.certifications || [],
               uploaded_documents: effectiveProfile?.uploaded_documents || [],

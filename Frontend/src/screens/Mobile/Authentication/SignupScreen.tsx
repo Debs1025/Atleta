@@ -1051,9 +1051,9 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
               />
               <FormField control={coachForm.control} name="certification_license_num" label="Coach License Number" placeholder="e.g. PSC-COACH-12345" error={coachErrors.certification_license_num?.message} />
               <FormField control={coachForm.control} name="years_of_experience" label="Years of Experience" placeholder="0 - 60" keyboardType="numeric" error={coachErrors.years_of_experience?.message} />
-              <FormField control={coachForm.control} name="current_institution" label="Current Institution" placeholder="e.g. Ateneo de Naga University" error={coachErrors.current_institution?.message} />
-              <FormField control={coachForm.control} name="regional_affiliation" label="Regional Affiliation (Optional)" placeholder="e.g. Bicol Regional Athletic Association (BRAA) (Optional)" error={coachErrors.regional_affiliation?.message} />
-              <FormField control={coachForm.control} name="national_sports_league" label="National Sports League (Optional)" placeholder="e.g. Batang Pinoy / Palarong Pambansa (Optional)" error={coachErrors.national_sports_league?.message} />
+              <FormField control={coachForm.control} name="current_institution" label="Current Institution (Academic Institution or Club)" placeholder="e.g. Ateneo de Naga University" error={coachErrors.current_institution?.message} />
+              <FormField control={coachForm.control} name="regional_affiliation" label="Regional Affiliation (Regional Board / Conference)" placeholder="e.g. Bicol Region Athletics Association / Bicol League" error={coachErrors.regional_affiliation?.message} />
+              <FormField control={coachForm.control} name="national_sports_league" label="National Sports League (Collegiate or Pro League - Optional)" placeholder="e.g. UAAP, NCAA, SBP, PVL" error={coachErrors.national_sports_league?.message} />
 
               <View style={styles.documentBox}>
                 <Text style={styles.documentLabel}>Credentials & Documents (Optional)</Text>

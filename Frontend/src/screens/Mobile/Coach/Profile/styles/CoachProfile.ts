@@ -146,6 +146,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     fontFamily: fontPlatform,
     textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  fieldSubDescription: {
+    color: "#94A3B8",
+    fontSize: 12,
+    fontWeight: "500",
+    fontFamily: fontPlatform,
     marginBottom: 14,
   },
   affiliationItemRow: {

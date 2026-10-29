@@ -104,6 +104,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     fontFamily: fontPlatform,
     textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  inputHelperText: {
+    color: "#64748B",
+    fontSize: 11.5,
+    fontFamily: fontPlatform,
     marginBottom: 8,
   },
   inputWrapper: {
