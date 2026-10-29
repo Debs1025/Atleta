@@ -1,7 +1,13 @@
 import { Alert, Linking, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
+
+let MediaLibrary: typeof import('expo-media-library') | null = null;
+try {
+  MediaLibrary = require('expo-media-library');
+} catch (e) {
+  // Gracefully handled if native module is not linked in current binary
+}
 
 /**
  * Ensures the scoresheet is saved to local app storage (documentDirectory)
@@ -88,8 +94,8 @@ export async function downloadScoresheetToDevice(
       filenamePrefix
     );
 
-    // 1. If it's an image (JPG, PNG, WEBP), save directly to Photos / Gallery via MediaLibrary
-    if (mimeType.startsWith('image/')) {
+    // 1. If it's an image (JPG, PNG, WEBP), save directly to Photos / Gallery via MediaLibrary (if available)
+    if (mimeType.startsWith('image/') && MediaLibrary) {
       try {
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
