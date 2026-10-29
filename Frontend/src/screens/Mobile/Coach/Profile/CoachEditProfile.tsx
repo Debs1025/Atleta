@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   ScrollView,
@@ -118,12 +119,16 @@ export function CoachEditProfile({
   const [form, setForm] = useState({
     full_name: currentProfile.full_name,
     email: currentProfile.email,
+    contact_number: currentProfile.contact_number || (currentProfile as any).phone || "",
     sports_focus: currentProfile.sports_focus,
     current_institution: currentProfile.current_institution || "",
     regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
     national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
     coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
   });
+
+  const [contactNumberError, setContactNumberError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const [avatarUri, setAvatarUri] = useState<string | undefined>(currentProfile.avatar_url);
 
@@ -143,12 +148,14 @@ export function CoachEditProfile({
     setForm({
       full_name: currentProfile.full_name,
       email: currentProfile.email,
+      contact_number: currentProfile.contact_number || (currentProfile as any).phone || "",
       sports_focus: currentProfile.sports_focus,
       current_institution: currentProfile.current_institution || "",
       regional_affiliation: currentProfile.regional_affiliation || currentProfile.regional_affiliations?.association_name || "",
       national_sports_league: currentProfile.national_sports_league || currentProfile.regional_affiliations?.office_name || "",
       coaching_philosophy: currentProfile.coaching_philosophy || (currentProfile as any).coachingPhilosophy || (currentProfile as any).philosophy || "",
     });
+    setContactNumberError("");
     setAvatarUri(currentProfile.avatar_url);
     const docs = normalizeUploadedDocs(
       currentProfile.uploaded_documents ||
@@ -351,6 +358,21 @@ export function CoachEditProfile({
       return;
     }
 
+    const rawContact = (form.contact_number || "").trim();
+    let cleanedContact = "";
+    if (rawContact) {
+      cleanedContact = rawContact.replace(/[\s\-_()]/g, "");
+      if (cleanedContact.startsWith("+63")) cleanedContact = "0" + cleanedContact.slice(3);
+      else if (cleanedContact.startsWith("63") && cleanedContact.length === 12) cleanedContact = "0" + cleanedContact.slice(2);
+      else if (cleanedContact.length === 10 && cleanedContact.startsWith("9")) cleanedContact = "0" + cleanedContact;
+
+      if (!/^09\d{9}$/.test(cleanedContact)) {
+        setContactNumberError("Contact number must be 11 digits starting with 09 (e.g. 09123456789).");
+        Alert.alert("Invalid Contact Number", "Contact number must be 11 digits starting with 09 (e.g. 09123456789).");
+        return;
+      }
+    }
+
     const todayFormatted = new Date()
       .toLocaleDateString("en-US", {
         month: "short",
@@ -367,8 +389,6 @@ export function CoachEditProfile({
       firstName = nameParts[0];
       lastName = "";
     } else if (nameParts.length > 1) {
-      // The last word is the surname/last name (e.g., "Pelonio")
-      // All preceding words form the first name (e.g., "Gerard Francis")
       firstName = nameParts.slice(0, -1).join(" ");
       lastName = nameParts[nameParts.length - 1];
     }
@@ -391,6 +411,7 @@ export function CoachEditProfile({
       last_name: lastName,
       full_name: form.full_name.trim(),
       email: form.email.trim(),
+      contact_number: cleanedContact,
       sports_focus: form.sports_focus,
       role_title: updatedRoleTitle,
       avatar_url: avatarUri,
@@ -419,6 +440,8 @@ export function CoachEditProfile({
       full_name: form.full_name.trim(),
       sport_type: canonicalSportType,
       sports_focus: form.sports_focus,
+      contact_number: cleanedContact || null,
+      phoneNumber: cleanedContact || null,
       current_institution: form.current_institution.trim(),
       regional_affiliation: form.regional_affiliation.trim(),
       national_sports_league: form.national_sports_league.trim(),
@@ -433,8 +456,14 @@ export function CoachEditProfile({
       credentials: [...nonDocCredentials, ...docCredentials],
     };
 
+    setIsSaving(true);
+
     try {
-      // 1. Resolve UID with token fallback if missing on profileData
+      // 1. Sync to backend REST API first to enforce phone uniqueness
+      await requestAuthenticatedJson("/coaches/me/profile", "PATCH", patchPayload)
+        .catch(() => requestAuthenticatedJson("/coaches/profile", "PATCH", patchPayload));
+
+      // 2. Resolve UID with token fallback if missing on profileData
       let uid = currentProfile.user_id || currentProfile.coach_id;
       if (!uid) {
         try {
@@ -450,7 +479,7 @@ export function CoachEditProfile({
       const rawUid = uid ? String(uid).replace(/^coach_/, "") : "";
       const canonicalCoachId = uid ? (String(uid).startsWith("coach_") ? String(uid) : `coach_${rawUid}`) : "";
 
-      // 2. Direct Firestore synchronization
+      // 3. Direct Firestore synchronization
       if (rawUid) {
         await Promise.all([
           setDoc(doc(db, "Coach_Profiles", canonicalCoachId), patchPayload, { merge: true }).catch(() => null),
@@ -459,6 +488,8 @@ export function CoachEditProfile({
             first_name: firstName,
             last_name: lastName,
             full_name: form.full_name.trim(),
+            contact_number: cleanedContact || null,
+            phoneNumber: cleanedContact || null,
             avatar_url: avatarUri,
             profile_image: avatarUri,
             coaching_philosophy: form.coaching_philosophy.trim(),
@@ -470,21 +501,17 @@ export function CoachEditProfile({
         ]);
       }
 
-      // 3. Persist to local offline caches immediately
+      // 4. Persist to local offline caches immediately
       await AsyncStorage.setItem(
         "atleta_offline_coach_profile_cache",
         JSON.stringify(updatedProfile)
       ).catch(() => null);
 
-      // 4. Update parent component state
+      // 5. Update parent component state
       if (onSave) {
         onSave(updatedProfile);
       }
-
-      // 5. Background sync to backend REST API (tolerant to network/server cold starts)
-      requestAuthenticatedJson("/coaches/me/profile", "PATCH", patchPayload)
-        .catch(() => requestAuthenticatedJson("/coaches/profile", "PATCH", patchPayload))
-        .catch(() => null);
+      setContactNumberError("");
 
       Alert.alert("Profile Updated", "Your coach credentials and profile changes have been saved successfully.", [
         {
@@ -494,7 +521,16 @@ export function CoachEditProfile({
       ]);
     } catch (err: any) {
       console.warn("Coach profile sync error:", err);
-      // Fallback save directly to state so user never loses their changes
+      const errMsg = err?.message || String(err || "Failed to update profile.");
+      const isPhoneDuplicate = errMsg.toLowerCase().includes("phone number") || errMsg.toLowerCase().includes("already registered");
+      if (isPhoneDuplicate) {
+        const errorText = "This phone number is already registered to another account.";
+        setContactNumberError(errorText);
+        Alert.alert("Profile Error", errorText);
+        return;
+      }
+
+      // Fallback save directly to state so user never loses their changes on transient network issues
       if (onSave) {
         onSave(updatedProfile);
       }
@@ -504,6 +540,8 @@ export function CoachEditProfile({
           onPress: () => onBack(),
         },
       ]);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -585,6 +623,29 @@ export function CoachEditProfile({
               autoCapitalize="none"
             />
           </View>
+        </View>
+
+        {/* CONTACT NUMBER */}
+        <View style={styles.formFieldContainer}>
+          <Text style={styles.inputLabel}>CONTACT NUMBER</Text>
+          <View style={[styles.inputWrapper, contactNumberError ? { borderColor: "#EF4444" } : null]}>
+            <TextInput
+              style={styles.textInput}
+              value={form.contact_number}
+              onChangeText={(text) => {
+                setForm((prev) => ({ ...prev, contact_number: text }));
+                if (contactNumberError) setContactNumberError("");
+              }}
+              placeholder="09XXXXXXXXX"
+              placeholderTextColor="#64748B"
+              keyboardType="phone-pad"
+            />
+          </View>
+          {contactNumberError ? (
+            <Text style={{ color: "#EF4444", fontSize: 12, marginTop: 4 }}>
+              {contactNumberError}
+            </Text>
+          ) : null}
         </View>
 
         {/* SPORT CATEGORY */}
@@ -793,12 +854,16 @@ export function CoachEditProfile({
 
         {/* SUBMIT ACTION BUTTON */}
         <TouchableOpacity
-          style={styles.saveSubmitBtn}
+          style={[styles.saveSubmitBtn, isSaving && { opacity: 0.7 }]}
           onPress={handleSaveChanges}
+          disabled={isSaving}
           activeOpacity={0.85}
         >
-          <Text style={styles.saveSubmitText}>SAVE CHANGES</Text>
-          <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+          ) : null}
+          <Text style={styles.saveSubmitText}>{isSaving ? "SAVING..." : "SAVE CHANGES"}</Text>
+          {!isSaving && <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />}
         </TouchableOpacity>
 
         {/* FOOTER TEXT */}

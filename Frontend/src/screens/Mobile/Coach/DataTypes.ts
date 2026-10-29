@@ -20,6 +20,8 @@ export interface CoachProfileState {
   last_name: string;
   full_name: string;
   email: string;
+  contact_number?: string;
+  phoneNumber?: string;
   role_title: string; // e.g., "BASKETBALL COACH"
   sports_focus: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   avatar_url?: string;
@@ -48,6 +50,8 @@ export const DEFAULT_COACH_PROFILE: CoachProfileState = {
   last_name: "",
   full_name: "Coach",
   email: "",
+  contact_number: "",
+  phoneNumber: "",
   role_title: "COACH",
   sports_focus: "BASKETBALL",
   current_institution: "",

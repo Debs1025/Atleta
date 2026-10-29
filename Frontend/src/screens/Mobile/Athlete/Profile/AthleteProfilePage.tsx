@@ -191,6 +191,8 @@ export function AthleteProfilePage({
   const [gender, setGender] = useState(profile.gender || "");
   const [province, setProvince] = useState((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
   const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
+  const [contactNumber, setContactNumber] = useState(profile.contact_number || (profile as any).phone || "");
+  const [contactNumberError, setContactNumberError] = useState("");
   const activeTeamId = (profile as any)?.team_id || (profile as any)?.current_affiliation?.team_id || (profile as any)?.teamId || null;
   const [hasActiveTeam, setHasActiveTeam] = useState<boolean>(Boolean(activeTeamId));
 
@@ -266,6 +268,8 @@ export function AthleteProfilePage({
     setGender(profile.gender || "");
     setProvince((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
     if (profile.category) setCategory(profile.category);
+    setContactNumber(profile.contact_number || (profile as any).phone || "");
+    setContactNumberError("");
     setHeightCm(profile.height_cm);
     setWeightKg(profile.weight_kg);
     setWingspanCm(profile.wingspan_cm);
@@ -1001,6 +1005,21 @@ export function AthleteProfilePage({
 
     const safeBirthdate = (birthdate || profile.birthdate || "").trim();
 
+    const rawContact = (contactNumber || "").trim();
+    let cleanedContact = "";
+    if (rawContact) {
+      cleanedContact = rawContact.replace(/[\s\-_()]/g, "");
+      if (cleanedContact.startsWith("+63")) cleanedContact = "0" + cleanedContact.slice(3);
+      else if (cleanedContact.startsWith("63") && cleanedContact.length === 12) cleanedContact = "0" + cleanedContact.slice(2);
+      else if (cleanedContact.length === 10 && cleanedContact.startsWith("9")) cleanedContact = "0" + cleanedContact;
+
+      if (!/^09\d{9}$/.test(cleanedContact)) {
+        setContactNumberError("Contact number must be 11 digits starting with 09 (e.g. 09123456789).");
+        Alert.alert("Invalid Contact Number", "Contact number must be 11 digits starting with 09 (e.g. 09123456789).");
+        return;
+      }
+    }
+
     const updated: AthleteProfile = {
       ...profile,
       first_name: resolvedFirst,
@@ -1010,6 +1029,8 @@ export function AthleteProfilePage({
       gender: gender,
       province: province,
       category: category,
+      contact_number: cleanedContact,
+      phone: cleanedContact,
       height_cm: safeHeight,
       weight_kg: safeWeight,
       wingspan_cm: safeWingspan,
@@ -1020,7 +1041,26 @@ export function AthleteProfilePage({
     setIsSavingProfile(true);
 
     try {
-      // 1. Synchronize to Firestore Athlete_Profiles & Users document
+      // 1. Sync to backend REST API first to enforce phone uniqueness
+      await requestAuthenticatedJson("/athletes/profile", "PATCH", {
+        first_name: resolvedFirst,
+        last_name: resolvedLast,
+        full_name: resolvedFullName,
+        contact_number: cleanedContact || undefined,
+        phoneNumber: cleanedContact || undefined,
+        height_cm: safeHeight,
+        weight_kg: safeWeight,
+        wingspan_cm: safeWingspan,
+        position: category,
+        sport_type: category,
+        gender: gender,
+        province: province,
+        birthdate: safeBirthdate,
+        avatar_url: avatarUri,
+        eligible_documents: documents,
+      });
+
+      // 2. Synchronize to Firestore Athlete_Profiles & Users document
       let athleteUid = profile.athlete_id || (profile as any).user_id;
       if (!athleteUid) {
         try {
@@ -1048,6 +1088,8 @@ export function AthleteProfilePage({
           province: province || "",
           category: category || "BASKETBALL",
           position: category || "BASKETBALL",
+          contact_number: cleanedContact || null,
+          phoneNumber: cleanedContact || null,
           height_cm: safeHeight,
           weight_kg: safeWeight,
           wingspan_cm: safeWingspan,
@@ -1061,6 +1103,8 @@ export function AthleteProfilePage({
           first_name: resolvedFirst,
           last_name: resolvedLast,
           full_name: resolvedFullName,
+          contact_number: cleanedContact || null,
+          phoneNumber: cleanedContact || null,
           avatar_url: avatarUri || "",
           profile_image: avatarUri || "",
           updated_at: new Date().toISOString(),
@@ -1077,40 +1121,32 @@ export function AthleteProfilePage({
         }
       }
 
-      // 2. Persist to AsyncStorage immediately
+      // 3. Persist to AsyncStorage immediately
       await AsyncStorage.setItem("atleta_offline_athlete_profile_cache", JSON.stringify(updated)).catch(() => null);
 
-      // 3. Update active parent state and toggle editing mode
+      // 4. Update active parent state and toggle editing mode
       try {
         onUpdateProfile(updated);
       } catch (parentErr) {
         console.warn("onUpdateProfile notice:", parentErr);
       }
       setIsEditing(false);
+      setContactNumberError("");
       setSaveSuccessMsg(true);
       setTimeout(() => setSaveSuccessMsg(false), 2500);
 
-      // 4. Background sync to backend REST API
-      requestAuthenticatedJson("/athletes/profile", "PATCH", {
-        first_name: resolvedFirst,
-        last_name: resolvedLast,
-        full_name: resolvedFullName,
-        height_cm: safeHeight,
-        weight_kg: safeWeight,
-        wingspan_cm: safeWingspan,
-        position: category,
-        sport_type: category,
-        gender: gender,
-        province: province,
-        birthdate: safeBirthdate,
-        avatar_url: avatarUri,
-        eligible_documents: documents,
-      }).catch(() => null);
-
       Alert.alert("Profile Updated", "Your athlete credentials and profile details have been saved successfully.");
-    } catch (saveErr) {
+    } catch (saveErr: any) {
       console.warn("Athlete profile save error:", saveErr);
-      Alert.alert("Save Error", "Failed to save profile changes. Please try again.");
+      const errMsg = saveErr?.message || String(saveErr || "Failed to save profile changes. Please try again.");
+      const isPhoneDuplicate = errMsg.toLowerCase().includes("phone number") || errMsg.toLowerCase().includes("already registered");
+      if (isPhoneDuplicate) {
+        const errorText = "This phone number is already registered to another account.";
+        setContactNumberError(errorText);
+        Alert.alert("Profile Error", errorText);
+      } else {
+        Alert.alert("Save Error", errMsg);
+      }
     } finally {
       setIsSavingProfile(false);
     }
@@ -1125,6 +1161,8 @@ export function AthleteProfilePage({
     setGender(profile.gender || "");
     setProvince(profile.province || "");
     setCategory(profile.category);
+    setContactNumber(profile.contact_number || (profile as any).phone || "");
+    setContactNumberError("");
     setHeightCm(profile.height_cm);
     setWeightKg(profile.weight_kg);
     setWingspanCm(profile.wingspan_cm);
@@ -1365,6 +1403,39 @@ export function AthleteProfilePage({
               )}
             </View>
           </View>
+        </View>
+
+        {/* Contact Number Field */}
+        <View style={[styles.fieldGroup, { marginTop: -4 }]}>
+          <Text style={styles.fieldLabel}>CONTACT NUMBER</Text>
+          <View
+            style={[
+              styles.inputWrapper,
+              isEditing && styles.inputWrapperEditable,
+              contactNumberError ? { borderColor: "#EF4444" } : null,
+            ]}
+          >
+            <TextInput
+              style={styles.textInput}
+              value={contactNumber}
+              editable={isEditing}
+              onChangeText={(text) => {
+                setContactNumber(text);
+                if (contactNumberError) setContactNumberError("");
+              }}
+              placeholder="09XXXXXXXXX"
+              placeholderTextColor="#64748B"
+              keyboardType="phone-pad"
+            />
+            {isEditing && (
+              <Ionicons name="pencil-sharp" size={14} color="#38BDF8" />
+            )}
+          </View>
+          {contactNumberError ? (
+            <Text style={{ color: "#EF4444", fontSize: 12, marginTop: 4 }}>
+              {contactNumberError}
+            </Text>
+          ) : null}
         </View>
 
         {/* Physical Stats Section Header */}

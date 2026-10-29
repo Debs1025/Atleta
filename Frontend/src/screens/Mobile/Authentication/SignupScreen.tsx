@@ -445,9 +445,33 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
     });
   }, [athleteForm, coachForm, role]);
 
+  const handleSubmissionError = (error: any) => {
+    const rawMsg = getAuthErrorMessage(error, "Unable to create the account right now.");
+    const isPhoneDuplicate =
+      rawMsg.toLowerCase().includes("phone number") ||
+      rawMsg.toLowerCase().includes("already registered");
+
+    if (isPhoneDuplicate) {
+      const displayMsg = "This phone number is already registered to another account.";
+      athleteForm.setError("contact_number" as any, {
+        type: "manual",
+        message: displayMsg,
+      });
+      coachForm.setError("contact_number" as any, {
+        type: "manual",
+        message: displayMsg,
+      });
+      setStep(2);
+      Alert.alert("Registration Error", displayMsg);
+      setFeedback({ tone: "error", message: displayMsg });
+    } else {
+      setFeedback({ tone: "error", message: rawMsg });
+    }
+  };
+
   const goNext = async () => {
     const fields = socialToken
-      ? (["first_name", "last_name", "email"] as const)
+      ? (["first_name", "last_name", "email", "contact_number"] as const)
       : (["first_name", "last_name", "email", "password", "contact_number"] as const);
     const valid = await activeForm.trigger(fields as any);
     if (valid) {
@@ -601,7 +625,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         return;
       }
     } catch (error) {
-      setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
+      handleSubmissionError(error);
     } finally {
       setLoading(false);
     }
@@ -727,7 +751,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         return;
       }
     } catch (error) {
-      setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create the account right now.") });
+      handleSubmissionError(error);
     } finally {
       setLoading(false);
     }
@@ -891,7 +915,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         }
         return;
       } catch (error) {
-        setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
+        handleSubmissionError(error);
       } finally {
         setLoading(false);
       }
