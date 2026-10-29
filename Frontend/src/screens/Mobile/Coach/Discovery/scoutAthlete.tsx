@@ -19,6 +19,7 @@ import {
   computePlayerArchetypeBadges,
   extractVerticalLeapInches,
 } from './playerBadgeEngine';
+import { getCleanBiometrics } from './biometricsFormatter';
 
 interface ScoutAthleteProps {
   onBack: () => void;
@@ -175,30 +176,45 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
           </View>
         ) : null}
 
-        {/* Biometrics Card */}
-        <View style={styles.biometricsCard}>
-          <View style={styles.biometricCol}>
-            <Text style={styles.biometricLabel}>HEIGHT</Text>
-            <Text style={styles.biometricValue}>{currentAthlete.biometrics?.height_ft || "6'2\""}</Text>
-          </View>
-          <View style={styles.biometricDivider} />
-          <View style={styles.biometricCol}>
-            <Text style={styles.biometricLabel}>WEIGHT</Text>
-            <Text style={styles.biometricValue}>{currentAthlete.biometrics?.weight_lbs || "180 lbs"}</Text>
-          </View>
-          <View style={styles.biometricDivider} />
-          <View style={styles.biometricCol}>
-            <Text style={styles.biometricLabel}>WINGSPAN</Text>
-            <Text style={styles.biometricValue}>{currentAthlete.biometrics?.wingspan_ft || "6'5\""}</Text>
-          </View>
-          <View style={styles.biometricDivider} />
-          <View style={styles.biometricCol}>
-            <Text style={styles.biometricLabel}>VERTICAL</Text>
-            <Text style={styles.biometricValue}>
-              {currentAthlete.biometrics?.vertical_leap_in || `${extractVerticalLeapInches(currentAthlete)}"`}
-            </Text>
-          </View>
-        </View>
+        {/* Clean Biometrics Card with Minimalist Icons & Standard Units */}
+        {(() => {
+          const cleanBio = getCleanBiometrics(currentAthlete);
+          return (
+            <View style={styles.biometricsCard}>
+              <View style={styles.biometricCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                  <Ionicons name="body-outline" size={12} color="#00C8FF" />
+                  <Text style={styles.biometricLabel}>HEIGHT</Text>
+                </View>
+                <Text style={styles.biometricValue}>{cleanBio.height}</Text>
+              </View>
+              <View style={styles.biometricDivider} />
+              <View style={styles.biometricCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                  <Ionicons name="barbell-outline" size={12} color="#38BDF8" />
+                  <Text style={styles.biometricLabel}>WEIGHT</Text>
+                </View>
+                <Text style={styles.biometricValue}>{cleanBio.weight}</Text>
+              </View>
+              <View style={styles.biometricDivider} />
+              <View style={styles.biometricCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                  <Ionicons name="resize-outline" size={12} color="#818CF8" />
+                  <Text style={styles.biometricLabel}>WINGSPAN</Text>
+                </View>
+                <Text style={styles.biometricValue}>{cleanBio.wingspan}</Text>
+              </View>
+              <View style={styles.biometricDivider} />
+              <View style={styles.biometricCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                  <Ionicons name="arrow-up-circle-outline" size={12} color="#34D399" />
+                  <Text style={styles.biometricLabel}>VERTICAL</Text>
+                </View>
+                <Text style={styles.biometricValue}>{cleanBio.vertical}</Text>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Stats-Derived Archetype Badges */}
         {(() => {

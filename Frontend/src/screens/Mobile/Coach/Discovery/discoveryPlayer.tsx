@@ -22,6 +22,7 @@ import {
   computePlayerArchetypeBadges,
   extractVerticalLeapInches,
 } from './playerBadgeEngine';
+import { getCleanBiometrics } from './biometricsFormatter';
 
 export const DiscoveryPlayer: React.FC<{
   mode: 'feed' | 'rankings' | 'recruits';
@@ -88,6 +89,7 @@ export const DiscoveryPlayer: React.FC<{
             const verticalIn = extractVerticalLeapInches(athlete);
             const primaryBadge = archetypeBadges.length > 0 ? archetypeBadges[0] : null;
             const secondaryBadgesCount = archetypeBadges.length > 1 ? archetypeBadges.length - 1 : 0;
+            const cleanBio = getCleanBiometrics(athlete);
 
             return (
               <TouchableOpacity
@@ -180,12 +182,12 @@ export const DiscoveryPlayer: React.FC<{
                   </View>
                 </View>
 
-                {/* Biometrics Strip including Vertical Leap */}
+                {/* Clean Biometrics Strip with Minimalist Icons & Standard Units */}
                 <View style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                  borderColor: 'rgba(255, 255, 255, 0.08)',
+                  borderColor: 'rgba(255, 255, 255, 0.07)',
                   borderWidth: 1,
                   borderRadius: 8,
                   paddingHorizontal: 10,
@@ -193,27 +195,46 @@ export const DiscoveryPlayer: React.FC<{
                   marginBottom: 8,
                   justifyContent: 'space-between',
                 }}>
+                  {/* Height */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{ color: '#64748B', fontSize: 10, fontWeight: '700' }}>HT</Text>
-                    <Text style={{ color: '#E2E8F0', fontSize: 11, fontWeight: '800' }}>{athlete.biometrics?.height_ft || '-'}</Text>
-                  </View>
-                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{ color: '#64748B', fontSize: 10, fontWeight: '700' }}>WT</Text>
-                    <Text style={{ color: '#E2E8F0', fontSize: 11, fontWeight: '800' }}>{athlete.biometrics?.weight_lbs || '-'}</Text>
-                  </View>
-                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{ color: '#64748B', fontSize: 10, fontWeight: '700' }}>WING</Text>
-                    <Text style={{ color: '#E2E8F0', fontSize: 11, fontWeight: '800' }}>{athlete.biometrics?.wingspan_ft || '-'}</Text>
-                  </View>
-                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{ color: '#64748B', fontSize: 10, fontWeight: '700' }}>VERT</Text>
-                    <Text style={{ color: '#E2E8F0', fontSize: 11, fontWeight: '800' }}>
-                      {athlete.biometrics?.vertical_leap_in || (verticalIn ? `${verticalIn}"` : '-')}
+                    <Ionicons name="body-outline" size={12} color="#00C8FF" />
+                    <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
+                      {cleanBio.height}
                     </Text>
                   </View>
+
+                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
+
+                  {/* Weight */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="barbell-outline" size={12} color="#38BDF8" />
+                    <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
+                      {cleanBio.weight}
+                    </Text>
+                  </View>
+
+                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
+
+                  {/* Wingspan */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="resize-outline" size={12} color="#818CF8" />
+                    <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
+                      {cleanBio.wingspan}
+                    </Text>
+                  </View>
+
+                  {cleanBio.vertical !== '-' && (
+                    <>
+                      <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
+                      {/* Vertical Leap */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="arrow-up-circle-outline" size={12} color="#34D399" />
+                        <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
+                          {cleanBio.vertical}
+                        </Text>
+                      </View>
+                    </>
+                  )}
                 </View>
 
                 <View style={styles.statsTrioRow}>
@@ -466,38 +487,46 @@ export const DiscoveryPlayer: React.FC<{
                 </View>
 
                 <View style={modalStyles.skillsWrap}>
-                  {selectedBadgeModalAthlete?.biometrics?.vertical_leap_in ? (
-                    <View style={modalStyles.skillChip}>
-                      <Ionicons name="arrow-up" size={11} color="#00C8FF" />
-                      <Text style={modalStyles.skillChipText}>
-                        Vertical: {selectedBadgeModalAthlete.biometrics.vertical_leap_in}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {selectedBadgeModalAthlete?.biometrics?.wingspan_ft ? (
-                    <View style={modalStyles.skillChip}>
-                      <Ionicons name="resize" size={11} color="#38BDF8" />
-                      <Text style={modalStyles.skillChipText}>
-                        Wingspan: {selectedBadgeModalAthlete.biometrics.wingspan_ft}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {selectedBadgeModalAthlete?.biometrics?.height_ft ? (
-                    <View style={modalStyles.skillChip}>
-                      <Ionicons name="body" size={11} color="#94A3B8" />
-                      <Text style={modalStyles.skillChipText}>
-                        Height: {selectedBadgeModalAthlete.biometrics.height_ft}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {selectedBadgeModalAthlete?.biometrics?.weight_lbs ? (
-                    <View style={modalStyles.skillChip}>
-                      <Ionicons name="barbell" size={11} color="#94A3B8" />
-                      <Text style={modalStyles.skillChipText}>
-                        Weight: {selectedBadgeModalAthlete.biometrics.weight_lbs}
-                      </Text>
-                    </View>
-                  ) : null}
+                  {(() => {
+                    const cleanModalBio = selectedBadgeModalAthlete ? getCleanBiometrics(selectedBadgeModalAthlete) : null;
+                    if (!cleanModalBio) return null;
+                    return (
+                      <>
+                        {cleanModalBio.height !== '-' && (
+                          <View style={modalStyles.skillChip}>
+                            <Ionicons name="body-outline" size={12} color="#00C8FF" />
+                            <Text style={modalStyles.skillChipText}>
+                              {cleanModalBio.height}
+                            </Text>
+                          </View>
+                        )}
+                        {cleanModalBio.weight !== '-' && (
+                          <View style={modalStyles.skillChip}>
+                            <Ionicons name="barbell-outline" size={12} color="#38BDF8" />
+                            <Text style={modalStyles.skillChipText}>
+                              {cleanModalBio.weight}
+                            </Text>
+                          </View>
+                        )}
+                        {cleanModalBio.wingspan !== '-' && (
+                          <View style={modalStyles.skillChip}>
+                            <Ionicons name="resize-outline" size={12} color="#818CF8" />
+                            <Text style={modalStyles.skillChipText}>
+                              {cleanModalBio.wingspan}
+                            </Text>
+                          </View>
+                        )}
+                        {cleanModalBio.vertical !== '-' && (
+                          <View style={modalStyles.skillChip}>
+                            <Ionicons name="arrow-up-circle-outline" size={12} color="#34D399" />
+                            <Text style={modalStyles.skillChipText}>
+                              {cleanModalBio.vertical}
+                            </Text>
+                          </View>
+                        )}
+                      </>
+                    );
+                  })()}
                   {selectedBadgeModalAthlete?.calculated_per ? (
                     <View style={modalStyles.skillChip}>
                       <Ionicons name="speedometer" size={11} color="#A855F7" />

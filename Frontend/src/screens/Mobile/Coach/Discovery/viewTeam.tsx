@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDiscovery } from './DiscoveryContext';
 import { styles } from './styles/viewTeam';
 import { DiscoveryTeamItem, AthleteDiscoveryItem } from './discoveryTypes';
+import { formatCleanHeight, formatCleanWeight } from './biometricsFormatter';
 
 interface ViewTeamProps {
   onBack: () => void;
@@ -157,8 +158,8 @@ export const ViewTeam: React.FC<ViewTeamProps> = ({ onBack, team }) => {
                 </View>
 
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ color: '#00C8FF', fontSize: 12, fontWeight: '800' }}>{player.biometrics.height_ft}</Text>
-                  <Text style={{ color: '#94A3B8', fontSize: 10, marginTop: 2 }}>{player.biometrics.weight_lbs}</Text>
+                  <Text style={{ color: '#00C8FF', fontSize: 12, fontWeight: '800' }}>{formatCleanHeight(player)}</Text>
+                  <Text style={{ color: '#94A3B8', fontSize: 10, marginTop: 2 }}>{formatCleanWeight(player)}</Text>
                 </View>
               </TouchableOpacity>
             ))}
