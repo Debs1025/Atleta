@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { View, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/AuthEntry";
 import * as SecureStore from "expo-secure-store";
 import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, clearAuthMicroCache, parseJwtPayload, getActiveApiBase, type AuthRole } from "./authShared";
-import { clearFirebaseClientCaches } from "../../../services/firebaseClient";
+import { db, clearFirebaseClientCaches } from "../../../services/firebaseClient";
+import { doc, getDoc } from "firebase/firestore";
 import { LoginScreen } from "./LoginScreen";
 import { PasswordResetScreen } from "./PasswordResetScreen";
 import { SignupScreen } from "./SignupScreen";
@@ -92,6 +93,41 @@ export function AuthEntry() {
           const tokenRole = payload?.role ? String(payload.role).toLowerCase() : "";
           const resolvedRole: AuthRole | null =
             tokenRole === "coach" ? "coach" : tokenRole === "athlete" ? "athlete" : (storedRole || null);
+
+          if (resolvedRole === "coach") {
+            const rawUid = payload?.uid ? String(payload.uid).replace(/^coach_/, "") : "";
+            if (rawUid) {
+              try {
+                const userDocSnap = await getDoc(doc(db, "Users", rawUid)).catch(() => null);
+                let status = "";
+                if (userDocSnap && userDocSnap.exists()) {
+                  const uData = userDocSnap.data();
+                  status = String(uData?.status || uData?.account_status || "").toLowerCase();
+                }
+                if (status !== "approved" && status !== "active") {
+                  const coachDocSnap = await getDoc(doc(db, "Coach_Profiles", `coach_${rawUid}`)).catch(() => null);
+                  if (coachDocSnap && coachDocSnap.exists()) {
+                    const cData = coachDocSnap.data();
+                    if (cData?.status || cData?.account_status) {
+                      status = String(cData?.status || cData?.account_status).toLowerCase();
+                    }
+                  }
+                }
+
+                if (status !== "approved" && status !== "active") {
+                  await handleLogout();
+                  Alert.alert(
+                    "Pending Verification",
+                    "Your account is currently pending System Admin verification."
+                  );
+                  setBooting(false);
+                  return;
+                }
+              } catch (fErr) {
+                console.warn("AuthEntry routing interceptor note:", fErr);
+              }
+            }
+          }
 
           if (resolvedRole) {
             setActiveRole(resolvedRole);

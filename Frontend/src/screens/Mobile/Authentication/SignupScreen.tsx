@@ -655,11 +655,12 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           sport_type: coachSport,
           ...restValues
         });
-        const token = extractAuthToken(result);
-        const savedRole = extractAuthRole(result) || "coach";
-        if (token) await storeAuthToken(token);
-        await storeAuthRole(savedRole);
-
+        // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
+          await NativeGoogleSignin.signOut().catch(() => null);
+        }
         clearAuthMicroCache();
         clearFirebaseClientCaches();
         await AsyncStorage.multiRemove([
@@ -678,13 +679,9 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         setDocumentFile(null);
         setSocialToken(null);
 
-        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
-        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
-        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
-        clearAuthMicroCache();
         Alert.alert(
-          "Account Created",
-          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          "Account Pending",
+          "Your account is currently pending System Admin verification.",
           [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
         );
         if (onGoLogin) {
@@ -710,12 +707,9 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           professional_documents: documentFile ? [documentFile.name || "coach_license.pdf"] : []
         };
 
-        const result = await requestJson("/users/coach", payload);
-        const token = extractAuthToken(result);
-        const savedRole = extractAuthRole(result) || "coach";
-        if (token) await storeAuthToken(token);
-        await storeAuthRole(savedRole);
-
+        // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         clearFirebaseClientCaches();
         await AsyncStorage.multiRemove([
@@ -734,13 +728,9 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         setDocumentFile(null);
         setSocialToken(null);
 
-        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
-        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
-        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
-        clearAuthMicroCache();
         Alert.alert(
-          "Account Created",
-          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          "Account Pending",
+          "Your account is currently pending System Admin verification.",
           [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
         );
         if (onGoLogin) {
@@ -877,11 +867,12 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           national_sports_league: values.national_sports_league,
           terms_accepted: true,
         });
-        const token = extractAuthToken(result);
-        const savedRole = extractAuthRole(result) || "coach";
-        if (token) await storeAuthToken(token);
-        await storeAuthRole(savedRole);
-
+        // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
+        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+        if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
+          await NativeGoogleSignin.signOut().catch(() => null);
+        }
         clearAuthMicroCache();
         clearFirebaseClientCaches();
         await AsyncStorage.multiRemove([
@@ -899,13 +890,9 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         coachForm.reset();
         setSocialToken(null);
 
-        // Prevent coaches from being automatically logged in immediately after signing up; redirect them securely to Login
-        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
-        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
-        clearAuthMicroCache();
         Alert.alert(
-          "Account Created",
-          "Your coach account has been successfully created. Please sign in with your credentials to continue.",
+          "Account Pending",
+          "Your account is currently pending System Admin verification.",
           [{ text: "OK", onPress: () => onGoLogin && onGoLogin() }]
         );
         if (onGoLogin) {
