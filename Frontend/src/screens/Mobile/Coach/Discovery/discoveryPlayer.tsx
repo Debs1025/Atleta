@@ -89,7 +89,6 @@ export const DiscoveryPlayer: React.FC<{
             const verticalIn = extractVerticalLeapInches(athlete);
             const primaryBadge = archetypeBadges.length > 0 ? archetypeBadges[0] : null;
             const secondaryBadgesCount = archetypeBadges.length > 1 ? archetypeBadges.length - 1 : 0;
-            const cleanBio = getCleanBiometrics(athlete);
 
             return (
               <TouchableOpacity
@@ -180,61 +179,6 @@ export const DiscoveryPlayer: React.FC<{
                   <View style={styles.tagChip}>
                     <Text style={styles.tagChipText}>{positionTag}</Text>
                   </View>
-                </View>
-
-                {/* Clean Biometrics Strip with Minimalist Icons & Standard Units */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                  borderColor: 'rgba(255, 255, 255, 0.07)',
-                  borderWidth: 1,
-                  borderRadius: 8,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  marginBottom: 8,
-                  justifyContent: 'space-between',
-                }}>
-                  {/* Height */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="body-outline" size={12} color="#00C8FF" />
-                    <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
-                      {cleanBio.height}
-                    </Text>
-                  </View>
-
-                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
-
-                  {/* Weight */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="barbell-outline" size={12} color="#38BDF8" />
-                    <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
-                      {cleanBio.weight}
-                    </Text>
-                  </View>
-
-                  <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
-
-                  {/* Wingspan */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="resize-outline" size={12} color="#818CF8" />
-                    <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
-                      {cleanBio.wingspan}
-                    </Text>
-                  </View>
-
-                  {cleanBio.vertical !== '-' && (
-                    <>
-                      <View style={{ width: 1, height: 12, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
-                      {/* Vertical Leap */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="arrow-up-circle-outline" size={12} color="#34D399" />
-                        <Text style={{ color: '#F1F5F9', fontSize: 11, fontWeight: '700', letterSpacing: 0.1 }}>
-                          {cleanBio.vertical}
-                        </Text>
-                      </View>
-                    </>
-                  )}
                 </View>
 
                 <View style={styles.statsTrioRow}>
