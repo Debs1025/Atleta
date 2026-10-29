@@ -297,6 +297,10 @@ export interface OfficialNotificationItem {
   is_read: boolean;
   created_at: string;
   requested_by_coach?: string;
+  match_name?: string;
+  matchName?: string;
+  customGameTitle?: string;
+  custom_game_title?: string;
   match_context?: string;
   sport_discipline?: string;
   [key: string]: any;

@@ -213,7 +213,7 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
             <View style={styles.certifiedCard}>
               <Text style={styles.sportTag}>{match.sport_type}</Text>
               <Text style={styles.matchHeadline}>
-                {`${match.home_team_name} vs. ${match.away_team_name}`}
+                {match.customGameTitle || match.matchName || `${match.home_team_name} vs. ${match.away_team_name}`}
               </Text>
               <View style={styles.dateRow}>
                 <Ionicons name="calendar-outline" size={14} color="#94A3B8" />
@@ -313,7 +313,7 @@ export const OfficialMatchPreview: React.FC<OfficialMatchPreviewProps> = ({
               <View style={styles.activeCardHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.matchHeadline}>
-                    {`${match.home_team_name} vs. ${match.away_team_name}`}
+                    {match.customGameTitle || match.matchName || `${match.home_team_name} vs. ${match.away_team_name}`}
                   </Text>
                   <Text style={styles.matchIdSubtext}>{`ID: ${match.match_id}`}</Text>
                 </View>

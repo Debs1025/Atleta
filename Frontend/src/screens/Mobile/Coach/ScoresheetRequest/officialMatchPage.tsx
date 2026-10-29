@@ -39,6 +39,8 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
     const q = searchQuery.toLowerCase();
     return matches.filter(
       (m) =>
+        (m.customGameTitle && m.customGameTitle.toLowerCase().includes(q)) ||
+        (m.matchName && m.matchName.toLowerCase().includes(q)) ||
         m.home_team_name.toLowerCase().includes(q) ||
         m.away_team_name.toLowerCase().includes(q) ||
         `${m.home_team_name} vs. ${m.away_team_name}`.toLowerCase().includes(q) ||
@@ -188,7 +190,7 @@ export const OfficialMatchesListContent: React.FC<OfficialMatchesListProps> = ({
                     {/* Match Info */}
                     <View style={styles.cardContent}>
                       <Text style={styles.matchTitle} numberOfLines={1}>
-                        {`${liveMatch.home_team_name} VS. ${liveMatch.away_team_name}`}
+                        {liveMatch.customGameTitle || liveMatch.matchName || `${liveMatch.home_team_name} VS. ${liveMatch.away_team_name}`}
                       </Text>
 
                       <View style={styles.infoRow}>

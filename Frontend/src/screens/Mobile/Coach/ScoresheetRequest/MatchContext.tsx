@@ -49,6 +49,9 @@ export interface OfficialMatchRecord {
   location: string; // e.g. "Metro Sports Arena, Court 4"
   audit_status: AuditStatus;
   is_certified: boolean;
+  customGameTitle?: string;
+  matchName?: string;
+  gameName?: string;
   home_score?: number;
   away_score?: number;
   scoresheet_url?: string;
@@ -191,6 +194,15 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             place: p.place || p.rank_position || 1,
           }));
 
+          const officialAssignedTitle =
+            (m.customGameTitle && String(m.customGameTitle).trim()) ||
+            (m.custom_game_title && String(m.custom_game_title).trim()) ||
+            (m.matchName && String(m.matchName).trim()) ||
+            (m.match_name && String(m.match_name).trim()) ||
+            (m.gameName && String(m.gameName).trim()) ||
+            (m.game_name && String(m.game_name).trim()) ||
+            undefined;
+
           return {
             match_id: m.match_id || m.id || `match_${idx}`,
             team_id: m.team_id || '',
@@ -203,6 +215,9 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             location: m.location || m.venue || '-',
             audit_status: auditStatus,
             is_certified: auditStatus === 'REQUEST GRANTED' || !!m.is_certified,
+            customGameTitle: officialAssignedTitle,
+            matchName: officialAssignedTitle || `${homeName} vs. ${oppName}`,
+            gameName: officialAssignedTitle || `${homeName} vs. ${oppName}`,
             home_score: hScore,
             away_score: aScore,
             scoresheet_url: m.scoresheet_url || m.scoresheetUrl || undefined,
@@ -281,11 +296,12 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const coachProfile = await getCoachProfileOfflineFirst().catch(() => null);
       const cId = coachProfile?.coach_id || coachProfile?.user_id || 'coach_default';
       const cName = coachProfile?.full_name || (coachProfile?.first_name ? `${coachProfile.first_name} ${coachProfile.last_name || ''}`.trim() : null) || 'Coach';
-      const mName = targetMatch ? `${targetMatch.home_team_name} vs. ${targetMatch.away_team_name}` : `Match ${matchId}`;
+      const mName = targetMatch?.customGameTitle || targetMatch?.matchName || targetMatch?.gameName || (targetMatch ? `${targetMatch.home_team_name} vs. ${targetMatch.away_team_name}` : `Match ${matchId}`);
 
       await submitScoresheetRequestOfflineFirst({
         matchId,
         matchName: mName,
+        customGameTitle: mName,
         teamId: targetMatch?.team_id || 'team_default',
         coachId: cId,
         coachName: cName,
@@ -296,10 +312,12 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // 3. Transmit to deployed backend via authenticated request or direct fetch
+    const mName = targetMatch?.customGameTitle || targetMatch?.matchName || targetMatch?.gameName || (targetMatch ? `${targetMatch.home_team_name} vs. ${targetMatch.away_team_name}` : `Match ${matchId}`);
     const scoresheetPayload = {
       ...payload,
       matchId,
-      matchName: targetMatch ? `${targetMatch.home_team_name} vs. ${targetMatch.away_team_name}` : `Match ${matchId}`,
+      matchName: mName,
+      customGameTitle: mName,
       teamId: targetMatch?.team_id || 'team_default',
       sportType: targetMatch?.sport_type || 'BASKETBALL',
     };

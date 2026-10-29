@@ -1502,7 +1502,7 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
   scoresheetList.forEach((req: any) => {
     const reqId = req.requestId || req.id;
     const notifKey = `req_${reqId}`;
-    const matchTitle = req.matchName || req.match_name || `Match ${req.matchId || ''}`;
+    const matchTitle = req.customGameTitle || req.custom_game_title || req.matchName || req.match_name || req.gameName || req.game_name || `Match ${req.matchId || ''}`;
     const coachName = req.coachName || req.coach_name || 'Coach';
     const sportType = req.sportType || req.sport_type || 'BASKETBALL';
     const isFulfilled = req.status === 'fulfilled' || req.status === 'accepted';
@@ -1526,6 +1526,9 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
       reference_id: req.matchId || reqId,
       match_id: req.matchId || null,
       match_name: matchTitle,
+      customGameTitle: matchTitle,
+      custom_game_title: matchTitle,
+      matchName: matchTitle,
       requested_by_coach: coachName,
       coach_name: coachName,
       match_context: matchTitle,
@@ -1538,12 +1541,17 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
 
     if (existingIdx >= 0) {
       rawList[existingIdx] = {
-        ...mappedItem,
         ...rawList[existingIdx],
+        ...mappedItem,
+        title: mappedItem.title,
+        message: mappedItem.message,
+        match_name: matchTitle,
+        customGameTitle: matchTitle,
+        custom_game_title: matchTitle,
+        match_context: matchTitle,
         status: req.status || rawList[existingIdx].status || 'pending',
         scoresheet_url: req.scoresheetUrl || req.scoresheet_url || rawList[existingIdx].scoresheet_url || null,
         requested_by_coach: rawList[existingIdx].requested_by_coach || coachName,
-        match_context: rawList[existingIdx].match_context || matchTitle,
         sport_discipline: rawList[existingIdx].sport_discipline || sportType,
       };
     } else {
@@ -1555,22 +1563,25 @@ export const getOfficialNotifications = async (forceRefresh = false): Promise<{ 
 
   const notifications: import('./types').OfficialNotificationItem[] = rawList.map((n: any, idx: number) => {
     const id = n.notification_id || `notif_${idx}`;
+    const resolvedTitle = n.customGameTitle || n.custom_game_title || n.matchName || n.match_name || n.match_context || undefined;
     return {
       notification_id: id,
       official_id: n.official_id || '',
       type: n.type || 'AUDIT_REQUEST',
-      title: n.title || '',
+      title: n.title || (resolvedTitle ? `Scoresheet Request: ${resolvedTitle}` : ''),
       message: n.message || '',
       reference_id: n.reference_id || null,
       request_id: n.request_id || (id.startsWith('req_') ? id.replace(/^req_/, '') : undefined),
       match_id: n.match_id || undefined,
-      match_name: n.match_name || n.match_context || undefined,
+      match_name: resolvedTitle,
+      customGameTitle: resolvedTitle,
+      custom_game_title: resolvedTitle,
       status: n.status || undefined,
       scoresheet_url: n.scoresheet_url || n.scoresheetUrl || undefined,
       is_read: Boolean(n.is_read) || readSet.has(id),
       created_at: n.created_at || n.timestamp || new Date().toISOString(),
       requested_by_coach: n.requested_by_coach || n.coach_name || n.requested_by || undefined,
-      match_context: n.match_context || n.match_name || n.match_class || undefined,
+      match_context: resolvedTitle,
       sport_discipline: n.sport_discipline || n.sport_type || n.sport || undefined,
     };
   });

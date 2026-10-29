@@ -97,7 +97,7 @@ export const NotificationPage: React.FC = () => {
     const reqId = notif.request_id || notif.requestId || notif.reference_id || notifId.replace(/^notif_req_/, '').replace(/^req_/, '');
     const matchId = notif.match_id || notif.matchId || notif.reference_id || reqId;
     const coachName = notif.requested_by_coach || notif.coach_name || 'Assigned Coach';
-    const matchName = notif.match_context || notif.match_name || 'Match';
+    const matchName = notif.customGameTitle || notif.custom_game_title || notif.match_name || notif.matchName || notif.match_context || 'Match';
 
     try {
       setUploadingId(notifId);
@@ -318,7 +318,7 @@ export const NotificationPage: React.FC = () => {
 
                 if (isAudit) {
                   const coachName = (notif.requested_by_coach || notif.coach_name || notif.requested_by || 'Coach').toUpperCase();
-                  const matchContext = (notif.match_context || notif.match_name || 'Official Match').toUpperCase();
+                  const matchContext = (notif.customGameTitle || notif.custom_game_title || notif.match_name || notif.matchName || notif.match_context || 'Official Match').toUpperCase();
                   const sportDiscipline = (notif.sport_discipline || notif.sport || 'Sports').toUpperCase();
                   const isUploadingThis = uploadingId === notif.notification_id;
                   const isRejectingThis = rejectingId === notif.notification_id;
@@ -327,8 +327,8 @@ export const NotificationPage: React.FC = () => {
 
                   // Title formatting
                   let displayAuditTitle = notif.title.toUpperCase();
-                  if (!displayAuditTitle.startsWith('AUDIT REQUEST')) {
-                    displayAuditTitle = `AUDIT REQUEST: ${displayAuditTitle}`;
+                  if (!displayAuditTitle.startsWith('AUDIT REQUEST') && !displayAuditTitle.startsWith('SCORESHEET REQUEST')) {
+                    displayAuditTitle = `SCORESHEET REQUEST: ${displayAuditTitle}`;
                   }
 
                   return (

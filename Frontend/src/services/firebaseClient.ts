@@ -1249,8 +1249,13 @@ export interface ScoresheetRequestRecord {
   teamId: string;
   matchId: string;
   matchName: string;
+  customGameTitle?: string;
+  custom_game_title?: string;
+  match_name?: string;
+  gameName?: string;
+  game_name?: string;
   sportType?: string;
-  status: 'pending' | 'fulfilled';
+  status: 'pending' | 'fulfilled' | 'rejected';
   createdAt: any;
   updatedAt?: any;
   scoresheetUrl?: string;
@@ -1266,6 +1271,7 @@ export interface ScoresheetRequestRecord {
 export async function submitScoresheetRequestOfflineFirst(payload: {
   matchId: string;
   matchName?: string;
+  customGameTitle?: string;
   teamId?: string;
   coachId?: string;
   coachName?: string;
@@ -1275,8 +1281,26 @@ export async function submitScoresheetRequestOfflineFirst(payload: {
   const coachId = String(payload.coachId || 'coach_default');
   const coachName = String(payload.coachName || 'Coach');
   const teamId = String(payload.teamId || 'team_default');
-  const matchName = String(payload.matchName || `Match ${matchId}`);
+  let matchName = String(payload.customGameTitle || payload.matchName || `Match ${matchId}`);
   const sportType = String(payload.sportType || 'BASKETBALL');
+
+  // If match exists in Match_Logs, pull the official's custom match title directly
+  try {
+    const matchSnap = await getDoc(doc(db, 'Match_Logs', matchId));
+    if (matchSnap.exists()) {
+      const md = matchSnap.data();
+      const officialTitle =
+        (md.customGameTitle && String(md.customGameTitle).trim()) ||
+        (md.custom_game_title && String(md.custom_game_title).trim()) ||
+        (md.matchName && String(md.matchName).trim()) ||
+        (md.match_name && String(md.match_name).trim()) ||
+        (md.gameName && String(md.gameName).trim()) ||
+        (md.game_name && String(md.game_name).trim());
+      if (officialTitle) {
+        matchName = officialTitle;
+      }
+    }
+  } catch (_) {}
 
   const requestId = `req_${matchId}_${coachId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const now = new Date().toISOString();
@@ -1289,6 +1313,11 @@ export async function submitScoresheetRequestOfflineFirst(payload: {
     teamId,
     matchId,
     matchName,
+    customGameTitle: matchName,
+    custom_game_title: matchName,
+    match_name: matchName,
+    gameName: matchName,
+    game_name: matchName,
     sportType,
     status: 'pending',
     createdAt: now,
@@ -1366,6 +1395,7 @@ export function listenToCoachScoresheetRequests(
       const results: ScoresheetRequestRecord[] = [];
       snapshot.forEach((d) => {
         const data = d.data();
+        const title = data.customGameTitle || data.custom_game_title || data.matchName || data.match_name || data.gameName || data.game_name || `Match ${data.matchId}`;
         results.push({
           id: d.id,
           requestId: d.id,
@@ -1373,7 +1403,12 @@ export function listenToCoachScoresheetRequests(
           coachName: data.coachName,
           teamId: data.teamId,
           matchId: data.matchId,
-          matchName: data.matchName,
+          matchName: title,
+          customGameTitle: title,
+          custom_game_title: title,
+          match_name: title,
+          gameName: title,
+          game_name: title,
           sportType: data.sportType,
           status: data.status,
           createdAt: data.createdAt,

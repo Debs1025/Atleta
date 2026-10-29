@@ -1300,7 +1300,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         requests.forEach((req) => {
           const notifId = `req_${req.id}`;
           const isFulfilled = req.status === "fulfilled";
-          const matchTitle = req.matchName || `Match ${req.matchId}`;
+          const matchTitle = (req as any).customGameTitle || (req as any).custom_game_title || req.matchName || (req as any).match_name || (req as any).gameName || `Match ${req.matchId}`;
 
           const item = {
             id: notifId,
