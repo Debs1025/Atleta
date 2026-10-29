@@ -51,6 +51,13 @@ import {
 import { clearFirebaseClientCaches, getSportsOfflineFirst, db } from "../../../services/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { DatePickerModal } from "../Athlete/Profile/AthleteProfileModals";
+import {
+  extractOAuthProfile,
+  persistOAuthUserDocument,
+  loadStagedOAuthData,
+  clearStagedOAuthData,
+  saveStagedOAuthData,
+} from "./oauthPersistence";
 
 export type InitialSocialData = {
   socialToken: { provider: "google" | "facebook"; idToken: string };
@@ -206,6 +213,50 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
   });
   const isFirstMount = useRef(true);
 
+  // Restore staged OAuth session on mount if recovering from network drops or app reloads
+  useEffect(() => {
+    let isMounted = true;
+    const restoreStagedSession = async () => {
+      if (initialSocialData?.socialToken) return;
+      try {
+        const staged = await loadStagedOAuthData();
+        if (isMounted && staged?.socialToken && staged?.email) {
+          setSocialToken(staged.socialToken);
+          if (staged.role === "coach" || staged.role === "athlete") {
+            setRole(staged.role as any);
+          }
+          const fn = staged.firstName || "";
+          const ln = staged.lastName || "";
+          const em = staged.email || "";
+          socialProfileRef.current = { first_name: fn, last_name: ln, email: em };
+          if (fn) {
+            athleteForm.setValue("first_name", fn);
+            coachForm.setValue("first_name", fn);
+          }
+          if (ln) {
+            athleteForm.setValue("last_name", ln);
+            coachForm.setValue("last_name", ln);
+          }
+          if (em) {
+            athleteForm.setValue("email", em);
+            coachForm.setValue("email", em);
+          }
+          setStep(2);
+          setFeedback({
+            tone: "info",
+            message: `Restored your staged ${staged.authProvider === "google" ? "Google" : "Facebook"} sign-up session. Please confirm your details below to complete your registration.`
+          });
+        }
+      } catch (err) {
+        // Non-blocking restore notice
+      }
+    };
+    restoreStagedSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (initialSocialData?.socialToken) {
       setSocialToken(initialSocialData.socialToken);
@@ -227,6 +278,34 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       setFeedback({
         tone: "info",
         message: `${providerLabel} connected! Select your role (Athlete or Coach) to continue.`
+      });
+
+      // Post-OAuth callback: explicitly persist user document to 'users' collection prior to completing registration
+      const extracted = extractOAuthProfile({
+        idToken: initialSocialData.socialToken.idToken,
+        provider: initialSocialData.socialToken.provider,
+        fallbackUser: {
+          email: em,
+          givenName: fn,
+          familyName: ln,
+          name: `${fn} ${ln}`.trim(),
+          photo: initialSocialData.initialData?.avatar_url,
+        },
+        role,
+      });
+
+      persistOAuthUserDocument({
+        uid: extracted.uid,
+        email: extracted.email,
+        fullName: extracted.fullName,
+        role,
+        authProvider: initialSocialData.socialToken.provider,
+        firstName: extracted.firstName,
+        lastName: extracted.lastName,
+        avatarUrl: extracted.avatarUrl,
+        socialToken: initialSocialData.socialToken,
+      }).catch((persistErr) => {
+        console.warn("[OAuthPersistence] Post-OAuth initial staging notice:", persistErr);
       });
     }
   }, [initialSocialData]);
@@ -377,6 +456,29 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
             }
           }
           setSocialToken({ provider: "google", idToken });
+
+          // Post-OAuth callback: explicitly persist user document to 'users' collection prior to completing registration
+          const extracted = extractOAuthProfile({
+            idToken,
+            provider: "google",
+            fallbackUser: userObj,
+            role,
+          });
+
+          await persistOAuthUserDocument({
+            uid: extracted.uid,
+            email: extracted.email || em,
+            fullName: extracted.fullName,
+            role,
+            authProvider: "google",
+            firstName: extracted.firstName || fn,
+            lastName: extracted.lastName || ln,
+            avatarUrl: extracted.avatarUrl,
+            socialToken: { provider: "google", idToken },
+          }).catch((err) => {
+            console.warn("[OAuthPersistence] Staged user doc persistence notice:", err);
+          });
+
           setFeedback({ tone: "info", message: `Google account connected! Please confirm your credentials below to complete your ${role.toUpperCase()} account.` });
           setStep(2);
           setLoading(false);
@@ -577,6 +679,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         athleteForm.reset();
         setSocialToken(null);
+        await clearStagedOAuthData();
 
         Alert.alert(
           "Account Created",
@@ -678,6 +781,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         coachForm.reset();
         setDocumentFile(null);
         setSocialToken(null);
+        await clearStagedOAuthData();
 
         Alert.alert(
           "Account Pending",
@@ -812,6 +916,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         athleteForm.reset();
         setSocialToken(null);
+        await clearStagedOAuthData();
 
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
@@ -827,8 +932,21 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         } else {
           setAccountCreated(true);
         }
-      } catch (error) {
-        setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
+      } catch (error: any) {
+        const errStr = String(error?.message || error).toLowerCase();
+        const isNetworkDrop =
+          errStr.includes("network") ||
+          errStr.includes("timeout") ||
+          errStr.includes("offline") ||
+          errStr.includes("failed to fetch");
+        if (isNetworkDrop) {
+          setFeedback({
+            tone: "error",
+            message: "Network connection lost. Your sign-up progress is safely preserved. Tap below to retry when your connection is restored.",
+          });
+        } else {
+          setFeedback({ tone: "error", message: getAuthErrorMessage(error, "Unable to create account right now.") });
+        }
       } finally {
         setLoading(false);
       }
@@ -889,6 +1007,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         coachForm.reset();
         setSocialToken(null);
+        await clearStagedOAuthData();
 
         Alert.alert(
           "Account Pending",
@@ -901,8 +1020,21 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           setAccountCreated(true);
         }
         return;
-      } catch (error) {
-        handleSubmissionError(error);
+      } catch (error: any) {
+        const errStr = String(error?.message || error).toLowerCase();
+        const isNetworkDrop =
+          errStr.includes("network") ||
+          errStr.includes("timeout") ||
+          errStr.includes("offline") ||
+          errStr.includes("failed to fetch");
+        if (isNetworkDrop) {
+          setFeedback({
+            tone: "error",
+            message: "Network connection lost. Your sign-up progress is safely preserved. Tap below to retry when your connection is restored.",
+          });
+        } else {
+          handleSubmissionError(error);
+        }
       } finally {
         setLoading(false);
       }
@@ -1151,6 +1283,28 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
               // Token parsing error handled gracefully
             }
             setSocialToken({ provider: socialModal.provider, idToken: token });
+
+            // Post-OAuth callback: explicitly persist user document to 'users' collection prior to completing registration
+            const extracted = extractOAuthProfile({
+              idToken: token,
+              provider: socialModal.provider,
+              role,
+            });
+
+            persistOAuthUserDocument({
+              uid: extracted.uid,
+              email: extracted.email || socialProfileRef.current.email,
+              fullName: extracted.fullName,
+              role,
+              authProvider: socialModal.provider,
+              firstName: extracted.firstName || socialProfileRef.current.first_name,
+              lastName: extracted.lastName || socialProfileRef.current.last_name,
+              avatarUrl: extracted.avatarUrl,
+              socialToken: { provider: socialModal.provider, idToken: token },
+            }).catch((err) => {
+              console.warn("[OAuthPersistence] In-app post-OAuth persistence notice:", err);
+            });
+
             setFeedback({
               tone: "info",
               message: `${socialModal.provider === "facebook" ? "Facebook" : "Google"} account connected! Please confirm your credentials below to complete your ${role.toUpperCase()} account.`
