@@ -208,11 +208,11 @@ export function computePlayerArchetypeBadges(athlete: any): PlayerStatsBadge[] {
       });
     }
 
-    // Glass Cleaner / Paint Beast Badge: High rebounding
+    // Glass Cleaner / Elite Rebounder Badge: High rebounding
     if (rpg >= 6.0) {
       badges.push({
         id: 'arch_rebounder',
-        label: 'Glass Cleaner',
+        label: rpg >= 8.0 ? 'Elite Rebounder' : 'Glass Cleaner',
         category: 'archetype',
         icon: 'cube',
         color: '#EC4899',
@@ -357,7 +357,26 @@ export function computePlayerArchetypeBadges(athlete: any): PlayerStatsBadge[] {
     });
   }
 
-  return badges;
+  return sortBadgesByDominance(badges);
+}
+
+/**
+ * Sorts badges so the most dominant playstyle / top percentile archetype takes primary position.
+ */
+export function sortBadgesByDominance(badges: PlayerStatsBadge[]): PlayerStatsBadge[] {
+  if (!badges || badges.length === 0) return [];
+  const categoryPriority: Record<string, number> = {
+    archetype: 1, // Core playstyle archetypes (Sharpshooter, Elite Rebounder, Floor General, Cannon Spiker, etc.)
+    athletic: 2,  // Athletic combine traits (High Flyer, Explosive Leaper)
+    efficiency: 3,// Composite efficiency (Elite Efficiency)
+    condition: 4, // Workload / condition
+  };
+  return [...badges].sort((a, b) => {
+    const prioA = categoryPriority[a.category] ?? 5;
+    const prioB = categoryPriority[b.category] ?? 5;
+    if (prioA !== prioB) return prioA - prioB;
+    return a.label.localeCompare(b.label);
+  });
 }
 
 export interface BadgeProgressItem {
