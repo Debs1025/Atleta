@@ -14,6 +14,7 @@ import type { RawOCRDetectedData, DetectedAthleteStat, SportConfiguration } from
 import { submitVerifiedMatch, getSports } from '../../api/client';
 import { INITIAL_DEFAULT_SPORTS } from '../../SysAdmin/Sports_Management/SportPage';
 import { styles } from './styles/OCROutputView';
+import { handleTableDragScroll } from '../Components/dragScroll';
 import {
   resolveSportColumns,
   getMetricValue,
@@ -777,7 +778,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
           </span>
         </div>
 
-        <div style={styles.tableWrap}>
+        <div style={styles.tableWrap} onMouseDown={handleTableDragScroll}>
           <table style={styles.table}>
             <thead>
               <tr style={styles.theadRow}>

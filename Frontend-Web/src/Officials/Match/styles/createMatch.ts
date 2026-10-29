@@ -470,10 +470,14 @@ export const styles: Record<string, React.CSSProperties> = {
     border: '1.5px solid #0B132B',
     backgroundColor: '#FFFFFF',
     overflowX: 'auto',
+    cursor: 'grab',
+    scrollbarWidth: 'thin',
+    WebkitOverflowScrolling: 'touch',
     marginBottom: '10px',
   },
   statsTable: {
     width: '100%',
+    minWidth: 'max-content',
     borderCollapse: 'collapse',
     fontSize: '11.5px',
     textAlign: 'center',
@@ -497,11 +501,13 @@ export const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid #E2E8F0',
     color: '#0B132B',
     fontWeight: 600,
+    whiteSpace: 'nowrap',
   },
   statTdName: {
     textAlign: 'left',
     paddingLeft: '10px',
     fontWeight: 700,
+    whiteSpace: 'nowrap',
   },
   statInput: {
     width: '100%',

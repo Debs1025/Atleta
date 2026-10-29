@@ -65,6 +65,8 @@ export interface AuthUser {
 
 export interface AuthResponse {
   token: string;
+  refreshToken?: string;
+  refresh_token?: string;
   user: AuthUser;
   message?: string;
 }

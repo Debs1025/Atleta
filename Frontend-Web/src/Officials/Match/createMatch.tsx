@@ -45,6 +45,7 @@ import {
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
+import { handleTableDragScroll } from '../Components/dragScroll';
 
 export interface SportOptionItem {
   id: string;
@@ -2073,7 +2074,7 @@ export const CreateMatch: React.FC = () => {
           </span>
         </div>
 
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
@@ -2249,7 +2250,7 @@ export const CreateMatch: React.FC = () => {
           </div>
         )}
 
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>

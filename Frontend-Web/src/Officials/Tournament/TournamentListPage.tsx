@@ -10,6 +10,7 @@ import {
   getSports,
   getTournamentBrackets,
   deleteTournamentBracket,
+  isTournamentDeleted,
   TournamentBracket,
 } from '../../api/client';
 import type { AuthUser } from '../../api/types';
@@ -112,10 +113,12 @@ export const TournamentListPage: React.FC = () => {
 
   const [selectedSport, setSelectedSport] = useState('ALL');
 
-  const [brackets, setBrackets] = useState<TournamentBracket[]>(() =>
-    getCachedData<TournamentBracket[]>('tournament_brackets_ALL') ||
-    getCachedData<TournamentBracket[]>('tournament_brackets_all') || []
-  );
+  const [brackets, setBrackets] = useState<TournamentBracket[]>(() => {
+    const list =
+      getCachedData<TournamentBracket[]>('tournament_brackets_ALL') ||
+      getCachedData<TournamentBracket[]>('tournament_brackets_all') || [];
+    return list.filter((b) => !isTournamentDeleted(b.bracket_id));
+  });
 
   const [loading, setLoading] = useState(!brackets.length);
   const [showCreate, setShowCreate] = useState(false);
@@ -136,20 +139,24 @@ export const TournamentListPage: React.FC = () => {
   }, []);
 
   const loadBrackets = useCallback(async (sport: string, force = false) => {
-    const cacheKey = `tournament_brackets_${sport}`;
+    const normSport = (sport || 'ALL').trim().toUpperCase();
+    const cacheKey = `tournament_brackets_${normSport}`;
     const cached = getCachedData<TournamentBracket[]>(cacheKey);
 
     if (cached && cached.length > 0 && !force) {
-      setBrackets(cached);
+      const active = cached.filter((b) => !isTournamentDeleted(b.bracket_id));
+      setBrackets(active);
       setLoading(false);
-      getTournamentBrackets(sport).then(setBrackets).catch(() => {});
+      getTournamentBrackets(normSport, true)
+        .then((fresh) => setBrackets(fresh.filter((b) => !isTournamentDeleted(b.bracket_id))))
+        .catch(() => {});
       return;
     }
 
     setLoading(true);
     try {
-      const list = await getTournamentBrackets(sport);
-      setBrackets(list);
+      const list = await getTournamentBrackets(normSport, force);
+      setBrackets(list.filter((b) => !isTournamentDeleted(b.bracket_id)));
     } catch {
       // keep stale
     } finally {

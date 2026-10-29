@@ -48,6 +48,7 @@ import {
   type SportColumnDef,
 } from '../../api/sportSchema';
 import { styles } from './styles/ScoresheetMatch';
+import { handleTableDragScroll } from '../Components/dragScroll';
 
 const BentoThumbnail: React.FC<{ url: string; alt: string; fallbackText: string }> = ({ url, alt, fallbackText }) => {
   const [hasError, setHasError] = useState(false);
@@ -1261,7 +1262,7 @@ export const ScoresheetMatch: React.FC = () => {
             </button>
           )}
         </div>
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
@@ -1289,8 +1290,32 @@ export const ScoresheetMatch: React.FC = () => {
                     <td style={styles.statTdName}>
                       {isEditing && !isCertified ? (
                         <input type="text" value={row.player_name} onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)} style={styles.statInputName} />
+                      ) : row.player_name?.toUpperCase().includes('TOTAL') ? (
+                        <span style={{ color: '#0B132B', fontWeight: 800 }}>
+                          {row.player_name}
+                        </span>
                       ) : (
-                        <span style={{ color: '#0B132B', fontWeight: 700 }}>
+                        <span
+                          style={styles.statPlayerLink}
+                          title="View athlete profile & analytics"
+                          onClick={() => {
+                            const rawId = (row as any).athlete_id || (row as any).user_id || `ath_${encodeURIComponent(row.player_name || '')}`;
+                            navigate(`/athletes/${rawId}`, {
+                              state: {
+                                athlete: {
+                                  athlete_id: (row as any).athlete_id,
+                                  name: row.player_name,
+                                  jersey_no: row.jersey_no,
+                                  position: row.position,
+                                  team_name: teamType === 'home' ? homeTeamDisplayName : awayTeamDisplayName,
+                                  sport: matchData?.sport_type,
+                                },
+                                currentMatch: matchData,
+                                matchRow: row,
+                              },
+                            });
+                          }}
+                        >
                           {row.player_name}
                         </span>
                       )}
@@ -1451,7 +1476,7 @@ export const ScoresheetMatch: React.FC = () => {
           </div>
         )}
 
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
@@ -1498,7 +1523,25 @@ export const ScoresheetMatch: React.FC = () => {
                         {isEditing && !isCertified ? (
                           <input type="text" value={row.athlete_name} onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)} style={styles.statInputName} />
                         ) : (
-                          <span style={{ color: '#0B132B', fontWeight: 700 }}>
+                          <span
+                            style={styles.statPlayerLink}
+                            title="View athlete profile & analytics"
+                            onClick={() => {
+                              const rawId = row.athlete_id || (row as any).user_id || `ath_${encodeURIComponent(row.athlete_name || '')}`;
+                              navigate(`/athletes/${rawId}`, {
+                                state: {
+                                  athlete: {
+                                    athlete_id: row.athlete_id,
+                                    name: row.athlete_name,
+                                    team_name: row.team_name,
+                                    sport: matchData?.sport_type,
+                                  },
+                                  currentMatch: matchData,
+                                  matchRow: row,
+                                },
+                              });
+                            }}
+                          >
                             {row.athlete_name}
                           </span>
                         )}
