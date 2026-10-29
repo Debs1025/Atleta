@@ -53,32 +53,38 @@ import { handleTableDragScroll } from '../Components/dragScroll';
 const BentoThumbnail: React.FC<{ url: string; alt: string; fallbackText: string }> = ({ url, alt, fallbackText }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setHasError(false);
-    setIsLoaded(false);
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
   }, [url]);
 
   if (hasError) {
     return (
-      <div style={{ ...styles.bentoThumb, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '8px', textAlign: 'center' }}>
-        <FileText style={{ width: 28, height: 28, color: '#64748B' }} />
-        <span style={{ fontSize: '10px', fontWeight: 800, color: '#0B132B' }}>{fallbackText}</span>
+      <div style={styles.bentoErrorBox}>
+        <FileText style={styles.bentoFileIcon} />
+        <span style={styles.bentoErrorText}>{fallbackText}</span>
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', height: '130px', position: 'relative', backgroundColor: '#F8FAFC', borderRadius: '2px', overflow: 'hidden' }}>
+    <div style={styles.bentoThumbWrap}>
       {!isLoaded && (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Loader2 style={{ width: 20, height: 20, color: '#64748B', animation: 'spin 1s linear infinite' }} />
+        <div style={styles.bentoLoaderWrap}>
+          <Loader2 style={styles.bentoLoaderIcon} />
         </div>
       )}
       <img
+        ref={imgRef}
         src={url}
         alt={alt}
-        style={{ ...styles.bentoThumb, display: isLoaded ? 'block' : 'none' }}
+        style={isLoaded ? styles.bentoThumbLoaded : styles.bentoThumbLoading}
         onLoad={() => setIsLoaded(true)}
         onError={() => setHasError(true)}
       />
@@ -89,17 +95,22 @@ const BentoThumbnail: React.FC<{ url: string; alt: string; fallbackText: string 
 const SingleScoresheetThumbnail: React.FC<{ url: string; alt: string }> = ({ url, alt }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setHasError(false);
-    setIsLoaded(false);
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
   }, [url]);
 
   if (hasError) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', minHeight: '160px', padding: '16px', textAlign: 'center' }}>
-        <FileText style={{ width: 36, height: 36, color: '#64748B' }} />
-        <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B' }}>SCORESHEET PREVIEW</span>
+      <div style={styles.scoresheetErrorBox}>
+        <FileText style={styles.scoresheetFileIcon} />
+        <span style={styles.scoresheetErrorText}>SCORESHEET PREVIEW</span>
       </div>
     );
   }
@@ -107,20 +118,21 @@ const SingleScoresheetThumbnail: React.FC<{ url: string; alt: string }> = ({ url
   return (
     <div style={styles.scoresheetImgWrap}>
       {!isLoaded && (
-        <div style={{ width: '100%', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Loader2 style={{ width: 24, height: 24, color: '#64748B', animation: 'spin 1s linear infinite' }} />
+        <div style={styles.scoresheetLoaderWrap}>
+          <Loader2 style={styles.scoresheetLoaderIcon} />
         </div>
       )}
       <img
+        ref={imgRef}
         src={url}
         alt={alt}
-        style={{ ...styles.scoresheetThumb, display: isLoaded ? 'block' : 'none' }}
+        style={isLoaded ? styles.scoresheetThumbLoaded : styles.scoresheetThumbLoading}
         onLoad={() => setIsLoaded(true)}
         onError={() => setHasError(true)}
       />
       {isLoaded && (
         <div style={styles.scoresheetEnlargeBadge}>
-          <Eye style={{ width: 13, height: 13 }} />
+          <Eye style={styles.scoresheetEyeIcon} />
           <span>CLICK TO ENLARGE PREVIEW</span>
         </div>
       )}

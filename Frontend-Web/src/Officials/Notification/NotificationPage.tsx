@@ -9,6 +9,9 @@ import {
   AlertCircle,
   ExternalLink,
   FileText,
+  X,
+  Download,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   getStoredToken,
@@ -50,6 +53,8 @@ export const NotificationPage: React.FC = () => {
   const [rejectModalNotif, setRejectModalNotif] = useState<OfficialNotificationItem | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('Scoresheet request could not be fulfilled at this time.');
   const [uploadSuccessModal, setUploadSuccessModal] = useState<{ matchName: string; coachName: string } | null>(null);
+  const [viewingScoresheet, setViewingScoresheet] = useState<{ url: string; title: string } | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   useEffect(() => {
@@ -504,28 +509,21 @@ export const NotificationPage: React.FC = () => {
                         )}
 
                         {notif.scoresheet_url && (
-                          <a
-                            href={notif.scoresheet_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              color: '#10B981',
-                              fontSize: '11.5px',
-                              fontWeight: 700,
-                              textDecoration: 'none',
-                              padding: '8px 12px',
-                              border: '1px solid rgba(16, 185, 129, 0.4)',
-                              borderRadius: '2px',
-                              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewFailed(false);
+                              setViewingScoresheet({
+                                url: notif.scoresheet_url || '',
+                                title: notif.match_name || notif.match_context || 'Scoresheet Document',
+                              });
                             }}
+                            style={styles.viewAttachedBtn}
                           >
                             <FileText style={{ width: 14, height: 14 }} />
                             <span>VIEW ATTACHED SCORESHEET</span>
                             <ExternalLink style={{ width: 12, height: 12 }} />
-                          </a>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -828,6 +826,89 @@ export const NotificationPage: React.FC = () => {
                 >
                   Done
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Scoresheet Preview Modal */}
+          {viewingScoresheet && (
+            <div style={styles.scoresheetModalOverlay} onClick={() => setViewingScoresheet(null)}>
+              <div style={styles.scoresheetModalCard} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.scoresheetModalHeader}>
+                  <div style={styles.scoresheetModalHeaderTitleWrap}>
+                    <FileText style={styles.scoresheetModalHeaderIcon} />
+                    <h3 style={styles.scoresheetModalTitle}>
+                      {viewingScoresheet.title}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewingScoresheet(null)}
+                    style={styles.scoresheetModalCloseBtn}
+                  >
+                    <X style={styles.scoresheetModalCloseIcon} />
+                  </button>
+                </div>
+
+                <div style={styles.scoresheetModalBody}>
+                  {previewFailed || viewingScoresheet.url.includes('test_scoresheet.pdf') ? (
+                    <div style={styles.scoresheetModalFallbackBox}>
+                      <AlertTriangle style={styles.scoresheetModalFallbackIcon} />
+                      <h4 style={styles.scoresheetModalFallbackTitle}>Scoresheet File Unavailable</h4>
+                      <p style={styles.scoresheetModalFallbackDesc}>
+                        The attached file link is a test placeholder or could not be loaded from the storage server.
+                        Please click <strong>Re-Attach Scoresheet</strong> on this request to attach a valid scoresheet document.
+                      </p>
+                    </div>
+                  ) : viewingScoresheet.url.toLowerCase().includes('.pdf') || viewingScoresheet.url.startsWith('data:application/pdf') ? (
+                    <iframe
+                      src={viewingScoresheet.url}
+                      title="Attached Scoresheet Document"
+                      style={styles.scoresheetModalIframe}
+                      onError={() => setPreviewFailed(true)}
+                    />
+                  ) : (
+                    <img
+                      src={viewingScoresheet.url}
+                      alt="Attached Scoresheet"
+                      style={styles.scoresheetModalImg}
+                      onError={() => setPreviewFailed(true)}
+                    />
+                  )}
+                </div>
+
+                <div style={styles.scoresheetModalFooter}>
+                  <button
+                    type="button"
+                    onClick={() => setViewingScoresheet(null)}
+                    style={styles.scoresheetModalCloseActionBtn}
+                  >
+                    Close
+                  </button>
+                  {!previewFailed && !viewingScoresheet.url.includes('test_scoresheet.pdf') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = viewingScoresheet.url;
+                        let ext = 'jpg';
+                        const lower = url.toLowerCase();
+                        if (lower.startsWith('data:application/pdf') || lower.includes('.pdf')) ext = 'pdf';
+                        else if (lower.startsWith('data:image/png') || lower.includes('.png')) ext = 'png';
+
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `scoresheet_${Date.now()}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }}
+                      style={styles.scoresheetModalDownloadBtn}
+                    >
+                      <Download style={styles.scoresheetModalDownloadIcon} />
+                      <span>Download File</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
