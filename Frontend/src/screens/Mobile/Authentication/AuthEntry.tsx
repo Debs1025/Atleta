@@ -11,6 +11,7 @@ import { PasswordResetScreen } from "./PasswordResetScreen";
 import { SignupScreen } from "./SignupScreen";
 import { AthleteHomePage } from "../Athlete/Dashboard/AthleteHomePage";
 import { CoachMainPage } from "../Coach/Dashboard/CoachMainPage";
+import { verifyCoachApprovalRealtime, isCoachAccountApproved } from "./coachVerification";
 
 let NativeGoogleSignin: any = null;
 try {
@@ -98,27 +99,15 @@ export function AuthEntry() {
             const rawUid = payload?.uid ? String(payload.uid).replace(/^coach_/, "") : "";
             if (rawUid) {
               try {
-                const userDocSnap = await getDoc(doc(db, "Users", rawUid)).catch(() => null);
-                let status = "";
-                if (userDocSnap && userDocSnap.exists()) {
-                  const uData = userDocSnap.data();
-                  status = String(uData?.status || uData?.account_status || "").toLowerCase();
-                }
-                if (status !== "approved" && status !== "active") {
-                  const coachDocSnap = await getDoc(doc(db, "Coach_Profiles", `coach_${rawUid}`)).catch(() => null);
-                  if (coachDocSnap && coachDocSnap.exists()) {
-                    const cData = coachDocSnap.data();
-                    if (cData?.status || cData?.account_status) {
-                      status = String(cData?.status || cData?.account_status).toLowerCase();
-                    }
-                  }
-                }
-
-                if (status !== "approved" && status !== "active") {
+                const realtimeCheck = await verifyCoachApprovalRealtime(rawUid);
+                if (!realtimeCheck.isApproved) {
                   await handleLogout();
+                  const isDeclined = realtimeCheck.status === "rejected" || realtimeCheck.status === "declined";
                   Alert.alert(
                     "Pending Verification",
-                    "Your account is currently pending System Admin verification."
+                    isDeclined
+                      ? "Your coach account application was declined by the system administrator."
+                      : "Your account is currently pending System Admin verification."
                   );
                   setBooting(false);
                   return;

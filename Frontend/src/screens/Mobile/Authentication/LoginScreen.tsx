@@ -32,6 +32,12 @@ import * as SecureStore from "expo-secure-store";
 import { db, clearFirebaseClientCaches } from "../../../services/firebaseClient";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
+import {
+  isCoachAccountApproved,
+  verifyCoachApprovalRealtime,
+  invalidateStaleAuthCaches,
+  forceRefreshTokenIfAvailable,
+} from "./coachVerification";
 let NativeGoogleSignin: any = null;
 try {
   NativeGoogleSignin = require("@react-native-google-signin/google-signin")?.GoogleSignin;
@@ -198,68 +204,41 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       const tokenRole = tokenPayload?.role ? String(tokenPayload.role).toLowerCase() : "";
       const role = (tokenRole === "coach" || tokenRole === "athlete" ? tokenRole : extractAuthRole(result, extractedEmail)) as AuthRole;
 
+      // Purge stale cached user records/local storage states during login
+      await invalidateStaleAuthCaches();
+
       // STRICT OAUTH ADMIN APPROVAL GATE:
-      // Inspect the user's status or isApproved flag in Firestore immediately following OAuth token exchange
+      // Inspect the user's status via a fresh real-time read from Firestore directly from the server
       const resolvedUid = result?.user?.user_id || result?.user?.uid || tokenPayload?.uid;
       const cleanUid = resolvedUid ? String(resolvedUid).replace(/^coach_/, "") : "";
 
       let isCoach = role === "coach";
-      let status = String(result?.user?.status || result?.user?.account_status || "").toLowerCase();
-      let isApproved = result?.user?.isApproved ?? result?.user?.is_approved;
 
-      if (cleanUid) {
-        try {
-          const userDocSnap = await getDoc(doc(db, "Users", cleanUid));
-          if (userDocSnap && userDocSnap.exists()) {
-            const uData = userDocSnap.data();
-            const firestoreRole = String(uData?.role || "").toLowerCase();
-            if (firestoreRole === "coach") isCoach = true;
-            if (uData?.status || uData?.account_status) {
-              status = String(uData?.status || uData?.account_status).toLowerCase();
-            }
-            if (uData?.isApproved !== undefined || uData?.is_approved !== undefined) {
-              isApproved = uData?.isApproved ?? uData?.is_approved;
-            }
-          }
-          if (isCoach && status !== "approved" && status !== "active") {
-            const coachDocSnap = await getDoc(doc(db, "Coach_Profiles", `coach_${cleanUid}`));
-            if (coachDocSnap && coachDocSnap.exists()) {
-              const cData = coachDocSnap.data();
-              if (cData?.status || cData?.account_status) {
-                status = String(cData?.status || cData?.account_status).toLowerCase();
-              }
-              if (cData?.isApproved !== undefined || cData?.is_approved !== undefined) {
-                isApproved = cData?.isApproved ?? cData?.is_approved;
-              }
-            }
-          }
-        } catch (fErr) {
-          console.warn("Firestore OAuth status verification notice:", fErr);
-        }
-      }
+      if (isCoach && cleanUid) {
+        const realtimeCheck = await verifyCoachApprovalRealtime(cleanUid);
+        const resultApproved = isCoachAccountApproved(result?.user);
+        const coachIsApproved = realtimeCheck.isApproved || resultApproved;
 
-      // If the account has role === 'coach' and status !== 'approved', block access to the dashboard.
-      if (isCoach && status !== "approved" && status !== "active") {
-        await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
-        await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
-        clearAuthMicroCache();
-        clearFirebaseClientCaches();
-        try {
-          const allKeys = await AsyncStorage.getAllKeys();
-          const atletaKeys = allKeys.filter((k) => k.startsWith("atleta_") || k.startsWith("@atleta_"));
-          if (atletaKeys.length > 0) {
-            await AsyncStorage.multiRemove(atletaKeys);
+        if (!coachIsApproved) {
+          await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+          await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+          await invalidateStaleAuthCaches();
+          if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
+            await NativeGoogleSignin.signOut().catch(() => null);
           }
-        } catch (_) {}
-        if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
-          await NativeGoogleSignin.signOut().catch(() => null);
+
+          const isDeclined = realtimeCheck.status === "rejected" || realtimeCheck.status === "declined";
+          const pendingMsg = isDeclined
+            ? "Your coach account application was declined by the system administrator."
+            : "Your account is currently pending System Admin verification.";
+          setFeedback({ tone: "error", message: pendingMsg });
+          Alert.alert("Pending Verification", pendingMsg);
+          setLoading(false);
+          return;
         }
 
-        const pendingMsg = "Your account is currently pending System Admin verification.";
-        setFeedback({ tone: "error", message: pendingMsg });
-        Alert.alert("Pending Verification", pendingMsg);
-        setLoading(false);
-        return;
+        // Force token refresh if Firebase Auth client user is active to pull updated claims
+        await forceRefreshTokenIfAvailable();
       }
 
       clearAuthMicroCache();
@@ -362,42 +341,35 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         const tokenRole = tokenPayload?.role ? String(tokenPayload.role).toLowerCase() : "";
         const role = (tokenRole === "coach" || tokenRole === "athlete" ? tokenRole : extractAuthRole(result, payload.email)) as AuthRole;
 
+        // Purge stale cached user records/local storage states during login
+        await invalidateStaleAuthCaches();
+
         const resolvedUid = result?.user?.user_id || result?.user?.uid || tokenPayload?.uid;
         const cleanUid = resolvedUid ? String(resolvedUid).replace(/^coach_/, "") : "";
         let isCoach = role === "coach";
-        let status = String(result?.user?.status || result?.user?.account_status || "").toLowerCase();
 
-        if (cleanUid) {
-          try {
-            const userDocSnap = await getDoc(doc(db, "Users", cleanUid));
-            if (userDocSnap && userDocSnap.exists()) {
-              const uData = userDocSnap.data();
-              if (String(uData?.role || "").toLowerCase() === "coach") isCoach = true;
-              if (uData?.status || uData?.account_status) {
-                status = String(uData?.status || uData?.account_status).toLowerCase();
-              }
-            }
-          } catch (_) {}
-        }
+        if (isCoach && cleanUid) {
+          const realtimeCheck = await verifyCoachApprovalRealtime(cleanUid);
+          const resultApproved = isCoachAccountApproved(result?.user);
+          const coachIsApproved = realtimeCheck.isApproved || resultApproved;
 
-        if (isCoach && status !== "approved" && status !== "active") {
-          await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
-          await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
-          clearAuthMicroCache();
-          clearFirebaseClientCaches();
-          try {
-            const allKeys = await AsyncStorage.getAllKeys();
-            const atletaKeys = allKeys.filter((k) => k.startsWith("atleta_") || k.startsWith("@atleta_"));
-            if (atletaKeys.length > 0) {
-              await AsyncStorage.multiRemove(atletaKeys);
-            }
-          } catch (_) {}
+          if (!coachIsApproved) {
+            await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+            await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
+            await invalidateStaleAuthCaches();
 
-          const pendingMsg = "Your account is currently pending System Admin verification.";
-          setFeedback({ tone: "error", message: pendingMsg });
-          Alert.alert("Pending Verification", pendingMsg);
-          setLoading(false);
-          return;
+            const isDeclined = realtimeCheck.status === "rejected" || realtimeCheck.status === "declined";
+            const pendingMsg = isDeclined
+              ? "Your coach account application was declined by the system administrator."
+              : "Your account is currently pending System Admin verification.";
+            setFeedback({ tone: "error", message: pendingMsg });
+            Alert.alert("Pending Verification", pendingMsg);
+            setLoading(false);
+            return;
+          }
+
+          // Force token refresh if Firebase Auth client user is active to pull updated claims
+          await forceRefreshTokenIfAvailable();
         }
 
         clearAuthMicroCache();
