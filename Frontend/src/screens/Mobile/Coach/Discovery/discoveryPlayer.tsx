@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   Modal,
   ScrollView,
   StyleSheet,
@@ -91,30 +92,37 @@ export const DiscoveryPlayer: React.FC<{
             const secondaryBadgesCount = archetypeBadges.length > 1 ? archetypeBadges.length - 1 : 0;
 
             return (
-              <TouchableOpacity
+              <View
                 key={athlete.athlete_id}
                 style={styles.athleteCard}
-                onPress={() => handleOpenAthlete(athlete)}
-                activeOpacity={0.85}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingRight: 8 }}>
-                    <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center' }}>
+                {/* Full-card background Pressable to open athlete profile */}
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => handleOpenAthlete(athlete)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${athleteName}'s profile`}
+                />
+
+                <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingRight: 8 }}>
+                    <View pointerEvents="none" style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center' }}>
                       <Ionicons name="person" size={18} color="#00C8FF" />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <View pointerEvents="box-none" style={{ flex: 1 }}>
+                      <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>{athleteName}</Text>
                         {athlete.is_scouted && (
-                          <View style={{ backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                          <View pointerEvents="none" style={{ backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
                             <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>SCOUTED</Text>
                           </View>
                         )}
 
                         {/* Primary Dominant Badge (No raw numbers) & Compact "+ More" Action */}
                         {primaryBadge && (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                             <View
+                              pointerEvents="none"
                               style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
@@ -137,11 +145,9 @@ export const DiscoveryPlayer: React.FC<{
                             {secondaryBadgesCount > 0 && (
                               <TouchableOpacity
                                 style={modalStyles.morePill}
-                                onPress={(e) => {
-                                  e.stopPropagation?.();
-                                  handleOpenBadgesModal(athlete, archetypeBadges);
-                                }}
+                                onPress={() => handleOpenBadgesModal(athlete, archetypeBadges)}
                                 activeOpacity={0.7}
+                                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                                 accessibilityLabel={`View ${secondaryBadgesCount} more badges`}
                               >
                                 <Ionicons name="add" size={10} color="#00C8FF" />
@@ -176,12 +182,12 @@ export const DiscoveryPlayer: React.FC<{
                     </View>
                   </View>
 
-                  <View style={styles.tagChip}>
+                  <View pointerEvents="none" style={styles.tagChip}>
                     <Text style={styles.tagChipText}>{positionTag}</Text>
                   </View>
                 </View>
 
-                <View style={styles.statsTrioRow}>
+                <View pointerEvents="none" style={styles.statsTrioRow}>
                   {(() => {
                     const sc = String(athlete.sport_category || '').toUpperCase().trim();
                     if (sc.includes('BASKETBALL')) {
@@ -242,7 +248,7 @@ export const DiscoveryPlayer: React.FC<{
                   })()}
                 </View>
 
-                <View style={styles.levelBarContainer}>
+                <View pointerEvents="none" style={styles.levelBarContainer}>
                   {[1, 2, 3, 4, 5].map((step) => {
                     const isFilled = step <= filledCount;
                     return (
@@ -250,7 +256,7 @@ export const DiscoveryPlayer: React.FC<{
                     );
                   })}
                 </View>
-              </TouchableOpacity>
+              </View>
             );
           })
         ) : (
