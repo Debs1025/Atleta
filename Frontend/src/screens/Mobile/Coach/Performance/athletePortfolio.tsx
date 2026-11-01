@@ -486,39 +486,99 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           {/* Stats-Derived Archetype Badges */}
           {(() => {
             const archetypeBadges = computePlayerArchetypeBadges(athlete);
+            if (!archetypeBadges || archetypeBadges.length === 0) return null;
             return (
-              <View style={{ marginTop: 14, alignItems: 'center', width: '100%' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                  <Ionicons name="sparkles" size={12} color="#00C8FF" />
-                  <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }}>
-                    STATS-DERIVED PLAYSTYLE ARCHETYPES
-                  </Text>
+              <View
+                style={{
+                  marginTop: 14,
+                  width: '100%',
+                  backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(0, 200, 255, 0.18)',
+                  borderRadius: 14,
+                  padding: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="sparkles" size={12} color="#00C8FF" />
+                    <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                      PLAYSTYLE ARCHETYPES
+                    </Text>
+                  </View>
+                  <View style={{ backgroundColor: 'rgba(0, 200, 255, 0.12)', borderColor: 'rgba(0, 200, 255, 0.35)', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10 }}>
+                    <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>
+                      {archetypeBadges.length} VERIFIED
+                    </Text>
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, paddingHorizontal: 12 }}>
 
-                  {/* Archetype Badges */}
-                  {archetypeBadges.map((badge) => (
-                    <View
-                      key={badge.id}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: badge.bgColor,
-                        borderColor: badge.borderColor,
-                        borderWidth: 1,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                        borderRadius: 6,
-                        gap: 4,
-                      }}
-                    >
-                      <Ionicons name={badge.icon as any} size={11} color={badge.color} />
-                      <Text style={{ color: badge.color, fontSize: 11, fontWeight: '800' }}>{badge.label}</Text>
-                      <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
-                        <Text style={{ color: '#F1F5F9', fontSize: 9, fontWeight: '700' }}>{badge.metricProof}</Text>
+                {/* Structured Badges 2-Column Grid */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
+                  {archetypeBadges.map((badge, idx) => {
+                    const isSingleOrLastOdd = (archetypeBadges.length === 1) || (archetypeBadges.length % 2 === 1 && idx === archetypeBadges.length - 1);
+                    return (
+                      <View
+                        key={badge.id}
+                        style={{
+                          width: isSingleOrLastOdd ? '100%' : '48.5%',
+                          backgroundColor: '#0A1424',
+                          borderColor: badge.borderColor,
+                          borderWidth: 1,
+                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        {isSingleOrLastOdd ? (
+                          // Full-width horizontal row
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, marginRight: 8 }}>
+                              <View style={{ width: 26, height: 26, borderRadius: 6, backgroundColor: badge.bgColor, alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name={badge.icon as any} size={14} color={badge.color} />
+                              </View>
+                              <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800' }} numberOfLines={1}>
+                                {badge.label}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={{ color: '#64748B', fontSize: 9.5, fontWeight: '700', textTransform: 'uppercase' }}>
+                                {badge.category}
+                              </Text>
+                              <View style={{ backgroundColor: badge.bgColor, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                <Text style={{ color: badge.color, fontSize: 10, fontWeight: '800' }}>
+                                  {badge.metricProof}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : (
+                          // 2-column stacked card
+                          <>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: badge.bgColor, alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name={badge.icon as any} size={13} color={badge.color} />
+                              </View>
+                              <Text style={{ color: '#FFFFFF', fontSize: 11.5, fontWeight: '800', flex: 1 }} numberOfLines={1}>
+                                {badge.label}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <Text style={{ color: '#64748B', fontSize: 9, fontWeight: '700', textTransform: 'uppercase' }}>
+                                {badge.category}
+                              </Text>
+                              <View style={{ backgroundColor: badge.bgColor, paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 4 }}>
+                                <Text style={{ color: badge.color, fontSize: 9.5, fontWeight: '800' }}>
+                                  {badge.metricProof}
+                                </Text>
+                              </View>
+                            </View>
+                          </>
+                        )}
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </View>
             );
