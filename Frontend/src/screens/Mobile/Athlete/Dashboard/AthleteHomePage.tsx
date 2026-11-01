@@ -19,6 +19,12 @@ import { Ionicons } from "@expo/vector-icons";
 
 const OFFLINE_ATHLETE_PROFILE_CACHE_KEY = "atleta_offline_athlete_profile_cache";
 
+// Micro-caches to prevent redundant direct Firestore getDoc calls on every tab navigation
+const directAthleteDocCache = new Map<string, { dData: any; uData: any; timestamp: number }>();
+const directTeamDocCache = new Map<string, { data: any; timestamp: number }>();
+const directCoachDocCache = new Map<string, { data: any; timestamp: number }>();
+const FIRESTORE_LOOKUP_TTL_MS = 60000; // 60s microcache
+
 const DEFAULT_ELIGIBLE_DOCS: EligibleDocument[] = [];
 
 // Athlete Data Structure
@@ -244,23 +250,30 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         let dData: any = null;
         let uData: any = null;
         if (cleanId) {
-          try {
-            const [d1, d2, uDocSnap] = await Promise.all([
-              getDoc(doc(db, "Athlete_Profiles", `ath_${cleanId}`)).catch(() => null),
-              getDoc(doc(db, "Athlete_Profiles", cleanId)).catch(() => null),
-              getDoc(doc(db, "Users", cleanId)).catch(() => null),
-            ]);
-            dData = (d1 && d1.exists()) ? d1.data() : (d2 && d2.exists()) ? d2.data() : null;
-            uData = (uDocSnap && uDocSnap.exists()) ? uDocSnap.data() : null;
+          const cachedAthleteDocs = directAthleteDocCache.get(cleanId);
+          if (cachedAthleteDocs && Date.now() - cachedAthleteDocs.timestamp < FIRESTORE_LOOKUP_TTL_MS) {
+            dData = cachedAthleteDocs.dData;
+            uData = cachedAthleteDocs.uData;
+          } else {
+            try {
+              const [d1, d2, uDocSnap] = await Promise.all([
+                getDoc(doc(db, "Athlete_Profiles", `ath_${cleanId}`)).catch(() => null),
+                getDoc(doc(db, "Athlete_Profiles", cleanId)).catch(() => null),
+                getDoc(doc(db, "Users", cleanId)).catch(() => null),
+              ]);
+              dData = (d1 && d1.exists()) ? d1.data() : (d2 && d2.exists()) ? d2.data() : null;
+              uData = (uDocSnap && uDocSnap.exists()) ? uDocSnap.data() : null;
+              directAthleteDocCache.set(cleanId, { dData, uData, timestamp: Date.now() });
+            } catch (_) {}
+          }
 
-            if (docList.length === 0) {
-              if (dData?.eligible_documents && Array.isArray(dData.eligible_documents) && dData.eligible_documents.length > 0) {
-                docList = dData.eligible_documents;
-              } else if (dData?.documents && Array.isArray(dData.documents) && dData.documents.length > 0) {
-                docList = dData.documents;
-              }
+          if (docList.length === 0) {
+            if (dData?.eligible_documents && Array.isArray(dData.eligible_documents) && dData.eligible_documents.length > 0) {
+              docList = dData.eligible_documents;
+            } else if (dData?.documents && Array.isArray(dData.documents) && dData.documents.length > 0) {
+              docList = dData.documents;
             }
-          } catch (_) {}
+          }
         }
 
         // Dynamically resolve athlete's assigned team ID from Firestore profile
@@ -282,13 +295,19 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
         // Query Firestore Teams collection dynamically for the live team document
         let dynamicTeamData: any = null;
         if (athleteTeamId) {
-          try {
-            const teamDocSnap = await getDoc(doc(db, "Teams", athleteTeamId)).catch(() => null);
-            if (teamDocSnap && teamDocSnap.exists()) {
-              dynamicTeamData = teamDocSnap.data();
+          const cachedTeam = directTeamDocCache.get(athleteTeamId);
+          if (cachedTeam && Date.now() - cachedTeam.timestamp < FIRESTORE_LOOKUP_TTL_MS) {
+            dynamicTeamData = cachedTeam.data;
+          } else {
+            try {
+              const teamDocSnap = await getDoc(doc(db, "Teams", athleteTeamId)).catch(() => null);
+              if (teamDocSnap && teamDocSnap.exists()) {
+                dynamicTeamData = teamDocSnap.data();
+                directTeamDocCache.set(athleteTeamId, { data: dynamicTeamData, timestamp: Date.now() });
+              }
+            } catch (tErr) {
+              console.warn("Dynamic team fetch notice:", tErr);
             }
-          } catch (tErr) {
-            console.warn("Dynamic team fetch notice:", tErr);
           }
         }
 
@@ -366,22 +385,31 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           "";
 
         if (coachId) {
-          try {
-            const rawCid = String(coachId).replace(/^coach_/, "");
-            const canonicalCid = String(coachId).startsWith("coach_") ? coachId : `coach_${rawCid}`;
-            const [cDoc, uDocCoach] = await Promise.all([
-              getDoc(doc(db, "Coach_Profiles", canonicalCid)).catch(() => null),
-              getDoc(doc(db, "Users", rawCid)).catch(() => null),
-            ]);
-            const liveCoach = (cDoc && cDoc.exists()) ? cDoc.data() : (uDocCoach && uDocCoach.exists()) ? uDocCoach.data() : null;
-            if (liveCoach) {
-              coachName = (liveCoach.full_name || `${liveCoach.first_name || ""} ${liveCoach.last_name || ""}`.trim() || coachName).toUpperCase();
-              coachRole = liveCoach.role_title || liveCoach.current_institution || coachRole;
-              coachExp = liveCoach.years_experience || liveCoach.years_of_experience ? `${liveCoach.years_experience || liveCoach.years_of_experience} Years` : coachExp;
-              coachQuote = liveCoach.coachingPhilosophy || liveCoach.coaching_philosophy || liveCoach.philosophy || liveCoach.quote || coachQuote;
-              coachAvatar = liveCoach.avatar_url || liveCoach.profile_image || coachAvatar;
-            }
-          } catch (_) {}
+          const rawCid = String(coachId).replace(/^coach_/, "");
+          const canonicalCid = String(coachId).startsWith("coach_") ? coachId : `coach_${rawCid}`;
+          const cachedCoach = directCoachDocCache.get(canonicalCid);
+          let liveCoach = (cachedCoach && Date.now() - cachedCoach.timestamp < FIRESTORE_LOOKUP_TTL_MS) ? cachedCoach.data : null;
+
+          if (!liveCoach) {
+            try {
+              const [cDoc, uDocCoach] = await Promise.all([
+                getDoc(doc(db, "Coach_Profiles", canonicalCid)).catch(() => null),
+                getDoc(doc(db, "Users", rawCid)).catch(() => null),
+              ]);
+              liveCoach = (cDoc && cDoc.exists()) ? cDoc.data() : (uDocCoach && uDocCoach.exists()) ? uDocCoach.data() : null;
+              if (liveCoach) {
+                directCoachDocCache.set(canonicalCid, { data: liveCoach, timestamp: Date.now() });
+              }
+            } catch (_) {}
+          }
+
+          if (liveCoach) {
+            coachName = (liveCoach.full_name || `${liveCoach.first_name || ""} ${liveCoach.last_name || ""}`.trim() || coachName).toUpperCase();
+            coachRole = liveCoach.role_title || liveCoach.current_institution || coachRole;
+            coachExp = liveCoach.years_experience || liveCoach.years_of_experience ? `${liveCoach.years_experience || liveCoach.years_of_experience} Years` : coachExp;
+            coachQuote = liveCoach.coachingPhilosophy || liveCoach.coaching_philosophy || liveCoach.philosophy || liveCoach.quote || coachQuote;
+            coachAvatar = liveCoach.avatar_url || liveCoach.profile_image || coachAvatar;
+          }
         }
 
         const resolvedProvince = (raw.province || raw.location || raw.user?.province || raw.regional_affiliation || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase() || "CAMARINES SUR";
@@ -683,6 +711,7 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     if (athleteUid) {
       try {
         const cleanId = String(athleteUid).replace(/^ath_/, "");
+        directAthleteDocCache.delete(cleanId);
         const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
         const payload = sanitizeFirestoreData({
           first_name: updatedProfile.first_name,

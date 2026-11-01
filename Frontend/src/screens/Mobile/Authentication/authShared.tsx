@@ -349,7 +349,35 @@ export async function getStoredAuthToken(): Promise<string | null> {
 
 const inFlightGetRequests = new Map<string, Promise<any>>();
 const getResponseMicroCache = new Map<string, { data: any; timestamp: number }>();
-const MICRO_CACHE_TTL_MS = 1500; // 1.5s snappy microcache to eliminate redundant duplicate queries across screens
+
+/**
+ * Returns optimized cache TTL per endpoint category to minimize Firestore reads & quotas
+ * while guaranteeing instant navigation responsiveness.
+ */
+function getMicroCacheTtlForPath(path: string): number {
+  const p = path.toLowerCase();
+  // 1. Static reference catalogs (Sports configurations, all teams, all matches): 3 to 5 minutes
+  if (p.includes('/sports') || p.includes('/teams?all=true') || p.includes('/matches?all=true')) {
+    return 3 * 60 * 1000;
+  }
+  // 2. Discovery & Recruitment catalogs (athlete directory, scouting proposals): 2 minutes
+  if (p.startsWith('/athletes') && !p.includes('/home') && !p.includes('/workload') && !p.includes('/profile') && !p.includes('/team') && !p.includes('/stats')) {
+    return 2 * 60 * 1000;
+  }
+  if (p.startsWith('/scouting/proposals') || p.startsWith('/teams')) {
+    return 2 * 60 * 1000;
+  }
+  // 3. User Dashboards & Profiles (Athlete home, Coach snapshot, athlete profile, coach athletes): 45 seconds
+  if (p.includes('/home') || p.includes('/profile') || p.includes('/snapshot') || p.includes('/workload') || p.includes('/coaches/athletes') || p.includes('/stats')) {
+    return 45 * 1000;
+  }
+  // 4. Notifications & Inquiries: 20 seconds
+  if (p.includes('/notifications') || p.includes('/inquiries')) {
+    return 20 * 1000;
+  }
+  // Default general GET cache TTL: 30 seconds
+  return 30 * 1000;
+}
 
 export function clearAuthMicroCache() {
   getResponseMicroCache.clear();
@@ -371,7 +399,8 @@ export async function requestAuthenticatedJson(
 
   if (isGet && !forceRefresh) {
     const cached = getResponseMicroCache.get(path);
-    if (cached && Date.now() - cached.timestamp < MICRO_CACHE_TTL_MS) {
+    const ttl = getMicroCacheTtlForPath(path);
+    if (cached && Date.now() - cached.timestamp < ttl) {
       return cached.data;
     }
     const inFlight = inFlightGetRequests.get(path);

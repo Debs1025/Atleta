@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMatchesOfflineFirst } from '../../../../services/firebaseClient';
 
 const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache_v2';
-const DISCOVERY_CACHE_TTL_MS = 5000; // 5s snappy TTL to prevent stale discovery views
+const DISCOVERY_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes TTL for discovery dataset (Stale-While-Revalidate)
 
 let discoveryMemoryCache: {
   athletes: AthleteDiscoveryItem[];

@@ -454,8 +454,8 @@ let matchesLastFetched = 0;
 let teamsMemoryCache: any[] | null = null;
 let teamsLastFetched = 0;
 
-const MEMORY_CACHE_TTL_MS = 3000; // 3s snappy debounce to prevent redundant in-flight queries while always staying fresh
-const SPORTS_MEMORY_CACHE_TTL_MS = 5000; // 5s cache validity for sports config catalog
+const MEMORY_CACHE_TTL_MS = 60000; // 60s memory cache to prevent redundant in-flight queries and protect Firestore read quotas
+const SPORTS_MEMORY_CACHE_TTL_MS = 600000; // 10 minutes cache validity for static sports config catalog
 
 export function clearFirebaseClientCaches() {
   sportsMemoryCache = null;
