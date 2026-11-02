@@ -208,6 +208,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const [activeSportFilter, setActiveSportFilter] = useState<string>("ALL");
   const [dynamicSports, setDynamicSports] = useState<string[]>([
     "BASKETBALL",
+    "VOLLEYBALL",
     "SWIMMING",
     "TRACK AND FIELD",
   ]);
@@ -593,7 +594,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           if (Array.isArray(cached.dynamicSports) && cached.dynamicSports.length > 0) {
             const sanitized = cached.dynamicSports.filter((s: string) => {
               const u = String(s).toUpperCase().trim();
-              return u !== 'VOLLEYBALL' && u !== 'PICKLEBALL';
+              return u !== 'PICKLEBALL';
             });
             if (sanitized.length > 0) {
               setDynamicSports(sanitized);
@@ -1134,7 +1135,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             };
             updatedCoachSnapshot = updatedCoach;
             setCoach(updatedCoach);
-            setActiveSportFilter(sportFocus);
+            // Keep default filter as "ALL" so all rostered athletes display immediately on dashboard load
 
             const updatedProfileState: CoachProfileState = {
               coach_id: updatedCoach.coach_id,
@@ -1200,7 +1201,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const mappedSports: string[] = [];
             sportsRes.forEach((s: any) => {
               if (s.is_active === false || s.active === false) return;
-              const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+              let raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
+              if (raw.includes('TRACK') && raw.includes('FIELD')) {
+                raw = 'TRACK AND FIELD';
+              }
               if (!raw || seen.has(raw)) return;
               seen.add(raw);
               mappedSports.push(raw);
@@ -2496,10 +2500,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   <View style={{ paddingVertical: 28, alignItems: "center", justifyContent: "center" }}>
                     <Ionicons name="people-outline" size={36} color="#64748B" />
                     <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "700", marginTop: 8 }}>
-                      No Athletes in Roster Yet
+                      {activeSportFilter !== "ALL" && athletesPool.length > 0
+                        ? `No ${activeSportFilter} Athletes in Roster`
+                        : "No Athletes in Roster Yet"}
                     </Text>
                     <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: 20 }}>
-                      You don't have any athletes in your roster yet. Use the Teams or Discovery tab to add players.
+                      {activeSportFilter !== "ALL" && athletesPool.length > 0
+                        ? `You have ${athletesPool.length} athlete(s) in your active roster. Tap 'ALL' above to view all rostered players.`
+                        : "You don't have any athletes in your roster yet. Use the Teams or Discovery tab to add players."}
                     </Text>
                   </View>
                 ) : (
@@ -2517,7 +2525,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
             {/* TOTAL ATHLETES Card */}
             <View style={styles.summaryTile}>
-              <Text style={styles.summaryLabel}>TOTAL ATHLETES</Text>
+              <Text style={styles.summaryLabel}>
+                {activeSportFilter === "ALL" ? "TOTAL ATHLETES" : `TOTAL ATHLETES (${activeSportFilter})`}
+              </Text>
               <View style={styles.summaryPill}>
                 <Text style={styles.summaryPillValue}>{filteredDashboardPlayers.length}</Text>
               </View>

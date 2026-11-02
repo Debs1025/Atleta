@@ -217,7 +217,8 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       if (isCoach && cleanUid) {
         const realtimeCheck = await verifyCoachApprovalRealtime(cleanUid);
         const resultApproved = isCoachAccountApproved(result?.user);
-        const coachIsApproved = realtimeCheck.isApproved || resultApproved;
+        const tokenApproved = isCoachAccountApproved(tokenPayload);
+        const coachIsApproved = realtimeCheck.isApproved || resultApproved || tokenApproved;
 
         if (!coachIsApproved) {
           await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
@@ -351,7 +352,8 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         if (isCoach && cleanUid) {
           const realtimeCheck = await verifyCoachApprovalRealtime(cleanUid);
           const resultApproved = isCoachAccountApproved(result?.user);
-          const coachIsApproved = realtimeCheck.isApproved || resultApproved;
+          const tokenApproved = isCoachAccountApproved(tokenPayload);
+          const coachIsApproved = realtimeCheck.isApproved || resultApproved || tokenApproved;
 
           if (!coachIsApproved) {
             await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);

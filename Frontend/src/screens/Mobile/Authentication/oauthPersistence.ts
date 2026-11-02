@@ -220,6 +220,8 @@ export async function persistOAuthUserDocument(params: {
     additionalData,
   } = params;
 
+  const isCoach = role.toLowerCase() === "coach";
+
   // 1. Stage locally in AsyncStorage FIRST so network drops cannot lose data
   const stagedPayload: StagedOAuthUserData = {
     uid,
@@ -227,7 +229,7 @@ export async function persistOAuthUserDocument(params: {
     fullName,
     role: role.toLowerCase(),
     authProvider,
-    status: "pending",
+    status: isCoach ? "pending" : "active",
     socialToken,
     firstName,
     lastName,
@@ -244,7 +246,7 @@ export async function persistOAuthUserDocument(params: {
     fullName: fullName.trim(),
     role: role.toLowerCase(),
     authProvider,
-    status: "pending",
+    status: isCoach ? "pending" : "active",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     // Snake-case aliases and metadata for complete platform compatibility
@@ -255,9 +257,9 @@ export async function persistOAuthUserDocument(params: {
     auth_provider: authProvider,
     provider: authProvider,
     avatar_url: avatarUrl || null,
-    account_status: "pending",
-    is_approved: false,
-    isApproved: false,
+    account_status: isCoach ? "pending" : "Active",
+    is_approved: !isCoach,
+    isApproved: !isCoach,
     ...(additionalData || {}),
   };
 

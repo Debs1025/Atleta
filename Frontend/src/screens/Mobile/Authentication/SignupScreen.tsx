@@ -811,6 +811,27 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           professional_documents: documentFile ? [documentFile.name || "coach_license.pdf"] : []
         };
 
+        if (documentFile) {
+          const formData = new FormData();
+          Object.entries(payload).forEach(([k, v]) => {
+            if (v !== undefined) {
+              if (Array.isArray(v)) {
+                formData.append(k, JSON.stringify(v));
+              } else {
+                formData.append(k, String(v));
+              }
+            }
+          });
+          formData.append('professional_documents', {
+            uri: documentFile.uri,
+            name: documentFile.name || 'coach_license.pdf',
+            type: documentFile.mimeType || 'application/pdf',
+          } as any);
+          await requestMultipart('/users/register-coach', formData);
+        } else {
+          await requestJson('/users/register', payload);
+        }
+
         // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);

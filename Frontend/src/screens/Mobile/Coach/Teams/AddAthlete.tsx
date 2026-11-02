@@ -53,7 +53,7 @@ export function AddAthlete({
       try {
         setIsLoading(true);
         let rawList: any[] = [];
-        const coachAthletesRes = await requestAuthenticatedJson("/coaches/athletes").catch(() => null);
+        const coachAthletesRes = await requestAuthenticatedJson("/coaches/athletes", "GET", undefined, true).catch(() => null);
         if (coachAthletesRes && Array.isArray(coachAthletesRes.athletes)) {
           rawList = coachAthletesRes.athletes;
         } else if (athletesPool && athletesPool.length > 0) {
@@ -77,7 +77,15 @@ export function AddAthlete({
 
   // Base pool filtered strictly by team sport_type from both live athletes and coach's athletesPool
   const baseSportPool: AthleteItem[] = useMemo(() => {
-    const targetSport = (teamDetails.sport_type || "BASKETBALL").toUpperCase().trim();
+    const normalizeSport = (s: string) => {
+      const u = (s || '').toUpperCase().trim();
+      if (u.includes('TRACK') || u.includes('FIELD')) return 'TRACK AND FIELD';
+      if (u.includes('SWIM')) return 'SWIMMING';
+      if (u.includes('VOLLEY')) return 'VOLLEYBALL';
+      if (u.includes('BASKET')) return 'BASKETBALL';
+      return u;
+    };
+    const targetSport = normalizeSport(teamDetails.sport_type || "BASKETBALL");
     const athleteMap = new Map<string, AthleteItem>();
 
     const getCanonicalKey = (a: any) => {
@@ -124,7 +132,7 @@ export function AddAthlete({
     // 1. Process coach's handled pool
     if (athletesPool && athletesPool.length > 0) {
       athletesPool.forEach((a) => {
-        const aSport = (a.sport_type || "").toUpperCase().trim();
+        const aSport = normalizeSport(a.sport_type || "");
         if (aSport === targetSport) {
           const aId = a.athlete_id || a.user_id;
           const cKey = getCanonicalKey(a);
@@ -150,7 +158,7 @@ export function AddAthlete({
     // 2. Process live Firestore athletes
     if (liveAthletes && liveAthletes.length > 0) {
       liveAthletes.forEach((a) => {
-        const aSport = (a.sport_type || a.sport_category || a.category || "").toUpperCase().trim();
+        const aSport = normalizeSport(a.sport_type || a.sport_category || a.category || "");
         if (aSport === targetSport) {
           const aId = a.athlete_id || a.user_id;
           const cKey = getCanonicalKey(a);

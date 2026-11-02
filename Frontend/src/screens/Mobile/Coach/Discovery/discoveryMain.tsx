@@ -72,7 +72,10 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
         sports.forEach((s: any) => {
           const raw = String(s.sport_name || s.name || s.id || '').trim();
           if (!raw) return;
-          const upper = raw.toUpperCase();
+          let upper = raw.toUpperCase();
+          if (upper.includes('TRACK') && upper.includes('FIELD')) {
+            upper = 'TRACK AND FIELD';
+          }
           if (seen.has(upper)) return;
           seen.add(upper);
           const label = upper === 'TRACK AND FIELD' ? 'Track and Field' : (raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase());

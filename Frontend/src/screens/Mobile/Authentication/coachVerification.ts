@@ -129,6 +129,33 @@ export async function verifyCoachApprovalRealtime(uid: string): Promise<{
     };
   }
 
+  // Resilient fallback: If direct Firestore client read was blocked or timed out,
+  // query the authoritative backend API before concluding the account is pending.
+  try {
+    const { requestAuthenticatedJson } = require("./authShared");
+    const apiRes = await requestAuthenticatedJson("/users/me").catch(() => null)
+      || await requestAuthenticatedJson("/coaches/profile").catch(() => null);
+    if (apiRes) {
+      const u = apiRes.user || apiRes.coach || apiRes;
+      if (isCoachAccountApproved(u)) {
+        return {
+          isApproved: true,
+          status: String(u.status || u.account_status || "approved").toLowerCase(),
+          sourceDoc: "api/users/me",
+          data: u,
+        };
+      }
+      if (u.status === "rejected" || u.status === "declined" || u.account_status === "rejected") {
+        return {
+          isApproved: false,
+          status: "rejected",
+          sourceDoc: "api/users/me",
+          data: u,
+        };
+      }
+    }
+  } catch (_) {}
+
   return { isApproved: false, status: "pending" };
 }
 

@@ -100,7 +100,8 @@ export function AuthEntry() {
             if (rawUid) {
               try {
                 const realtimeCheck = await verifyCoachApprovalRealtime(rawUid);
-                if (!realtimeCheck.isApproved) {
+                const tokenApproved = isCoachAccountApproved(payload);
+                if (!realtimeCheck.isApproved && !tokenApproved) {
                   await handleLogout();
                   const isDeclined = realtimeCheck.status === "rejected" || realtimeCheck.status === "declined";
                   Alert.alert(
