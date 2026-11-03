@@ -15,7 +15,7 @@ import { TeamDetailsScreen } from "./TeamDetails";
 import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
-import { getSportsOfflineFirst, getTeamsOfflineFirst, db } from "../../../../services/firebaseClient";
+import { getActiveCoachSportsOfflineFirst, getTeamsOfflineFirst, db } from "../../../../services/firebaseClient";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -86,9 +86,6 @@ interface TeamsProps {
 
 const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
   { label: "ALL", value: "ALL" },
-  { label: "BASKETBALL", value: "BASKETBALL" },
-  { label: "SWIMMING", value: "SWIMMING" },
-  { label: "TRACK AND FIELD", value: "TRACK AND FIELD" },
 ];
 
 const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
@@ -151,16 +148,14 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
 
   useEffect(() => {
     let isMounted = true;
-    getSportsOfflineFirst()
-      .then((sports: any) => {
+    getActiveCoachSportsOfflineFirst()
+      .then((sports: string[]) => {
         if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
         const seen = new Set<string>(["ALL"]);
         const mapped: { label: string; value: string }[] = [{ label: "ALL", value: "ALL" }];
-        sports.forEach((s: any) => {
-          const raw = String(s.sport_name || s.name || s.id || "").trim();
-          if (!raw) return;
-          const upper = raw.toUpperCase();
-          if (seen.has(upper)) return;
+        sports.forEach((raw: string) => {
+          const upper = String(raw).toUpperCase().trim();
+          if (!upper || upper === "ALL" || seen.has(upper)) return;
           seen.add(upper);
           mapped.push({ label: upper, value: upper });
         });
@@ -191,11 +186,12 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
   const fetchDirectoryAndInquiries = useCallback(async (isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
-      const [offlineTeams, teamsRes, inquiriesRes, myTeamRes]: [any, any, any, any] = await Promise.all([
+      const [offlineTeams, teamsRes, inquiriesRes, myTeamRes, activeCoachSports]: [any, any, any, any, string[]] = await Promise.all([
         getTeamsOfflineFirst().catch(() => []),
         requestAuthenticatedJson("/teams").catch(() => null),
         requestAuthenticatedJson("/inquiries").catch(() => null),
         requestAuthenticatedJson("/athletes/team").catch(() => null),
+        getActiveCoachSportsOfflineFirst(isRefresh).catch(() => []),
       ]);
 
         const currentTeamId = myTeamRes?.team?.team_id || myTeamRes?.team_id || "";
@@ -301,18 +297,41 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
             });
           setTeams(mappedTeams);
 
-          setSportChips((prev) => {
-            const seen = new Set(prev.map((c) => c.value));
-            const additional: { label: string; value: string }[] = [];
-            mappedTeams.forEach((t) => {
-              const val = (t.sport_type || "").toUpperCase().trim();
-              if (val && !seen.has(val)) {
-                seen.add(val);
-                additional.push({ label: val, value: val });
-              }
+          // Dynamically bind sports chips strictly to active sports available from coach profiles in Firestore
+          const distinctSports = new Set<string>();
+          if (Array.isArray(activeCoachSports)) {
+            activeCoachSports.forEach((s) => {
+              const norm = String(s).toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
+              if (norm && norm !== "ALL") distinctSports.add(norm);
             });
-            return additional.length > 0 ? [...prev, ...additional] : prev;
+          }
+          // Also incorporate active sports confirmed from managed teams with coaches
+          mappedTeams.forEach((t) => {
+            const hasCoach = t.managed_by_coach_id || (t.head_coach?.full_name && t.head_coach.full_name !== "HEAD COACH");
+            if (hasCoach && t.sport_type) {
+              const norm = String(t.sport_type).toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
+              if (norm && norm !== "ALL") distinctSports.add(norm);
+            }
           });
+
+          if (distinctSports.size > 0) {
+            const sorted = Array.from(distinctSports).sort();
+            const mapped: { label: string; value: string }[] = [{ label: "ALL", value: "ALL" }];
+            sorted.forEach((upper) => {
+              mapped.push({ label: upper, value: upper });
+            });
+            setSportChips(mapped);
+
+            setSelectedSport((current) => {
+              if (current && current !== "ALL") {
+                const isValid = sorted.some(
+                  (s) => normSport(s) === normSport(current)
+                );
+                return isValid ? current : "ALL";
+              }
+              return current;
+            });
+          }
 
           const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
           const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {

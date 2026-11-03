@@ -454,12 +454,18 @@ let matchesLastFetched = 0;
 let teamsMemoryCache: any[] | null = null;
 let teamsLastFetched = 0;
 
+let activeCoachSportsMemoryCache: string[] | null = null;
+let activeCoachSportsLastFetched = 0;
+export const OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY = "atleta_offline_active_coach_sports_cache";
+
 const MEMORY_CACHE_TTL_MS = 60000; // 60s memory cache to prevent redundant in-flight queries and protect Firestore read quotas
 const SPORTS_MEMORY_CACHE_TTL_MS = 600000; // 10 minutes cache validity for static sports config catalog
 
 export function clearFirebaseClientCaches() {
   sportsMemoryCache = null;
   sportsLastFetched = 0;
+  activeCoachSportsMemoryCache = null;
+  activeCoachSportsLastFetched = 0;
   athletesMemoryCache = null;
   athletesLastFetched = 0;
   matchesMemoryCache = null;
@@ -468,6 +474,7 @@ export function clearFirebaseClientCaches() {
   teamsLastFetched = 0;
   AsyncStorage.multiRemove([
     OFFLINE_SPORTS_CACHE_KEY,
+    OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY,
     OFFLINE_MATCHES_CACHE_KEY,
     OFFLINE_ATHLETES_CACHE_KEY,
     OFFLINE_TEAMS_CACHE_KEY,
@@ -738,6 +745,115 @@ export async function getSportsOfflineFirst(forceRefresh: boolean = false): Prom
         sportsMemoryCache = activeList;
         sportsLastFetched = Date.now();
         return activeList;
+      }
+    }
+  } catch (_) {}
+
+  return [];
+}
+
+/**
+ * Fetch distinct sports strictly offered by active, registered coach profiles in Firestore.
+ * If no coach is registered or active under a specific sport, that sport is excluded.
+ * Cache-first (instant 0-10ms) -> Snappy REST -> Direct Firestore -> AsyncStorage.
+ */
+export async function getActiveCoachSportsOfflineFirst(forceRefresh: boolean = false): Promise<string[]> {
+  // 1. Fast in-memory cache (<15s)
+  if (!forceRefresh && activeCoachSportsMemoryCache && activeCoachSportsMemoryCache.length > 0 && Date.now() - activeCoachSportsLastFetched < 15000) {
+    return activeCoachSportsMemoryCache;
+  }
+
+  // 2. Network REST fetch from /coaches/active-sports (5.0s timeout)
+  try {
+    const token = await getStoredAuthToken();
+    const data = await quickFetchJson(`${API_BASE}/coaches/active-sports`, {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }, 5000);
+
+    if (data && Array.isArray(data.sports) && data.sports.length > 0) {
+      activeCoachSportsMemoryCache = data.sports;
+      activeCoachSportsLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY, JSON.stringify(data.sports)).catch(() => null);
+      return data.sports;
+    }
+  } catch (_) {}
+
+  // 3. Direct Firestore Fallback across Coach_Profiles and Users collections
+  try {
+    const [cSnap, uSnap] = await Promise.all([
+      getDocs(collection(db, "Coach_Profiles")).catch(() => null),
+      getDocs(collection(db, "Users")).catch(() => null),
+    ]);
+
+    const sportsSet = new Set<string>();
+    const processCoachDoc = (data: any) => {
+      if (!data) return;
+      const st = String(data.status || "").toLowerCase();
+      const ast = String(data.account_status || "").toLowerCase();
+      const app = Boolean(data.is_approved || data.isApproved);
+      const ver = Boolean(data.is_verified || data.isVerified);
+      if (st === "rejected" || st === "disabled" || st === "banned" || st === "inactive" || ast === "inactive" || ast === "disabled") {
+        return;
+      }
+      if (st === "approved" || st === "verified" || ast === "active" || app || ver) {
+        const raw = String(data.sport_type || data.sports_focus || data.sport || "").trim();
+        if (raw) {
+          const norm = raw.toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
+          if (norm && norm !== "ALL") {
+            sportsSet.add(norm);
+          }
+        }
+      }
+    };
+
+    if (cSnap && !cSnap.empty) {
+      cSnap.docs.forEach((d) => processCoachDoc(d.data()));
+    }
+    if (uSnap && !uSnap.empty) {
+      uSnap.docs.forEach((d) => {
+        const u = d.data();
+        if (String(u.role || "").toLowerCase() === "coach") {
+          processCoachDoc(u);
+        }
+      });
+    }
+
+    // Direct Firestore Teams fallback: check teams with assigned coaches
+    if (sportsSet.size === 0) {
+      const teamsSnap = await getDocs(collection(db, "Teams")).catch(() => null);
+      if (teamsSnap && !teamsSnap.empty) {
+        teamsSnap.docs.forEach((d) => {
+          const t = d.data();
+          const hasCoach = t.coach_id || t.managed_by_coach_id || t.coach_name || t.head_coach;
+          if (hasCoach && t.sport_type) {
+            const norm = String(t.sport_type).toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
+            if (norm && norm !== "ALL") {
+              sportsSet.add(norm);
+            }
+          }
+        });
+      }
+    }
+
+    if (sportsSet.size > 0) {
+      const sorted = Array.from(sportsSet).sort();
+      activeCoachSportsMemoryCache = sorted;
+      activeCoachSportsLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY, JSON.stringify(sorted)).catch(() => null);
+      return sorted;
+    }
+  } catch (_) {}
+
+  // 4. Offline AsyncStorage Fallback
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        activeCoachSportsMemoryCache = parsed;
+        activeCoachSportsLastFetched = Date.now();
+        return parsed;
       }
     }
   } catch (_) {}

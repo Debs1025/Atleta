@@ -10,7 +10,7 @@ export interface StagedOAuthUserData {
   fullName: string;
   role: string;
   authProvider: "google" | "facebook";
-  status: "pending";
+  status: "pending" | "active";
   socialToken: { provider: "google" | "facebook"; idToken: string };
   firstName?: string;
   lastName?: string;
