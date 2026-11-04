@@ -25,6 +25,7 @@ export const BASE_URL = rawBase
   : '/api/v1';
 
 const TOKEN_KEY = 'atleta_official_token';
+export const REFRESH_TOKEN_KEY = 'atleta_official_refresh_token';
 const USER_KEY = 'atleta_official_user';
 const PERSIST_KEY = 'atleta_persist_session';
 const SETTINGS_KEY = 'atleta_official_settings';
@@ -177,6 +178,30 @@ export const getStoredToken = (): string | null => {
   return null;
 };
 
+export const getStoredRefreshToken = (): string | null => {
+  const keys = [REFRESH_TOKEN_KEY, 'atleta_official_refresh_token', 'atleta_refresh_token', 'refreshToken', 'refresh_token'];
+  for (const k of keys) {
+    const val = localStorage.getItem(k) || sessionStorage.getItem(k);
+    if (val && val !== 'null' && val !== 'undefined') return val;
+  }
+  return null;
+};
+
+export const updateStoredToken = (token: string, refreshToken?: string): void => {
+  const isLocal = Boolean(localStorage.getItem(TOKEN_KEY) || localStorage.getItem(PERSIST_KEY) === 'true');
+  if (isLocal) {
+    localStorage.setItem(TOKEN_KEY, token);
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    }
+  } else {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    if (refreshToken) {
+      sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    }
+  }
+};
+
 export const getStoredUser = (): AuthUser | null => {
   const raw = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
   if (!raw) return null;
@@ -187,7 +212,7 @@ export const getStoredUser = (): AuthUser | null => {
   }
 };
 
-export const storeAuthSession = (token: string, user: AuthUser, persist: boolean): void => {
+export const storeAuthSession = (token: string, user: AuthUser, persist: boolean, refreshToken?: string): void => {
   // Purge any residual cached data from other user sessions
   invalidateCache();
   try {
@@ -205,14 +230,22 @@ export const storeAuthSession = (token: string, user: AuthUser, persist: boolean
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     localStorage.setItem(PERSIST_KEY, 'true');
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    }
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   } else {
     sessionStorage.setItem(TOKEN_KEY, token);
     sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (refreshToken) {
+      sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(PERSIST_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   }
   setCachedData('user_me', user);
 
@@ -230,9 +263,11 @@ export const clearAuthSession = (): void => {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(PERSIST_KEY);
   localStorage.removeItem(SETTINGS_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
   sessionStorage.removeItem(SETTINGS_KEY);
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   try {
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -251,6 +286,156 @@ export const clearAuthSession = (): void => {
   } catch {}
   invalidateCache();
 };
+
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+let refreshRejectSubscribers: Array<(err: any) => void> = [];
+
+const subscribeTokenRefresh = (cb: (token: string) => void, errCb: (err: any) => void) => {
+  refreshSubscribers.push(cb);
+  refreshRejectSubscribers.push(errCb);
+};
+
+const onTokenRefreshed = (newToken: string) => {
+  refreshSubscribers.forEach((cb) => cb(newToken));
+  refreshSubscribers = [];
+  refreshRejectSubscribers = [];
+};
+
+const onTokenRefreshFailed = (err: any) => {
+  refreshRejectSubscribers.forEach((cb) => cb(err));
+  refreshSubscribers = [];
+  refreshRejectSubscribers = [];
+};
+
+export const refreshAuthToken = async (): Promise<string> => {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) {
+    throw new Error('No refresh token available.');
+  }
+
+  const nativeFetch = (typeof window !== 'undefined' && (window as any).__originalFetch)
+    ? (window as any).__originalFetch
+    : fetch;
+
+  let res = await nativeFetch(`${BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!res.ok) {
+    res = await nativeFetch(`${BASE_URL}/users/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+  }
+
+  if (!res.ok) {
+    clearAuthSession();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('atleta:auth_expired'));
+    }
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const newToken = data.accessToken || data.token;
+  if (!newToken) {
+    throw new Error('Invalid refresh token response from server.');
+  }
+
+  const newRefreshToken = data.refreshToken || refreshToken;
+  updateStoredToken(newToken, newRefreshToken);
+  return newToken;
+};
+
+async function retryRequestWithFreshToken(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  freshToken: string,
+  fetchFn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+): Promise<Response> {
+  let updatedHeaders: any;
+  if (init?.headers && typeof Headers !== 'undefined' && init.headers instanceof Headers) {
+    updatedHeaders = new Headers(init.headers);
+    updatedHeaders.set('Authorization', `Bearer ${freshToken}`);
+  } else if (Array.isArray(init?.headers)) {
+    updatedHeaders = [
+      ...init.headers.filter(([k]) => String(k).toLowerCase() !== 'authorization'),
+      ['Authorization', `Bearer ${freshToken}`],
+    ];
+  } else if (init?.headers && typeof init.headers === 'object') {
+    updatedHeaders = { ...init.headers, Authorization: `Bearer ${freshToken}` };
+  } else {
+    updatedHeaders = { Authorization: `Bearer ${freshToken}` };
+  }
+
+  if (typeof Request !== 'undefined' && input instanceof Request) {
+    const clonedRequest = new Request(input, { ...init, headers: updatedHeaders });
+    return await fetchFn(clonedRequest);
+  } else {
+    return await fetchFn(input, { ...init, headers: updatedHeaders });
+  }
+}
+
+// Transparent Auto-Refresh Interceptor installed on window.fetch
+if (typeof window !== 'undefined' && window.fetch && !(window as any).__atletaFetchInterceptorInstalled) {
+  (window as any).__atletaFetchInterceptorInstalled = true;
+  const originalFetch = window.fetch.bind(window);
+  (window as any).__originalFetch = originalFetch;
+
+  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const urlStr = typeof input === 'string'
+      ? input
+      : (typeof Request !== 'undefined' && input instanceof Request)
+      ? input.url
+      : String(input);
+
+    let response = await originalFetch(input, init);
+
+    const isApiCall = urlStr.includes('/api/v1') || urlStr.startsWith('/api/') || (BASE_URL && urlStr.includes(BASE_URL));
+    const isAuthBypass =
+      urlStr.includes('/auth/refresh') ||
+      urlStr.includes('/users/refresh') ||
+      urlStr.includes('/login') ||
+      urlStr.includes('/register') ||
+      urlStr.includes('/password-reset');
+
+    if (response.status === 401 && isApiCall && !isAuthBypass) {
+      const refreshToken = getStoredRefreshToken();
+      if (!refreshToken) {
+        return response;
+      }
+
+      if (isRefreshing) {
+        try {
+          const freshToken = await new Promise<string>((resolve, reject) => {
+            subscribeTokenRefresh(resolve, reject);
+          });
+          return await retryRequestWithFreshToken(input, init, freshToken, originalFetch);
+        } catch {
+          return response;
+        }
+      }
+
+      isRefreshing = true;
+      try {
+        const freshToken = await refreshAuthToken();
+        isRefreshing = false;
+        onTokenRefreshed(freshToken);
+        return await retryRequestWithFreshToken(input, init, freshToken, originalFetch);
+      } catch (refreshErr) {
+        isRefreshing = false;
+        onTokenRefreshFailed(refreshErr);
+        return response;
+      }
+    }
+
+    return response;
+  };
+}
 
 export async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -370,7 +555,7 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
   }
 
   if (data && data.token && data.user) {
-    storeAuthSession(data.token, data.user, Boolean(payload.savePassword));
+    storeAuthSession(data.token, data.user, Boolean(payload.savePassword), data.refreshToken);
     return data;
   }
 

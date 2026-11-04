@@ -71,6 +71,11 @@ export const AUTH_TOKEN_KEY = (
   "atleta_auth_token"
 ).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_token";
 
+export const AUTH_REFRESH_TOKEN_KEY = (
+  runtime.process?.env?.EXPO_PUBLIC_AUTH_REFRESH_TOKEN_KEY ||
+  "atleta_auth_refresh_token"
+).trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "atleta_auth_refresh_token";
+
 export const AUTH_ROLE_KEY = (
   runtime.process?.env?.EXPO_PUBLIC_AUTH_ROLE_KEY ||
   "atleta_auth_role"
@@ -254,6 +259,23 @@ export async function storeAuthToken(token: string) {
   await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
 }
 
+export async function storeAuthRefreshToken(refreshToken: string) {
+  await SecureStore.setItemAsync(AUTH_REFRESH_TOKEN_KEY, refreshToken);
+}
+
+export async function getStoredAuthRefreshToken(): Promise<string | null> {
+  return await SecureStore.getItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
+}
+
+export async function clearAuthTokens() {
+  clearAuthMicroCache();
+  await Promise.all([
+    SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
+    SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null),
+    SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
+  ]);
+}
+
 // This keeps the role of the user when reopening the app
 export async function storeAuthRole(role: AuthRole) {
   clearAuthMicroCache();
@@ -278,6 +300,63 @@ export async function getStoredAuthRole(): Promise<AuthRole | null> {
 export function extractAuthToken(payload: Record<string, unknown>) {
   const token = payload.token ?? payload.access_token ?? payload.jwt;
   return typeof token === "string" && token.length > 0 ? token : null;
+}
+
+export function extractAuthRefreshToken(payload: Record<string, unknown>): string | null {
+  const token = payload.refreshToken ?? payload.refresh_token;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
+let isMobileRefreshing = false;
+let mobileRefreshSubscribers: Array<(token: string) => void> = [];
+let mobileRefreshRejectSubscribers: Array<(err: any) => void> = [];
+
+export async function refreshMobileAuthToken(): Promise<string> {
+  const refreshToken = await getStoredAuthRefreshToken();
+  if (!refreshToken) {
+    throw new Error("No refresh token available.");
+  }
+
+  let res = await fetch(`${CLOUD_PROD_API}/auth/refresh`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!res.ok) {
+    res = await fetch(`${CLOUD_PROD_API}/users/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+  }
+
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const errMessage = typeof data.error === "string" ? data.error : "Session expired. Please log in again.";
+    await clearAuthTokens();
+    throw new Error(errMessage);
+  }
+
+  const newToken = (data.accessToken ?? data.token) as string | undefined;
+  if (!newToken) {
+    throw new Error("Failed to receive fresh access token.");
+  }
+
+  await storeAuthToken(newToken);
+  const newRefreshToken = extractAuthRefreshToken(data);
+  if (newRefreshToken) {
+    await storeAuthRefreshToken(newRefreshToken);
+  }
+
+  return newToken;
 }
 
 export function extractAuthRole(payload: Record<string, unknown>, emailFallback?: string): AuthRole {
@@ -306,13 +385,13 @@ async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T
   }
 }
 
-async function fetchApi(path: string, options: RequestInit) {
+async function fetchApi(path: string, options: RequestInit, isRetry = false): Promise<Record<string, unknown>> {
   const primaryUrl = `${CLOUD_PROD_API}${path}`;
 
-  const headers = {
+  const headers: Record<string, string> = {
     "Cache-Control": "no-cache",
     Pragma: "no-cache",
-    ...(options.headers || {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
 
   try {
@@ -323,6 +402,48 @@ async function fetchApi(path: string, options: RequestInit) {
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
     if (!response.ok) {
+      // Automatic Refresh Token Interceptor:
+      // If 401 Unauthorized occurs on an authenticated route and we haven't already retried this request:
+      const isAuthExempt = path.includes("/refresh") || path.includes("/login") || path.includes("/register") || path.includes("/password-reset");
+      if (response.status === 401 && !isAuthExempt && !isRetry) {
+        const refreshToken = await getStoredAuthRefreshToken();
+        if (refreshToken) {
+          try {
+            let freshToken: string;
+            if (isMobileRefreshing) {
+              freshToken = await new Promise<string>((resolve, reject) => {
+                mobileRefreshSubscribers.push(resolve);
+                mobileRefreshRejectSubscribers.push(reject);
+              });
+            } else {
+              isMobileRefreshing = true;
+              try {
+                freshToken = await refreshMobileAuthToken();
+                isMobileRefreshing = false;
+                mobileRefreshSubscribers.forEach((cb) => cb(freshToken));
+                mobileRefreshSubscribers = [];
+                mobileRefreshRejectSubscribers = [];
+              } catch (refreshErr) {
+                isMobileRefreshing = false;
+                mobileRefreshRejectSubscribers.forEach((cb) => cb(refreshErr));
+                mobileRefreshSubscribers = [];
+                mobileRefreshRejectSubscribers = [];
+                throw refreshErr;
+              }
+            }
+
+            // Retry original request with fresh token
+            const retriedHeaders = {
+              ...headers,
+              Authorization: `Bearer ${freshToken}`,
+            };
+            return await fetchApi(path, { ...options, headers: retriedHeaders }, true);
+          } catch (retryErr) {
+            console.warn("Silent token refresh failed, proceeding with original 401:", retryErr);
+          }
+        }
+      }
+
       let serverMessage: string | undefined = typeof payload.error === "string" ? payload.error : typeof payload.message === "string" ? payload.message : undefined;
       if (typeof payload.details === "string" && payload.details.trim().length > 0 && !payload.details.includes("node:internal") && !payload.details.includes("    at ")) {
         serverMessage = payload.details;

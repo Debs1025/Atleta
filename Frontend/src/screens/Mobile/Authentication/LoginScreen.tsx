@@ -19,9 +19,12 @@ import {
   loginSchema,
   AUTH_ROLE_KEY,
   AUTH_TOKEN_KEY,
+  AUTH_REFRESH_TOKEN_KEY,
   requestJson,
   storeAuthRole,
   storeAuthToken,
+  storeAuthRefreshToken,
+  extractAuthRefreshToken,
   clearAuthMicroCache,
   API_BASE,
   type AuthRole,
@@ -222,6 +225,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
         if (!coachIsApproved) {
           await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+          await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
           await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
           await invalidateStaleAuthCaches();
           if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
@@ -252,7 +256,9 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         }
       } catch (_) {}
 
+      const refreshToken = extractAuthRefreshToken(result);
       if (token) await storeAuthToken(token);
+      if (refreshToken) await storeAuthRefreshToken(refreshToken);
       await storeAuthRole(role);
 
       onAuthenticated?.(role);
@@ -357,6 +363,7 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
 
           if (!coachIsApproved) {
             await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+            await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
             await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
             await invalidateStaleAuthCaches();
 
@@ -384,7 +391,9 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           }
         } catch (_) {}
 
+        const refreshToken = extractAuthRefreshToken(result);
         if (token) await storeAuthToken(token);
+        if (refreshToken) await storeAuthRefreshToken(refreshToken);
         await storeAuthRole(role);
 
         onAuthenticated?.(role);

@@ -17,6 +17,7 @@ import {
   AuthHeader,
   authScreenStyles,
   AUTH_TOKEN_KEY,
+  AUTH_REFRESH_TOKEN_KEY,
   AUTH_ROLE_KEY,
   Banner,
   Button,
@@ -36,10 +37,12 @@ import {
   MAX_DOCUMENT_BYTES,
   extractAuthRole,
   extractAuthToken,
+  extractAuthRefreshToken,
   requestJson,
   requestMultipart,
   storeAuthRole,
   storeAuthToken,
+  storeAuthRefreshToken,
   type AthleteSignupValues,
   type AuthRole,
   type AuthStep,
@@ -662,6 +665,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         });
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         clearFirebaseClientCaches();
@@ -697,6 +701,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         clearFirebaseClientCaches();
@@ -760,6 +765,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         });
         // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
           await NativeGoogleSignin.signOut().catch(() => null);
@@ -834,6 +840,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         clearFirebaseClientCaches();
@@ -917,8 +924,10 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           terms_accepted: true,
         });
         const token = extractAuthToken(result);
+        const refreshToken = extractAuthRefreshToken(result);
         const savedRole = extractAuthRole(result) || "athlete";
         if (token) await storeAuthToken(token);
+        if (refreshToken) await storeAuthRefreshToken(refreshToken);
         await storeAuthRole(savedRole);
 
         clearAuthMicroCache();
@@ -941,6 +950,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         clearAuthMicroCache();
         Alert.alert(
@@ -1008,6 +1018,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         });
         // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
+        await SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null);
         await SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null);
         if (NativeGoogleSignin && typeof NativeGoogleSignin.signOut === "function") {
           await NativeGoogleSignin.signOut().catch(() => null);

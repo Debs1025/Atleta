@@ -3,7 +3,7 @@ import { View, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/AuthEntry";
 import * as SecureStore from "expo-secure-store";
-import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, clearAuthMicroCache, parseJwtPayload, getActiveApiBase, type AuthRole } from "./authShared";
+import { AUTH_ROLE_KEY, AUTH_TOKEN_KEY, AUTH_REFRESH_TOKEN_KEY, FullScreenOverlay, getStoredAuthRole, clearAuthMicroCache, parseJwtPayload, getActiveApiBase, refreshMobileAuthToken, type AuthRole } from "./authShared";
 import { db, clearFirebaseClientCaches } from "../../../services/firebaseClient";
 import { doc, getDoc } from "firebase/firestore";
 import { LoginScreen } from "./LoginScreen";
@@ -60,6 +60,7 @@ export function AuthEntry() {
     }
     await Promise.all([
       SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
+      SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null),
       SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
     ]);
     setActiveRole(null);
@@ -82,12 +83,20 @@ export function AuthEntry() {
       }
       if (mounted) {
         if (token) {
-          const payload = parseJwtPayload(token);
-          // Check expiration: If token has expired, purge and force login
+          let activeToken = token;
+          let payload = parseJwtPayload(activeToken);
+
+          // Check expiration: If access token has expired, attempt silent token refresh
           if (payload?.exp && Date.now() / 1000 > payload.exp) {
-            await handleLogout();
-            setBooting(false);
-            return;
+            try {
+              const freshToken = await refreshMobileAuthToken();
+              activeToken = freshToken;
+              payload = parseJwtPayload(freshToken);
+            } catch {
+              await handleLogout();
+              setBooting(false);
+              return;
+            }
           }
 
           // Authoritative role from token payload first, then fallback to storedRole

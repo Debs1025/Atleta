@@ -67,6 +67,8 @@ export interface AuthResponse {
   token: string;
   user: AuthUser;
   message?: string;
+  accessToken?: string;
+  refreshToken?: string;
 }
 
 export interface AuditQueueItem {
