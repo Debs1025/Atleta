@@ -1352,8 +1352,29 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   );
 
   const availableSportCategories = useMemo(() => {
+    const relevantSports = new Set<string>();
+    if (coachProfile?.coach_id && coachProfile?.sports_focus) {
+      relevantSports.add(coachProfile.sports_focus.toUpperCase().trim());
+    }
+    teams.forEach((t) => {
+      if (t.sport_type) relevantSports.add(t.sport_type.toUpperCase().trim());
+    });
+    athletesPool.forEach((a) => {
+      if (a.sport_type) relevantSports.add(a.sport_type.toUpperCase().trim());
+    });
+
+    if (relevantSports.size > 0) {
+      return ["ALL", ...Array.from(relevantSports)];
+    }
     return ["ALL", ...dynamicSports];
-  }, [dynamicSports]);
+  }, [coachProfile?.coach_id, coachProfile?.sports_focus, teams, athletesPool, dynamicSports]);
+
+  // Ensure activeSportFilter is reset if current filter is not in available categories
+  useEffect(() => {
+    if (activeSportFilter !== "ALL" && !availableSportCategories.includes(activeSportFilter)) {
+      setActiveSportFilter("ALL");
+    }
+  }, [availableSportCategories, activeSportFilter]);
 
   // Memoized Filtered Players for Dashboard
   const filteredDashboardPlayers = useMemo(() => {
