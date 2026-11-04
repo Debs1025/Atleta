@@ -1904,9 +1904,11 @@ export const getStoredOfficialProfile = (): any => {
 };
 
 export const getOfficialProfileData = async (forceRefresh = false): Promise<any> => {
-  const stored = getStoredOfficialProfile() || getStoredUser();
-  const cached = getCachedData<any>('official_profile') || stored;
-  if (cached && !forceRefresh) return cached;
+  const storedProfile = getStoredOfficialProfile();
+  const cached = getCachedData<any>('official_profile') || storedProfile;
+  if (cached && !forceRefresh && (cached.organization_name || cached.organization || cached.avatar_url || cached.official_id)) {
+    return cached;
+  }
 
   const token = getStoredToken();
   try {
@@ -1922,12 +1924,33 @@ export const getOfficialProfileData = async (forceRefresh = false): Promise<any>
       try {
         localStorage.setItem('atleta_cached_official_profile', JSON.stringify(data));
       } catch {}
+
+      try {
+        const storedUser = getStoredUser();
+        if (storedUser && (!storedUser.avatar_url || !storedUser.organization_name)) {
+          const enrichedUser = {
+            ...storedUser,
+            avatar_url: data.avatar_url || data.profile_image || storedUser.avatar_url,
+            profile_image: data.avatar_url || data.profile_image || (storedUser as any).profile_image,
+            organization_name: data.organization_name || data.organization || storedUser.organization_name,
+            organization: data.organization_name || data.organization || storedUser.organization,
+          };
+          setCachedData('user_me', enrichedUser);
+          const isLocal = !!localStorage.getItem(USER_KEY);
+          if (isLocal) {
+            localStorage.setItem(USER_KEY, JSON.stringify(enrichedUser));
+          } else {
+            sessionStorage.setItem(USER_KEY, JSON.stringify(enrichedUser));
+          }
+        }
+      } catch {}
+
       return data;
     }
   } catch {
   }
 
-  return stored || getMe();
+  return cached || storedProfile || getStoredUser() || getMe();
 };
 
 export const updateOfficialProfileData = async (payload: any): Promise<any> => {

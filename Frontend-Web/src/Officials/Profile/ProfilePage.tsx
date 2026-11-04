@@ -74,8 +74,17 @@ export const ProfilePage: React.FC = () => {
       getMe().then((res) => {
         if (res) setUser(res);
       }).catch(() => {}),
-      getOfficialProfileData().then((res) => {
-        if (res) setProfile(res);
+      getOfficialProfileData(true).then((res) => {
+        if (res) {
+          setProfile(res);
+          setUser((prev) => ({
+            ...(prev || {}),
+            avatar_url: res.avatar_url || res.profile_image || prev?.avatar_url,
+            profile_image: res.avatar_url || res.profile_image || (prev as any)?.profile_image,
+            organization_name: res.organization_name || res.organization || prev?.organization_name,
+            organization: res.organization_name || res.organization || prev?.organization,
+          } as any));
+        }
       }).catch(() => {}),
       getAllOfficialMatchesMaster().then((res) => {
         if (res) setMasterMatches(res);
