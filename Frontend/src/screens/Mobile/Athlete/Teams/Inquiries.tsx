@@ -20,103 +20,136 @@ export function InquiriesScreen({ inquiries: propInquiries, onBack }: InquiriesP
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
   const [inquiries, setInquiries] = useState<InquirySchema[]>(propInquiries || []);
-  const [loading, setLoading] = useState(!propInquiries || propInquiries.length === 0);
+  const [loading, setLoading] = useState(propInquiries === undefined);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchInquiries = useCallback(async (isRefresh = false) => {
     try {
-      if (!isRefresh) setLoading(true);
+      if (isRefresh) setRefreshing(true);
+      if (!isRefresh && propInquiries === undefined && inquiries.length === 0) {
+        setLoading(true);
+      }
+
+      // Fetch user token for scoping
+      const token = await getStoredAuthToken().catch(() => null);
+      let currentUserId = "";
+      if (token && token.includes(".")) {
+        try {
+          const base64Url = token.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const decoded = typeof atob === "function" ? atob(base64) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(base64, "base64").toString("utf-8") : "");
+          const payload = JSON.parse(decoded);
+          currentUserId = payload.uid || payload.user_id || payload.sub || "";
+        } catch (_) {}
+      }
+
       const res: any = await requestAuthenticatedJson("/inquiries").catch(() => null);
 
-      let rawList = res?.inquiries || (Array.isArray(res) ? res : []);
+      if (res && (Array.isArray(res.inquiries) || Array.isArray(res))) {
+        // Authoritative backend response: map and set instantly (resolves empty state with 0ms delay)
+        const rawList = res.inquiries || (Array.isArray(res) ? res : []);
+        const mapped: InquirySchema[] = rawList.map((inq: any, idx: number) => {
+          const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
+          const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
+          return {
+            inquiry_id: inq.scout_id || inq.inquiry_id || `inq_${idx}`,
+            coach_name: inq.coach_name || "Coach",
+            institution_sport: `${inq.current_institution || inq.institution || "Varsity"} • ${inq.sport_type || inq.role_title || "Basketball"}`,
+            status: mappedStatus as any,
+            updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
+            sub_note: inq.decline_reason || inq.sub_note || undefined,
+          };
+        });
 
-      // Fallback to Firestore Scouting_Registry / Inquiries if backend returns empty
-      if (!rawList || rawList.length === 0) {
-        try {
-          const token = await getStoredAuthToken();
-          let currentUserId = "";
-          if (token && token.includes(".")) {
+        setInquiries(mapped);
+        setLoading(false);
+
+        if (currentUserId) {
+          await AsyncStorage.setItem(`atleta_inquiries_${currentUserId}`, JSON.stringify(mapped)).catch(() => null);
+        }
+        return;
+      }
+
+      // Fallback only if backend is unreachable (offline)
+      if (currentUserId) {
+        const cachedStr = await AsyncStorage.getItem(`atleta_inquiries_${currentUserId}`).catch(() => null);
+        if (cachedStr) {
+          const cachedItems = JSON.parse(cachedStr);
+          if (Array.isArray(cachedItems)) {
+            setInquiries(cachedItems);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Quick indexed Firestore fallback with 2-second timeout guard
+        const cleanId = currentUserId.replace(/^ath_/, "");
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+        const queryPromise = getDocs(
+          query(collection(db, "Scouting_Registry"), where("athlete_id", "in", [currentUserId, `ath_${cleanId}`, cleanId]))
+        ).catch(() => null);
+
+        const snap: any = await Promise.race([queryPromise, timeoutPromise]);
+        if (snap && !snap.empty) {
+          const rawList = snap.docs.map((d: any) => d.data());
+          const mapped: InquirySchema[] = rawList.map((inq: any, idx: number) => {
+            const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
+            const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
+            return {
+              inquiry_id: inq.scout_id || inq.inquiry_id || `inq_${idx}`,
+              coach_name: inq.coach_name || "Coach",
+              institution_sport: `${inq.current_institution || inq.institution || "Varsity"} • ${inq.sport_type || inq.role_title || "Basketball"}`,
+              status: mappedStatus as any,
+              updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
+              sub_note: inq.decline_reason || inq.sub_note || undefined,
+            };
+          });
+          setInquiries(mapped);
+          await AsyncStorage.setItem(`atleta_inquiries_${currentUserId}`, JSON.stringify(mapped)).catch(() => null);
+        } else {
+          setInquiries([]);
+        }
+      }
+    } catch (err) {
+      // Keep existing state on error
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [inquiries.length, propInquiries]);
+
+  const handleRefresh = useCallback(async () => {
+    await fetchInquiries(true);
+  }, [fetchInquiries]);
+
+  useEffect(() => {
+    if (propInquiries !== undefined) {
+      setInquiries(propInquiries);
+      setLoading(false);
+    } else {
+      getStoredAuthToken().then((token) => {
+        if (token && token.includes(".")) {
+          try {
             const base64Url = token.split(".")[1];
             const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
             const decoded = typeof atob === "function" ? atob(base64) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(base64, "base64").toString("utf-8") : "");
             const payload = JSON.parse(decoded);
-            currentUserId = payload.uid || payload.user_id || payload.sub || "";
-          }
-          if (currentUserId) {
-            const cleanId = currentUserId.replace(/^ath_/, "");
-            const snap = await getDocs(
-              query(collection(db, "Scouting_Registry"), where("athlete_id", "in", [currentUserId, `ath_${cleanId}`, cleanId]))
-            ).catch(() => null);
-            if (snap && !snap.empty) {
-              rawList = snap.docs.map((d) => d.data());
+            const uid = payload.uid || payload.user_id || payload.sub || "";
+            if (uid) {
+              AsyncStorage.getItem(`atleta_inquiries_${uid}`).then((cachedStr) => {
+                if (cachedStr) {
+                  const cached = JSON.parse(cachedStr);
+                  if (Array.isArray(cached)) {
+                    setInquiries(cached);
+                    setLoading(false);
+                  }
+                }
+              }).catch(() => {});
             }
-          }
-        } catch (_) {}
-      }
-
-      const mapped: InquirySchema[] = (rawList || []).map((inq: any, idx: number) => {
-        const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
-        const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
-        return {
-          inquiry_id: inq.scout_id || inq.inquiry_id || `inq_${idx}`,
-          coach_name: inq.coach_name || "Coach",
-          institution_sport: `${inq.current_institution || inq.institution || "Varsity"} • ${inq.sport_type || inq.role_title || "Basketball"}`,
-          status: mappedStatus as any,
-          updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
-          sub_note: inq.decline_reason || inq.sub_note || undefined,
-        };
-      });
-
-      // Merge with any existing offline cache items
-      const cachedStr = await AsyncStorage.getItem("atleta_offline_inquiries_cache").catch(() => null);
-      const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
-      const combinedMap = new Map<string, InquirySchema>();
-      
-      cachedItems.forEach((item) => {
-        if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
-      });
-      mapped.forEach((item) => {
-        if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
-      });
-
-      const finalList = Array.from(combinedMap.values());
-      if (finalList.length > 0) {
-        setInquiries(finalList);
-        await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(finalList)).catch(() => null);
-      } else if (mapped.length > 0) {
-        setInquiries(mapped);
-        await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(mapped)).catch(() => null);
-      }
-    } catch (err) {
-      // Fallback to cache on error
-    } finally {
-      setLoading(false);
+          } catch (_) {}
+        }
+      }).catch(() => {});
     }
-  }, []);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await fetchInquiries(true);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [fetchInquiries]);
-
-  useEffect(() => {
-    // Load instantly from AsyncStorage offline cache
-    AsyncStorage.getItem("atleta_offline_inquiries_cache")
-      .then((cachedStr) => {
-        if (!cachedStr) return;
-        try {
-          const cached = JSON.parse(cachedStr);
-          if (Array.isArray(cached) && cached.length > 0) {
-            setInquiries(cached);
-            setLoading(false);
-          }
-        } catch (_) {}
-      })
-      .catch(() => {});
 
     fetchInquiries(false);
   }, [fetchInquiries, propInquiries]);

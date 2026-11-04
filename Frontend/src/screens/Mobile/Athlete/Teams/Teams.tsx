@@ -347,22 +347,12 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
             };
           });
 
-          // Merge with any existing offline cache items
-          const cachedStr = await AsyncStorage.getItem("atleta_offline_inquiries_cache").catch(() => null);
-          const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
-          const combinedMap = new Map<string, InquirySchema>();
-          
-          cachedItems.forEach((item) => {
-            if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
-          });
-          mappedInquiries.forEach((item) => {
-            if (item && item.coach_name) combinedMap.set(item.coach_name.trim().toLowerCase(), item);
-          });
-
-          const finalList = Array.from(combinedMap.values());
-          setInquiries(finalList.length > 0 ? finalList : mappedInquiries);
-          if (finalList.length > 0) {
-            await AsyncStorage.setItem("atleta_offline_inquiries_cache", JSON.stringify(finalList)).catch(() => null);
+          if (inquiriesRes) {
+            setInquiries(mappedInquiries);
+          } else {
+            const cachedStr = await AsyncStorage.getItem("atleta_offline_inquiries_cache").catch(() => null);
+            const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
+            setInquiries(cachedItems);
           }
       } catch (err) {
         setTeams([]);

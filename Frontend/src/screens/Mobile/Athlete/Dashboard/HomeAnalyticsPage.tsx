@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import styles from "./styles/HomeAnalyticsPage";
 import { Coach } from "../Teams/Teams";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
-import { AthleteBadgesShowcase } from "./AthleteBadgesShowcase";
+
 
 export interface PastTeamStatsSummary {
   matches_played: number;
@@ -613,8 +613,7 @@ export function HomeAnalyticsPage({
         )}
       </View>
 
-      {/* --- BADGES YOU'VE UNLOCKED (ACHIEVEMENT SHOWCASE & PROGRESS BARS) --- */}
-      <AthleteBadgesShowcase athlete={profile} />
+
 
       {/* --- TEAM & COACH SECTION --- */}
       <View style={styles.sectionBlock}>
