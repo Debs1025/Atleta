@@ -176,7 +176,7 @@ export async function clearStagedOAuthData(): Promise<void> {
 }
 
 /**
- * Explicitly writes the user document to the 'users' collection in Firestore post-OAuth callback,
+ * Explicitly writes the user document to the canonical 'Users' collection in Firestore post-OAuth callback,
  * prior to completing registration.
  *
  * Verifies all required fields:
@@ -277,17 +277,9 @@ export async function persistOAuthUserDocument(params: {
   // 3. Perform explicit setDoc writes with retry logic
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      // Primary required target: 'users' collection
-      const usersDocRef = doc(db, "users", uid);
+      // Primary canonical target: 'Users' collection
+      const usersDocRef = doc(db, "Users", uid);
       await setDoc(usersDocRef, userDocPayload, { merge: true });
-
-      // Synchronize to 'Users' collection for legacy compatibility
-      try {
-        const capitalUsersDocRef = doc(db, "Users", uid);
-        await setDoc(capitalUsersDocRef, userDocPayload, { merge: true });
-      } catch (cErr) {
-        // Non-blocking secondary sync notice
-      }
 
       writeSuccess = true;
       stagedPayload.syncedToFirestore = true;

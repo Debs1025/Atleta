@@ -283,7 +283,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         message: `${providerLabel} connected! Select your role (Athlete or Coach) to continue.`
       });
 
-      // Post-OAuth callback: explicitly persist user document to 'users' collection prior to completing registration
+      // Post-OAuth callback: explicitly persist user document to canonical 'Users' collection prior to completing registration
       const extracted = extractOAuthProfile({
         idToken: initialSocialData.socialToken.idToken,
         provider: initialSocialData.socialToken.provider,
@@ -460,7 +460,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           }
           setSocialToken({ provider: "google", idToken });
 
-          // Post-OAuth callback: explicitly persist user document to 'users' collection prior to completing registration
+          // Post-OAuth callback: explicitly persist user document to canonical 'Users' collection prior to completing registration
           const extracted = extractOAuthProfile({
             idToken,
             provider: "google",
@@ -1316,7 +1316,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
             }
             setSocialToken({ provider: socialModal.provider, idToken: token });
 
-            // Post-OAuth callback: explicitly persist user document to 'users' collection prior to completing registration
+            // Post-OAuth callback: explicitly persist user document to canonical 'Users' collection prior to completing registration
             const extracted = extractOAuthProfile({
               idToken: token,
               provider: socialModal.provider,

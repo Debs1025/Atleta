@@ -80,7 +80,6 @@ export async function verifyCoachApprovalRealtime(uid: string): Promise<{
   const cleanUid = uid.replace(/^coach_/, "");
   const candidateTargets = [
     { coll: "Users", docId: cleanUid },
-    { coll: "users", docId: cleanUid },
     { coll: "Coach_Profiles", docId: `coach_${cleanUid}` },
     { coll: "Coach_Profiles", docId: cleanUid },
   ];
