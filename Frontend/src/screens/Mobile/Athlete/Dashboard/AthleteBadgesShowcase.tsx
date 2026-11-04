@@ -132,7 +132,11 @@ export function AthleteBadgesShowcase({ athlete, showAll = true }: AthleteBadges
                         {badge.progressPct}%
                       </Text>
                       <Text style={styles.remainingSub}>
-                        {remaining > 0 ? `-${remainingFormatted} to go` : 'Target met'}
+                        {badge.currentValue === 0
+                          ? 'Unranked'
+                          : remaining > 0
+                          ? `-${remainingFormatted} to go`
+                          : 'Target met'}
                       </Text>
                     </View>
                   </View>
@@ -143,7 +147,7 @@ export function AthleteBadgesShowcase({ athlete, showAll = true }: AthleteBadges
                       style={[
                         styles.progressBarFill,
                         {
-                          width: `${Math.max(6, Math.min(100, badge.progressPct))}%`,
+                          width: badge.progressPct > 0 ? `${Math.max(6, Math.min(100, badge.progressPct))}%` : '0%',
                           backgroundColor: badge.color,
                         },
                       ]}

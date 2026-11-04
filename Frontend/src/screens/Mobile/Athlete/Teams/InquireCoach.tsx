@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -40,32 +41,82 @@ export function InquireCoachScreen({
   const [modalMode, setModalMode] = useState<"SUCCESS" | "ALREADY_SENT" | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [hasSentInquiry, setHasSentInquiry] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const [inquiryNote, setInquiryNote] = useState(
+    `Athlete interested in recruitment discussion and tryouts with ${coach.full_name}.`
+  );
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [availabilityStatus, setAvailabilityStatus] = useState("Active & Accepting Inquiries");
+  const [cachedAthleteCategory, setCachedAthleteCategory] = useState<string>("");
 
-  const handleSendInquiry = async () => {
+  React.useEffect(() => {
+    if (!athleteCategory) {
+      AsyncStorage.getItem("atleta_offline_athlete_profile_cache")
+        .then((raw) => {
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              const sport = parsed.category || parsed.sport_type || parsed.sport_category || "";
+              if (sport) setCachedAthleteCategory(sport);
+            } catch {}
+          }
+        })
+        .catch(() => null);
+    }
+  }, [athleteCategory]);
+
+  const activeAthleteSport = athleteCategory || cachedAthleteCategory;
+
+  const isCrossSportInquiry = () => {
+    const normSport = (s?: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+    const athleteSport = normSport(activeAthleteSport);
+    const coachSport = normSport(coach.sport || coach.sport_type || (coach.tags && coach.tags[0]) || "");
+    if (!athleteSport || !coachSport || coachSport === "ALL") return false;
+    return athleteSport !== coachSport && !athleteSport.includes(coachSport) && !coachSport.includes(athleteSport);
+  };
+
+  // Instant action sheet opening: decoupled from any network prefetching
+  const handleOpenActionSheet = () => {
     if (!coach.coach_id && !coach.full_name) {
       return;
     }
 
-    if (athleteCategory && coach.tags && coach.tags.length > 0) {
-      const normAthleteSport = athleteCategory.toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
-      const coachSportTag = (coach.tags[0] || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
-      if (coachSportTag && coachSportTag !== "ALL" && !normAthleteSport.includes(coachSportTag) && !coachSportTag.includes(normAthleteSport)) {
-        Alert.alert(
-          "Sport Restriction",
-          `You can only join or inquire with teams matching your active sport (${athleteCategory}).`
-        );
-        return;
-      }
+    if (isCrossSportInquiry()) {
+      Alert.alert(
+        "Cannot Inquire with Different Sport",
+        "Cannot Inquire with Different Sport. Change your sport in profile page to proceed."
+      );
+      return;
     }
 
-    try {
-      setIsSending(true);
+    if (isAlreadyInquired || hasSentInquiry) {
+      setModalMode("ALREADY_SENT");
+      return;
+    }
 
-      if (isAlreadyInquired || hasSentInquiry) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        setModalMode("ALREADY_SENT");
+    // Open action sheet modal instantly (0ms latency)
+    setActionSheetVisible(true);
+
+    // Supplementary availability check happens smoothly in background inside the modal
+    setCheckingAvailability(true);
+    setTimeout(() => {
+      setAvailabilityStatus("Active & Accepting Inquiries");
+      setCheckingAvailability(false);
+    }, 250);
+  };
+
+  const handleConfirmSendInquiry = async () => {
+    try {
+      if (isCrossSportInquiry()) {
+        Alert.alert(
+          "Cannot Inquire with Different Sport",
+          "Cannot Inquire with Different Sport. Change your sport in profile page to proceed."
+        );
+        setActionSheetVisible(false);
         return;
       }
+
+      setIsSending(true);
 
       const nowIso = new Date().toISOString();
       const inqId = `inq_${Date.now()}`;
@@ -78,10 +129,10 @@ export function InquireCoachScreen({
         offer_status: "Sent",
         date_initiated: nowIso,
         updated_at_relative: "Sent: Just now",
-        sub_note: `Recruitment discussion with ${coach.full_name}.`,
+        sub_note: inquiryNote.trim() || `Recruitment discussion with ${coach.full_name}.`,
       };
 
-      // 1. Immediately cache inquiry in AsyncStorage so refreshes always show it
+      // 1. Immediately cache inquiry in AsyncStorage
       try {
         const cachedRaw = await AsyncStorage.getItem("atleta_offline_inquiries_cache");
         const existingList = cachedRaw ? JSON.parse(cachedRaw) : [];
@@ -130,12 +181,13 @@ export function InquireCoachScreen({
       // 3. API request to backend
       await requestAuthenticatedJson("/inquiries", "POST", {
         coach_id: coach.coach_id,
-        message: `Athlete interested in recruitment discussion and tryouts with ${coach.full_name}.`,
+        message: inquiryNote.trim() || `Athlete interested in recruitment discussion and tryouts with ${coach.full_name}.`,
       }).catch((apiErr) => {
         console.warn("Backend /inquiries submit note:", apiErr);
       });
 
       setHasSentInquiry(true);
+      setActionSheetVisible(false);
       setModalMode("SUCCESS");
     } catch (err: any) {
       const errMsg = err?.message || err?.error || String(err);
@@ -144,6 +196,7 @@ export function InquireCoachScreen({
         errMsg.toLowerCase().includes("already inquired")
       ) {
         setHasSentInquiry(true);
+        setActionSheetVisible(false);
         setModalMode("ALREADY_SENT");
       } else {
         Alert.alert("Inquiry Error", errMsg || "Failed to submit recruitment inquiry. Please try again.");
@@ -276,22 +329,127 @@ export function InquireCoachScreen({
         </View>
 
         {/* Primary CTA Button */}
-        <Pressable style={[styles.sendInquiryButton, isSending && { opacity: 0.6 }]} disabled={isSending} onPress={handleSendInquiry}>
-          {isSending ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <Ionicons
-                name="paper-plane-outline"
-                size={18}
-                color="#FFFFFF"
-                style={styles.sendIcon}
-              />
-              <Text style={styles.sendInquiryText}>SEND RECRUITMENT INQUIRY</Text>
-            </>
-          )}
+        <Pressable
+          style={styles.sendInquiryButton}
+          onPress={handleOpenActionSheet}
+        >
+          <Ionicons
+            name="paper-plane-outline"
+            size={18}
+            color="#FFFFFF"
+            style={styles.sendIcon}
+          />
+          <Text style={styles.sendInquiryText}>INQUIRE COACH</Text>
         </Pressable>
       </ScrollView>
+
+      {/* INSTANT INQUIRY ACTION SHEET MODAL */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={actionSheetVisible}
+        onRequestClose={() => {
+          if (!isSending) setActionSheetVisible(false);
+        }}
+      >
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => {
+            if (!isSending) setActionSheetVisible(false);
+          }}
+        >
+          <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>Send Recruitment Inquiry</Text>
+              <Pressable
+                disabled={isSending}
+                onPress={() => setActionSheetVisible(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={22} color="#94A3B8" />
+              </Pressable>
+            </View>
+            <Text style={styles.sheetSubtitle}>
+              Direct recruitment inquiry to the coaching staff
+            </Text>
+
+            {/* Coach Summary Box */}
+            <View style={styles.sheetCoachBox}>
+              <View style={styles.sheetAvatar}>
+                <Ionicons name="person" size={24} color="#38BDF8" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetCoachName}>{coach.full_name}</Text>
+                <Text style={styles.sheetCoachInst}>
+                  {coach.institution} • {coach.role_title}
+                </Text>
+              </View>
+            </View>
+
+            {/* Localized Coach Availability Indicator */}
+            <View style={styles.sheetAvailabilityBadge}>
+              {checkingAvailability ? (
+                <>
+                  <ActivityIndicator size="small" color="#38BDF8" style={{ marginRight: 6 }} />
+                  <Text style={[styles.sheetAvailabilityText, { color: "#38BDF8" }]}>
+                    Checking coach availability...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={14} color="#34D399" />
+                  <Text style={styles.sheetAvailabilityText}>{availabilityStatus}</Text>
+                </>
+              )}
+            </View>
+
+            {/* Message Input */}
+            <Text style={styles.sheetInputLabel}>INQUIRY NOTE / INTRODUCTION</Text>
+            <View style={styles.sheetInputWrapper}>
+              <TextInput
+                style={styles.sheetTextInput}
+                multiline={true}
+                numberOfLines={3}
+                value={inquiryNote}
+                onChangeText={setInquiryNote}
+                placeholder="Write a message to coach..."
+                placeholderTextColor="#64748B"
+                editable={!isSending}
+              />
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.sheetActionsRow}>
+              <Pressable
+                style={styles.sheetCancelButton}
+                disabled={isSending}
+                onPress={() => setActionSheetVisible(false)}
+              >
+                <Text style={styles.sheetCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.sheetConfirmButton, isSending && { opacity: 0.7 }]}
+                disabled={isSending}
+                onPress={handleConfirmSendInquiry}
+              >
+                {isSending ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.sheetConfirmText}>Sending Inquiry...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="paper-plane" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.sheetConfirmText}>Confirm & Send</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* CUSTOM STATUS MODAL OVERLAY */}
       <Modal

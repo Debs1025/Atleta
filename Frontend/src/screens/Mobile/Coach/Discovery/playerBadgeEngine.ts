@@ -61,17 +61,8 @@ export function extractVerticalLeapInches(athlete: any): number {
     return Math.round(cmVal / 2.54);
   }
 
-  // 4. Fallback baseline based on sport category to ensure coach always sees a realistic measurement
-  const sport = String(athlete.sport_category || athlete.sport_type || '').toUpperCase();
-  if (sport.includes('BASKETBALL')) {
-    const seed = String(athlete.athlete_id || athlete.full_name || 'ath').charCodeAt(0);
-    return 27 + (seed % 9); // 27" to 35"
-  } else if (sport.includes('VOLLEY')) {
-    const seed = String(athlete.athlete_id || athlete.full_name || 'ath').charCodeAt(0);
-    return 26 + (seed % 8); // 26" to 33"
-  }
-
-  return 26;
+  // 4. Default to 0 until explicit combine or tryout test results are entered
+  return 0;
 }
 
 /**
@@ -415,7 +406,7 @@ export function computeBadgeProgressList(athlete: any): BadgeProgressItem[] {
   // 1. High Flyer Badge (32" Vertical Leap required)
   const vertTarget = 32;
   const vertUnlocked = verticalIn >= vertTarget;
-  const vertPct = Math.min(100, Math.max(0, Math.round((verticalIn / vertTarget) * 100)));
+  const vertPct = verticalIn > 0 ? Math.min(100, Math.max(0, Math.round((verticalIn / vertTarget) * 100))) : 0;
   results.push({
     id: 'arch_high_flyer',
     label: 'High Flyer',
@@ -431,12 +422,16 @@ export function computeBadgeProgressList(athlete: any): BadgeProgressItem[] {
     progressPct: vertUnlocked ? 100 : vertPct,
     requirementLabel: vertUnlocked
       ? `High Flyer: UNLOCKED (${verticalIn}" Vert)`
-      : `High Flyer: ${verticalIn}" / ${vertTarget}" Vertical required`,
+      : verticalIn > 0
+      ? `High Flyer: ${verticalIn}" / ${vertTarget}" Vertical required`
+      : `High Flyer: No combine data logged (${vertTarget}" required)`,
     progressShort: vertUnlocked
       ? `${verticalIn}" Vertical Achieved`
-      : `${verticalIn}" / ${vertTarget}" Vertical required`,
+      : verticalIn > 0
+      ? `${verticalIn}" / ${vertTarget}" Vertical required`
+      : `Unranked • 0" / ${vertTarget}" required`,
     description: `Requires ${vertTarget}" vertical leap verified in combine testing. Leaping explosiveness for rim-finishing and blocks.`,
-    metricProof: `${verticalIn}" Vert`,
+    metricProof: verticalIn > 0 ? `${verticalIn}" Vert` : 'Unranked',
   });
 
   // 2. Sport-Specific Badges

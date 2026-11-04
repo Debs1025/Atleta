@@ -184,7 +184,8 @@ export function TeamDetailsScreen({
                 style={styles.viewCoachButton}
                 onPress={() => onViewCoach(team.head_coach.coach_id)}
               >
-                <Text style={styles.viewCoachText}>VIEW COACH PROFILE</Text>
+                <Ionicons name="chatbubbles-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.viewCoachText}>INQUIRE COACH</Text>
               </Pressable>
             </View>
           </View>

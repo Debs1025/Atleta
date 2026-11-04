@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Animated,
   Image,
   Pressable,
@@ -49,6 +50,8 @@ export interface CoachProfileSchema {
   full_name: string;
   institution: string;
   role_title: string;
+  sport?: string;
+  sport_type?: string;
   avatar_url?: string;
   tags: string[]; // ["VARSITY", "RECRUITER", "ACTIVE SCOUTING"]
   years_experience: string; // "15+"
@@ -434,17 +437,32 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
     }
   };
 
-  const handleOpenCoach = async (coachId?: string) => {
+  const handleOpenCoach = (coachId?: string) => {
     const targetId = coachId || selectedTeam?.head_coach.coach_id;
     if (!targetId) return;
 
-    // Use available head coach info as initial state to prevent any empty flicker
+    if (athleteCategory && selectedTeam?.sport_type) {
+      const normSport = (s?: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+      const athleteSport = normSport(athleteCategory);
+      const teamSport = normSport(selectedTeam.sport_type);
+      if (athleteSport && teamSport && teamSport !== "ALL" && athleteSport !== teamSport && !athleteSport.includes(teamSport) && !teamSport.includes(athleteSport)) {
+        Alert.alert(
+          "Cannot Inquire with Different Sport",
+          "Cannot Inquire with Different Sport. Change your sport in profile page to proceed."
+        );
+        return;
+      }
+    }
+
+    // Use available head coach info immediately as initial state to prevent any empty flicker or lag
     if (selectedTeam && selectedTeam.head_coach && (selectedTeam.head_coach.coach_id === targetId || !selectedCoach)) {
       setSelectedCoach({
         coach_id: targetId,
         full_name: selectedTeam.head_coach.full_name || "Coach",
         institution: selectedTeam.team_name || "Athletic Program",
         role_title: selectedTeam.head_coach.role_title || "Head Coach",
+        sport: selectedTeam.sport_type,
+        sport_type: selectedTeam.sport_type,
         tags: [selectedTeam.sport_type, "VERIFIED COACH"],
         years_experience: selectedTeam.head_coach.years_experience || "Not specified",
         core_specialties: [],
@@ -461,60 +479,64 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
       });
     }
 
+    // Switch screen INSTANTLY upon tap (0ms latency)
     setCurrentScreen("COACH_PROFILE");
 
-    let res: any = await requestAuthenticatedJson(`/coaches/${targetId}`).catch(() => null);
-    let c = res ? (res.profile || res.coach || res) : null;
-    if (!c) {
+    // Decoupled supplementary data fetching runs in background smoothly
+    (async () => {
       try {
-        const cleanId = targetId.replace(/^coach_/, "");
-        const [cSnap, uSnap] = await Promise.all([
-          getDoc(doc(db, "Coach_Profiles", targetId)).catch(() => null),
-          getDoc(doc(db, "Coach_Profiles", cleanId)).catch(() => null),
-          getDoc(doc(db, "Users", cleanId)).catch(() => null),
-          getDoc(doc(db, "Users", targetId)).catch(() => null),
-        ]);
-        const cpData = (cSnap && cSnap.exists()) ? cSnap.data() : (uSnap && uSnap.exists()) ? uSnap.data() : null;
-        const uData = (uSnap && uSnap.exists()) ? uSnap.data() : null;
-        if (cpData || uData) {
-          c = {
-            ...cpData,
-            ...uData,
-            full_name: uData?.full_name || (uData?.first_name ? `${uData.first_name} ${uData.last_name || ""}`.trim() : "") || cpData?.full_name,
-            email: uData?.email || cpData?.email,
-            phone: uData?.contact_number || uData?.phone || cpData?.phone,
-          };
+        let res: any = await requestAuthenticatedJson(`/coaches/${targetId}`).catch(() => null);
+        let c = res ? (res.profile || res.coach || res) : null;
+        if (!c) {
+          const cleanId = targetId.replace(/^coach_/, "");
+          const [cSnap, uSnap] = await Promise.all([
+            getDoc(doc(db, "Coach_Profiles", targetId)).catch(() => null),
+            getDoc(doc(db, "Coach_Profiles", cleanId)).catch(() => null),
+            getDoc(doc(db, "Users", cleanId)).catch(() => null),
+            getDoc(doc(db, "Users", targetId)).catch(() => null),
+          ]);
+          const cpData = (cSnap && cSnap.exists()) ? cSnap.data() : (uSnap && uSnap.exists()) ? uSnap.data() : null;
+          const uData = (uSnap && uSnap.exists()) ? uSnap.data() : null;
+          if (cpData || uData) {
+            c = {
+              ...cpData,
+              ...uData,
+              full_name: uData?.full_name || (uData?.first_name ? `${uData.first_name} ${uData.last_name || ""}`.trim() : "") || cpData?.full_name,
+              email: uData?.email || cpData?.email,
+              phone: uData?.contact_number || uData?.phone || cpData?.phone,
+            };
+          }
+        }
+
+        if (c) {
+          const firstName = c.first_name || "";
+          const lastName = c.last_name || "";
+          const fullName = c.full_name || `${firstName} ${lastName}`.trim() || selectedTeam?.head_coach.full_name || "Coach Profile";
+          const inst = c.current_institution || c.institution || (selectedTeam?.team_name) || "Athletic Program";
+          const sport = (c.sport_type || selectedTeam?.sport_type || "Basketball").toUpperCase();
+
+          setSelectedCoach({
+            coach_id: c.coach_id || targetId,
+            full_name: fullName.toUpperCase(),
+            institution: inst,
+            role_title: c.role_title || `${sport} HEAD COACH`,
+            tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
+            years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : (selectedTeam?.head_coach.years_experience || "Not specified"),
+            core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
+            success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
+            recruits_placed: c.recruits_placed || "",
+            philosophy: c.coachingPhilosophy || c.coaching_philosophy || c.philosophy || c.bio || selectedTeam?.head_coach.quote || "Not specified",
+            quote: c.quote || c.coachingPhilosophy || c.coaching_philosophy || selectedTeam?.head_coach.quote || "Not specified",
+            certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
+            contact_info: {
+              email: c.email || c.contact_info?.email || "Not specified",
+              facebook: c.facebook || c.contact_info?.facebook || "Not specified",
+              phone: c.contact_number || c.phone || c.contact_info?.phone || "Not specified",
+            },
+          });
         }
       } catch (_) {}
-    }
-
-    if (c) {
-      const firstName = c.first_name || "";
-      const lastName = c.last_name || "";
-      const fullName = c.full_name || `${firstName} ${lastName}`.trim() || selectedTeam?.head_coach.full_name || "Coach Profile";
-      const inst = c.current_institution || c.institution || (selectedTeam?.team_name) || "Athletic Program";
-      const sport = (c.sport_type || selectedTeam?.sport_type || "Basketball").toUpperCase();
-
-      setSelectedCoach({
-        coach_id: c.coach_id || targetId,
-        full_name: fullName.toUpperCase(),
-        institution: inst,
-        role_title: c.role_title || `${sport} HEAD COACH`,
-        tags: Array.isArray(c.tags) && c.tags.length > 0 ? c.tags : [sport, "VERIFIED COACH"],
-        years_experience: c.years_of_experience || c.years_experience ? `${c.years_of_experience || c.years_experience} Years` : (selectedTeam?.head_coach.years_experience || "Not specified"),
-        core_specialties: Array.isArray(c.specialties) && c.specialties.length > 0 ? c.specialties : Array.isArray(c.core_specialties) && c.core_specialties.length > 0 ? c.core_specialties : [],
-        success_rate: c.success_rate !== undefined && c.success_rate !== null ? `${c.success_rate}%` : "Not specified",
-        recruits_placed: c.recruits_placed || "",
-        philosophy: c.coachingPhilosophy || c.coaching_philosophy || c.philosophy || c.bio || selectedTeam?.head_coach.quote || "Not specified",
-        quote: c.quote || c.coachingPhilosophy || c.coaching_philosophy || selectedTeam?.head_coach.quote || "Not specified",
-        certificates: Array.isArray(c.professional_documents) && c.professional_documents.length > 0 ? c.professional_documents.map((d: any) => typeof d === 'string' ? d.replace(/\.[^/.]+$/, "") : (d.name || "Certified Coach")) : (Array.isArray(c.certificates) && c.certificates.length > 0 ? c.certificates : []),
-        contact_info: {
-          email: c.email || c.contact_info?.email || "Not specified",
-          facebook: c.facebook || c.contact_info?.facebook || "Not specified",
-          phone: c.contact_number || c.phone || c.contact_info?.phone || "Not specified",
-        },
-      });
-    }
+    })();
   };
 
   const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
@@ -561,6 +583,8 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
       full_name: (selectedTeam.head_coach.full_name && selectedTeam.head_coach.full_name.toLowerCase() !== "coach") ? selectedTeam.head_coach.full_name : "Head Coach",
       institution: selectedTeam.team_name || "Athletic Program",
       role_title: selectedTeam.head_coach.role_title || "Head Coach",
+      sport: selectedTeam.sport_type,
+      sport_type: selectedTeam.sport_type,
       tags: [selectedTeam.sport_type, "VERIFIED COACH"],
       years_experience: selectedTeam.head_coach.years_experience || "Not specified",
       core_specialties: [],

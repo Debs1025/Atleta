@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -65,6 +66,8 @@ export interface AddDocumentModalProps {
   setAddDocError: (val: string) => void;
   onPickDocument: () => void;
   onSaveDocument: () => void;
+  isSaving?: boolean;
+  uploadProgress?: number;
 }
 
 export function AddDocumentModal({
@@ -77,19 +80,33 @@ export function AddDocumentModal({
   setAddDocError,
   onPickDocument,
   onSaveDocument,
+  isSaving = false,
+  uploadProgress = 0,
 }: AddDocumentModalProps) {
   return (
     <Modal
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (!isSaving) onClose();
+      }}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
+      <Pressable
+        style={styles.modalOverlay}
+        onPress={() => {
+          if (!isSaving) onClose();
+        }}
+      >
         <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>ADD ELIGIBLE DOCUMENT</Text>
-            <Pressable onPress={onClose}>
+            <Pressable
+              disabled={isSaving}
+              onPress={() => {
+                if (!isSaving) onClose();
+              }}
+            >
               <Ionicons name="close" size={22} color="#94A3B8" />
             </Pressable>
           </View>
@@ -111,6 +128,7 @@ export function AddDocumentModal({
                 }}
                 placeholder="e.g. PSA Birth Certificate, Medical Clearance"
                 placeholderTextColor="#64748B"
+                editable={!isSaving}
               />
             </View>
           </View>
@@ -118,7 +136,11 @@ export function AddDocumentModal({
           {/* Document File Picker Box */}
           <View style={styles.modalFieldGroup}>
             <Text style={styles.fieldLabel}>ATTACH FILE (PDF or IMAGE)</Text>
-            <Pressable style={styles.filePickerBox} onPress={onPickDocument}>
+            <Pressable
+              style={[styles.filePickerBox, isSaving && { opacity: 0.6 }]}
+              disabled={isSaving}
+              onPress={onPickDocument}
+            >
               <Ionicons
                 name={newDocAsset ? "document-attach" : "cloud-upload-outline"}
                 size={24}
@@ -140,14 +162,48 @@ export function AddDocumentModal({
             <Text style={styles.modalErrorText}>{addDocError}</Text>
           ) : null}
 
+          {/* Accurate Upload Progress Bar */}
+          {isSaving && (
+            <View style={{ marginBottom: 14 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700" }}>
+                  Compressing & Uploading
+                </Text>
+                <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "800" }}>
+                  {uploadProgress}%
+                </Text>
+              </View>
+              <View style={{ height: 4, backgroundColor: "#0F172A", borderRadius: 2, overflow: "hidden" }}>
+                <View style={{ width: `${Math.max(uploadProgress, 10)}%`, height: "100%", backgroundColor: "#38BDF8" }} />
+              </View>
+            </View>
+          )}
+
           {/* Modal Action Buttons */}
           <View style={styles.modalActionRow}>
-            <Pressable style={styles.modalSaveButton} onPress={onSaveDocument}>
-              <Ionicons name="checkmark" size={16} color="#080F21" style={{ marginRight: 4 }} />
-              <Text style={styles.modalSaveButtonText}>Save Document</Text>
+            <Pressable
+              style={[styles.modalSaveButton, isSaving && { opacity: 0.8 }]}
+              disabled={isSaving}
+              onPress={onSaveDocument}
+            >
+              {isSaving ? (
+                <>
+                  <ActivityIndicator size="small" color="#080F21" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalSaveButtonText}>Saving... {uploadProgress > 0 ? `${uploadProgress}%` : ""}</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={16} color="#080F21" style={{ marginRight: 4 }} />
+                  <Text style={styles.modalSaveButtonText}>Save Document</Text>
+                </>
+              )}
             </Pressable>
 
-            <Pressable style={styles.modalCancelButton} onPress={onClose}>
+            <Pressable
+              style={styles.modalCancelButton}
+              disabled={isSaving}
+              onPress={onClose}
+            >
               <Text style={styles.modalCancelButtonText}>Cancel</Text>
             </Pressable>
           </View>
