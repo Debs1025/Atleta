@@ -96,7 +96,7 @@ export const SettingsPage: React.FC = () => {
           <div style={styles.sectionWrap}>
             <div style={styles.sectionBanner}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Bell style={{ width: 12, height: 12 }} /> NOTIFICATIONS & REMINDERS
+                <Bell style={{ width: 13, height: 13 }} /> NOTIFICATIONS & REMINDERS
               </span>
             </div>
             <div style={styles.sectionBox}>
@@ -162,7 +162,7 @@ export const SettingsPage: React.FC = () => {
           <div style={styles.sectionWrap}>
             <div style={styles.sectionBanner}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Sliders style={{ width: 12, height: 12 }} /> MATCH AUDIT & DISPLAY
+                <Sliders style={{ width: 13, height: 13 }} /> MATCH AUDIT & DISPLAY
               </span>
             </div>
             <div style={styles.sectionBox}>
@@ -228,7 +228,7 @@ export const SettingsPage: React.FC = () => {
           <div style={styles.sectionWrap}>
             <div style={styles.sectionBanner}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Shield style={{ width: 12, height: 12 }} /> SECURITY & COMPLIANCE
+                <Shield style={{ width: 13, height: 13 }} /> SECURITY & COMPLIANCE
               </span>
             </div>
             <div style={styles.sectionBox}>
@@ -240,13 +240,15 @@ export const SettingsPage: React.FC = () => {
                 style={styles.itemRow}
               >
                 <div style={styles.itemLeft}>
-                  <FileText style={{ width: 18, height: 18, color: '#0B132B' }} />
+                  <div style={styles.iconPill}>
+                    <FileText style={{ width: 18, height: 18, color: '#2563EB' }} />
+                  </div>
                   <div style={styles.itemTextWrap}>
                     <h3 style={styles.itemTitle}>DATA PRIVACY ACT (RA 10173) COMPLIANCE</h3>
                     <p style={styles.itemDesc}>Review guidelines on handling student-athlete performance data.</p>
                   </div>
                 </div>
-                <ExternalLink style={{ width: 16, height: 16, color: '#0B132B' }} />
+                <ExternalLink style={{ width: 16, height: 16, color: '#2563EB' }} />
               </a>
 
               <div
@@ -255,13 +257,15 @@ export const SettingsPage: React.FC = () => {
                 onClick={() => navigate('/profile')}
               >
                 <div style={styles.itemLeft}>
-                  <Shield style={{ width: 18, height: 18, color: '#0B132B' }} />
+                  <div style={styles.iconPill}>
+                    <Shield style={{ width: 18, height: 18, color: '#2563EB' }} />
+                  </div>
                   <div style={styles.itemTextWrap}>
                     <h3 style={styles.itemTitle}>ACCOUNT PASSWORD & SECURITY</h3>
                     <p style={styles.itemDesc}>Manage login password and secure authentication credentials.</p>
                   </div>
                 </div>
-                <ChevronRight style={{ width: 18, height: 18, color: '#0B132B' }} />
+                <ChevronRight style={{ width: 18, height: 18, color: '#2563EB' }} />
               </div>
             </div>
           </div>

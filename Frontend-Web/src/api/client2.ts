@@ -1538,7 +1538,7 @@ export const getAthleteStatsAndMatchesForOfficial = async (
   return result;
 };
 
-// ─── SCORESHEET REQUEST & FULFILLMENT PIPELINE ────────────────────────────
+// SCORESHEET REQUEST 
 
 export const fulfillScoresheetRequest = async (
   requestId: string,

@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, X, Camera, Trash2, Key, Eye, EyeOff, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import {
+  User,
+  X,
+  Camera,
+  Trash2,
+  Key,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+  Shield,
+  Mail,
+  Award,
+} from 'lucide-react';
 import {
   getStoredToken,
   getStoredUser,
@@ -245,6 +259,12 @@ export const ProfilePage: React.FC = () => {
 
         {/* Profile Content Area */}
         <main style={styles.contentArea}>
+          {/* Header Banner */}
+          <div style={styles.pageHeader}>
+            <h1 style={styles.pageTitle}>OFFICIAL PROFILE</h1>
+            <p style={styles.pageSubtitle}>Official credentials, regional affiliation, and match audit record</p>
+          </div>
+
           <div style={styles.profileCardWrapper}>
             {/* Top Section */}
             <div style={styles.topSection}>
@@ -257,7 +277,7 @@ export const ProfilePage: React.FC = () => {
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
-                    <User style={{ width: 48, height: 48, strokeWidth: 1.5, color: '#0B132B' }} />
+                    <User style={{ width: 48, height: 48, strokeWidth: 1.5, color: '#2563EB' }} />
                   )}
                 </div>
 
@@ -296,13 +316,19 @@ export const ProfilePage: React.FC = () => {
 
             {/* Section 1: OFFICIAL IDENTIFIER */}
             <div style={styles.sectionCard}>
-              <div style={styles.sectionBannerDark}>OFFICIAL IDENTIFIER</div>
+              <div style={styles.sectionBannerDark}>
+                <Shield style={{ width: 13, height: 13 }} />
+                <span>OFFICIAL IDENTIFIER</span>
+              </div>
               <div style={styles.identifierBox}>{officialId}</div>
             </div>
 
             {/* Section 2: ACCOUNT SUMMARY */}
             <div style={styles.sectionCard}>
-              <div style={styles.sectionBannerDark}>ACCOUNT SUMMARY</div>
+              <div style={styles.sectionBannerDark}>
+                <Award style={{ width: 13, height: 13 }} />
+                <span>ACCOUNT SUMMARY</span>
+              </div>
               <div style={styles.summaryBox}>
                 <div style={{ ...styles.summaryRow, ...styles.summaryRowBorder }}>
                   <span style={styles.rowLabel}>TOTAL AUDITS HANDLED</span>
@@ -323,7 +349,10 @@ export const ProfilePage: React.FC = () => {
 
             {/* Section 3: CONTACT INFORMATION */}
             <div style={styles.sectionCard}>
-              <div style={styles.sectionBannerGray}>CONTACT INFORMATION</div>
+              <div style={styles.sectionBannerGray}>
+                <Mail style={{ width: 13, height: 13 }} />
+                <span>CONTACT INFORMATION</span>
+              </div>
               <div style={styles.summaryBox}>
                 <div style={styles.summaryRow}>
                   <span style={styles.rowLabel}>PRIMARY EMAIL</span>
@@ -337,10 +366,10 @@ export const ProfilePage: React.FC = () => {
 
       {/* Edit Profile */}
       {isEditModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(11, 19, 43, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: '#FFFFFF', border: '2px solid #0B132B', width: '92%', maxWidth: '480px', padding: '24px 28px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <h3 style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '16px', fontWeight: '800', color: '#0B132B', margin: 0, textTransform: 'uppercase' }}>EDIT OFFICIAL PROFILE</h3>
+              <h3 style={styles.modalTitle}>EDIT OFFICIAL PROFILE</h3>
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
@@ -354,11 +383,11 @@ export const ProfilePage: React.FC = () => {
             <form onSubmit={handleSaveProfile}>
               {/* Profile Image Field */}
               <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '64px', height: '64px', border: '1.5px solid #0B132B', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={styles.modalAvatarBox}>
                   {editAvatar ? (
                     <img src={editAvatar} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <User style={{ width: 32, height: 32, color: '#64748B' }} />
+                    <User style={{ width: 32, height: 32, color: '#2563EB' }} />
                   )}
                 </div>
 
@@ -369,7 +398,7 @@ export const ProfilePage: React.FC = () => {
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className="hover-btn-outline"
-                      style={{ padding: '6px 12px', border: '1px solid #0B132B', backgroundColor: '#FFFFFF', color: '#0B132B', fontWeight: 800, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      style={{ padding: '7px 14px', border: '1.5px solid #2563EB', backgroundColor: '#EFF6FF', color: '#1D4ED8', fontWeight: 800, fontSize: '10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                     >
                       <Camera style={{ width: 12, height: 12 }} />
                       UPLOAD PHOTO
@@ -379,7 +408,7 @@ export const ProfilePage: React.FC = () => {
                         type="button"
                         onClick={() => setEditAvatar(null)}
                         className="hover-btn-outline"
-                        style={{ padding: '6px 10px', border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#B91C1C', fontWeight: 700, fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        style={{ padding: '7px 12px', border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#B91C1C', fontWeight: 700, fontSize: '10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                       >
                         <Trash2 style={{ width: 12, height: 12 }} />
                         REMOVE
@@ -405,7 +434,7 @@ export const ProfilePage: React.FC = () => {
                   placeholder="e.g. Erick Nathaniel S. De Belen"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '2px', padding: '9px 12px', fontSize: '13px', outline: 'none', color: '#0B132B', fontWeight: 600 }}
+                  style={styles.modalInput}
                 />
               </div>
 
@@ -417,7 +446,7 @@ export const ProfilePage: React.FC = () => {
                   placeholder="e.g. Bucal Official / Ateneo De Cubao"
                   value={editOrg}
                   onChange={(e) => setEditOrg(e.target.value)}
-                  style={{ border: '1px solid #CBD5E1', borderRadius: '2px', padding: '9px 12px', fontSize: '13px', outline: 'none', color: '#0B132B', fontWeight: 600 }}
+                  style={styles.modalInput}
                 />
               </div>
 
@@ -426,14 +455,14 @@ export const ProfilePage: React.FC = () => {
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
                   className="hover-btn-outline"
-                  style={{ padding: '9px 16px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#64748B', fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
+                  style={styles.modalBtnCancel}
                 >
                   CANCEL
                 </button>
                 <button
                   type="submit"
                   className="hover-btn-solid"
-                  style={{ padding: '9px 20px', border: 'none', backgroundColor: '#0B132B', color: '#FFFFFF', fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
+                  style={styles.modalBtnSubmit}
                 >
                   SAVE CHANGES
                 </button>
@@ -445,12 +474,12 @@ export const ProfilePage: React.FC = () => {
 
       {/* Change Password Modal */}
       {isPasswordModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(11, 19, 43, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: '#FFFFFF', border: '2px solid #0B132B', width: '92%', maxWidth: '440px', padding: '24px 28px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCardPassword}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Key style={{ width: 18, height: 18, color: '#0B132B' }} />
-                <h3 style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontSize: '15px', fontWeight: '800', color: '#0B132B', margin: 0, textTransform: 'uppercase' }}>
+                <Key style={{ width: 18, height: 18, color: '#2563EB' }} />
+                <h3 style={styles.modalTitle}>
                   CHANGE PASSWORD
                 </h3>
               </div>
@@ -465,14 +494,14 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {passwordSuccess ? (
-              <div style={{ padding: '16px', backgroundColor: '#ECFDF5', border: '1px solid #10B981', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ padding: '16px', backgroundColor: '#ECFDF5', border: '1px solid #10B981', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                 <CheckCircle2 style={{ width: 18, height: 18, color: '#10B981', flexShrink: 0 }} />
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#065F46' }}>{passwordSuccess}</span>
               </div>
             ) : (
               <form onSubmit={handleChangePasswordSubmit}>
                 {passwordError && (
-                  <div style={{ padding: '10px 12px', backgroundColor: '#FEF2F2', border: '1px solid #EF4444', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#FEF2F2', border: '1px solid #EF4444', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
                     <AlertTriangle style={{ width: 15, height: 15, color: '#EF4444', flexShrink: 0 }} />
                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#B91C1C' }}>{passwordError}</span>
                   </div>
@@ -488,7 +517,7 @@ export const ProfilePage: React.FC = () => {
                       placeholder="Minimum 6 characters"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      style={{ border: '1px solid #CBD5E1', borderRadius: '2px', padding: '9px 36px 9px 12px', fontSize: '13px', outline: 'none', color: '#0B132B', fontWeight: 600, width: '100%', boxSizing: 'border-box' }}
+                      style={{ ...styles.modalInput, paddingRight: '38px' }}
                     />
                     <button
                       type="button"
@@ -510,7 +539,7 @@ export const ProfilePage: React.FC = () => {
                       placeholder="Re-type new password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      style={{ border: '1px solid #CBD5E1', borderRadius: '2px', padding: '9px 36px 9px 12px', fontSize: '13px', outline: 'none', color: '#0B132B', fontWeight: 600, width: '100%', boxSizing: 'border-box' }}
+                      style={{ ...styles.modalInput, paddingRight: '38px' }}
                     />
                     <button
                       type="button"
@@ -527,7 +556,7 @@ export const ProfilePage: React.FC = () => {
                     type="button"
                     onClick={() => setIsPasswordModalOpen(false)}
                     className="hover-btn-outline"
-                    style={{ padding: '9px 16px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#64748B', fontWeight: 800, fontSize: '11px', cursor: 'pointer' }}
+                    style={styles.modalBtnCancel}
                   >
                     CANCEL
                   </button>
@@ -535,7 +564,7 @@ export const ProfilePage: React.FC = () => {
                     type="submit"
                     disabled={passwordLoading}
                     className="hover-btn-solid"
-                    style={{ padding: '9px 20px', border: 'none', backgroundColor: '#0B132B', color: '#FFFFFF', fontWeight: 800, fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    style={styles.modalBtnSubmit}
                   >
                     {passwordLoading ? (
                       <>
@@ -555,3 +584,5 @@ export const ProfilePage: React.FC = () => {
     </div>
   );
 };
+
+export default ProfilePage;

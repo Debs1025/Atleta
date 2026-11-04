@@ -2326,7 +2326,7 @@ export const warmAdminAppCache = async (): Promise<void> => {
 };
 
 
-// ─── SPORTS MANAGEMENT  ───────────────────────────────────────────────────
+// SPORTS MANAGEMENT 
 
 export const getSports = async (activeOnly = false, forceRefresh = false): Promise<SportsListResponse> => {
   const cacheKey = `sports_catalog_${activeOnly}`;

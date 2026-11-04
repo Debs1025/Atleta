@@ -211,7 +211,6 @@ export const TournamentListPage: React.FC = () => {
           {/* Header */}
           <div style={styles.headerRow}>
             <div style={styles.headerLeft}>
-              <div style={styles.iconBox}><Trophy size={22} /></div>
               <div>
                 <h1 style={styles.titleH1}>TOURNAMENTS</h1>
                 <p style={styles.subtitle}>

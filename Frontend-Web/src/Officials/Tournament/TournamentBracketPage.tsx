@@ -611,9 +611,6 @@ export const TournamentBracketPage: React.FC = () => {
         <main style={styles.main}>
           {/* Header Title */}
           <div style={styles.headerLeft}>
-            <div style={styles.iconBox}>
-              <Trophy size={20} />
-            </div>
             <div>
               <h1 style={styles.titleH1}>TOURNAMENT BRACKETING SYSTEM</h1>
               <p style={styles.subtitle}>View and manage knockout tournament brackets and schedules</p>

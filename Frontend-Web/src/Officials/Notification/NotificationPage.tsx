@@ -219,8 +219,8 @@ export const NotificationPage: React.FC = () => {
               className="hover-btn-outline"
               style={styles.goBackBtn}
             >
+              <Undo2 style={{ width: 14, height: 14 }} />
               <span>Go Back</span>
-              <Undo2 style={{ width: 16, height: 16 }} />
             </button>
           </div>
 
@@ -286,8 +286,8 @@ export const NotificationPage: React.FC = () => {
               <button
                 type="button"
                 onClick={clearHistory}
-                style={styles.darkActionBtn}
-                className="hover-btn-solid"
+                style={styles.clearBtn}
+                className="hover-btn-outline"
               >
                 CLEAR HISTORY
               </button>

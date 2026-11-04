@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import {
   getStoredUser,
   getAllOfficialMatchesMaster,
@@ -39,12 +40,14 @@ const MatchRow = memo(({ item, onClick, isLast }: MatchRowProps) => {
       <td style={{ ...styles.td, ...styles.tdMatchClass }}>
         {item.matchName || item.gameReferenceId || item.raw_match?.matchName || item.raw_match?.gameReferenceId || item.raw_match?.game_name || item.raw_match?.gameName || item.match_name || "Unnamed Match"}
       </td>
-      <td style={{ ...styles.td, ...styles.tdSport }}>{item.sport}</td>
+      <td style={{ ...styles.td, ...styles.tdSport }}>
+        <span style={styles.sportPill}>{item.sport}</span>
+      </td>
       <td style={{ ...styles.td, ...styles.tdCoaches }}>{item.coaches}</td>
       <td style={{ ...styles.td, ...styles.tdDateTime }}>{item.date_time}</td>
       <td style={{ ...styles.td, borderRight: 'none' }}>
         <span style={isPending ? styles.statusPending : styles.statusAudited}>
-          {item.status}
+          ● {item.status}
         </span>
       </td>
     </tr>
@@ -179,10 +182,13 @@ export const ViewAllMatch: React.FC = () => {
       <main style={styles.contentArea}>
         {/* Header Row */}
         <div style={styles.pageHeaderRow}>
-          <h1 style={styles.pageTitle}>ALL MATCHES</h1>
+          <div style={styles.pageTitleGroup}>
+            <h1 style={styles.pageTitle}>ALL MATCHES</h1>
+            <p style={styles.pageSubtitle}>Complete master queue of certified and pending tournament matches</p>
+          </div>
           <Link to="/dashboard" className="hover-back-link" style={styles.backLink}>
-            <span>Back to Main Page</span>
-            <span>↩</span>
+            <ArrowLeft style={{ width: 14, height: 14 }} />
+            <span>Back to Dashboard</span>
           </Link>
         </div>
 
@@ -197,7 +203,6 @@ export const ViewAllMatch: React.FC = () => {
               style={{
                 ...styles.tabBtn,
                 ...(activeTab === 'PENDING' ? styles.tabBtnActive : styles.tabBtnInactive),
-                borderRight: '2px solid #0B132B',
               }}
             >
               PENDING AUDITS
@@ -219,13 +224,12 @@ export const ViewAllMatch: React.FC = () => {
           <div style={styles.sportFilterWrap}>
             <span style={styles.sportFilterLabel}>FILTER SPORT:</span>
             <div style={styles.sportBtnGroup}>
-              {sportsList.map((sport, idx) => {
+              {sportsList.map((sport) => {
                 const normSelected = selectedSport.replace('&', 'AND').toUpperCase().trim();
                 const normSport = sport.replace('&', 'AND').toUpperCase().trim();
                 const isActive =
                   (sport === 'ALL SPORTS' && (normSelected === 'ALL' || normSelected === 'ALL SPORTS')) ||
                   normSelected === normSport;
-                const isLast = idx === sportsList.length - 1;
 
                 return (
                   <button
@@ -236,7 +240,6 @@ export const ViewAllMatch: React.FC = () => {
                     style={{
                       ...styles.sportBtn,
                       ...(isActive ? styles.sportBtnActive : styles.sportBtnInactive),
-                      ...(isLast ? { borderRight: 'none' } : {}),
                     }}
                   >
                     {sport}
