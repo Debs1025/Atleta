@@ -16,6 +16,7 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
 import { Ionicons } from "@expo/vector-icons";
+import { useAccount } from "../../../../context/AccountContext";
 
 const OFFLINE_ATHLETE_PROFILE_CACHE_KEY = "atleta_offline_athlete_profile_cache";
 
@@ -93,6 +94,31 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [hideParentBars, setHideParentBars] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { account, updateAccount } = useAccount();
+
+  useEffect(() => {
+    if (account) {
+      setProfile((prev) => ({
+        ...prev,
+        athlete_id: account.uid || prev.athlete_id,
+        first_name: (account.first_name || prev.first_name || "").toUpperCase(),
+        last_name: (account.last_name || prev.last_name || "").toUpperCase(),
+        birthdate: account.birthdate || prev.birthdate,
+        gender: (account.gender || prev.gender || "MALE").toUpperCase(),
+        province: (account.province || prev.province || "CAMARINES SUR").replace(/,\s*PH(ILIPPINES)?$/i, "").trim().toUpperCase(),
+        category: (account.category || prev.category || "BASKETBALL").toUpperCase() as any,
+        avatar_url: account.avatar_url || prev.avatar_url,
+        height_cm: account.height_cm !== undefined && account.height_cm !== null ? Number(account.height_cm) : prev.height_cm,
+        weight_kg: account.weight_kg !== undefined && account.weight_kg !== null ? Number(account.weight_kg) : prev.weight_kg,
+        wingspan_cm: account.wingspan_cm !== undefined && account.wingspan_cm !== null ? Number(account.wingspan_cm) : prev.wingspan_cm,
+        vertical_cm: account.vertical_cm !== undefined && account.vertical_cm !== null ? Number(account.vertical_cm) : prev.vertical_cm,
+        vertical_leap_in: account.vertical_leap_in !== undefined && account.vertical_leap_in !== null ? Number(account.vertical_leap_in) : prev.vertical_leap_in,
+        eligible_documents: (account.eligible_documents && account.eligible_documents.length > 0)
+          ? account.eligible_documents
+          : prev.eligible_documents,
+      }));
+    }
+  }, [account]);
 
   useEffect(() => {
     if (activeTab !== "HOME") {
@@ -707,12 +733,30 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
     setProfile(updatedProfile);
     AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(updatedProfile)).catch(() => null);
 
-    const athleteUid = updatedProfile.athlete_id || (updatedProfile as any).user_id;
-    if (athleteUid) {
+    const athleteUid = updatedProfile.athlete_id || (updatedProfile as any).user_id || account?.uid;
+    const cleanId = athleteUid ? String(athleteUid).replace(/^ath_/, "") : "";
+    const canonicalId = athleteUid ? (String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`) : "";
+
+    // Sync via AccountContext
+    updateAccount({
+      first_name: updatedProfile.first_name,
+      last_name: updatedProfile.last_name,
+      birthdate: updatedProfile.birthdate,
+      gender: updatedProfile.gender,
+      province: updatedProfile.province,
+      category: updatedProfile.category,
+      sport_type: updatedProfile.category,
+      height_cm: updatedProfile.height_cm,
+      weight_kg: updatedProfile.weight_kg,
+      wingspan_cm: updatedProfile.wingspan_cm,
+      vertical_cm: updatedProfile.vertical_cm,
+      avatar_url: updatedProfile.avatar_url,
+      eligible_documents: updatedProfile.eligible_documents,
+    }).catch(() => null);
+
+    if (cleanId) {
       try {
-        const cleanId = String(athleteUid).replace(/^ath_/, "");
         directAthleteDocCache.delete(cleanId);
-        const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
         const payload = sanitizeFirestoreData({
           first_name: updatedProfile.first_name,
           last_name: updatedProfile.last_name,
@@ -727,7 +771,21 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
           eligible_documents: updatedProfile.eligible_documents,
           updated_at: new Date().toISOString(),
         });
+        const userPayload = sanitizeFirestoreData({
+          first_name: updatedProfile.first_name,
+          last_name: updatedProfile.last_name,
+          full_name: `${updatedProfile.first_name || ""} ${updatedProfile.last_name || ""}`.trim(),
+          birthdate: updatedProfile.birthdate,
+          gender: updatedProfile.gender,
+          province: updatedProfile.province,
+          sport_type: updatedProfile.category,
+          avatar_url: updatedProfile.avatar_url,
+          profile_image: updatedProfile.avatar_url,
+          updated_at: new Date().toISOString(),
+        });
         setDoc(doc(db, "Athlete_Profiles", canonicalId), payload, { merge: true }).catch(() => null);
+        setDoc(doc(db, "Athlete_Profiles", cleanId), payload, { merge: true }).catch(() => null);
+        setDoc(doc(db, "Users", cleanId), userPayload, { merge: true }).catch(() => null);
       } catch (err) {
         console.warn("AthleteHomePage handleUpdateProfile setDoc error:", err);
       }

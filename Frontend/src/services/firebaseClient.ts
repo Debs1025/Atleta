@@ -984,21 +984,36 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
 
     if (athleteUid) {
       const cleanId = athleteUid.replace(/^ath_/, "");
-      const [pDoc1, pDoc2] = await Promise.all([
+      const [pDoc1, pDoc2, uDoc1, uDoc2] = await Promise.all([
         getDoc(doc(db, "Athlete_Profiles", `ath_${cleanId}`)).catch(() => null),
         getDoc(doc(db, "Athlete_Profiles", cleanId)).catch(() => null),
+        getDoc(doc(db, "Users", cleanId)).catch(() => null),
+        getDoc(doc(db, "Users", `ath_${cleanId}`)).catch(() => null),
       ]);
-      const pData = (pDoc1 && pDoc1.exists()) ? pDoc1.data() : (pDoc2 && pDoc2.exists()) ? pDoc2.data() : null;
-      if (pData) {
+      const pData = (pDoc1 && pDoc1.exists()) ? pDoc1.data() : (pDoc2 && pDoc2.exists()) ? pDoc2.data() : {};
+      const uData = (uDoc1 && uDoc1.exists()) ? uDoc1.data() : (uDoc2 && uDoc2.exists()) ? uDoc2.data() : {};
+      if ((pData && Object.keys(pData).length > 0) || (uData && Object.keys(uData).length > 0)) {
         const rawStats = pData.stats || {};
         const rawAverages = pData.averages || {};
         const rawShooting = pData.shooting_efficiency || {};
         const fgPct = Number(rawShooting.fg_pct ?? rawStats.fg_pct ?? rawStats.fg_percentage ?? rawAverages.fg_percentage ?? 0);
         const ftPct = Number(rawShooting.ft_pct ?? rawStats.ft_pct ?? rawStats.ft_percentage ?? rawAverages.ft_percentage ?? 0);
         const scores = pData.five_game_trend || pData.last_5_games_scores || pData.scoring_trends_last_10 || [];
+        const firstName = uData.first_name || pData.first_name || "";
+        const lastName = uData.last_name || pData.last_name || "";
+        const fullName = uData.full_name || pData.full_name || `${firstName} ${lastName}`.trim();
 
         const enriched = {
+          athlete_id: `ath_${cleanId}`,
+          user_id: cleanId,
+          ...uData,
           ...pData,
+          first_name: firstName,
+          last_name: lastName,
+          full_name: fullName,
+          province: uData.province || pData.province || "Camarines Sur",
+          category: pData.category || pData.sport_type || uData.sport_type || "BASKETBALL",
+          sport_type: pData.sport_type || pData.category || uData.sport_type || "BASKETBALL",
           shooting_efficiency: {
             fg_pct: fgPct,
             ft_pct: ftPct,

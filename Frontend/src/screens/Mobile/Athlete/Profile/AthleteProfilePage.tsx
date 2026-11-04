@@ -28,6 +28,7 @@ import {
   DatePickerModal,
 } from "./AthleteProfileModals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAccount } from "../../../../context/AccountContext";
 import { requestAuthenticatedJson, requestMultipart, getStoredAuthToken } from "../../Authentication/authShared";
 import { getSportsOfflineFirst, db, storage } from "../../../../services/firebaseClient";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -179,19 +180,23 @@ export function AthleteProfilePage({
   onRefresh,
   isRefreshing,
 }: AthleteProfilePageProps) {
+  const { account, updateAccount } = useAccount();
+
   // Edit Mode state
   const [isEditing, setIsEditing] = useState(false);
 
   // Profile form local state
-  const initialFullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || profile.full_name || "";
+  const resolvedInitialFirst = profile.first_name || account?.first_name || "";
+  const resolvedInitialLast = profile.last_name || account?.last_name || "";
+  const initialFullName = `${resolvedInitialFirst} ${resolvedInitialLast}`.trim() || profile.full_name || account?.full_name || "";
   const [fullName, setFullName] = useState(initialFullName);
-  const [firstName, setFirstName] = useState(profile.first_name);
-  const [lastName, setLastName] = useState(profile.last_name);
-  const [birthdate, setBirthdate] = useState(profile.birthdate);
-  const [gender, setGender] = useState(profile.gender || "");
-  const [province, setProvince] = useState((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
-  const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category);
-  const [contactNumber, setContactNumber] = useState(profile.contact_number || (profile as any).phone || "");
+  const [firstName, setFirstName] = useState(resolvedInitialFirst);
+  const [lastName, setLastName] = useState(resolvedInitialLast);
+  const [birthdate, setBirthdate] = useState(profile.birthdate || account?.birthdate || "");
+  const [gender, setGender] = useState(profile.gender || account?.gender || "");
+  const [province, setProvince] = useState((profile.province || account?.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
+  const [category, setCategory] = useState<AthleteProfile["category"]>(profile.category || (account?.category as any) || "BASKETBALL");
+  const [contactNumber, setContactNumber] = useState(profile.contact_number || (profile as any).phone || account?.contact_number || account?.phoneNumber || "");
   const [contactNumberError, setContactNumberError] = useState("");
   const activeTeamId = (profile as any)?.team_id || (profile as any)?.current_affiliation?.team_id || (profile as any)?.teamId || null;
   const [hasActiveTeam, setHasActiveTeam] = useState<boolean>(Boolean(activeTeamId));
@@ -262,25 +267,37 @@ export function AthleteProfilePage({
 
   React.useEffect(() => {
     if (isEditing) return;
-    setFirstName(profile.first_name);
-    setLastName(profile.last_name);
-    setBirthdate(profile.birthdate);
-    setGender(profile.gender || "");
-    setProvince((profile.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim());
-    if (profile.category) setCategory(profile.category);
-    setContactNumber(profile.contact_number || (profile as any).phone || "");
-    setContactNumberError("");
-    setHeightCm(profile.height_cm);
-    setWeightKg(profile.weight_kg);
-    setWingspanCm(profile.wingspan_cm);
-    setAvatarUri(profile.avatar_url || (profile as any).avatar_uri);
+    const effFirst = profile.first_name || account?.first_name || "";
+    const effLast = profile.last_name || account?.last_name || "";
+    const effBirthdate = profile.birthdate || account?.birthdate || "";
+    const effGender = profile.gender || account?.gender || "";
+    const effProvince = (profile.province || account?.province || "").replace(/,\s*PH(ILIPPINES)?$/i, "").trim();
+    const effCategory = profile.category || (account?.category as any) || "BASKETBALL";
+    const effContact = profile.contact_number || (profile as any).phone || account?.contact_number || account?.phoneNumber || "";
+    const effHeight = profile.height_cm ?? account?.height_cm ?? 0;
+    const effWeight = profile.weight_kg ?? account?.weight_kg ?? 0;
+    const effWingspan = profile.wingspan_cm ?? account?.wingspan_cm ?? 0;
+    const effAvatar = profile.avatar_url || (profile as any).avatar_uri || account?.avatar_url || "";
 
-    const norm = normalizeDocuments(profile.eligible_documents || (profile as any).documents);
+    setFirstName(effFirst);
+    setLastName(effLast);
+    setBirthdate(effBirthdate);
+    setGender(effGender);
+    setProvince(effProvince);
+    if (effCategory) setCategory(effCategory);
+    setContactNumber(effContact);
+    setContactNumberError("");
+    setHeightCm(effHeight);
+    setWeightKg(effWeight);
+    setWingspanCm(effWingspan);
+    setAvatarUri(effAvatar);
+
+    const norm = normalizeDocuments(profile.eligible_documents || (profile as any).documents || account?.eligible_documents);
     const hasUploadedInProfile = norm.some((d) => d.status === "UPLOADED" || d.fileUri);
     if (hasUploadedInProfile) {
       setDocuments(norm);
     } else {
-      const athleteUid = profile.athlete_id || (profile as any).user_id || (profile as any).id;
+      const athleteUid = profile.athlete_id || (profile as any).user_id || (profile as any).id || account?.uid;
       const cleanId = athleteUid ? String(athleteUid).replace(/^ath_/, "") : "";
       AsyncStorage.getItem(`atleta_offline_eligible_docs_${cleanId}`)
         .then((cachedStr) => {
@@ -295,7 +312,7 @@ export function AthleteProfilePage({
         })
         .catch(() => setDocuments(norm));
     }
-  }, [profile, isEditing]);
+  }, [profile, isEditing, account]);
 
   // UI state
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -1116,27 +1133,8 @@ export function AthleteProfilePage({
     setIsSavingProfile(true);
 
     try {
-      // 1. Sync to backend REST API first to enforce phone uniqueness
-      await requestAuthenticatedJson("/athletes/profile", "PATCH", {
-        first_name: resolvedFirst,
-        last_name: resolvedLast,
-        full_name: resolvedFullName,
-        contact_number: cleanedContact || undefined,
-        phoneNumber: cleanedContact || undefined,
-        height_cm: safeHeight,
-        weight_kg: safeWeight,
-        wingspan_cm: safeWingspan,
-        position: category,
-        sport_type: category,
-        gender: gender,
-        province: province,
-        birthdate: safeBirthdate,
-        avatar_url: avatarUri,
-        eligible_documents: documents,
-      });
-
-      // 2. Synchronize to Firestore Athlete_Profiles & Users document
-      let athleteUid = profile.athlete_id || (profile as any).user_id;
+      // 1. Resolve UID with all fallbacks
+      let athleteUid = profile.athlete_id || (profile as any).user_id || account?.uid;
       if (!athleteUid) {
         try {
           const token = await getStoredAuthToken();
@@ -1151,9 +1149,45 @@ export function AthleteProfilePage({
         } catch (_) {}
       }
 
-      if (athleteUid) {
-        const cleanId = String(athleteUid).replace(/^ath_/, "");
-        const canonicalId = String(athleteUid).startsWith("ath_") ? athleteUid : `ath_${cleanId}`;
+      const cleanId = String(athleteUid || account?.cleanUid || "").replace(/^ath_/, "");
+      const canonicalId = cleanId ? `ath_${cleanId}` : "";
+
+      // 2. Immediate optimistic state update & close edit mode
+      try {
+        onUpdateProfile(updated);
+      } catch (parentErr) {
+        console.warn("onUpdateProfile notice:", parentErr);
+      }
+      setIsEditing(false);
+      setContactNumberError("");
+      setSaveSuccessMsg(true);
+      setTimeout(() => setSaveSuccessMsg(false), 2500);
+
+      // 3. Persist via AccountContext
+      try {
+        await updateAccount({
+          first_name: resolvedFirst,
+          last_name: resolvedLast,
+          full_name: resolvedFullName,
+          contact_number: cleanedContact || undefined,
+          phoneNumber: cleanedContact || undefined,
+          height_cm: safeHeight,
+          weight_kg: safeWeight,
+          wingspan_cm: safeWingspan,
+          category: category,
+          sport_type: category,
+          gender: gender,
+          province: province,
+          birthdate: safeBirthdate,
+          avatar_url: avatarUri,
+          eligible_documents: documents,
+        });
+      } catch (accErr) {
+        console.warn("updateAccount notice:", accErr);
+      }
+
+      // 4. Direct Firestore synchronization
+      if (cleanId) {
         const firestorePayload = sanitizeForFirestore({
           first_name: resolvedFirst,
           last_name: resolvedLast,
@@ -1196,32 +1230,42 @@ export function AthleteProfilePage({
         }
       }
 
-      // 3. Persist to AsyncStorage immediately
+      // 5. Persist to AsyncStorage immediately
       await AsyncStorage.setItem("atleta_offline_athlete_profile_cache", JSON.stringify(updated)).catch(() => null);
 
-      // 4. Update active parent state and toggle editing mode
+      // 6. Background sync to backend REST API (enforce phone uniqueness if needed)
       try {
-        onUpdateProfile(updated);
-      } catch (parentErr) {
-        console.warn("onUpdateProfile notice:", parentErr);
+        await requestAuthenticatedJson("/athletes/profile", "PATCH", {
+          first_name: resolvedFirst,
+          last_name: resolvedLast,
+          full_name: resolvedFullName,
+          contact_number: cleanedContact || undefined,
+          phoneNumber: cleanedContact || undefined,
+          height_cm: safeHeight,
+          weight_kg: safeWeight,
+          wingspan_cm: safeWingspan,
+          position: category,
+          sport_type: category,
+          gender: gender,
+          province: province,
+          birthdate: safeBirthdate,
+          avatar_url: avatarUri,
+          eligible_documents: documents,
+        });
+      } catch (apiErr: any) {
+        const errMsg = String(apiErr?.message || "").toLowerCase();
+        if (errMsg.includes("phone number") || errMsg.includes("already registered")) {
+          setContactNumberError("This phone number is already registered to another account.");
+          Alert.alert("Invalid Phone Number", "This phone number is already registered to another account.");
+          return;
+        }
       }
-      setIsEditing(false);
-      setContactNumberError("");
-      setSaveSuccessMsg(true);
-      setTimeout(() => setSaveSuccessMsg(false), 2500);
 
       Alert.alert("Profile Updated", "Your athlete credentials and profile details have been saved successfully.");
     } catch (saveErr: any) {
       console.warn("Athlete profile save error:", saveErr);
       const errMsg = saveErr?.message || String(saveErr || "Failed to save profile changes. Please try again.");
-      const isPhoneDuplicate = errMsg.toLowerCase().includes("phone number") || errMsg.toLowerCase().includes("already registered");
-      if (isPhoneDuplicate) {
-        const errorText = "This phone number is already registered to another account.";
-        setContactNumberError(errorText);
-        Alert.alert("Profile Error", errorText);
-      } else {
-        Alert.alert("Save Error", errMsg);
-      }
+      Alert.alert("Save Error", errMsg);
     } finally {
       setIsSavingProfile(false);
     }

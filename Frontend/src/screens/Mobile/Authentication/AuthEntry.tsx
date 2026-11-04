@@ -12,6 +12,7 @@ import { SignupScreen } from "./SignupScreen";
 import { AthleteHomePage } from "../Athlete/Dashboard/AthleteHomePage";
 import { CoachMainPage } from "../Coach/Dashboard/CoachMainPage";
 import { verifyCoachApprovalRealtime, isCoachAccountApproved } from "./coachVerification";
+import { useAccount } from "../../../context/AccountContext";
 
 let NativeGoogleSignin: any = null;
 try {
@@ -41,10 +42,12 @@ export function AuthEntry() {
   const [booting, setBooting] = useState(true);
   const [activeRole, setActiveRole] = useState<AuthRole | null>(null);
   const [socialSignupData, setSocialSignupData] = useState<any | null>(null);
+  const { refreshAccount, setAccount } = useAccount();
 
   const handleLogout = async () => {
     clearAuthMicroCache();
     clearFirebaseClientCaches();
+    setAccount(null);
     try {
       await AsyncStorage.clear();
     } catch (_) {
@@ -159,7 +162,10 @@ export function AuthEntry() {
             setScreen("signup");
           }}
           onGoReset={() => setScreen("reset")}
-          onAuthenticated={setActiveRole}
+          onAuthenticated={(role) => {
+            setActiveRole(role);
+            refreshAccount(true);
+          }}
         />
       )}
       {screen === "signup" && (
@@ -169,7 +175,10 @@ export function AuthEntry() {
             setScreen("login");
           }}
           initialSocialData={socialSignupData}
-          onAuthenticated={setActiveRole}
+          onAuthenticated={(role) => {
+            setActiveRole(role);
+            refreshAccount(true);
+          }}
         />
       )}
       {screen === "reset" && <PasswordResetScreen onGoLogin={() => setScreen("login")} />}

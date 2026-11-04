@@ -21,6 +21,7 @@ import { requestAuthenticatedJson, getStoredAuthToken } from "../../Authenticati
 import styles from "./styles/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
 import { getSportsOfflineFirst, db } from "../../../../services/firebaseClient";
+import { useAccount } from "../../../../context/AccountContext";
 
 function safeBase64Decode(str: string): string {
   if (typeof (globalThis as any).atob === "function") {
@@ -86,6 +87,7 @@ export function CoachEditProfile({
   profileData,
   onSave,
 }: CoachEditProfileProps) {
+  const { account, updateAccount } = useAccount();
   const insets = useSafeAreaInsets();
   const currentProfile = profileData || DEFAULT_COACH_PROFILE;
 
@@ -459,12 +461,8 @@ export function CoachEditProfile({
     setIsSaving(true);
 
     try {
-      // 1. Sync to backend REST API first to enforce phone uniqueness
-      await requestAuthenticatedJson("/coaches/me/profile", "PATCH", patchPayload)
-        .catch(() => requestAuthenticatedJson("/coaches/profile", "PATCH", patchPayload));
-
-      // 2. Resolve UID with token fallback if missing on profileData
-      let uid = currentProfile.user_id || currentProfile.coach_id;
+      // 1. Resolve UID with token and account fallbacks
+      let uid = currentProfile.user_id || currentProfile.coach_id || account?.uid;
       if (!uid) {
         try {
           const token = await getStoredAuthToken();
@@ -479,7 +477,35 @@ export function CoachEditProfile({
       const rawUid = uid ? String(uid).replace(/^coach_/, "") : "";
       const canonicalCoachId = uid ? (String(uid).startsWith("coach_") ? String(uid) : `coach_${rawUid}`) : "";
 
-      // 3. Direct Firestore synchronization
+      // 2. Immediate parent component update
+      if (onSave) {
+        onSave(updatedProfile);
+      }
+      setContactNumberError("");
+
+      // 3. Sync via AccountContext
+      try {
+        await updateAccount({
+          first_name: firstName,
+          last_name: lastName,
+          full_name: form.full_name.trim(),
+          contact_number: cleanedContact || undefined,
+          phoneNumber: cleanedContact || undefined,
+          sport_type: canonicalSportType,
+          sports_focus: form.sports_focus,
+          current_institution: form.current_institution.trim(),
+          regional_affiliation: form.regional_affiliation.trim(),
+          national_sports_league: form.national_sports_league.trim(),
+          coaching_philosophy: form.coaching_philosophy.trim(),
+          avatar_url: avatarUri,
+          uploaded_documents: documents,
+          professional_documents: documents.map((d) => d.file_name),
+        });
+      } catch (accErr) {
+        console.warn("CoachEditProfile updateAccount notice:", accErr);
+      }
+
+      // 4. Direct Firestore synchronization
       if (rawUid) {
         await Promise.all([
           setDoc(doc(db, "Coach_Profiles", canonicalCoachId), patchPayload, { merge: true }).catch(() => null),
@@ -501,17 +527,25 @@ export function CoachEditProfile({
         ]);
       }
 
-      // 4. Persist to local offline caches immediately
+      // 5. Persist to local offline caches immediately
       await AsyncStorage.setItem(
         "atleta_offline_coach_profile_cache",
         JSON.stringify(updatedProfile)
       ).catch(() => null);
 
-      // 5. Update parent component state
-      if (onSave) {
-        onSave(updatedProfile);
+      // 6. Sync to backend REST API
+      try {
+        await requestAuthenticatedJson("/coaches/me/profile", "PATCH", patchPayload)
+          .catch(() => requestAuthenticatedJson("/coaches/profile", "PATCH", patchPayload));
+      } catch (apiErr: any) {
+        const errMsg = String(apiErr?.message || "").toLowerCase();
+        if (errMsg.includes("phone number") || errMsg.includes("already registered")) {
+          const errorText = "This phone number is already registered to another account.";
+          setContactNumberError(errorText);
+          Alert.alert("Profile Error", errorText);
+          return;
+        }
       }
-      setContactNumberError("");
 
       Alert.alert("Profile Updated", "Your coach credentials and profile changes have been saved successfully.", [
         {
@@ -522,24 +556,7 @@ export function CoachEditProfile({
     } catch (err: any) {
       console.warn("Coach profile sync error:", err);
       const errMsg = err?.message || String(err || "Failed to update profile.");
-      const isPhoneDuplicate = errMsg.toLowerCase().includes("phone number") || errMsg.toLowerCase().includes("already registered");
-      if (isPhoneDuplicate) {
-        const errorText = "This phone number is already registered to another account.";
-        setContactNumberError(errorText);
-        Alert.alert("Profile Error", errorText);
-        return;
-      }
-
-      // Fallback save directly to state so user never loses their changes on transient network issues
-      if (onSave) {
-        onSave(updatedProfile);
-      }
-      Alert.alert("Profile Updated", "Your coach credentials and profile changes have been saved locally.", [
-        {
-          text: "OK",
-          onPress: () => onBack(),
-        },
-      ]);
+      Alert.alert("Profile Error", errMsg);
     } finally {
       setIsSaving(false);
     }
