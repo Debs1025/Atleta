@@ -4,7 +4,11 @@ export const styles: Record<string, React.CSSProperties> = {
   shell: {
     minHeight: '100vh',
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F0F6FE',
+    backgroundImage:
+      'radial-gradient(at 95% 5%, rgba(56, 189, 248, 0.08) 0px, transparent 45%), ' +
+      'radial-gradient(at 5% 95%, rgba(37, 99, 235, 0.05) 0px, transparent 45%), ' +
+      'linear-gradient(180deg, #F8FAFD 0%, #EEF5FC 100%)',
     fontFamily: '"Outfit", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
     color: '#0B132B',
   },

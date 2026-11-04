@@ -957,25 +957,39 @@ export const getTournamentBrackets = async (sport?: string, forceRefresh = false
   if (normSport !== 'ALL') {
     queryParts.push(`sport=${encodeURIComponent(normSport)}`);
   }
-  if (forceRefresh) {
-    queryParts.push(`_t=${Date.now()}`);
-  }
-  const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  // Always include live timestamp to bypass browser 120s disk cache stall
+  queryParts.push(`_t=${Date.now()}`);
+  const qs = `?${queryParts.join('&')}`;
   const cacheKey = `tournament_brackets_${normSport}`;
 
-  // Instant local cache fallback (only if not forcing refresh)
+  // Instant local cache fallback 
   if (!forceRefresh) {
     try {
       const raw =
         localStorage.getItem(`atleta_cached_bracket_${normSport}`) ||
-        localStorage.getItem(`atleta_cached_bracket_${normSport.toLowerCase()}`) ||
-        localStorage.getItem('atleta_cached_bracket_all') ||
-        localStorage.getItem('atleta_cached_bracket_ALL');
+        localStorage.getItem(`atleta_cached_bracket_${normSport.toLowerCase()}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const active = parsed.filter((b) => !isTournamentDeleted(b.bracket_id));
+        if (Array.isArray(parsed)) {
+          const active = parsed.filter(
+            (b) =>
+              !isTournamentDeleted(b.bracket_id) &&
+              (normSport === 'ALL' || (b.sport_type && String(b.sport_type).trim().toUpperCase() === normSport))
+          );
           setCachedData(cacheKey, active);
+        }
+      } else {
+        const rawAll = localStorage.getItem('atleta_cached_bracket_ALL') || localStorage.getItem('atleta_cached_bracket_all');
+        if (rawAll) {
+          const allParsed = JSON.parse(rawAll);
+          if (Array.isArray(allParsed)) {
+            const matching = allParsed.filter(
+              (b) =>
+                !isTournamentDeleted(b.bracket_id) &&
+                (normSport === 'ALL' || (b.sport_type && String(b.sport_type).trim().toUpperCase() === normSport))
+            );
+            setCachedData(cacheKey, matching);
+          }
         }
       }
     } catch { }
@@ -985,14 +999,19 @@ export const getTournamentBrackets = async (sport?: string, forceRefresh = false
     const res = await authFetch(`${BASE_URL}/tournaments/brackets${qs}`, {
       headers: {
         'Content-Type': 'application/json',
-        ...(forceRefresh ? { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache' } : {}),
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      ...(forceRefresh ? { cache: 'no-store' as RequestCache } : {}),
+      cache: 'no-store' as RequestCache,
     });
     if (res.ok) {
       const data = await res.json();
-      const list = (Array.isArray(data.brackets) ? data.brackets : []).filter((b: any) => !isTournamentDeleted(b.bracket_id));
+      const list = (Array.isArray(data.brackets) ? data.brackets : []).filter(
+        (b: any) =>
+          !isTournamentDeleted(b.bracket_id) &&
+          (normSport === 'ALL' || (b.sport_type && String(b.sport_type).trim().toUpperCase() === normSport))
+      );
       setCachedData(cacheKey, list);
       try {
         localStorage.setItem(`atleta_cached_bracket_${normSport}`, JSON.stringify(list));
@@ -1211,8 +1230,30 @@ export const advanceBracketTeam = async (
     }),
   });
   const data = await handleResponse<{ bracket: TournamentBracket }>(res);
+  const updated = data.bracket;
+
+  if (updated) {
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('atleta_cached_bracket_')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const list: TournamentBracket[] = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const idx = list.findIndex((b) => b.bracket_id === bracketId);
+              if (idx !== -1) {
+                list[idx] = { ...list[idx], ...updated, updated_at: new Date().toISOString() };
+                localStorage.setItem(key, JSON.stringify(list));
+              }
+            }
+          }
+        }
+      }
+    } catch { }
+  }
+
   invalidateCache('tournament_brackets');
-  return data.bracket;
+  return updated;
 };
 
 // ─── ATHLETE PROFILE VIEWING FOR TOURNAMENT OFFICIALS ──────────────────────

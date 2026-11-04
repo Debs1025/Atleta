@@ -15,11 +15,16 @@ export const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     height: 'calc(100vh - 58px)',
     overflow: 'hidden',
+    backgroundColor: '#F0F6FE',
   },
   contentArea: {
     flex: 1,
     padding: '32px 48px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F0F6FE',
+    backgroundImage:
+      'radial-gradient(at 95% 5%, rgba(56, 189, 248, 0.08) 0px, transparent 45%), ' +
+      'radial-gradient(at 5% 95%, rgba(37, 99, 235, 0.05) 0px, transparent 45%), ' +
+      'linear-gradient(180deg, #F8FAFD 0%, #EEF5FC 100%)',
     overflowY: 'auto',
     height: '100%',
     boxSizing: 'border-box',

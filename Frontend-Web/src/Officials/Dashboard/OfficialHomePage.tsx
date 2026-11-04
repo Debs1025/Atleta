@@ -370,6 +370,11 @@ export const OfficialHomePage: React.FC = () => {
 
   const isKpiLoading = (!dataReady && officialMatches.length === 0) || (loading && officialMatches.length === 0);
 
+  const officialFirstName = useMemo(() => {
+    const name = user?.first_name || getStoredUser()?.first_name || '';
+    return name ? name.toUpperCase() : 'OFFICIAL';
+  }, [user]);
+
   const roleStr = String(user?.role || getStoredUser()?.role || '').toLowerCase().replace(/[\s_-]+/g, '');
   if (roleStr.includes('admin')) {
     return (
@@ -394,19 +399,27 @@ export const OfficialHomePage: React.FC = () => {
 
         {/* Dashboard Content Area */}
         <main style={styles.contentArea}>
-          <div style={styles.pageHeader}>
-            <h1 style={styles.pageTitle}>OFFICIALS DASHBOARD</h1>
-            <p style={styles.pageSubtitle}>MANAGE YOUR GAMES, MATCH STATISTICS AND PERFORMANCE METRICS !</p>
+          {/* Hero Banner Section */}
+          <div style={styles.heroBanner}>
+            <div style={styles.heroGlowTopRight} />
+            <div style={styles.heroGlowBottomLeft} />
+            <div style={styles.heroContentLeft}>
+              <h1 style={styles.heroTitle}>WELCOME {officialFirstName}!</h1>
+              <p style={styles.heroSubtitle}>MANAGE YOUR GAMES, MATCH STATISTICS AND PERFORMANCE METRICS</p>
+            </div>
           </div>
 
           {/* Metric Summary KPI Cards */}
           <div style={styles.kpiGrid}>
             <div style={styles.kpiBox}>
-              <span style={{ ...styles.kpiLabel, color: '#94A3B8' }}>TOTAL MATCHES</span>
+              <div style={styles.kpiAccentLine} />
+              <div style={styles.kpiTopRow}>
+                <span style={{ ...styles.kpiLabel, color: '#1E40AF' }}>TOTAL MATCHES</span>
+              </div>
               <h2 style={styles.kpiValue}>
                 {isKpiLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
-                    <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+                    <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', color: '#1D4ED8' }} />
                   </div>
                 ) : (
                   totalMatches
@@ -414,7 +427,10 @@ export const OfficialHomePage: React.FC = () => {
               </h2>
             </div>
             <div style={styles.kpiBox}>
-              <span style={{ ...styles.kpiLabel, color: '#D97706' }}>PENDING VERIFICATION</span>
+              <div style={styles.kpiAccentLineAmber} />
+              <div style={styles.kpiTopRow}>
+                <span style={{ ...styles.kpiLabel, color: '#D97706' }}>PENDING VERIFICATION</span>
+              </div>
               <h2 style={styles.kpiValue}>
                 {isKpiLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
@@ -426,7 +442,10 @@ export const OfficialHomePage: React.FC = () => {
               </h2>
             </div>
             <div style={styles.kpiBox}>
-              <span style={{ ...styles.kpiLabel, color: '#059669' }}>AUDITED COMPLETED</span>
+              <div style={styles.kpiAccentLineEmerald} />
+              <div style={styles.kpiTopRow}>
+                <span style={{ ...styles.kpiLabel, color: '#059669' }}>AUDITED COMPLETED</span>
+              </div>
               <h2 style={styles.kpiValue}>
                 {isKpiLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', height: '38px' }}>
@@ -441,7 +460,10 @@ export const OfficialHomePage: React.FC = () => {
 
           {/* New Matches Table Section */}
           <div style={styles.sectionHeaderRow}>
-            <h3 style={styles.sectionHeading}>NEW MATCHES</h3>
+            <h3 style={styles.sectionHeading}>
+              <span style={styles.sectionDot} />
+              NEW MATCHES
+            </h3>
             <Link
               to="/matches"
               className="hover-view-all"
@@ -466,7 +488,7 @@ export const OfficialHomePage: React.FC = () => {
                 {isKpiLoading && newMatchesList.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ ...styles.td, textAlign: 'center', padding: '32px' }}>
-                      <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#0B132B' }} />
+                      <Loader2 style={{ width: 24, height: 24, animation: 'spin 1s linear infinite', margin: '0 auto', color: '#1D4ED8' }} />
                     </td>
                   </tr>
                 ) : newMatchesList.length > 0 ? (
@@ -486,7 +508,9 @@ export const OfficialHomePage: React.FC = () => {
                         <td style={styles.td}>
                           {item.matchName || item.gameReferenceId || item.raw_match?.matchName || item.raw_match?.gameReferenceId || item.raw_match?.game_name || item.raw_match?.gameName || item.match_name || "Unnamed Match"}
                         </td>
-                        <td style={styles.td}>{item.sport}</td>
+                        <td style={styles.td}>
+                          <span style={styles.sportPill}>{item.sport}</span>
+                        </td>
                         <td style={styles.td}>{item.coaches || 'Assigned Coach'}</td>
                         <td style={{ ...styles.td, borderRight: 'none' }}>
                           <span style={isAudited ? styles.statusAudited : styles.statusPending}>
@@ -509,29 +533,27 @@ export const OfficialHomePage: React.FC = () => {
 
           {/* Recent Activity Section */}
           <div style={styles.recentActivityCard}>
-            <div style={styles.activityHead}>RECENT ACTIVITY</div>
+            <div style={styles.activityHead}>
+              <span style={styles.sectionDot} />
+              RECENT ACTIVITY
+            </div>
             <div style={styles.activityBody}>
               {isKpiLoading && recentActivities.length === 0 ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
-                  <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: '#0B132B' }} />
+                  <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: '#1D4ED8' }} />
                 </div>
               ) : recentActivities.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {recentActivities.slice(0, 6).map((act, i) => (
                     <div
                       key={act.id || i}
-                      style={{
-                        fontSize: '12px',
-                        color: '#334155',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingBottom: '8px',
-                        borderBottom: i < Math.min(recentActivities.length, 6) - 1 ? '1px solid #F1F5F9' : 'none',
-                      }}
+                      style={styles.activityItem}
                     >
-                      <div>{act.description}</div>
-                      <span style={{ color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: '12px', fontSize: '11px', fontWeight: 600 }}>
+                      <div style={styles.activityLeft}>
+                        <span style={styles.activityBullet} />
+                        <div>{act.description}</div>
+                      </div>
+                      <span style={styles.activityDateBadge}>
                         {act.dateFormatted}
                       </span>
                     </div>

@@ -172,7 +172,11 @@ export const styles: Record<string, React.CSSProperties> = {
   contentArea: {
     flex: 1,
     padding: '24px 32px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F0F6FE',
+    backgroundImage:
+      'radial-gradient(at 95% 5%, rgba(56, 189, 248, 0.08) 0px, transparent 45%), ' +
+      'radial-gradient(at 5% 95%, rgba(37, 99, 235, 0.05) 0px, transparent 45%), ' +
+      'linear-gradient(180deg, #F8FAFD 0%, #EEF5FC 100%)',
     overflowY: 'auto',
     overflowX: 'hidden',
     height: '100%',

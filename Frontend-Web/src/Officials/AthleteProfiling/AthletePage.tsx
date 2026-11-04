@@ -4,10 +4,8 @@ import {
   ArrowLeft,
   Flame,
   Activity,
-  Award,
   Zap,
   Target,
-  ShieldCheck,
   ChevronRight,
   TrendingUp,
   User,
@@ -139,17 +137,10 @@ export const AthletePage: React.FC = () => {
     previewAthlete.name ||
     'ATHLETE PROFILE';
 
-  const athleteInitials = useMemo(() => {
-    const parts = athleteName.split(' ').filter(Boolean);
-    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return (athleteName[0] || 'A').toUpperCase();
-  }, [athleteName]);
-
   const jerseyNumber = profile?.jersey_number ?? previewAthlete.jersey_no ?? '-';
   const sportName = (profile?.sport || previewAthlete.sport || 'BASKETBALL').toUpperCase();
   const teamName = profile?.team_name || previewAthlete.team_name || 'Athletic Delegation';
   const position = profile?.position || previewAthlete.position || 'Player';
-  const isRosterOnly = Boolean(profile?.is_roster_athlete || !profile?.user_id);
 
   const stats = analytics?.stats || {
     games_played: 1,
@@ -227,16 +218,12 @@ export const AthletePage: React.FC = () => {
                 <ArrowLeft size={16} />
                 <span>Back to Match Scoresheet</span>
               </button>
-              <div style={styles.badgeOfficialOnly}>
-                <ShieldCheck size={14} />
-                <span>Official Tournament Profiling</span>
-              </div>
             </div>
 
             {loading ? (
               <div style={styles.loadingBox}>
                 <div style={styles.spinner} />
-                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>
+                <span style={styles.loadingText}>
                   Loading athlete profile & performance stats...
                 </span>
               </div>
@@ -246,21 +233,48 @@ export const AthletePage: React.FC = () => {
                 <div style={styles.heroCard}>
                   <div style={styles.heroLeft}>
                     <div style={styles.avatarContainer}>
-                      {profile?.avatar_url ? (
-                        <img src={profile.avatar_url} alt={athleteName} style={styles.avatarImg} />
-                      ) : (
-                        <span>{athleteInitials}</span>
-                      )}
+                      {profile?.avatar_url || profile?.profile_image ? (
+                        <img
+                          src={profile.avatar_url || profile.profile_image}
+                          alt={athleteName}
+                          style={styles.avatarImg}
+                          onError={(e) => {
+                            // If remote image fails, gracefully fallback to vector athlete avatar
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                            const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = 'block';
+                          }}
+                        />
+                      ) : null}
+                      <svg
+                        viewBox="0 0 100 100"
+                        style={{
+                          ...styles.avatarSvgFallback,
+                          display: profile?.avatar_url || profile?.profile_image ? 'none' : 'block',
+                        }}
+                      >
+                        <defs>
+                          <linearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#1E40AF" />
+                            <stop offset="50%" stopColor="#2563EB" />
+                            <stop offset="100%" stopColor="#38BDF8" />
+                          </linearGradient>
+                        </defs>
+                        <rect width="100" height="100" rx="20" fill="url(#avatarGrad)" />
+                        {/* Athlete Silhouette Profile */}
+                        <circle cx="50" cy="36" r="17" fill="#FFFFFF" opacity="0.95" />
+                        <path
+                          d="M20 86 C20 63, 34 56, 50 56 C66 56, 80 63, 80 86 Z"
+                          fill="#FFFFFF"
+                          opacity="0.95"
+                        />
+                      </svg>
                       <span style={styles.jerseyBadge}>#{jerseyNumber}</span>
                     </div>
 
                     <div style={styles.heroMeta}>
                       <div style={styles.heroNameRow}>
                         <h1 style={styles.heroName}>{athleteName}</h1>
-                        <span style={isRosterOnly ? styles.rosterPill : styles.verifiedPill}>
-                          <Award size={12} />
-                          {isRosterOnly ? 'Tournament Roster Athlete' : 'Verified Profile'}
-                        </span>
                       </div>
 
                       <div style={styles.heroTeamRow}>
@@ -273,7 +287,7 @@ export const AthletePage: React.FC = () => {
 
                       <div style={styles.heroAttributesRow}>
                         <div style={styles.attrItem}>
-                          <User size={13} color="#94A3B8" />
+                          <User size={13} color="#93C5FD" />
                           <span>Height: {profile?.height || "6'0\""}</span>
                         </div>
                         <span>|</span>
@@ -291,13 +305,13 @@ export const AthletePage: React.FC = () => {
                     </div>
                     <div style={styles.quickStatBox}>
                       <span style={styles.quickStatLabel}>Win Rate</span>
-                      <span style={{ ...styles.quickStatVal, color: '#047857' }}>
+                      <span style={{ ...styles.quickStatVal, color: '#34D399' }}>
                         {stats.win_rate}%
                       </span>
                     </div>
                     <div style={styles.quickStatBox}>
                       <span style={styles.quickStatLabel}>EFF</span>
-                      <span style={{ ...styles.quickStatVal, color: '#2563EB' }}>
+                      <span style={{ ...styles.quickStatVal, color: '#60A5FA' }}>
                         +{stats.efficiency}
                       </span>
                     </div>
@@ -307,9 +321,10 @@ export const AthletePage: React.FC = () => {
                 {/* Key Metrics Grid */}
                 <div style={styles.statGrid}>
                   <div style={styles.statCard}>
+                    <div style={styles.statCardAccentLine} />
                     <div style={styles.statCardTop}>
                       <span style={styles.statCardTitle}>Points Per Game</span>
-                      <div style={{ ...styles.statCardIconBox, backgroundColor: '#FFE4E6', color: '#E11D48' }}>
+                      <div style={{ ...styles.statCardIconBox, background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', color: '#1D4ED8' }}>
                         <Flame size={17} />
                       </div>
                     </div>
@@ -320,41 +335,44 @@ export const AthletePage: React.FC = () => {
                   </div>
 
                   <div style={styles.statCard}>
+                    <div style={{ ...styles.statCardAccentLine, background: 'linear-gradient(90deg, #0284C7 0%, #38BDF8 100%)' }} />
                     <div style={styles.statCardTop}>
                       <span style={styles.statCardTitle}>Rebounds Per Game</span>
-                      <div style={{ ...styles.statCardIconBox, backgroundColor: '#EFF6FF', color: '#2563EB' }}>
+                      <div style={{ ...styles.statCardIconBox, background: 'linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%)', color: '#0284C7' }}>
                         <Activity size={17} />
                       </div>
                     </div>
                     <div style={styles.statCardValRow}>
                       <span style={styles.statCardValue}>{stats.rpg}</span>
-                      <span style={styles.statCardSub}>RPG Average</span>
+                      <span style={{ ...styles.statCardSub, color: '#0284C7' }}>RPG Average</span>
                     </div>
                   </div>
 
                   <div style={styles.statCard}>
+                    <div style={{ ...styles.statCardAccentLine, background: 'linear-gradient(90deg, #0D9488 0%, #2DD4BF 100%)' }} />
                     <div style={styles.statCardTop}>
                       <span style={styles.statCardTitle}>Assists Per Game</span>
-                      <div style={{ ...styles.statCardIconBox, backgroundColor: '#F0FDF4', color: '#047857' }}>
+                      <div style={{ ...styles.statCardIconBox, background: 'linear-gradient(135deg, #F0FDFA 0%, #CCFBF1 100%)', color: '#0D9488' }}>
                         <Zap size={17} />
                       </div>
                     </div>
                     <div style={styles.statCardValRow}>
                       <span style={styles.statCardValue}>{stats.apg}</span>
-                      <span style={styles.statCardSub}>APG Average</span>
+                      <span style={{ ...styles.statCardSub, color: '#0D9488' }}>APG Average</span>
                     </div>
                   </div>
 
                   <div style={styles.statCard}>
+                    <div style={{ ...styles.statCardAccentLine, background: 'linear-gradient(90deg, #4F46E5 0%, #818CF8 100%)' }} />
                     <div style={styles.statCardTop}>
                       <span style={styles.statCardTitle}>Shooting Accuracy</span>
-                      <div style={{ ...styles.statCardIconBox, backgroundColor: '#FEF3C7', color: '#D97706' }}>
+                      <div style={{ ...styles.statCardIconBox, background: 'linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%)', color: '#4F46E5' }}>
                         <Target size={17} />
                       </div>
                     </div>
                     <div style={styles.statCardValRow}>
                       <span style={styles.statCardValue}>{stats.fg_pct}%</span>
-                      <span style={styles.statCardSub}>Field Goal %</span>
+                      <span style={{ ...styles.statCardSub, color: '#4F46E5' }}>Field Goal %</span>
                     </div>
                   </div>
                 </div>
@@ -368,7 +386,7 @@ export const AthletePage: React.FC = () => {
                         <h3 style={styles.cardTitle}>Efficiency Rating Trend</h3>
                         <p style={styles.cardSubtitle}>Match-by-match game score & overall player impact</p>
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#2563EB' }}>
+                      <span style={styles.badgeAvgEff}>
                         Avg EFF: +{stats.efficiency}
                       </span>
                     </div>
@@ -378,15 +396,15 @@ export const AthletePage: React.FC = () => {
                         <svg viewBox="0 0 640 180" style={styles.svgElement} preserveAspectRatio="none">
                           <defs>
                             <linearGradient id="effGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.32" />
-                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
+                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.38" />
+                              <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
                             </linearGradient>
                           </defs>
 
                           {/* Horizontal Grid lines */}
-                          <line x1="24" y1="30" x2="616" y2="30" stroke="#F1F5F9" strokeWidth="1" />
-                          <line x1="24" y1="90" x2="616" y2="90" stroke="#F1F5F9" strokeWidth="1" />
-                          <line x1="24" y1="150" x2="616" y2="150" stroke="#F1F5F9" strokeWidth="1" />
+                          <line x1="24" y1="30" x2="616" y2="30" stroke="#DBEAFE" strokeWidth="1" strokeDasharray="3 3" />
+                          <line x1="24" y1="90" x2="616" y2="90" stroke="#DBEAFE" strokeWidth="1" strokeDasharray="3 3" />
+                          <line x1="24" y1="150" x2="616" y2="150" stroke="#DBEAFE" strokeWidth="1" strokeDasharray="3 3" />
 
                           {/* Gradient Area under curve */}
                           <path d={svgData.areaPath} fill="url(#effGradient)" />
@@ -396,7 +414,7 @@ export const AthletePage: React.FC = () => {
                             d={svgData.path}
                             fill="none"
                             stroke="#2563EB"
-                            strokeWidth="3"
+                            strokeWidth="3.5"
                             strokeLinecap="round"
                           />
 
@@ -406,10 +424,10 @@ export const AthletePage: React.FC = () => {
                               <circle
                                 cx={pt.x}
                                 cy={pt.y}
-                                r={hoveredNode?.match?.match_id === pt.match.match_id ? 7 : 4.5}
+                                r={hoveredNode?.match?.match_id === pt.match.match_id ? 7.5 : 5}
                                 fill="#FFFFFF"
-                                stroke="#2563EB"
-                                strokeWidth="2.5"
+                                stroke="#1D4ED8"
+                                strokeWidth="3"
                                 style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
                                 onMouseEnter={() => setHoveredNode(pt)}
                                 onMouseLeave={() => setHoveredNode(null)}
@@ -431,19 +449,20 @@ export const AthletePage: React.FC = () => {
                             position: 'absolute',
                             left: Math.min(520, Math.max(10, hoveredNode.x - 60)),
                             top: Math.max(10, hoveredNode.y - 50),
-                            backgroundColor: '#0B132B',
+                            background: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 100%)',
                             color: '#FFFFFF',
-                            padding: '6px 12px',
-                            borderRadius: 8,
+                            padding: '7px 14px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(147, 197, 253, 0.4)',
                             fontSize: 11,
                             fontWeight: 700,
                             pointerEvents: 'none',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                            boxShadow: '0 8px 20px rgba(15, 23, 42, 0.35)',
                             zIndex: 10,
                           }}
                         >
                           <div>vs {hoveredNode.match.opponent}</div>
-                          <div style={{ color: '#60A5FA', fontSize: 10 }}>
+                          <div style={{ color: '#93C5FD', fontSize: 10, marginTop: 2 }}>
                             {hoveredNode.match.date} • EFF: +{hoveredNode.match.efficiency}
                           </div>
                         </div>
@@ -462,14 +481,14 @@ export const AthletePage: React.FC = () => {
                       <div style={styles.breakdownItem}>
                         <div style={styles.breakdownItemHeader}>
                           <span>Scoring Output</span>
-                          <span>{Math.min(100, Math.round((stats.ppg / 28) * 100))}%</span>
+                          <span style={styles.breakdownPctText}>{Math.min(100, Math.round((stats.ppg / 28) * 100))}%</span>
                         </div>
                         <div style={styles.breakdownBarTrack}>
                           <div
                             style={{
                               ...styles.breakdownBarFill,
                               width: `${Math.min(100, Math.max(15, Math.round((stats.ppg / 28) * 100)))}%`,
-                              backgroundColor: '#E11D48',
+                              background: 'linear-gradient(90deg, #2563EB 0%, #38BDF8 100%)',
                             }}
                           />
                         </div>
@@ -478,14 +497,14 @@ export const AthletePage: React.FC = () => {
                       <div style={styles.breakdownItem}>
                         <div style={styles.breakdownItemHeader}>
                           <span>Playmaking & Vision</span>
-                          <span>{Math.min(100, Math.round((stats.apg / 10) * 100))}%</span>
+                          <span style={{ ...styles.breakdownPctText, color: '#0284C7' }}>{Math.min(100, Math.round((stats.apg / 10) * 100))}%</span>
                         </div>
                         <div style={styles.breakdownBarTrack}>
                           <div
                             style={{
                               ...styles.breakdownBarFill,
                               width: `${Math.min(100, Math.max(15, Math.round((stats.apg / 10) * 100)))}%`,
-                              backgroundColor: '#2563EB',
+                              background: 'linear-gradient(90deg, #0284C7 0%, #06B6D4 100%)',
                             }}
                           />
                         </div>
@@ -494,14 +513,14 @@ export const AthletePage: React.FC = () => {
                       <div style={styles.breakdownItem}>
                         <div style={styles.breakdownItemHeader}>
                           <span>Rebounding & Board Presence</span>
-                          <span>{Math.min(100, Math.round((stats.rpg / 14) * 100))}%</span>
+                          <span style={{ ...styles.breakdownPctText, color: '#0D9488' }}>{Math.min(100, Math.round((stats.rpg / 14) * 100))}%</span>
                         </div>
                         <div style={styles.breakdownBarTrack}>
                           <div
                             style={{
                               ...styles.breakdownBarFill,
                               width: `${Math.min(100, Math.max(15, Math.round((stats.rpg / 14) * 100)))}%`,
-                              backgroundColor: '#047857',
+                              background: 'linear-gradient(90deg, #0D9488 0%, #14B8A6 100%)',
                             }}
                           />
                         </div>
@@ -510,14 +529,14 @@ export const AthletePage: React.FC = () => {
                       <div style={styles.breakdownItem}>
                         <div style={styles.breakdownItemHeader}>
                           <span>Overall Efficiency Index</span>
-                          <span>{Math.min(100, Math.round((stats.efficiency / 30) * 100))}%</span>
+                          <span style={{ ...styles.breakdownPctText, color: '#4F46E5' }}>{Math.min(100, Math.round((stats.efficiency / 30) * 100))}%</span>
                         </div>
                         <div style={styles.breakdownBarTrack}>
                           <div
                             style={{
                               ...styles.breakdownBarFill,
                               width: `${Math.min(100, Math.max(20, Math.round((stats.efficiency / 30) * 100)))}%`,
-                              backgroundColor: '#D97706',
+                              background: 'linear-gradient(90deg, #4F46E5 0%, #6366F1 100%)',
                             }}
                           />
                         </div>
@@ -526,16 +545,16 @@ export const AthletePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Official Match History Card */}
+                {/* Match History Card */}
                 <div style={styles.matchHistoryCard}>
                   <div style={styles.cardHeaderRow}>
                     <div style={styles.cardHeaderTitleGroup}>
-                      <h3 style={styles.cardTitle}>Official Match History</h3>
+                      <h3 style={styles.cardTitle}>Match History</h3>
                       <p style={styles.cardSubtitle}>
                         Matches recorded in the tournament official portal involving {athleteName}
                       </p>
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B' }}>
+                    <span style={styles.matchCountBadge}>
                       {matches.length} {matches.length === 1 ? 'Match' : 'Matches'} Found
                     </span>
                   </div>
