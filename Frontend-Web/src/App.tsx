@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './Authentication/LoginPage';
 import { SignupPage } from './Authentication/SignupPage';
@@ -17,8 +18,13 @@ import { CreateMatch } from './Officials/Match/createMatch';
 import { OCRLoggingPage } from './Officials/OCR/OCRLoggingPage';
 import { TournamentListPage } from './Officials/Tournament/TournamentListPage';
 import { TournamentBracketPage } from './Officials/Tournament/TournamentBracketPage';
+import { initBackgroundTokenRefresh } from './api/client';
 
 function App() {
+  useEffect(() => {
+    initBackgroundTokenRefresh();
+  }, []);
+
   return (
     <Router>
       <Routes>

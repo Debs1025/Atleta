@@ -226,12 +226,14 @@ export const storeAuthSession = (token: string, user: AuthUser, persist: boolean
     toRemove.forEach((k) => localStorage.removeItem(k));
   } catch {}
 
+  const finalRefreshToken = refreshToken || (user as any)?.refreshToken || (user as any)?.refresh_token;
+
   if (persist) {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
     localStorage.setItem(PERSIST_KEY, 'true');
-    if (refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    if (finalRefreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, finalRefreshToken);
     }
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
@@ -239,8 +241,8 @@ export const storeAuthSession = (token: string, user: AuthUser, persist: boolean
   } else {
     sessionStorage.setItem(TOKEN_KEY, token);
     sessionStorage.setItem(USER_KEY, JSON.stringify(user));
-    if (refreshToken) {
-      sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    if (finalRefreshToken) {
+      sessionStorage.setItem(REFRESH_TOKEN_KEY, finalRefreshToken);
     }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -256,18 +258,22 @@ export const storeAuthSession = (token: string, user: AuthUser, persist: boolean
       warmOfficialAppCache().catch(() => { });
     }, 10);
   }
+
+  // Schedule silent background token refresh before the 15-minute token expiration window
+  scheduleSilentTokenRefresh(token);
 };
 
 export const clearAuthSession = (): void => {
+  cancelSilentTokenRefresh();
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(PERSIST_KEY);
   localStorage.removeItem(SETTINGS_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
   sessionStorage.removeItem(SETTINGS_KEY);
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   try {
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -287,104 +293,357 @@ export const clearAuthSession = (): void => {
   invalidateCache();
 };
 
+/* =========================================================================
+   AUTHENTICATION INTERCEPTOR & AUTOMATIC TOKEN REFRESH QUEUE
+   ========================================================================= */
+
 let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
-let refreshRejectSubscribers: Array<(err: any) => void> = [];
+let refreshSubscribers: Array<(token: string | null) => void> = [];
+let lastRefreshFailureTime = 0;
+const REFRESH_FAILURE_COOLDOWN_MS = 6000;
 
-const subscribeTokenRefresh = (cb: (token: string) => void, errCb: (err: any) => void) => {
+function subscribeTokenRefresh(cb: (token: string | null) => void) {
   refreshSubscribers.push(cb);
-  refreshRejectSubscribers.push(errCb);
-};
+}
 
-const onTokenRefreshed = (newToken: string) => {
-  refreshSubscribers.forEach((cb) => cb(newToken));
+function onTokenRefreshed(token: string | null) {
+  const subscribers = refreshSubscribers;
   refreshSubscribers = [];
-  refreshRejectSubscribers = [];
-};
+  subscribers.forEach((cb) => {
+    try {
+      cb(token);
+    } catch {}
+  });
+}
 
-const onTokenRefreshFailed = (err: any) => {
-  refreshRejectSubscribers.forEach((cb) => cb(err));
-  refreshSubscribers = [];
-  refreshRejectSubscribers = [];
-};
+export function isBypassAuthUrl(url: string | URL | Request): boolean {
+  const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : (url as Request).url || '';
+  return (
+    urlStr.includes('/auth/refresh') ||
+    urlStr.includes('/users/refresh') ||
+    urlStr.includes('/officials/refresh') ||
+    urlStr.includes('/officials/login') ||
+    urlStr.includes('/admin/login') ||
+    urlStr.includes('/users/login') ||
+    urlStr.includes('/users/password-reset')
+  );
+}
 
-export const refreshAuthToken = async (): Promise<string> => {
-  const refreshToken = getStoredRefreshToken();
-  if (!refreshToken) {
-    throw new Error('No refresh token available.');
+export function attachAuthHeader(init?: RequestInit, tokenOverride?: string): RequestInit {
+  const token = tokenOverride || getStoredToken();
+  if (!token) return init || {};
+
+  const options: RequestInit = { ...(init || {}) };
+  if (options.headers instanceof Headers) {
+    const newHeaders = new Headers(options.headers);
+    newHeaders.set('Authorization', `Bearer ${token}`);
+    options.headers = newHeaders;
+  } else if (Array.isArray(options.headers)) {
+    const newHeaders = new Headers(options.headers);
+    newHeaders.set('Authorization', `Bearer ${token}`);
+    options.headers = newHeaders;
+  } else {
+    options.headers = {
+      ...((options.headers as Record<string, string>) || {}),
+      Authorization: `Bearer ${token}`,
+    };
+  }
+  return options;
+}
+
+export async function attemptTokenRefresh(): Promise<string | null> {
+  const currentToken = getStoredToken();
+  const currentRefreshToken = getStoredRefreshToken();
+
+  // If no tokens exist, cannot refresh
+  if (!currentToken && !currentRefreshToken) {
+    return null;
   }
 
-  const nativeFetch = (typeof window !== 'undefined' && (window as any).__originalFetch)
-    ? (window as any).__originalFetch
+  // Prevent endless refresh loops if refresh recently failed
+  if (Date.now() - lastRefreshFailureTime < REFRESH_FAILURE_COOLDOWN_MS) {
+    return null;
+  }
+
+  const endpoints = [
+    `${BASE_URL}/auth/refresh`,
+    `${BASE_URL}/users/refresh`,
+    `${BASE_URL}/officials/refresh`,
+  ];
+
+  const nativeFetch = (typeof window !== 'undefined' && (window as any).__rawFetch)
+    ? (window as any).__rawFetch
     : fetch;
 
-  let res = await nativeFetch(`${BASE_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
-  });
+  for (const ep of endpoints) {
+    try {
+      const res = await nativeFetch(ep, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentRefreshToken ? { 'x-refresh-token': currentRefreshToken } : {}),
+          ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+        },
+        body: JSON.stringify({
+          refreshToken: currentRefreshToken,
+          refresh_token: currentRefreshToken,
+          token: currentToken,
+        }),
+      });
 
-  if (!res.ok) {
-    res = await nativeFetch(`${BASE_URL}/users/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const newToken = data.token || data.accessToken || data.access_token || data.jwt;
+        const newRefreshToken = data.refreshToken || data.refresh_token;
+
+        if (newToken) {
+          const persist = localStorage.getItem(PERSIST_KEY) === 'true';
+          if (persist) {
+            localStorage.setItem(TOKEN_KEY, newToken);
+            if (newRefreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
+          } else {
+            sessionStorage.setItem(TOKEN_KEY, newToken);
+            if (newRefreshToken) sessionStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
+          }
+          console.info('[AuthInterceptor] Access token refreshed successfully via', ep);
+          scheduleSilentTokenRefresh(newToken);
+          return newToken;
+        }
+      }
+    } catch {
+      // Endpoint error or network failure, proceed to try fallback endpoint
+    }
   }
 
-  if (!res.ok) {
+  lastRefreshFailureTime = Date.now();
+  return null;
+}
+
+// Compatibility alias for existing callers
+export const refreshAuthToken = async (): Promise<string> => {
+  const token = await attemptTokenRefresh();
+  if (!token) {
     clearAuthSession();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('atleta:auth_expired'));
     }
     throw new Error('Session expired. Please log in again.');
   }
-
-  const data = await res.json().catch(() => ({}));
-  const newToken = data.accessToken || data.token;
-  if (!newToken) {
-    throw new Error('Invalid refresh token response from server.');
-  }
-
-  const newRefreshToken = data.refreshToken || refreshToken;
-  updateStoredToken(newToken, newRefreshToken);
-  return newToken;
+  return token;
 };
 
-async function retryRequestWithFreshToken(
-  input: RequestInfo | URL,
-  init: RequestInit | undefined,
-  freshToken: string,
-  fetchFn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+/**
+ * Authenticated Fetch Interceptor:
+ * Automatically attaches Authorization Bearer tokens, pauses requests while token refresh is in progress,
+ * and transparently retries requests on 401 Unauthorized using /auth/refresh without user disruption.
+ */
+export async function authFetch(
+  input: string | URL | Request,
+  init?: RequestInit
 ): Promise<Response> {
-  let updatedHeaders: any;
-  if (init?.headers && typeof Headers !== 'undefined' && init.headers instanceof Headers) {
-    updatedHeaders = new Headers(init.headers);
-    updatedHeaders.set('Authorization', `Bearer ${freshToken}`);
-  } else if (Array.isArray(init?.headers)) {
-    updatedHeaders = [
-      ...init.headers.filter(([k]) => String(k).toLowerCase() !== 'authorization'),
-      ['Authorization', `Bearer ${freshToken}`],
-    ];
-  } else if (init?.headers && typeof init.headers === 'object') {
-    updatedHeaders = { ...init.headers, Authorization: `Bearer ${freshToken}` };
-  } else {
-    updatedHeaders = { Authorization: `Bearer ${freshToken}` };
+  const nativeFetch = (typeof window !== 'undefined' && (window as any).__rawFetch)
+    ? (window as any).__rawFetch
+    : fetch;
+
+  // If token refresh is in flight, pause this outgoing request until the refresh completes
+  if (isRefreshing && !isBypassAuthUrl(input)) {
+    await new Promise<string | null>((resolve) => {
+      subscribeTokenRefresh((token) => resolve(token));
+    });
   }
 
-  if (typeof Request !== 'undefined' && input instanceof Request) {
-    const clonedRequest = new Request(input, { ...init, headers: updatedHeaders });
-    return await fetchFn(clonedRequest);
+  const reqOptions = attachAuthHeader(init);
+  let res = await nativeFetch(input, reqOptions);
+
+  // If 401 Unauthorized received on an authenticated endpoint
+  if (res.status === 401 && !isBypassAuthUrl(input)) {
+    if (isRefreshing) {
+      // Refresh already in progress: queue this request to retry when ready
+      return new Promise<Response>((resolve, reject) => {
+        subscribeTokenRefresh(async (newToken) => {
+          if (!newToken) {
+            resolve(res);
+            return;
+          }
+          try {
+            const retriedOptions = attachAuthHeader(init, newToken);
+            const retryRes = await nativeFetch(input, retriedOptions);
+            resolve(retryRes);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+    }
+
+    // First request to encounter 401: lock and initiate token refresh
+    isRefreshing = true;
+    try {
+      const newToken = await attemptTokenRefresh();
+      if (newToken) {
+        onTokenRefreshed(newToken);
+        // Automatically retry the original failed request with the new token
+        const retriedOptions = attachAuthHeader(init, newToken);
+        res = await nativeFetch(input, retriedOptions);
+        return res;
+      } else {
+        onTokenRefreshed(null);
+      }
+    } catch {
+      onTokenRefreshed(null);
+    } finally {
+      isRefreshing = false;
+    }
+  }
+
+  return res;
+}
+
+/* =========================================================================
+   SILENT BACKGROUND TOKEN REFRESH SCHEDULER (15-MINUTE WINDOW)
+   ========================================================================= */
+
+let silentRefreshTimer: any = null;
+let isBackgroundRefreshInitialized = false;
+
+/**
+ * Safely decodes the expiration timestamp from a JWT access token.
+ * Returns expiration time in milliseconds, or null if unparseable.
+ */
+export function parseJwtExpiryMs(token: string | null): number | null {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const parsed = JSON.parse(jsonPayload);
+    if (parsed && typeof parsed.exp === 'number') {
+      return parsed.exp * 1000;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Proactively schedules silent token refresh in the background before the
+ * 15-minute token expiration window (e.g. 2-3 minutes prior to expiration).
+ */
+export function scheduleSilentTokenRefresh(tokenOverride?: string | null): void {
+  if (typeof window === 'undefined') return;
+
+  if (silentRefreshTimer) {
+    clearTimeout(silentRefreshTimer);
+    silentRefreshTimer = null;
+  }
+
+  const token = tokenOverride || getStoredToken();
+  const refreshToken = getStoredRefreshToken();
+
+  // If user is not authenticated or has no refresh token, do not schedule
+  if (!token || !refreshToken) return;
+
+  const expiryMs = parseJwtExpiryMs(token);
+  const now = Date.now();
+
+  let delayMs: number;
+  if (expiryMs && expiryMs > now) {
+    const remainingMs = expiryMs - now;
+    // If less than 2.5 minutes remain, refresh in 5 seconds
+    // Otherwise, refresh 2.5 minutes before expiration (at ~12.5 min for a 15-min token)
+    delayMs = Math.max(5000, remainingMs - 150_000);
   } else {
-    return await fetchFn(input, { ...init, headers: updatedHeaders });
+    // Fallback: 12 minutes (720,000 ms) for standard 15-minute token
+    delayMs = 12 * 60 * 1000;
+  }
+
+  console.info(`[AuthInterceptor] Silent background token refresh scheduled in ${Math.round(delayMs / 1000)}s`);
+
+  silentRefreshTimer = setTimeout(async () => {
+    try {
+      const activeToken = getStoredToken();
+      const activeRefreshToken = getStoredRefreshToken();
+      if (!activeToken || !activeRefreshToken) return;
+
+      console.info('[AuthInterceptor] Initiating proactive silent token refresh in background...');
+      const refreshedToken = await attemptTokenRefresh();
+      if (refreshedToken) {
+        scheduleSilentTokenRefresh(refreshedToken);
+      }
+    } catch (err) {
+      console.warn('[AuthInterceptor] Proactive silent background token refresh attempt failed:', err);
+    }
+  }, delayMs);
+}
+
+/**
+ * Cancels active background refresh timer (e.g. on user logout).
+ */
+export function cancelSilentTokenRefresh(): void {
+  if (silentRefreshTimer) {
+    clearTimeout(silentRefreshTimer);
+    silentRefreshTimer = null;
   }
 }
 
-// Transparent Auto-Refresh Interceptor installed on window.fetch
-if (typeof window !== 'undefined' && window.fetch && !(window as any).__atletaFetchInterceptorInstalled) {
-  (window as any).__atletaFetchInterceptorInstalled = true;
-  const originalFetch = window.fetch.bind(window);
-  (window as any).__originalFetch = originalFetch;
+/**
+ * Initializes automatic background refresh and attaches tab focus / visibility
+ * listeners to guarantee tokens stay fresh even across browser sleep or tab switching.
+ */
+export function initBackgroundTokenRefresh(): void {
+  if (typeof window === 'undefined' || isBackgroundRefreshInitialized) return;
+  isBackgroundRefreshInitialized = true;
+
+  const checkAndRefreshIfNeeded = async () => {
+    const token = getStoredToken();
+    const refreshToken = getStoredRefreshToken();
+    if (!token || !refreshToken) return;
+
+    const expiryMs = parseJwtExpiryMs(token);
+    const now = Date.now();
+    // If token has expired or will expire within 3 minutes, refresh immediately
+    if (!expiryMs || (expiryMs - now <= 180_000)) {
+      console.info('[AuthInterceptor] Token near/past 15-min expiration on tab wake. Triggering silent refresh...');
+      const fresh = await attemptTokenRefresh();
+      if (fresh) {
+        scheduleSilentTokenRefresh(fresh);
+      }
+    } else {
+      scheduleSilentTokenRefresh(token);
+    }
+  };
+
+  // Re-check when user focuses window or returns to tab
+  window.addEventListener('focus', checkAndRefreshIfNeeded);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkAndRefreshIfNeeded();
+    }
+  });
+
+  // Schedule initial timer if session exists
+  const existingToken = getStoredToken();
+  if (existingToken && getStoredRefreshToken()) {
+    scheduleSilentTokenRefresh(existingToken);
+  }
+}
+
+// Auto-initialize background refresh on script import
+if (typeof window !== 'undefined') {
+  initBackgroundTokenRefresh();
+}
+
+// Global window.fetch transparent interceptor to protect all existing fetch calls across the app
+if (typeof window !== 'undefined' && window.fetch && !(window as any).__atletaAuthFetchPatched) {
+  (window as any).__atletaAuthFetchPatched = true;
+  const rawFetch = window.fetch.bind(window);
+  (window as any).__rawFetch = rawFetch;
 
   window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const urlStr = typeof input === 'string'
@@ -393,47 +652,11 @@ if (typeof window !== 'undefined' && window.fetch && !(window as any).__atletaFe
       ? input.url
       : String(input);
 
-    let response = await originalFetch(input, init);
-
     const isApiCall = urlStr.includes('/api/v1') || urlStr.startsWith('/api/') || (BASE_URL && urlStr.includes(BASE_URL));
-    const isAuthBypass =
-      urlStr.includes('/auth/refresh') ||
-      urlStr.includes('/users/refresh') ||
-      urlStr.includes('/login') ||
-      urlStr.includes('/register') ||
-      urlStr.includes('/password-reset');
-
-    if (response.status === 401 && isApiCall && !isAuthBypass) {
-      const refreshToken = getStoredRefreshToken();
-      if (!refreshToken) {
-        return response;
-      }
-
-      if (isRefreshing) {
-        try {
-          const freshToken = await new Promise<string>((resolve, reject) => {
-            subscribeTokenRefresh(resolve, reject);
-          });
-          return await retryRequestWithFreshToken(input, init, freshToken, originalFetch);
-        } catch {
-          return response;
-        }
-      }
-
-      isRefreshing = true;
-      try {
-        const freshToken = await refreshAuthToken();
-        isRefreshing = false;
-        onTokenRefreshed(freshToken);
-        return await retryRequestWithFreshToken(input, init, freshToken, originalFetch);
-      } catch (refreshErr) {
-        isRefreshing = false;
-        onTokenRefreshFailed(refreshErr);
-        return response;
-      }
+    if (isApiCall && !isBypassAuthUrl(input)) {
+      return authFetch(input, init);
     }
-
-    return response;
+    return rawFetch(input, init);
   };
 }
 
@@ -555,7 +778,8 @@ export const loginOfficial = async (payload: OfficialLoginPayload): Promise<Auth
   }
 
   if (data && data.token && data.user) {
-    storeAuthSession(data.token, data.user, Boolean(payload.savePassword), data.refreshToken);
+    const refreshToken = (data as any).refreshToken || (data as any).refresh_token;
+    storeAuthSession(data.token, data.user, Boolean(payload.savePassword), refreshToken);
     return data;
   }
 

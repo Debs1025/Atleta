@@ -1,4 +1,4 @@
-import { BASE_URL, getStoredToken, handleResponse } from './client';
+import { BASE_URL, getStoredToken, handleResponse, authFetch } from './client';
 
 export const readFileAsDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve) => {
@@ -444,7 +444,7 @@ export const scanScoresheetOCR = async (file: File): Promise<any> => {
       formData.append('file', file, file.name);
       formData.append('scoresheet', file, file.name);
 
-      const formRes = await fetch(ep, {
+      const formRes = await authFetch(ep, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -487,7 +487,7 @@ export const scanScoresheetOCR = async (file: File): Promise<any> => {
     // Attempt 2: JSON Base64 Payload with x-gemini-key header
     if (base64Payload) {
       try {
-        const jsonRes = await fetch(ep, {
+        const jsonRes = await authFetch(ep, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -579,7 +579,7 @@ export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
   let lastError: Error | null = null;
   for (const ep of endpoints) {
     try {
-      const res = await fetch(ep, {
+      const res = await authFetch(ep, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -633,7 +633,7 @@ export const uploadScoresheetFile = async (matchId: string, rawFile: File): Prom
 
   // Attempt without auth header first to avoid backend optionalAuth duplicate next() bug
   try {
-    const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
+    const res = await authFetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -646,7 +646,7 @@ export const uploadScoresheetFile = async (matchId: string, rawFile: File): Prom
   } catch {}
 
   // Secondary attempt with token
-  const res = await fetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
+  const res = await authFetch(`${BASE_URL}/matches/${cleanId}/scoresheet`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -675,7 +675,7 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
 
   // Attempt without auth header first
   try {
-    const res = await fetch(`${BASE_URL}/matches/${cleanId}/multi/scoresheet`, {
+    const res = await authFetch(`${BASE_URL}/matches/${cleanId}/multi/scoresheet`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -688,7 +688,7 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
   } catch {}
 
   try {
-    const res = await fetch(`${BASE_URL}/matches/${cleanId}/multi/scoresheet`, {
+    const res = await authFetch(`${BASE_URL}/matches/${cleanId}/multi/scoresheet`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -708,7 +708,7 @@ export const uploadMultipleScoresheetFiles = async (matchId: string, files: File
 
 export const submitVerifiedMatch = async (payload: any): Promise<any> => {
   const token = getStoredToken();
-  const res = await fetch(`${BASE_URL}/matches/submit`, {
+  const res = await authFetch(`${BASE_URL}/matches/submit`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
