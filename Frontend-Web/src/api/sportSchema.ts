@@ -628,6 +628,7 @@ export function sortRaceResultsByTime(results: any[]): any[] {
   return list.map((item, idx) => ({
     ...item,
     placement_rank: String(idx + 1),
+    efficiency: Number(item.efficiency) > 0 ? Number(item.efficiency) : Math.max(50, 100 - idx * 7),
   }));
 }
 

@@ -107,9 +107,9 @@ export const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
   },
   tabBtnActive: {
-    background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)',
+    backgroundColor: '#0B132B',
     color: '#FFFFFF',
-    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+    boxShadow: '0 2px 8px rgba(11, 19, 43, 0.3)',
   },
   tabBtnInactive: {
     backgroundColor: 'transparent',

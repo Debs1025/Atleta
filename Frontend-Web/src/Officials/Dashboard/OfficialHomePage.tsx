@@ -21,6 +21,14 @@ import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/OfficialHomePage';
 
+const SPORTS_SLICES = [
+  { name: 'Soccer', src: '/sports/sport_soccer.jpg', pos: 'center 15%' },
+  { name: 'Basketball', src: '/sports/sport_basketball.jpg', pos: 'center 35%' },
+  { name: 'Swimming', src: '/sports/sport_swimming.jpg', pos: 'center 35%' },
+  { name: 'Volleyball', src: '/sports/sport_volleyball.jpg', pos: 'center 15%' },
+  { name: 'Track & Field', src: '/sports/sport_track.jpg', pos: 'center 35%' },
+];
+
 export const OfficialHomePage: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(
@@ -401,9 +409,29 @@ export const OfficialHomePage: React.FC = () => {
         <main style={styles.contentArea}>
           {/* Hero Banner Section */}
           <div style={styles.heroBanner}>
-            <div style={styles.heroGlowTopRight} />
-            <div style={styles.heroGlowBottomLeft} />
-            <div style={styles.heroContentLeft}>
+            {/* Diagonally Divided Sports Grid */}
+            <div style={styles.heroSportsGrid}>
+              {SPORTS_SLICES.map((sport) => (
+                <div key={sport.name} style={styles.heroSportSlice}>
+                  <div style={styles.heroSportSliceInner}>
+                    <img
+                      src={sport.src}
+                      alt={sport.name}
+                      style={{
+                        ...styles.heroSportImg,
+                        objectPosition: sport.pos,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Subtle dark navy overlay to ensure welcoming text pops */}
+            <div style={styles.heroOverlay} />
+
+            {/* Welcoming Center Card (1 Solid Navy Blue) */}
+            <div style={styles.heroCenterCard}>
               <h1 style={styles.heroTitle}>WELCOME {officialFirstName}!</h1>
               <p style={styles.heroSubtitle}>MANAGE YOUR GAMES, MATCH STATISTICS AND PERFORMANCE METRICS</p>
             </div>

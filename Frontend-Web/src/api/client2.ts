@@ -1469,13 +1469,11 @@ export const getAthleteStatsAndMatchesForOfficial = async (
     const awayScore = Number(m.away_team?.score ?? 0);
     const myTeamScore = isHome ? homeScore : awayScore;
     const oppTeamScore = isHome ? awayScore : homeScore;
-    const isWin = myTeamScore >= oppTeamScore && myTeamScore > 0;
-    if (isWin) wins++;
 
     const myTeamName = isHome ? (m.home_team?.name || 'Home') : (m.away_team?.name || 'Away');
     const oppTeamName = isHome ? (m.away_team?.name || 'Away') : (m.home_team?.name || 'Home');
 
-    const pts = Number(matchedRow.pts ?? matchedRow.points ?? 0);
+    const pts = Number(matchedRow.pts ?? matchedRow.points ?? matchedRow.score ?? 0);
     const reb = Number(matchedRow.reb ?? matchedRow.rebounds ?? 0);
     const ast = Number(matchedRow.ast ?? matchedRow.assists ?? 0);
     const stl = Number(matchedRow.stl ?? matchedRow.steals ?? 0);
@@ -1483,15 +1481,52 @@ export const getAthleteStatsAndMatchesForOfficial = async (
     const fgm = Number(matchedRow.fgm ?? matchedRow.fg_made ?? 0);
     const fga = Number(matchedRow.fga ?? matchedRow.fg_attempted ?? 0);
 
-    totalPts += pts;
-    totalReb += reb;
+    // Multi-sport metric parsing
+    const kills = Number(matchedRow.kills ?? matchedRow.kill_points ?? 0);
+    const digs = Number(matchedRow.digs ?? matchedRow.dig ?? 0);
+    const aces = Number(matchedRow.service_aces ?? matchedRow.aces ?? 0);
+    const goals = Number(matchedRow.goals ?? 0);
+    const sot = Number(matchedRow.shots_on_target ?? matchedRow.sot ?? 0);
+    const smashes = Number(matchedRow.smash_winners ?? matchedRow.smashes ?? 0);
+    const netKills = Number(matchedRow.net_kills ?? 0);
+    const finishTime = String(matchedRow.finish_time || matchedRow.time || matchedRow.mark_time || '');
+    const placementRank = matchedRow.placement_rank ?? matchedRow.rank ?? matchedRow.place ?? '';
+    const split = String(matchedRow.split || matchedRow.split_times || matchedRow.lap_splits || '');
+    const distance = String(matchedRow.distance || (matchedRow.distance_meters ? `${matchedRow.distance_meters}m` : '') || matchedRow.event || (m as any).distance || '');
+
+    const rankNumber = Number(String(placementRank || '').replace(/[^0-9]/g, '')) || 0;
+    const isIndividual = Boolean(raceMatch) || String(m.sport_type || '').toLowerCase().match(/swim|track|field|athletic/);
+
+    const isWin = isIndividual
+      ? (rankNumber === 1 || matchedRow.result === 'W' || matchedRow.is_winner || (myTeamScore >= oppTeamScore && myTeamScore > 0))
+      : (myTeamScore >= oppTeamScore && myTeamScore > 0);
+    if (isWin) wins++;
+
+    totalPts += (pts || goals || kills);
+    totalReb += (reb || digs);
     totalAst += ast;
     totalStl += stl;
     totalBlk += blk;
     totalFgm += fgm;
     totalFga += fga;
 
-    const gameEff = pts + reb + ast + stl + blk - Math.max(0, fga - fgm);
+    let computedEff = Number(matchedRow.efficiency || 0);
+    if (computedEff === 0) {
+      if (rankNumber > 0) {
+        computedEff = Math.max(50, 100 - (rankNumber - 1) * 7);
+      } else if (finishTime && finishTime !== '00:00.00' && finishTime !== '-') {
+        computedEff = 85;
+      } else if (kills > 0 || digs > 0 || aces > 0) {
+        computedEff = kills * 3 + digs * 2 + aces * 3;
+      } else if (goals > 0 || sot > 0) {
+        computedEff = goals * 6 + sot * 3 + ast * 4;
+      } else if (smashes > 0 || netKills > 0) {
+        computedEff = smashes * 3 + netKills * 3;
+      } else {
+        computedEff = pts + reb + ast + stl + blk - Math.max(0, fga - fgm);
+      }
+    }
+    const gameEff = Math.max(0, computedEff);
 
     aggregatedMatches.push({
       match_id: m.match_id || `match_${aggregatedMatches.length + 1}`,
@@ -1501,11 +1536,22 @@ export const getAthleteStatsAndMatchesForOfficial = async (
       team_name: myTeamName,
       result: isWin ? 'W' : 'L',
       score: `${myTeamScore} - ${oppTeamScore}`,
+      distance: distance || '50m',
       pts,
       reb,
       ast,
-      efficiency: Math.max(1, gameEff),
-    });
+      kills,
+      digs,
+      aces,
+      goals,
+      sot,
+      smashes,
+      net_kills: netKills,
+      finish_time: finishTime,
+      placement_rank: placementRank,
+      split,
+      efficiency: Math.max(0, gameEff),
+    } as any);
   });
 
   const gp = Math.max(1, aggregatedMatches.length);
@@ -1514,8 +1560,11 @@ export const getAthleteStatsAndMatchesForOfficial = async (
   const apg = Number((totalAst / gp).toFixed(1));
   const spg = Number((totalStl / gp).toFixed(1));
   const bpg = Number((totalBlk / gp).toFixed(1));
-  const fg_pct = totalFga > 0 ? Number(((totalFgm / totalFga) * 100).toFixed(1)) : 48.5;
-  const efficiency = Number(((totalPts + totalReb + totalAst + totalStl + totalBlk) / gp).toFixed(1));
+  const fg_pct = totalFga > 0 ? Number(((totalFgm / totalFga) * 100).toFixed(1)) : (totalPts > 0 ? 50.0 : 0);
+  const totalMatchEff = aggregatedMatches.reduce((acc: number, cur: any) => acc + Number(cur.efficiency || 0), 0);
+  const efficiency = aggregatedMatches.length > 0
+    ? Number((totalMatchEff / gp).toFixed(1))
+    : Number(((totalPts + totalReb + totalAst + totalStl + totalBlk) / gp).toFixed(1));
   const win_rate = Number(((wins / gp) * 100).toFixed(0));
 
   const result: AthleteOfficialAnalytics = {
@@ -1530,7 +1579,12 @@ export const getAthleteStatsAndMatchesForOfficial = async (
       fg_pct,
       win_rate,
       total_pts: totalPts,
-    },
+      finish_time: (aggregatedMatches[0] as any)?.finish_time || '',
+      best_time: (aggregatedMatches[0] as any)?.finish_time || '',
+      placement_rank: (aggregatedMatches[0] as any)?.placement_rank || '',
+      distance: (aggregatedMatches[0] as any)?.distance || '',
+      stroke_rate: 'Optimum',
+    } as any,
     matches: aggregatedMatches,
   };
 
