@@ -201,7 +201,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
             <span>Scoresheet</span>
           </button>
         </div>
-      ) : isPlayable && !done ? (
+      ) : isPlayable ? (
         <div style={styles.matchCardFooter}>
           <button
             type="button"
@@ -955,7 +955,7 @@ export const TournamentBracketPage: React.FC = () => {
                 {/* Champion Trophy Column */}
                 <div style={styles.championCol}>
                   <div style={styles.championHeaderBadge}>
-                    <Trophy size={14} color="#92400E" />
+                    <Trophy size={14} color="#854D0E" />
                     <span>CHAMPION</span>
                   </div>
                   <div
@@ -964,7 +964,7 @@ export const TournamentBracketPage: React.FC = () => {
                       ...(bracket.champion_team ? styles.trophyCircleWon : {}),
                     }}
                   >
-                    <Trophy size={42} color="#D97706" />
+                    <Trophy size={42} color="#D4AF37" />
                   </div>
                   <div>
                     <span style={styles.trophyLabel}>TOURNAMENT CHAMPION</span>

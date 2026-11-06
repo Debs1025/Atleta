@@ -101,7 +101,7 @@ export const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: '0.04em',
     cursor: 'pointer',
-    boxShadow: '0 4px 14px rgba(37, 99, 235, 0.32)',
+    boxShadow: 'none',
     transition: 'all 0.15s ease',
   },
 
@@ -142,7 +142,7 @@ export const styles: Record<string, React.CSSProperties> = {
     border: '1.5px solid #1E3A8A',
     backgroundColor: '#1E3A8A',
     color: '#FFFFFF',
-    boxShadow: '0 3px 10px rgba(30, 58, 138, 0.3)',
+    boxShadow: 'none',
   },
 
   // ── Loading / Empty ──
@@ -202,7 +202,7 @@ export const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
     marginTop: 8,
-    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.28)',
+    boxShadow: 'none',
   },
 
   // ── Cards grid ──
@@ -461,14 +461,14 @@ export const styles: Record<string, React.CSSProperties> = {
   },
   submitBtn: {
     padding: '9px 20px',
-    backgroundColor: '#E11D48',
+    backgroundColor: '#10B981',
     border: 'none',
     borderRadius: 8,
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(225, 29, 72, 0.25)',
+    boxShadow: 'none',
   },
   resetLink: { fontSize: 11, color: '#E11D48', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 },
   seedingControls: {
@@ -578,6 +578,6 @@ export const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(225, 29, 72, 0.25)',
+    boxShadow: 'none',
   },
 };

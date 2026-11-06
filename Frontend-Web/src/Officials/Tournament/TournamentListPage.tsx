@@ -133,6 +133,7 @@ export const TournamentListPage: React.FC = () => {
   });
 
   const [loading, setLoading] = useState(!allBrackets.length);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editingBracket, setEditingBracket] = useState<TournamentBracket | null>(null);
   const [deletingBracket, setDeletingBracket] = useState<TournamentBracket | null>(null);
@@ -174,6 +175,18 @@ export const TournamentListPage: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await loadBrackets(true);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 600);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -221,8 +234,8 @@ export const TournamentListPage: React.FC = () => {
               </div>
             </div>
             <div style={styles.headerActions}>
-              <button type="button" style={styles.refreshBtn} onClick={() => loadBrackets(true)}>
-                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <button type="button" style={styles.refreshBtn} onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw size={15} className={isRefreshing || loading ? 'animate-spin' : ''} />
                 <span>Refresh</span>
               </button>
               <button type="button" style={styles.createBtn} onClick={() => setShowCreate(true)}>

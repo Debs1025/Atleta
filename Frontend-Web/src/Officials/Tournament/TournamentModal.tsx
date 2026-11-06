@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Edit3, X, AlertCircle, Info } from 'lucide-react';
+import { Edit3, X, AlertCircle, Info } from 'lucide-react';
 import {
   saveTournamentBracket,
   updateTournamentBracket,
@@ -310,13 +310,13 @@ export const TournamentModal: React.FC<TournamentModalProps> = ({
       <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <div style={styles.modalHeaderLeft}>
-            {isEdit ? <Edit3 size={20} color="#0284C7" /> : <Trophy size={20} color="#E11D48" />}
+            {isEdit && <Edit3 size={20} color="#0284C7" />}
             <h2 style={styles.modalTitle}>
               {isEdit
                 ? 'Tournament & Teams'
                 : isTimedSport
                 ? 'Create Timed Meet (Heats & Finals)'
-                : 'Create Single-Elimination Bracket'}
+                : 'Create Tournament Bracket'}
             </h2>
           </div>
           <button type="button" onClick={onClose} style={styles.modalClose}>
@@ -464,7 +464,7 @@ export const TournamentModal: React.FC<TournamentModalProps> = ({
                 ? 'Save Changes'
                 : isTimedSport
                 ? 'Create Timed Meet'
-                : 'Generate Bracket'}
+                : 'Create Tournament'}
             </button>
           </div>
         </form>

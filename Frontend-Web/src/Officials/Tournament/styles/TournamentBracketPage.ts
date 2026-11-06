@@ -116,7 +116,7 @@ export const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(30, 58, 138, 0.28)',
+    boxShadow: 'none',
   },
 
   // ── Sport filter bar ──
@@ -243,7 +243,7 @@ export const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
     marginTop: 8,
-    boxShadow: '0 4px 12px rgba(225, 29, 72, 0.25)',
+    boxShadow: 'none',
   },
 
   // ── Bracket content ──
@@ -615,8 +615,8 @@ export const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(180deg, #FFFFFF 0%, #FEF9C3 50%, #EFF6FF 100%)',
-    border: '2px solid #F59E0B',
+    background: 'linear-gradient(180deg, #FFFFFF 0%, #FEFCE8 50%, #FEF9C3 100%)',
+    border: '2px solid #D4AF37',
     borderRadius: 18,
     padding: '40px 18px',
     flex: '0 0 240px',
@@ -626,7 +626,7 @@ export const styles: Record<string, React.CSSProperties> = {
     gap: 16,
     boxSizing: 'border-box',
     alignSelf: 'stretch',
-    boxShadow: '0 8px 24px -4px rgba(245, 158, 11, 0.22)',
+    boxShadow: 'none',
   },
   championHeaderBadge: {
     display: 'inline-flex',
@@ -634,14 +634,14 @@ export const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 6,
     padding: '6px 16px',
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: '#FEF9C3',
+    border: '1px solid #FDE047',
     borderRadius: 20,
     fontSize: 11,
     fontWeight: 800,
     letterSpacing: '0.08em',
-    color: '#92400E',
-    boxShadow: '0 1px 2px rgba(245, 158, 11, 0.1)',
+    color: '#854D0E',
+    boxShadow: 'none',
   },
   statusBadgeOngoing: {
     fontSize: 11,
@@ -665,22 +665,24 @@ export const styles: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: '50%',
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#FEF9C3',
+    border: '2px solid #FACC15',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#D97706',
+    color: '#D4AF37',
   },
   trophyCircleWon: {
-    backgroundColor: '#FEF3C7',
-    boxShadow: '0 0 24px rgba(245, 158, 11, 0.35)',
-    color: '#D97706',
+    backgroundColor: '#FEF08A',
+    border: '2px solid #D4AF37',
+    boxShadow: 'none',
+    color: '#D4AF37',
   },
   trophyLabel: {
     fontSize: 11,
     fontWeight: 800,
     letterSpacing: '0.06em',
-    color: '#B45309',
+    color: '#A16207',
   },
   championTeam: {
     margin: '6px 0 0 0',
@@ -691,7 +693,7 @@ export const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.25,
   },
   championTeamWon: {
-    color: '#92400E',
+    color: '#854D0E',
   },
   finalizedBadge: {
     display: 'flex',
@@ -857,7 +859,7 @@ export const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(225, 29, 72, 0.25)',
+    boxShadow: 'none',
   },
   resetLink: {
     fontSize: 11,
@@ -921,6 +923,6 @@ export const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(225, 29, 72, 0.25)',
+    boxShadow: 'none',
   },
 };

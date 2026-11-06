@@ -55,7 +55,7 @@ export const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+    boxShadow: 'none',
     flexShrink: 0,
   },
   pageTitle: {
@@ -86,7 +86,7 @@ export const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     cursor: 'pointer',
     textTransform: 'uppercase',
-    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.08)',
+    boxShadow: 'none',
     transition: 'all 0.15s ease',
   },
   filterBar: {
@@ -121,7 +121,7 @@ export const styles: Record<string, React.CSSProperties> = {
   tabBtnActive: {
     background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)',
     color: '#FFFFFF',
-    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+    boxShadow: 'none',
   },
   actionBtnGroup: {
     display: 'flex',
@@ -152,7 +152,7 @@ export const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.06em',
     cursor: 'pointer',
     textTransform: 'uppercase',
-    boxShadow: '0 3px 10px rgba(37, 99, 235, 0.25)',
+    boxShadow: 'none',
     transition: 'all 0.15s ease',
   },
   feedList: {
@@ -238,7 +238,7 @@ export const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     textTransform: 'uppercase',
     alignSelf: 'flex-start',
-    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+    boxShadow: 'none',
     transition: 'all 0.15s ease',
   },
   rejectBtn: {
@@ -493,7 +493,7 @@ export const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '6px',
     textTransform: 'uppercase',
-    boxShadow: '0 3px 10px rgba(37, 99, 235, 0.25)',
+    boxShadow: 'none',
   },
   scoresheetModalCloseActionBtn: {
     padding: '9px 18px',

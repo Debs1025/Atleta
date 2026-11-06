@@ -147,7 +147,8 @@ export const styles: Record<string, React.CSSProperties> = {
   switchTrack: {
     width: '46px',
     height: '26px',
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#94A3B8',
+    background: '#94A3B8',
     border: 'none',
     borderRadius: '9999px',
     position: 'relative',
@@ -160,11 +161,11 @@ export const styles: Record<string, React.CSSProperties> = {
     WebkitUserSelect: 'none',
     flexShrink: 0,
     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-    boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)',
+    boxShadow: 'none',
   },
   switchTrackActive: {
     background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)',
-    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+    boxShadow: 'none',
   },
   switchThumb: {
     width: '20px',
