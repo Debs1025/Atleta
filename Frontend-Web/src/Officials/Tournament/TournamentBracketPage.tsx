@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Trophy, ArrowLeft, Award, RefreshCw, Plus, Edit2, Trash2, AlertCircle, X, GripVertical } from 'lucide-react';
+import { Trophy, ArrowLeft, Award, RefreshCw, Plus, Edit2, Trash2, AlertCircle, X, GripVertical, FileText, CloudUpload } from 'lucide-react';
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import {
@@ -46,6 +46,8 @@ interface MatchCardProps {
   onDragLeaveTeam: (e: React.DragEvent, target: TeamSlotRef) => void;
   onDropTeam: (e: React.DragEvent, target: TeamSlotRef) => void;
   onDragEndTeam: () => void;
+  onViewScoresheet: (linkedMatchId: string) => void;
+  onUploadMatch: (match: BracketMatch, stageIdx?: number, matchIdx?: number) => void;
 }
 
 const MatchCard: React.FC<MatchCardProps> = ({
@@ -64,12 +66,21 @@ const MatchCard: React.FC<MatchCardProps> = ({
   onDragLeaveTeam,
   onDropTeam,
   onDragEndTeam,
+  onViewScoresheet,
+  onUploadMatch,
 }) => {
   const homeName = match.home_team?.team_name || 'TBD';
   const awayName = match.away_team?.team_name || 'TBD';
   const done = match.status === 'COMPLETED' && Boolean(match.winner_team_name);
   const homeWin = match.winner_team_name === homeName;
   const awayWin = match.winner_team_name === awayName;
+  const isPlayable =
+    !homeName.includes('TBD') &&
+    !awayName.includes('TBD') &&
+    homeName !== 'BYE' &&
+    awayName !== 'BYE' &&
+    homeName !== 'No Opponent' &&
+    awayName !== 'No Opponent';
 
   const teamRow = (
     name: string,
@@ -141,11 +152,23 @@ const MatchCard: React.FC<MatchCardProps> = ({
             {displayName}
           </span>
         </div>
-        {done && (
-          <span style={{ ...styles.teamScore, ...(isWinner ? styles.teamScoreWinner : {}) }}>
-            {isWinner ? 'W' : 'L'}
-          </span>
-        )}
+        <div style={styles.teamRightScoreArea}>
+          {side === 'home' && match.home_team?.score !== undefined && (
+            <span style={{ ...styles.teamActualScore, ...(isWinner ? styles.teamActualScoreWinner : {}) }}>
+              {match.home_team.score}
+            </span>
+          )}
+          {side === 'away' && match.away_team?.score !== undefined && (
+            <span style={{ ...styles.teamActualScore, ...(isWinner ? styles.teamActualScoreWinner : {}) }}>
+              {match.away_team.score}
+            </span>
+          )}
+          {done && (
+            <span style={{ ...styles.teamScore, ...(isWinner ? styles.teamScoreWinner : {}) }}>
+              {isWinner ? 'W' : 'L'}
+            </span>
+          )}
+        </div>
       </div>
     );
   };
@@ -162,6 +185,38 @@ const MatchCard: React.FC<MatchCardProps> = ({
       </div>
       {teamRow(homeName, match.home_team?.seed, homeWin, 'home')}
       {teamRow(awayName, match.away_team?.seed, awayWin, 'away')}
+
+      {match.linked_match_id ? (
+        <div style={styles.matchCardFooter}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewScoresheet(match.linked_match_id!);
+            }}
+            style={styles.scoresheetSlotBtn}
+            title="View full match scoresheet & player statistics"
+          >
+            <FileText size={12} />
+            <span>Scoresheet</span>
+          </button>
+        </div>
+      ) : isPlayable && !done ? (
+        <div style={styles.matchCardFooter}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUploadMatch(match, stageIdx, idx);
+            }}
+            style={styles.uploadMatchSlotBtn}
+            title={`Upload official match & scoresheet for ${homeName} vs ${awayName}`}
+          >
+            <CloudUpload size={12} />
+            <span>Upload Match</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -182,6 +237,8 @@ const StageColumn: React.FC<{
   onDragLeaveTeam: (e: React.DragEvent, target: TeamSlotRef) => void;
   onDropTeam: (e: React.DragEvent, target: TeamSlotRef) => void;
   onDragEndTeam: () => void;
+  onViewScoresheet: (linkedMatchId: string) => void;
+  onUploadMatch: (match: BracketMatch, stageIdx?: number, matchIdx?: number) => void;
 }> = ({
   stage,
   idx,
@@ -197,6 +254,8 @@ const StageColumn: React.FC<{
   onDragLeaveTeam,
   onDropTeam,
   onDragEndTeam,
+  onViewScoresheet,
+  onUploadMatch,
 }) => (
   <div style={styles.stageCol}>
     <div style={styles.stageHeader}>
@@ -227,6 +286,8 @@ const StageColumn: React.FC<{
           onDragLeaveTeam={onDragLeaveTeam}
           onDropTeam={onDropTeam}
           onDragEndTeam={onDragEndTeam}
+          onViewScoresheet={onViewScoresheet}
+          onUploadMatch={onUploadMatch}
         />
       ))}
     </div>
@@ -344,13 +405,111 @@ export const TournamentBracketPage: React.FC = () => {
   const loadBracket = useCallback(async (force = false) => {
     if (!bracketId) return;
 
+    const syncWithMasterMatches = (br: TournamentBracket): TournamentBracket => {
+      try {
+        let masterMatches: any[] = getCachedData<any[]>('all_official_matches_master') || [];
+        if (!masterMatches.length) {
+          const raw = localStorage.getItem('atleta_cached_official_matches_master');
+          if (raw) masterMatches = JSON.parse(raw);
+        }
+        if (br && br.stages) {
+          const stagesCopy = JSON.parse(JSON.stringify(br.stages));
+          let changed = false;
+          for (const stg of stagesCopy) {
+            for (const m of stg.matches) {
+              const hName = (m.home_team?.team_name || '').trim().toLowerCase();
+              const aName = (m.away_team?.team_name || '').trim().toLowerCase();
+              if (hName && aName && !hName.includes('tbd') && !aName.includes('tbd') && hName !== 'bye' && aName !== 'bye' && hName !== 'no opponent' && aName !== 'no opponent') {
+                let detail: any = null;
+                const cleanId = String(m.linked_match_id || '').replace(/^#/, '');
+
+                // 1. Direct match detail lookup by linked_match_id
+                if (cleanId) {
+                  detail = getCachedData(`match_audit_detail_${cleanId}`);
+                  if (!detail) {
+                    try {
+                      const raw = localStorage.getItem(`atleta_match_detail_${cleanId}`);
+                      if (raw) detail = JSON.parse(raw);
+                    } catch {}
+                  }
+                }
+
+                // 2. Master matches lookup by tournament_id + team names
+                if (!detail && masterMatches.length) {
+                  const matchObj = masterMatches.find((om: any) => {
+                    const rawM = om.raw_match || om;
+                    const tId = rawM.tournament_id || om.tournament_id;
+                    const rawH = (rawM.home_team?.name || rawM.home_team_name || '').trim().toLowerCase();
+                    const rawA = (rawM.away_team?.name || rawM.opponent_team_name || '').trim().toLowerCase();
+                    const matchesTeams = (rawH === hName && rawA === aName) || (rawH === aName && rawA === hName);
+                    if (tId && tId === br.bracket_id) {
+                      return matchesTeams || (cleanId && String(om.match_id || rawM.match_id || '').replace(/^#/, '') === cleanId);
+                    }
+                    return matchesTeams;
+                  });
+                  if (matchObj) {
+                    detail = matchObj.raw_match || matchObj;
+                    const mId = String(detail.match_id || matchObj.match_id || '').replace(/^#/, '');
+                    if (!m.linked_match_id && mId) {
+                      m.linked_match_id = mId;
+                      changed = true;
+                    }
+                  }
+                }
+
+                if (detail) {
+                  const sHomeName = (detail.home_team?.name || detail.home_team_name || '').trim().toLowerCase();
+                  const sAwayName = (detail.away_team?.name || detail.opponent_team_name || detail.away_team_name || '').trim().toLowerCase();
+
+                  const sHomeScore = typeof detail.home_team?.score === 'number'
+                    ? detail.home_team.score
+                    : typeof detail.home_score === 'number'
+                    ? detail.home_score
+                    : undefined;
+
+                  const sAwayScore = typeof detail.away_team?.score === 'number'
+                    ? detail.away_team.score
+                    : typeof detail.away_score === 'number'
+                    ? detail.away_score
+                    : undefined;
+
+                  if (sHomeScore !== undefined && sAwayScore !== undefined) {
+                    if (sHomeName === hName || sAwayName === aName) {
+                      if (m.home_team) m.home_team.score = sHomeScore;
+                      if (m.away_team) m.away_team.score = sAwayScore;
+                    } else if (sHomeName === aName || sAwayName === hName) {
+                      if (m.home_team) m.home_team.score = sAwayScore;
+                      if (m.away_team) m.away_team.score = sHomeScore;
+                    } else {
+                      if (m.home_team) m.home_team.score = sHomeScore;
+                      if (m.away_team) m.away_team.score = sAwayScore;
+                    }
+                    changed = true;
+                  }
+
+                  if (detail.scoresheet_url && !m.scoresheet_url) {
+                    m.scoresheet_url = detail.scoresheet_url;
+                    changed = true;
+                  }
+                }
+              }
+            }
+          }
+          if (changed) {
+            return { ...br, stages: stagesCopy };
+          }
+        }
+      } catch {}
+      return br;
+    };
+
     if (!force) {
       const allSportCaches = ['ALL', 'all', bracket?.sport_type].filter(Boolean) as string[];
       for (const sp of allSportCaches) {
         const cached = getCachedData<TournamentBracket[]>(`tournament_brackets_${sp}`);
         const found = cached?.find((b) => b.bracket_id === bracketId);
         if (found) {
-          setBracket(found);
+          setBracket(syncWithMasterMatches(found));
           setLoading(false);
           return;
         }
@@ -364,7 +523,7 @@ export const TournamentBracketPage: React.FC = () => {
               if (Array.isArray(list)) {
                 const found = list.find((b) => b.bracket_id === bracketId);
                 if (found) {
-                  setBracket(found);
+                  setBracket(syncWithMasterMatches(found));
                   setLoading(false);
                   return;
                 }
@@ -379,7 +538,7 @@ export const TournamentBracketPage: React.FC = () => {
       const list = await getTournamentBrackets('ALL', force);
       const found = list.find((b) => b.bracket_id === bracketId);
       if (found) {
-        setBracket(found);
+        setBracket(syncWithMasterMatches(found));
       }
     } catch {
       // keep existing
@@ -392,18 +551,45 @@ export const TournamentBracketPage: React.FC = () => {
     loadBracket();
   }, [loadBracket]);
 
+  const handleUploadMatch = (m: BracketMatch, _stageIdx?: number, _matchIdx?: number) => {
+    if (!bracket) return;
+    const params = new URLSearchParams({
+      tournamentId: bracket.bracket_id,
+      tournamentName: bracket.tournament_name,
+      bracketMatchId: m.match_id,
+      home: m.home_team?.team_name || '',
+      away: m.away_team?.team_name || '',
+      sport: bracket.sport_type || '',
+    });
+    navigate(`/create-match?${params.toString()}`);
+  };
+
+  const handleViewScoresheet = (linkedMatchId: string) => {
+    if (!bracket) return;
+    navigate(`/matches/${linkedMatchId.replace(/^#/, '')}`, {
+      state: {
+        returnUrl: `/tournaments/${bracket.bracket_id}`,
+        returnLabel: 'BACK TO TOURNAMENT BRACKET',
+        tournamentId: bracket.bracket_id,
+        tournamentName: bracket.tournament_name,
+      },
+    });
+  };
+
   // Handle advancing winner
   const handleWin = async (match: BracketMatch, winner: string) => {
     if (!bracket || !winner || winner.includes('TBD')) return;
     setAdvancingId(match.match_id);
     try {
       const isHome = winner === match.home_team?.team_name;
+      const hScore = match.home_team?.score !== undefined ? match.home_team.score : (isHome ? 2 : 0);
+      const aScore = match.away_team?.score !== undefined ? match.away_team.score : (isHome ? 0 : 2);
       const updated = await advanceBracketTeam(
         bracket.bracket_id,
         match.match_id,
         winner,
-        isHome ? 2 : 0,
-        isHome ? 0 : 2,
+        hScore,
+        aScore,
       );
       invalidateCache('tournament_brackets');
       setBracket(updated);
@@ -761,6 +947,8 @@ export const TournamentBracketPage: React.FC = () => {
                     onDragLeaveTeam={handleDragLeaveTeam}
                     onDropTeam={handleDropTeam}
                     onDragEndTeam={handleDragEndTeam}
+                    onViewScoresheet={handleViewScoresheet}
+                    onUploadMatch={handleUploadMatch}
                   />
                 ))}
 

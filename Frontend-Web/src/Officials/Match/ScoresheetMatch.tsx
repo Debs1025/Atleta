@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
@@ -34,6 +34,8 @@ import {
   invalidateCache,
   getSports,
   recordDeletedMatch,
+  advanceBracketTeam,
+  linkMatchToBracketSlot,
 } from '../../api/client';
 import { scanScoresheetStandalone, scanMultipleScoresheets } from '../../api/ocr';
 import { saveScoresheetFilesToIndexedDB, getScoresheetFilesFromIndexedDB } from '../../api/scoresheetStorage';
@@ -143,6 +145,7 @@ const SingleScoresheetThumbnail: React.FC<{ url: string; alt: string }> = ({ url
 export const ScoresheetMatch: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const appendFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -1109,6 +1112,55 @@ export const ScoresheetMatch: React.FC = () => {
         console.warn('Error updating dashboard cache on certify:', e);
       }
 
+      // Automatically sync scores and advancement with tournament bracket if linked
+      const targetTournamentId = updatedDetail.tournament_id || (location.state as any)?.tournamentId;
+      if (targetTournamentId) {
+        try {
+          const hScore = typeof homeScore === 'number' ? homeScore : 0;
+          const aScore = typeof awayScore === 'number' ? awayScore : 0;
+          const winnerName = hScore > aScore ? (homeTeamDisplayName || 'Home Team') : aScore > hScore ? (awayTeamDisplayName || 'Away Team') : undefined;
+
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('atleta_cached_bracket_')) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const list = JSON.parse(raw);
+                if (Array.isArray(list)) {
+                  const br = list.find((b: any) => b.bracket_id === targetTournamentId);
+                  if (br && br.stages) {
+                    for (const stage of br.stages) {
+                      for (const m of stage.matches) {
+                        const mLinked = String(m.linked_match_id || '').replace(/^#/, '');
+                        const mMatchId = String(m.match_id || '').replace(/^#/, '');
+                        if (mLinked === cleanId || mLinked === matchLookupId || mMatchId === cleanId) {
+                          let actualWinnerName = winnerName;
+                          if (winnerName) {
+                            const wLower = winnerName.trim().toLowerCase();
+                            if (m.home_team?.team_name?.trim().toLowerCase() === wLower) {
+                              actualWinnerName = m.home_team.team_name;
+                            } else if (m.away_team?.team_name?.trim().toLowerCase() === wLower) {
+                              actualWinnerName = m.away_team.team_name;
+                            }
+                          }
+                          if (actualWinnerName) {
+                            advanceBracketTeam(targetTournamentId, m.match_id, actualWinnerName, hScore, aScore).catch(() => {});
+                          } else {
+                            linkMatchToBracketSlot(targetTournamentId, m.match_id, cleanId, scoresheetUrl, hScore, aScore).catch(() => {});
+                          }
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error syncing certified match with tournament bracket:', e);
+        }
+      }
+
       setActiveModal(null);
     } catch (err: any) {
       setActionError(err?.message || 'Certification failed.');
@@ -1667,13 +1719,28 @@ export const ScoresheetMatch: React.FC = () => {
     }));
   }, [uploadedFiles, scoresheetUrl, scoresheetUrls, matchData]);
 
+  const stateReturnUrl = (location.state as any)?.returnUrl;
+  const returnUrl = stateReturnUrl || '/dashboard';
+  const returnLabel =
+    (location.state as any)?.returnLabel ||
+    (returnUrl === '/matches'
+      ? 'BACK TO ALL MATCHES'
+      : returnUrl.includes('/tournaments')
+      ? 'BACK TO TOURNAMENT BRACKET'
+      : 'RETURN TO DASHBOARD');
+
   return (
     <div style={styles.shell}>
       <main style={styles.contentArea}>
         <div style={styles.topReturnBar}>
-          <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-outline" style={styles.returnBtn}>
+          <button
+            type="button"
+            onClick={() => returnUrl ? navigate(returnUrl) : navigate('/dashboard')}
+            className="hover-btn-outline"
+            style={styles.returnBtn}
+          >
             <ArrowLeft style={{ width: 15, height: 15 }} />
-            <span>RETURN TO DASHBOARD</span>
+            <span>{returnLabel}</span>
           </button>
         </div>
 
@@ -2129,8 +2196,13 @@ export const ScoresheetMatch: React.FC = () => {
             </div>
             <p style={styles.modalDesc}>Match record <strong style={{ color: '#0B132B' }}>#{cleanId}</strong> was successfully removed.</p>
             <div style={styles.modalActions}>
-              <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-solid" style={styles.modalConfirmBtnGreen}>
-                RETURN TO DASHBOARD
+              <button
+                type="button"
+                onClick={() => returnUrl ? navigate(returnUrl) : navigate('/dashboard')}
+                className="hover-btn-solid"
+                style={styles.modalConfirmBtnGreen}
+              >
+                {returnLabel}
               </button>
             </div>
           </div>

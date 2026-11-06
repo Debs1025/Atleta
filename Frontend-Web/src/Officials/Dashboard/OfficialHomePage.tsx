@@ -530,7 +530,14 @@ export const OfficialHomePage: React.FC = () => {
                         className="hover-match-row"
                         style={{ cursor: 'pointer' }}
                         onMouseEnter={() => prefetchMatchAuditDetail(lookupId)}
-                        onClick={() => navigate(`/matches/${lookupId}`)}
+                        onClick={() =>
+                          navigate(`/matches/${lookupId}`, {
+                            state: {
+                              returnUrl: '/dashboard',
+                              returnLabel: 'RETURN TO DASHBOARD',
+                            },
+                          })
+                        }
                       >
                         <td style={{ ...styles.td, ...styles.tdMatchId }}>{item.match_id}</td>
                         <td style={styles.td}>

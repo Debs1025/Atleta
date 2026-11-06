@@ -268,6 +268,8 @@ export interface MatchAuditDetail {
   is_locked?: boolean;
   assigned_coaches?: string[];
   coach_name?: string;
+  tournament_id?: string;
+  tournament_name?: string;
 }
 
 export interface MatchSummaryItem {

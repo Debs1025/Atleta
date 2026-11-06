@@ -907,6 +907,8 @@ export interface BracketMatch {
   slot_for_next?: 'home' | 'away';
   match_date?: string;
   venue?: string;
+  linked_match_id?: string;
+  scoresheet_url?: string;
 }
 
 export interface BracketStage {
@@ -1007,11 +1009,41 @@ export const getTournamentBrackets = async (sport?: string, forceRefresh = false
     });
     if (res.ok) {
       const data = await res.json();
-      const list = (Array.isArray(data.brackets) ? data.brackets : []).filter(
+      const rawList = (Array.isArray(data.brackets) ? data.brackets : []).filter(
         (b: any) =>
           !isTournamentDeleted(b.bracket_id) &&
           (normSport === 'ALL' || (b.sport_type && String(b.sport_type).trim().toUpperCase() === normSport))
       );
+
+      // Preserve any concluded winner or scoresheet progress from local storage
+      const list = rawList.map((b: any) => {
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('atleta_cached_bracket_')) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const localList = JSON.parse(raw);
+                if (Array.isArray(localList)) {
+                  const localFound = localList.find((lb: any) => lb.bracket_id === b.bracket_id);
+                  if (localFound && localFound.stages) {
+                    const localHasProgress =
+                      Boolean(localFound.champion_team) ||
+                      localFound.status === 'Completed' ||
+                      localFound.stages.some((st: any) =>
+                        st.matches?.some((m: any) => m.status === 'COMPLETED' || Boolean(m.winner_team_name) || Boolean(m.linked_match_id))
+                      );
+                    if (localHasProgress) {
+                      return { ...b, ...localFound, updated_at: localFound.updated_at || b.updated_at };
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch {}
+        return b;
+      });
+
       setCachedData(cacheKey, list);
       try {
         localStorage.setItem(`atleta_cached_bracket_${normSport}`, JSON.stringify(list));
@@ -1216,44 +1248,232 @@ export const advanceBracketTeam = async (
   awayScore?: number
 ): Promise<TournamentBracket> => {
   const token = getStoredToken();
-  const res = await authFetch(`${BASE_URL}/tournaments/brackets/${bracketId}/advance`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      match_id: matchId,
-      winner_team_name: winnerTeamName,
-      home_score: homeScore,
-      away_score: awayScore,
-    }),
-  });
-  const data = await handleResponse<{ bracket: TournamentBracket }>(res);
-  const updated = data.bracket;
 
-  if (updated) {
-    try {
-      for (const key of Object.keys(localStorage)) {
-        if (key.startsWith('atleta_cached_bracket_')) {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            const list: TournamentBracket[] = JSON.parse(raw);
-            if (Array.isArray(list)) {
-              const idx = list.findIndex((b) => b.bracket_id === bracketId);
-              if (idx !== -1) {
-                list[idx] = { ...list[idx], ...updated, updated_at: new Date().toISOString() };
-                localStorage.setItem(key, JSON.stringify(list));
-              }
+  // 1. First retrieve existing bracket from localStorage to guarantee local progression
+  let currentBracket: TournamentBracket | null = null;
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('atleta_cached_bracket_')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list: TournamentBracket[] = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const found = list.find((b) => b.bracket_id === bracketId);
+            if (found) {
+              currentBracket = found;
+              break;
             }
           }
         }
       }
-    } catch { }
+    }
+  } catch {}
+
+  // 2. Perform direct advancement on stages
+  if (currentBracket && currentBracket.stages) {
+    const updatedStages = JSON.parse(JSON.stringify(currentBracket.stages)) as BracketStage[];
+    let targetMatch: BracketMatch | null = null;
+    let targetStageIdx = -1;
+    let winnerSeed: number | undefined;
+
+    for (let sIdx = 0; sIdx < updatedStages.length; sIdx++) {
+      const stg = updatedStages[sIdx];
+      for (const m of stg.matches) {
+        if (m.match_id === matchId) {
+          targetMatch = m;
+          targetStageIdx = sIdx;
+          m.winner_team_name = winnerTeamName;
+          m.status = 'COMPLETED';
+          if (homeScore !== undefined && m.home_team) m.home_team.score = homeScore;
+          if (awayScore !== undefined && m.away_team) m.away_team.score = awayScore;
+          if (m.home_team?.team_name?.trim().toLowerCase() === winnerTeamName.trim().toLowerCase()) {
+            winnerSeed = m.home_team?.seed;
+          } else if (m.away_team?.team_name?.trim().toLowerCase() === winnerTeamName.trim().toLowerCase()) {
+            winnerSeed = m.away_team?.seed;
+          }
+          break;
+        }
+      }
+      if (targetMatch) break;
+    }
+
+    if (targetMatch) {
+      // Advance to next round if available
+      const nextMatchId = targetMatch.next_match_id;
+      const slotForNext = targetMatch.slot_for_next || 'home';
+      const nextStage = updatedStages[targetStageIdx + 1];
+
+      if (nextStage) {
+        let placed = false;
+        if (nextMatchId) {
+          const nextMatch = nextStage.matches.find((nm) => nm.match_id === nextMatchId);
+          if (nextMatch) {
+            if (slotForNext === 'home') {
+              nextMatch.home_team = { ...nextMatch.home_team, team_name: winnerTeamName, seed: winnerSeed };
+            } else {
+              nextMatch.away_team = { ...nextMatch.away_team, team_name: winnerTeamName, seed: winnerSeed };
+            }
+            placed = true;
+          }
+        }
+        if (!placed) {
+          // Fallback map by match index (matchIdx / 2)
+          const targetMatchIdx = updatedStages[targetStageIdx].matches.findIndex((m) => m.match_id === matchId);
+          const nextIdx = Math.floor(targetMatchIdx / 2);
+          const isHome = targetMatchIdx % 2 === 0;
+          const nextMatch = nextStage.matches[nextIdx];
+          if (nextMatch) {
+            if (isHome) {
+              nextMatch.home_team = { ...nextMatch.home_team, team_name: winnerTeamName, seed: winnerSeed };
+            } else {
+              nextMatch.away_team = { ...nextMatch.away_team, team_name: winnerTeamName, seed: winnerSeed };
+            }
+          }
+        }
+      } else {
+        // Finals match! Set tournament champion
+        currentBracket.champion_team = winnerTeamName;
+        currentBracket.status = 'Completed';
+      }
+
+      currentBracket.stages = updatedStages;
+      currentBracket.updated_at = new Date().toISOString();
+
+      // Immediately write locally across ALL localStorage keys
+      try {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('atleta_cached_bracket_')) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const list: TournamentBracket[] = JSON.parse(raw);
+              if (Array.isArray(list)) {
+                const idx = list.findIndex((b) => b.bracket_id === bracketId);
+                if (idx !== -1) {
+                  list[idx] = { ...list[idx], ...currentBracket };
+                  localStorage.setItem(key, JSON.stringify(list));
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 3. Inform backend via advance endpoint or update endpoint
+  let backendBracket: TournamentBracket | null = null;
+  try {
+    const res = await authFetch(`${BASE_URL}/tournaments/brackets/${bracketId}/advance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        match_id: matchId,
+        winner_team_name: winnerTeamName,
+        home_score: homeScore,
+        away_score: awayScore,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.bracket) backendBracket = data.bracket;
+    }
+  } catch {}
+
+  if (currentBracket) {
+    try {
+      await updateTournamentBracket(bracketId, currentBracket);
+    } catch {}
   }
 
   invalidateCache('tournament_brackets');
-  return updated;
+  return currentBracket || backendBracket!;
+};
+
+export const linkMatchToBracketSlot = async (
+  bracketId: string,
+  bracketMatchId: string,
+  officialMatchId: string,
+  scoresheetUrl?: string,
+  homeScore?: number,
+  awayScore?: number,
+  winnerTeamName?: string
+): Promise<TournamentBracket | null> => {
+  if (!bracketId || !bracketMatchId || !officialMatchId) return null;
+
+  let bracket: TournamentBracket | null = null;
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('atleta_cached_bracket_')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list: TournamentBracket[] = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const found = list.find((b) => b.bracket_id === bracketId);
+            if (found) {
+              bracket = found;
+              break;
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+
+  if (!bracket) {
+    try {
+      const list = await getTournamentBrackets('ALL', true);
+      bracket = list.find((b) => b.bracket_id === bracketId) || null;
+    } catch {}
+  }
+
+  if (!bracket || !bracket.stages) return null;
+
+  const updatedStages = JSON.parse(JSON.stringify(bracket.stages)) as BracketStage[];
+  let matched = false;
+
+  for (const stage of updatedStages) {
+    for (const m of stage.matches) {
+      if (m.match_id === bracketMatchId) {
+        m.linked_match_id = officialMatchId;
+        if (scoresheetUrl) m.scoresheet_url = scoresheetUrl;
+        if (homeScore !== undefined) {
+          if (!m.home_team) m.home_team = { team_name: 'Team 1' };
+          m.home_team.score = homeScore;
+        }
+        if (awayScore !== undefined) {
+          if (!m.away_team) m.away_team = { team_name: 'Team 2' };
+          m.away_team.score = awayScore;
+        }
+        if (winnerTeamName) {
+          m.winner_team_name = winnerTeamName;
+          m.status = 'COMPLETED';
+        } else if (m.status === 'PENDING') {
+          m.status = 'IN_PROGRESS';
+        }
+        matched = true;
+        break;
+      }
+    }
+    if (matched) break;
+  }
+
+  if (!matched) return bracket;
+
+  const updatedBracketPayload: TournamentBracket = {
+    ...bracket,
+    stages: updatedStages,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const updated = await updateTournamentBracket(bracketId, updatedBracketPayload);
+    return updated || updatedBracketPayload;
+  } catch {
+    return updatedBracketPayload;
+  }
 };
 
 // ─── ATHLETE PROFILE VIEWING FOR TOURNAMENT OFFICIALS ──────────────────────

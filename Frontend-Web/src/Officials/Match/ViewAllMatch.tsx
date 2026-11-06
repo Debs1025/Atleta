@@ -174,7 +174,12 @@ export const ViewAllMatch: React.FC = () => {
 
   const handleRowClick = (matchId: string) => {
     const cleanId = matchId.replace(/^#/, '');
-    navigate(`/matches/${cleanId}`);
+    navigate(`/matches/${cleanId}`, {
+      state: {
+        returnUrl: '/matches',
+        returnLabel: 'BACK TO ALL MATCHES',
+      },
+    });
   };
 
   return (

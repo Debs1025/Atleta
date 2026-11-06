@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Info,
   Users,
@@ -30,6 +30,7 @@ import {
   setCachedData,
   getCachedData,
   getSports,
+  linkMatchToBracketSlot,
 } from '../../api/client';
 import { saveScoresheetFilesToIndexedDB } from '../../api/scoresheetStorage';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow, RaceResultRow, SportConfiguration, MatchSummaryItem } from '../../api/types';
@@ -481,6 +482,14 @@ export const extractMatchDetails = (
 
 export const CreateMatch: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const paramTournamentId = searchParams.get('tournamentId') || '';
+  const paramTournamentName = searchParams.get('tournamentName') || '';
+  const paramBracketMatchId = searchParams.get('bracketMatchId') || '';
+  const paramHome = searchParams.get('home') || '';
+  const paramAway = searchParams.get('away') || '';
+  const paramSport = searchParams.get('sport') || '';
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const appendFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -493,6 +502,25 @@ export const CreateMatch: React.FC = () => {
   const [sportCategory, setSportCategory] = useState('Basketball');
   const [sportsList, setSportsList] = useState<SportOptionItem[]>(() => buildCreateSportsList());
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
+
+  // Pre-fill parameters when arriving from a tournament bracket slot
+  useEffect(() => {
+    if (paramSport) {
+      const formatted = toTitleCaseSport(paramSport);
+      if (formatted) setSportCategory(formatted);
+    }
+    if (paramHome) setHomeTeam(paramHome);
+    if (paramAway) setAwayTeam(paramAway);
+    if (paramHome && paramAway) {
+      setTeams([paramHome, paramAway]);
+    }
+    if (paramTournamentName || (paramHome && paramAway)) {
+      const baseName = paramTournamentName
+        ? `${paramTournamentName}: ${paramHome || 'Team 1'} vs ${paramAway || 'Team 2'}`
+        : `${paramHome} vs ${paramAway}`;
+      setGameName(baseName);
+    }
+  }, [paramTournamentId, paramTournamentName, paramBracketMatchId, paramHome, paramAway, paramSport]);
 
   // Strict array deduplication keyed by normalized sport name, sorted alphabetically
   const uniqueSports = useMemo(() => {
@@ -568,6 +596,7 @@ export const CreateMatch: React.FC = () => {
     teams: string[];
     gameName: string;
     venue?: string;
+    tournamentId?: string;
   } | null>(null);
 
   const activeSportCategory = (ocrDetectedSport || sportCategory || 'Basketball').trim();
@@ -1842,6 +1871,10 @@ export const CreateMatch: React.FC = () => {
         gameName: gameName.trim() || `${finalHome} vs ${finalAway}`,
         game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
         gameReferenceId: gameName.trim() || undefined,
+        tournament_id: paramTournamentId || undefined,
+        tournament_name: paramTournamentName || undefined,
+        tournamentId: paramTournamentId || undefined,
+        tournamentName: paramTournamentName || undefined,
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
         assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
         scoresheet_url: networkScoresheetUrl,
@@ -1972,7 +2005,21 @@ export const CreateMatch: React.FC = () => {
           is_certified: false,
           assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
           coach_name: coaches[0]?.trim() || undefined,
+          tournament_id: paramTournamentId || undefined,
+          tournament_name: paramTournamentName || undefined,
         };
+
+        if (paramTournamentId && paramBracketMatchId) {
+          linkMatchToBracketSlot(
+            paramTournamentId,
+            paramBracketMatchId,
+            cleanMatchId,
+            networkScoresheetUrl || finalScoresheetUrlPayload,
+            homeDynamicScore.num,
+            awayDynamicScore.num,
+            dynamicMatchResult.homeResult === 'WIN' ? finalHome : dynamicMatchResult.homeResult === 'LOSE' ? finalAway : undefined
+          ).catch((err) => console.error('Error linking match to bracket slot:', err));
+        }
 
         setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
         try {
@@ -2047,6 +2094,7 @@ export const CreateMatch: React.FC = () => {
         teams: participating,
         gameName: gameName.trim() || `${finalHome} vs ${finalAway}`,
         venue: venueLocation,
+        tournamentId: paramTournamentId || undefined,
       });
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to create match instance.');
@@ -3383,9 +3431,35 @@ export const CreateMatch: React.FC = () => {
             )}
 
             <div style={styles.modalActions}>
+              {createdMatchInfo.tournamentId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/tournaments/${createdMatchInfo.tournamentId}`)}
+                  className="hover-btn-solid"
+                  style={{
+                    ...styles.modalPrimaryBtn,
+                    backgroundColor: '#00C8FF',
+                    color: '#070D19',
+                    marginBottom: '8px',
+                  }}
+                >
+                  <Trophy style={{ width: 15, height: 15 }} />
+                  <span>RETURN TO TOURNAMENT BRACKET</span>
+                  <span>→</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => navigate(`/matches/${createdMatchInfo.matchId.replace(/^#/, '')}`)}
+                onClick={() =>
+                  navigate(`/matches/${createdMatchInfo.matchId.replace(/^#/, '')}`, {
+                    state: createdMatchInfo.tournamentId
+                      ? {
+                          returnUrl: `/tournaments/${createdMatchInfo.tournamentId}`,
+                          returnLabel: 'BACK TO TOURNAMENT BRACKET',
+                        }
+                      : undefined,
+                  })
+                }
                 className="hover-btn-solid"
                 style={styles.modalPrimaryBtn}
               >
