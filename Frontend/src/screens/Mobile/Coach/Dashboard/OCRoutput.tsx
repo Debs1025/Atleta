@@ -77,11 +77,14 @@ export interface DetectedAthleteStat {
     split_time?: string;
     split_2?: string;
     seed_time?: string;
+    seed?: string;
     pace?: string;
     reaction_sec?: string;
     heat?: number;
     lane?: number;
     rank?: number;
+    place?: number;
+    points?: number;
     // Badminton / Racket
     smash_winners?: number;
     net_kills?: number;
@@ -541,7 +544,7 @@ export function OCRoutput({
                 const itemIdx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
                 if (itemIdx === -1) return prev;
                 const numVal = parseInt(value, 10);
-                const isNumericField = !['time', 'finish_time', 'split', 'split_time', 'event', 'event_name', 'fg_pct', 'hitting_pct'].includes(field);
+                const isNumericField = !['time', 'finish_time', 'seed_time', 'seed', 'split', 'split_time', 'event', 'event_name', 'fg_pct', 'hitting_pct'].includes(field);
                 updated[itemIdx] = {
                     ...updated[itemIdx],
                     [field]: isNumericField ? (isNaN(numVal) ? 0 : numVal) : value,
@@ -775,7 +778,10 @@ export function OCRoutput({
                             <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
                                 <Text style={styles.identityLabel}>TOP RECORDED TIME</Text>
                                 <Text style={styles.teamScoreNum}>
-                                    {athleteStats.find((a) => a.time || a.finish_time)?.time || athleteStats[0]?.time || "00:00.00"}
+                                    {(() => {
+                                        const top = athleteStats.find((a) => a.finish_time || a.time);
+                                        return top?.finish_time || top?.time || "00:00.00";
+                                    })()}
                                 </Text>
                             </View>
                         </View>
@@ -887,7 +893,7 @@ export function OCRoutput({
                         showsHorizontalScrollIndicator={true}
                         nestedScrollEnabled
                     >
-                        <View style={{ minWidth: Math.max(680, (activeSportSchema?.tableHeaders?.length || 8) * 64 + 180) }}>
+                        <View style={{ minWidth: Math.max(520, 160 + (activeSportSchema?.tableHeaders?.reduce((acc, h) => acc + (h.width || 65), 0) || 500)) }}>
                             {/* Table Header Row */}
                             <View style={styles.tableHeaderRow}>
                                 <Text style={styles.tableHeaderColName}>
@@ -939,10 +945,25 @@ export function OCRoutput({
                                     </View>
 
                                     {activeSportSchema?.tableHeaders?.map((header) => {
-                                        const rawVal = item[header.key] ?? item.stats?.[header.key] ?? item.custom_stats?.[header.key];
+                                        const rawVal = (() => {
+                                            if (header.key === 'finish_time') {
+                                                return item.finish_time || item.time || item.final_time || item.stats?.finish_time || item.stats?.time || item.custom_stats?.finish_time;
+                                            }
+                                            if (header.key === 'seed_time') {
+                                                return item.seed_time || item.seed || item.entry_time || item.stats?.seed_time || item.stats?.seed || item.custom_stats?.seed_time;
+                                            }
+                                            if (header.key === 'rank' || header.key === 'place') {
+                                                return item.rank !== undefined ? item.rank : (item.place !== undefined ? item.place : item.stats?.rank ?? item.stats?.place ?? item.custom_stats?.rank ?? item.custom_stats?.place);
+                                            }
+                                            if (header.key === 'pts' || header.key === 'points') {
+                                                return item.pts !== undefined ? item.pts : (item.points !== undefined ? item.points : item.stats?.pts ?? item.stats?.points ?? item.custom_stats?.pts ?? item.custom_stats?.points);
+                                            }
+                                            return item[header.key] ?? item.stats?.[header.key] ?? item.custom_stats?.[header.key];
+                                        })();
                                         const fallbackVal = header.key === "pts" ? item.pts : (header.key === "min" ? item.min : undefined);
                                         const val = rawVal !== undefined ? rawVal : fallbackVal;
-                                        const isNumeric = typeof val === "number" || (!isNaN(Number(val)) && val !== "" && val !== undefined);
+                                        const isTimeOrRankField = ['finish_time', 'seed_time', 'time', 'rank', 'place'].includes(header.key);
+                                        const isNumeric = !isTimeOrRankField && (typeof val === "number" || (!isNaN(Number(val)) && val !== "" && val !== undefined));
 
                                         return isEditing ? (
                                             <TextInput
@@ -960,10 +981,10 @@ export function OCRoutput({
                                                 key={header.key}
                                                 style={[
                                                     styles.cellStatText,
-                                                    header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                                    header.width ? { width: header.width } : null,
                                                 ]}
                                             >
-                                                {val !== undefined && val !== null ? String(val) : "-"}
+                                                {val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-"}
                                             </Text>
                                         );
                                     })}
@@ -974,6 +995,25 @@ export function OCRoutput({
                             <View style={[styles.tableDataRow, styles.totalsRow]}>
                                 <Text style={styles.cellNameText}>TOTAL</Text>
                                 {activeSportSchema?.tableHeaders?.map((header) => {
+                                    const isNonSummableHeader = [
+                                        'finish_time', 'seed_time', 'time', 'split', 'split_time',
+                                        'rank', 'place', 'lane', 'heat', 'event', 'jersey_number'
+                                    ].includes(header.key);
+
+                                    if (isNonSummableHeader) {
+                                        return (
+                                            <Text
+                                                key={header.key}
+                                                style={[
+                                                    styles.cellStatText,
+                                                    header.width ? { width: header.width } : null,
+                                                ]}
+                                            >
+                                                -
+                                            </Text>
+                                        );
+                                    }
+
                                     const isNumericHeader = visibleAthletes.some((a) => {
                                         const v = a[header.key] ?? a.stats?.[header.key] ?? (header.key === "pts" ? a.pts : undefined);
                                         return typeof v === "number" || (!isNaN(Number(v)) && v !== "" && v !== undefined);
@@ -985,7 +1025,7 @@ export function OCRoutput({
                                                 key={header.key}
                                                 style={[
                                                     styles.cellStatText,
-                                                    header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                                    header.width ? { width: header.width } : null,
                                                 ]}
                                             >
                                                 -
@@ -994,7 +1034,7 @@ export function OCRoutput({
                                     }
 
                                     const sumVal = visibleAthletes.reduce((acc, a) => {
-                                        const v = a[header.key] ?? a.stats?.[header.key] ?? (header.key === "pts" ? a.pts : 0);
+                                        const v = a[header.key] ?? a.stats?.[header.key] ?? (header.key === "pts" ? (a.pts ?? a.points ?? 0) : 0);
                                         return acc + (Number(v) || 0);
                                     }, 0);
 
@@ -1003,7 +1043,7 @@ export function OCRoutput({
                                             key={header.key}
                                             style={[
                                                 styles.cellStatText,
-                                                header.width ? { width: Math.max(48, header.width - 6) } : null,
+                                                header.width ? { width: header.width } : null,
                                             ]}
                                         >
                                             {sumVal}
@@ -1139,7 +1179,10 @@ export function OCRoutput({
                             <View style={styles.metricCard}>
                                 <Text style={styles.metricLabel}>TOP RECORDED TIME</Text>
                                 <Text style={styles.metricValue}>
-                                    {athleteStats.find((a) => a.time || a.finish_time)?.time || athleteStats[0]?.time || "RECORDED"}
+                                    {(() => {
+                                        const top = athleteStats.find((a) => a.finish_time || a.time);
+                                        return top?.finish_time || top?.time || "RECORDED";
+                                    })()}
                                 </Text>
                             </View>
                         </View>

@@ -401,14 +401,13 @@ const SWIMMING_SCHEMA: SportStatSchema = {
   sportDisplayName: 'SWIMMING',
   isTimed: true,
   formatSummary: (s: any, c?: any) => {
-    const laps = s?.reb ?? c?.laps ?? 0;
-    const splits = s?.ast ?? c?.splits ?? 0;
-    return `${laps} LAPS • ${splits} SPLITS`;
+    const time = s?.finish_time ?? s?.time ?? c?.finish_time ?? c?.time ?? '--';
+    const pts = s?.pts ?? s?.points ?? c?.pts ?? c?.points ?? 0;
+    return `${time} • ${pts} PTS`;
   },
   primaryActions: [
-    { label: '+LAP', statKey: 'reb', delta: 1 },
-    { label: '+SPLIT', statKey: 'ast', delta: 1 },
     { label: '+POINT', statKey: 'pts', delta: 1 },
+    { label: '-POINT', statKey: 'pts', delta: -1 },
   ],
   multiPointOptions: [],
   secondaryActions: [
@@ -417,12 +416,12 @@ const SWIMMING_SCHEMA: SportStatSchema = {
   ],
   actionCategories: [
     {
-      name: 'LAPS & SPLITS',
+      name: 'RACE METRICS',
       icon: 'water-outline',
       color: '#00D2FF',
       actions: [
-        { label: '+1 LAP', statKey: 'reb', delta: 1, icon: 'repeat-outline', color: '#00D2FF' },
-        { label: '+1 SPLIT', statKey: 'ast', delta: 1, icon: 'timer-outline', color: '#38BDF8' },
+        { label: '+1 POINT', statKey: 'pts', delta: 1, icon: 'add-circle-outline', color: '#00D2FF' },
+        { label: '-1 POINT', statKey: 'pts', delta: -1, icon: 'remove-circle-outline', color: '#94A3B8' },
       ],
     },
     {
@@ -436,10 +435,10 @@ const SWIMMING_SCHEMA: SportStatSchema = {
     },
   ],
   tableHeaders: [
-    { label: 'LAPS', key: 'reb' },
-    { label: 'SPLITS', key: 'ast' },
-    { label: 'FLT', key: 'pf' },
-    { label: 'ERR', key: 'to' },
+    { label: 'FINISH TIME', shortLabel: 'FINISH TIME', key: 'finish_time', width: 115 },
+    { label: 'SEED TIME', shortLabel: 'SEED TIME', key: 'seed_time', width: 105 },
+    { label: 'POINTS', shortLabel: 'POINTS', key: 'pts', width: 80 },
+    { label: 'PLACE', shortLabel: 'PLACE', key: 'rank', width: 70 },
   ],
 };
 

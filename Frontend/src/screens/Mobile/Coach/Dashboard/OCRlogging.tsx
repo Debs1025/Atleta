@@ -626,8 +626,10 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                         saves: parseStatValue(p.saves ?? p.save ?? p.sv ?? 0),
                         tackles: parseStatValue(p.tackles ?? p.tkl ?? 0),
                         // Timed / Individual (Swimming / Track)
-                        time: String(p.finish_time || p.time || ""),
-                        finish_time: String(p.finish_time || p.time || ""),
+                        time: String(p.finish_time || p.time || p.final_time || p.mark || ""),
+                        finish_time: String(p.finish_time || p.time || p.final_time || p.mark || ""),
+                        seed_time: String(p.seed_time || p.seed || p.entry_time || ""),
+                        seed: String(p.seed_time || p.seed || p.entry_time || ""),
                         split: String(p.split_times || p.split_time || p.split || ""),
                         split_2: String(p.split_2 || ""),
                         event: String(p.event || p.event_name || p.race || ""),
@@ -638,7 +640,8 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                         reaction_sec: String(p.reaction_sec || p.reaction_time || ""),
                         heat: parseStatValue(p.heat || 1),
                         lane: parseStatValue(p.lane || 1),
-                        rank: parseStatValue(p.rank || p.place || idx + 1),
+                        rank: parseStatValue(p.rank ?? p.place ?? idx + 1),
+                        place: parseStatValue(p.place ?? p.rank ?? idx + 1),
                         // Badminton / Racket
                         smash_winners: parseStatValue(p.smash_winners ?? p.smashes ?? 0),
                         net_kills: parseStatValue(p.net_kills ?? p.net_shots ?? 0),
