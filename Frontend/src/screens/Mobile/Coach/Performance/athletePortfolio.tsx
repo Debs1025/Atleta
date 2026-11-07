@@ -325,12 +325,21 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
         })}
 
         {/* Competency Fill Polygon */}
-        <Polygon
-          points={polygonPoints}
-          fill="rgba(0, 200, 255, 0.35)"
-          stroke="#00C8FF"
-          strokeWidth={2}
-        />
+        {hasRadarData && (
+          <>
+            <Polygon
+              points={polygonPoints}
+              fill="rgba(0, 200, 255, 0.35)"
+              stroke="#00C8FF"
+              strokeWidth={2}
+            />
+            {axes.map((axis, i) => {
+              const r = (axis.value / 100) * maxRadius;
+              const pt = getCoords(r, i);
+              return <Circle key={i} cx={pt.x} cy={pt.y} r={3} fill="#00C8FF" />;
+            })}
+          </>
+        )}
 
         {/* Axis Labels */}
         {axes.map((axis, i) => {
