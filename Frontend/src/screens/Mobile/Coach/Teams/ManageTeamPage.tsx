@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -120,6 +121,7 @@ interface ManageTeamPageProps {
     teamId: string,
     updates: { team_name?: string; sport_type?: Team["sport_type"]; division?: string }
   ) => void;
+  onSaveRoster?: (teamId: string, updatedRoster: RosterAthlete[]) => Promise<void> | void;
   onUpdateRosterPlayer: (
     teamId: string,
     athleteId: string,
@@ -144,6 +146,7 @@ export function ManageTeamPage({
   onDeleteTeam,
   onUpdateTeamName,
   onUpdateTeamDetails,
+  onSaveRoster,
   onUpdateRosterPlayer,
   onUpdateRosterPlayerDetails,
   onRemovePlayer,
@@ -153,6 +156,16 @@ export function ManageTeamPage({
 }: ManageTeamPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
+
+  // Local Roster Draft State for unified saving & instantaneous UI updates
+  const [localRoster, setLocalRoster] = useState<RosterAthlete[]>(team.roster_list || []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    setLocalRoster(team.roster_list || []);
+    setHasUnsavedChanges(false);
+  }, [team.team_id, team.roster_list]);
 
   // Add Players Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -207,11 +220,13 @@ export function ManageTeamPage({
   }, [team]);
 
   const availablePool = athletesPool.filter(
-    (p) => !team.roster_list.some((rp) => rp.athlete_id === p.athlete_id)
+    (p) => !localRoster.some((rp) => rp.athlete_id === p.athlete_id)
   );
 
   const handleConfirmAdd = () => {
     const toAdd = availablePool.filter((p) => selectedIds.includes(p.athlete_id));
+    setLocalRoster((prev) => [...prev, ...toAdd]);
+    setHasUnsavedChanges(true);
     onAddPlayers(team.team_id, toAdd);
     setSelectedIds([]);
     setShowAddModal(false);
@@ -233,6 +248,8 @@ export function ManageTeamPage({
 
   const handleConfirmRemovePlayer = () => {
     if (playerToRemove) {
+      setLocalRoster((prev) => prev.filter((p) => p.athlete_id !== playerToRemove.athlete_id));
+      setHasUnsavedChanges(true);
       onRemovePlayer(team.team_id, playerToRemove.athlete_id);
       setPlayerToRemove(null);
     }
@@ -243,26 +260,84 @@ export function ManageTeamPage({
     onDeleteTeam?.(team.team_id);
   };
 
+  const handleSaveRoster = async () => {
+    setIsSaving(true);
+    try {
+      if (onSaveRoster) {
+        await onSaveRoster(team.team_id, localRoster);
+      } else {
+        for (const p of localRoster) {
+          onUpdateRosterPlayer(team.team_id, p.athlete_id, p.position, String(p.jersey_number || "0"));
+        }
+      }
+      setHasUnsavedChanges(false);
+      Alert.alert("Success", "Team roster and player assignments updated successfully!");
+    } catch (err: any) {
+      console.warn("Save roster error:", err);
+      Alert.alert("Error", err?.message || "Could not save roster changes. Please check player numbers.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBackWithPrompt = () => {
+    if (hasUnsavedChanges) {
+      Alert.alert(
+        "Save Changes?",
+        "You have unsaved changes in your team roster.",
+        [
+          { text: "Discard", style: "destructive", onPress: onBack },
+          {
+            text: "Save & Exit",
+            onPress: async () => {
+              await handleSaveRoster();
+              onBack();
+            },
+          },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+    } else {
+      onBack();
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* FIXED TOP HEADER */}
       <View style={[styles.fixedHeaderContainer, { paddingTop: headerTopPadding }]}>
         <View style={styles.header}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <TouchableOpacity onPress={onBack} style={{ marginRight: 14 }} activeOpacity={0.7}>
+            <TouchableOpacity onPress={handleBackWithPrompt} style={{ marginRight: 14 }} activeOpacity={0.7}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Manage Team</Text>
           </View>
 
-          {/* Minimalist Delete Team Icon Button */}
-          <TouchableOpacity
-            style={styles.deleteTeamHeaderIcon}
-            onPress={() => setShowDeleteConfirmModal(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="trash-outline" size={20} color="#EF4444" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            {/* Quick Header Save Button */}
+            <TouchableOpacity
+              style={[styles.saveHeaderButton, isSaving && styles.saveHeaderButtonDisabled]}
+              onPress={handleSaveRoster}
+              activeOpacity={0.8}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#070D19" />
+              ) : (
+                <Text style={styles.saveHeaderText}>Save</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Minimalist Delete Team Icon Button */}
+            <TouchableOpacity
+              style={styles.deleteTeamHeaderIcon}
+              onPress={() => setShowDeleteConfirmModal(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -341,16 +416,16 @@ export function ManageTeamPage({
         <View style={{ marginBottom: 20 }}>
           <View style={styles.rosterHeaderRow}>
             <Text style={styles.rosterTitle}>Active Roster</Text>
-            <Text style={styles.rosterCountText}>{team.roster_list.length} Players</Text>
+            <Text style={styles.rosterCountText}>{localRoster.length} Players</Text>
           </View>
 
           <View style={styles.rosterContainer}>
-            {team.roster_list.map((player, index) => (
+            {localRoster.map((player, index) => (
               <View
                 key={`${player.athlete_id}_${index}`}
                 style={[
                   styles.rosterRow,
-                  index < team.roster_list.length - 1 && styles.rosterRowBorder,
+                  index < localRoster.length - 1 && styles.rosterRowBorder,
                 ]}
               >
                 <View style={styles.avatarCircle}>
@@ -385,14 +460,14 @@ export function ManageTeamPage({
                         value={player.jersey_number !== undefined && player.jersey_number !== null ? String(player.jersey_number) : ""}
                         keyboardType="number-pad"
                         maxLength={3}
-                        onChangeText={(val) =>
-                          onUpdateRosterPlayer(
-                            team.team_id,
-                            player.athlete_id,
-                            player.position,
-                            val
-                          )
-                        }
+                        onChangeText={(val) => {
+                          setLocalRoster((prev) =>
+                            prev.map((p) =>
+                              p.athlete_id === player.athlete_id ? { ...p, jersey_number: val } : p
+                            )
+                          );
+                          setHasUnsavedChanges(true);
+                        }}
                       />
                     </View>
                   </>
@@ -410,11 +485,14 @@ export function ManageTeamPage({
                           maxLength={4}
                           onChangeText={(val) => {
                             const digits = val.replace(/[^0-9]/g, "");
-                            if (onUpdateRosterPlayerDetails) {
-                              onUpdateRosterPlayerDetails(team.team_id, player.athlete_id, {
-                                event_distance: digits ? `${digits}m` : "",
-                              });
-                            }
+                            setLocalRoster((prev) =>
+                              prev.map((p) =>
+                                p.athlete_id === player.athlete_id
+                                  ? { ...p, event_distance: digits ? `${digits}m` : "" }
+                                  : p
+                              )
+                            );
+                            setHasUnsavedChanges(true);
                           }}
                         />
                         <Text style={styles.meterUnitText}>m</Text>
@@ -428,14 +506,14 @@ export function ManageTeamPage({
                         value={player.jersey_number || ""}
                         keyboardType="number-pad"
                         maxLength={3}
-                        onChangeText={(val) =>
-                          onUpdateRosterPlayer(
-                            team.team_id,
-                            player.athlete_id,
-                            player.position,
-                            val
-                          )
-                        }
+                        onChangeText={(val) => {
+                          setLocalRoster((prev) =>
+                            prev.map((p) =>
+                              p.athlete_id === player.athlete_id ? { ...p, jersey_number: val } : p
+                            )
+                          );
+                          setHasUnsavedChanges(true);
+                        }}
                       />
                     </View>
                   </>
@@ -453,11 +531,14 @@ export function ManageTeamPage({
                           maxLength={4}
                           onChangeText={(val) => {
                             const digits = val.replace(/[^0-9]/g, "");
-                            if (onUpdateRosterPlayerDetails) {
-                              onUpdateRosterPlayerDetails(team.team_id, player.athlete_id, {
-                                event_distance: digits ? `${digits}m` : "",
-                              });
-                            }
+                            setLocalRoster((prev) =>
+                              prev.map((p) =>
+                                p.athlete_id === player.athlete_id
+                                  ? { ...p, event_distance: digits ? `${digits}m` : "" }
+                                  : p
+                              )
+                            );
+                            setHasUnsavedChanges(true);
                           }}
                         />
                         <Text style={styles.meterUnitText}>m</Text>
@@ -500,6 +581,23 @@ export function ManageTeamPage({
         >
           <Ionicons name="person-add" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
           <Text style={styles.addPlayersCtaText}>+ ADD MORE PLAYERS</Text>
+        </TouchableOpacity>
+
+        {/* Save Roster Changes Button */}
+        <TouchableOpacity
+          style={[styles.saveRosterCta, isSaving && styles.saveRosterCtaDisabled]}
+          onPress={handleSaveRoster}
+          activeOpacity={0.8}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#070D19" style={{ marginRight: 8 }} />
+          ) : (
+            <Ionicons name="checkmark-circle" size={20} color="#070D19" style={{ marginRight: 8 }} />
+          )}
+          <Text style={styles.saveRosterCtaText}>
+            {isSaving ? "SAVING ROSTER..." : "SAVE ROSTER CHANGES"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -612,12 +710,22 @@ export function ManageTeamPage({
                   style={styles.pickerOptionRow}
                   onPress={() => {
                     if (posPickerPlayer) {
-                      onUpdateRosterPlayer(
-                        team.team_id,
-                        posPickerPlayer.athlete_id,
-                        pos.code,
-                        posPickerPlayer.jersey_number
+                      setLocalRoster((prev) =>
+                        prev.map((p) =>
+                          p.athlete_id === posPickerPlayer.athlete_id
+                            ? { ...p, position: pos.code }
+                            : p
+                        )
                       );
+                      setHasUnsavedChanges(true);
+                      if (!onSaveRoster) {
+                        onUpdateRosterPlayer(
+                          team.team_id,
+                          posPickerPlayer.athlete_id,
+                          pos.code,
+                          String(posPickerPlayer.jersey_number || "0")
+                        );
+                      }
                     }
                     setPosPickerPlayer(null);
                   }}
@@ -652,10 +760,20 @@ export function ManageTeamPage({
                   key={type}
                   style={styles.pickerOptionRow}
                   onPress={() => {
-                    if (typePickerPlayer && onUpdateRosterPlayerDetails) {
-                      onUpdateRosterPlayerDetails(team.team_id, typePickerPlayer.athlete_id, {
-                        stroke_style: type,
-                      });
+                    if (typePickerPlayer) {
+                      setLocalRoster((prev) =>
+                        prev.map((p) =>
+                          p.athlete_id === typePickerPlayer.athlete_id
+                            ? { ...p, stroke_style: type }
+                            : p
+                        )
+                      );
+                      setHasUnsavedChanges(true);
+                      if (!onSaveRoster && onUpdateRosterPlayerDetails) {
+                        onUpdateRosterPlayerDetails(team.team_id, typePickerPlayer.athlete_id, {
+                          stroke_style: type,
+                        });
+                      }
                     }
                     setTypePickerPlayer(null);
                   }}

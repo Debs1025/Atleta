@@ -118,6 +118,11 @@ export interface RosterAthlete {
   excel_tags?: string[];
   excelTags?: string[];
   specialties?: string[];
+  team_id?: string;
+  team_name?: string;
+  team_ids?: string[];
+  team_names?: string[];
+  teams?: { team_id: string; team_name: string }[];
 }
 
 export interface Team {

@@ -1428,6 +1428,106 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     []
   );
 
+  const handleSaveRoster = useCallback(
+    async (teamId: string, updatedRoster: RosterAthlete[]) => {
+      // 1. Optimistically update teams state
+      setTeams((prev) =>
+        prev.map((t) => {
+          if (t.team_id !== teamId) return t;
+          return {
+            ...t,
+            roster_list: updatedRoster,
+          };
+        })
+      );
+
+      // 2. Optimistically update athletesPool state so Home Dashboard & ViewAll immediately update!
+      setAthletesPool((prev) => {
+        const teamObj = teams.find((t) => t.team_id === teamId);
+        const teamName = teamObj?.team_name || "Team";
+        const rosterMap = new Map<string, RosterAthlete>();
+        updatedRoster.forEach((r) => rosterMap.set(r.athlete_id, r));
+
+        return prev.map((ath) => {
+          const inRoster = rosterMap.get(ath.athlete_id);
+          if (inRoster) {
+            return {
+              ...ath,
+              position: inRoster.position || ath.position,
+              jersey_number: inRoster.jersey_number !== undefined ? inRoster.jersey_number : ath.jersey_number,
+              event_distance: inRoster.event_distance || ath.event_distance,
+              stroke_style: inRoster.stroke_style || ath.stroke_style,
+              team_id: teamId,
+              team_name: teamName,
+              team_ids: Array.from(new Set([...(ath.team_ids || []), teamId])),
+              team_names: Array.from(new Set([...(ath.team_names || []), teamName])),
+            };
+          } else if (ath.team_id === teamId || (ath.team_ids || []).includes(teamId)) {
+            const remainingTeamIds = (ath.team_ids || []).filter((id) => id !== teamId);
+            const remainingTeamNames = (ath.team_names || []).filter((_, idx) => (ath.team_ids || [])[idx] !== teamId);
+            return {
+              ...ath,
+              team_id: remainingTeamIds[0] || "",
+              team_name: remainingTeamNames[0] || "Unassigned",
+              team_ids: remainingTeamIds,
+              team_names: remainingTeamNames,
+            };
+          }
+          return ath;
+        });
+      });
+
+      // 3. Persist to Backend API
+      try {
+        await requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", {
+          roster_list: updatedRoster.map((p) => ({
+            athlete_id: p.athlete_id,
+            position: p.position || "Unassigned",
+            jersey_number: Number(p.jersey_number) || 0,
+            event_distance: p.event_distance,
+            stroke_style: p.stroke_style,
+          })),
+          override_unverified: true,
+        });
+        clearAuthMicroCache();
+        clearFirebaseClientCaches();
+        AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY).then((cachedStr) => {
+          if (cachedStr) {
+            const cachedObj = JSON.parse(cachedStr);
+            if (Array.isArray(cachedObj.teams)) {
+              cachedObj.teams = cachedObj.teams.map((t: any) =>
+                t.team_id === teamId ? { ...t, roster_list: updatedRoster } : t
+              );
+            }
+            if (Array.isArray(cachedObj.athletesPool)) {
+              cachedObj.athletesPool = cachedObj.athletesPool.map((ath: any) => {
+                const updatedPlayer = updatedRoster.find((r) => r.athlete_id === ath.athlete_id);
+                if (updatedPlayer) {
+                  return {
+                    ...ath,
+                    position: updatedPlayer.position || ath.position,
+                    jersey_number:
+                      updatedPlayer.jersey_number !== undefined
+                        ? updatedPlayer.jersey_number
+                        : ath.jersey_number,
+                    event_distance: updatedPlayer.event_distance || ath.event_distance,
+                    stroke_style: updatedPlayer.stroke_style || ath.stroke_style,
+                  };
+                }
+                return ath;
+              });
+            }
+            AsyncStorage.setItem(COACH_DASHBOARD_CACHE_KEY, JSON.stringify(cachedObj)).catch(() => null);
+          }
+        }).catch(() => null);
+      } catch (err) {
+        console.warn("Backend save roster error:", err);
+        throw err;
+      }
+    },
+    [teams]
+  );
+
   const handleUpdateRosterPlayer = useCallback(
     async (teamId: string, athleteId: string, position: string, jerseyNumber: string) => {
       let updatedRoster: RosterAthlete[] = [];
@@ -1445,6 +1545,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         })
       );
 
+      // Keep athletesPool in sync immediately
+      setAthletesPool((prev) =>
+        prev.map((a) =>
+          a.athlete_id === athleteId
+            ? { ...a, position, jersey_number: jerseyNumber, team_id: teamId }
+            : a
+        )
+      );
+
       if (updatedRoster.length > 0) {
         try {
           await requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", {
@@ -1453,6 +1562,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               position: p.position,
               jersey_number: Number(p.jersey_number) || 0,
             })),
+            override_unverified: true,
           });
           clearAuthMicroCache();
           clearFirebaseClientCaches();
@@ -1496,6 +1606,25 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         })
       );
 
+      // Keep athletesPool in sync immediately
+      setAthletesPool((prev) =>
+        prev.map((a) =>
+          a.athlete_id === athleteId
+            ? {
+                ...a,
+                position: details.position !== undefined ? details.position : a.position,
+                jersey_number:
+                  details.jerseyNumber !== undefined ? details.jerseyNumber : a.jersey_number,
+                event_distance:
+                  details.event_distance !== undefined ? details.event_distance : a.event_distance,
+                stroke_style:
+                  details.stroke_style !== undefined ? details.stroke_style : a.stroke_style,
+                team_id: teamId,
+              }
+            : a
+        )
+      );
+
       if (updatedRoster.length > 0) {
         try {
           await requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", {
@@ -1506,6 +1635,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               event_distance: p.event_distance,
               stroke_style: p.stroke_style,
             })),
+            override_unverified: true,
           });
           clearAuthMicroCache();
           clearFirebaseClientCaches();
@@ -1532,6 +1662,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       })
     );
 
+    // Keep athletesPool in sync immediately
+    setAthletesPool((prev) =>
+      prev.map((a) => {
+        if (a.athlete_id === athleteId) {
+          const remainingTeamIds = (a.team_ids || []).filter((id) => id !== teamId);
+          const remainingTeamNames = (a.team_names || []).filter((_, idx) => (a.team_ids || [])[idx] !== teamId);
+          return {
+            ...a,
+            team_id: remainingTeamIds[0] || "",
+            team_name: remainingTeamNames[0] || "Unassigned",
+            team_ids: remainingTeamIds,
+            team_names: remainingTeamNames,
+          };
+        }
+        return a;
+      })
+    );
+
     try {
       await requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", {
         roster_list: updatedRoster.map((p) => ({
@@ -1539,6 +1687,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           position: p.position,
           jersey_number: Number(p.jersey_number) || 0,
         })),
+        override_unverified: true,
       });
       clearAuthMicroCache();
       clearFirebaseClientCaches();
@@ -1562,6 +1711,26 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       })
     );
 
+    // Keep athletesPool in sync immediately
+    setAthletesPool((prev) => {
+      const teamObj = teams.find((t) => t.team_id === teamId);
+      const teamName = teamObj?.team_name || "Team";
+      return prev.map((a) => {
+        if (newAthletes.some((na) => na.athlete_id === a.athlete_id)) {
+          const addedAthlete = newAthletes.find((na) => na.athlete_id === a.athlete_id);
+          return {
+            ...a,
+            ...addedAthlete,
+            team_id: teamId,
+            team_name: teamName,
+            team_ids: Array.from(new Set([...(a.team_ids || []), teamId])),
+            team_names: Array.from(new Set([...(a.team_names || []), teamName])),
+          };
+        }
+        return a;
+      });
+    });
+
     try {
       await requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", {
         roster_list: updatedRoster.map((p) => ({
@@ -1569,6 +1738,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           position: p.position,
           jersey_number: Number(p.jersey_number) || 0,
         })),
+        override_unverified: true,
       });
       clearAuthMicroCache();
       clearFirebaseClientCaches();
@@ -1576,7 +1746,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     } catch (err) {
       console.warn("Backend add players error:", err);
     }
-  }, []);
+  }, [teams]);
 
   const handleMarkAllNotificationsRead = useCallback(async () => {
     setNotificationsList((prev) => prev.map((n) => ({ ...n, is_read: true, status: "READ" })));
@@ -2602,6 +2772,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onDeleteTeam={handleDeleteTeam}
           onUpdateTeamName={handleUpdateTeamName}
           onUpdateTeamDetails={handleUpdateTeamDetails}
+          onSaveRoster={handleSaveRoster}
           onUpdateRosterPlayer={handleUpdateRosterPlayer}
           onUpdateRosterPlayerDetails={handleUpdateRosterPlayerDetails}
           onRemovePlayer={handleRemovePlayer}
