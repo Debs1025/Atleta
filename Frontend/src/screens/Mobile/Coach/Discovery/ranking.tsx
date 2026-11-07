@@ -460,12 +460,16 @@ export const RankingPage: React.FC<RankingProps> = ({
                         <Text style={styles.athleteName} numberOfLines={1}>
                           {athlete.full_name || 'Athlete'}
                         </Text>
-                        {athlete.is_scouted && (
+                        {athlete.is_scouted ? (
                           <View style={{ backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
                             <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>SCOUTED</Text>
                           </View>
+                        ) : (
+                          <View style={{ backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                            <Text style={{ color: '#94A3B8', fontSize: 9, fontWeight: '800' }}>UNASSIGNED</Text>
+                          </View>
                         )}
-                        {athlete.has_coach && !athlete.is_scouted && (
+                        {athlete.has_coach && (
                           <View style={styles.coachBadge}>
                             <Ionicons name="shield-checkmark" size={10} color="#10B981" />
                             <Text style={styles.coachBadgeText}>COACHED</Text>
@@ -473,9 +477,7 @@ export const RankingPage: React.FC<RankingProps> = ({
                         )}
                       </View>
                       <Text style={styles.athleteLocation} numberOfLines={1}>
-                        {athlete.position_tag || 'Player'}
-                        {athlete.jersey_number ? ` • #${athlete.jersey_number}` : ''}
-                        {athlete.team_name ? ` • Team: ${athlete.team_name}` : athlete.coach_name ? ` • Coach ${athlete.coach_name}` : ` • ${athlete.province || 'Camarines Sur'}`}
+                        {athlete.team_name ? `Team: ${athlete.team_name}` : athlete.coach_name ? `Coach ${athlete.coach_name}` : (athlete.province || 'Camarines Sur')}
                       </Text>
                     </View>
                   </View>

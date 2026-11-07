@@ -100,25 +100,33 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
           )}
         </View>
 
-        {/* Athlete Name & Position Badge */}
+        {/* Athlete Name & Status Badge */}
         <View style={styles.athleteNameRow}>
           <Text style={styles.athleteNameText}>{(currentAthlete.full_name || 'ATHLETE').toUpperCase()}</Text>
-          {currentAthlete.position_tag &&
-            currentAthlete.position_tag.toUpperCase() !== (currentAthlete.sport_category || '').toUpperCase() && (
-              <View style={styles.positionBadge}>
-                <Text style={styles.positionBadgeText}>{currentAthlete.position_tag}</Text>
-              </View>
-            )}
+          <View
+            style={[
+              styles.positionBadge,
+              currentAthlete.is_scouted
+                ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.positionBadgeText,
+                currentAthlete.is_scouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+              ]}
+            >
+              {currentAthlete.is_scouted ? 'SCOUTED' : 'UNASSIGNED'}
+            </Text>
+          </View>
         </View>
 
-        {/* Location & Sport Subline */}
+        {/* Location Subline */}
         <View style={styles.sublineRow}>
           <Text style={styles.sublineText}>
-            #{currentAthlete.jersey_number || '2'} • {currentAthlete.team_name ? `Team: ${currentAthlete.team_name}` : `${currentAthlete.province || 'Camarines Sur'}, Bicol`}
+            {currentAthlete.team_name ? `Team: ${currentAthlete.team_name}` : `${currentAthlete.province || 'Camarines Sur'}, Bicol`}
           </Text>
-          <View style={styles.sportTagBadge}>
-            <Text style={styles.sportTagBadgeText}>{(currentAthlete.sport_category || 'BASKETBALL').toUpperCase()}</Text>
-          </View>
         </View>
 
         {/* Current Team Affiliation Banner */}

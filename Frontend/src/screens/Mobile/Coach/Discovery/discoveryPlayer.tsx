@@ -80,7 +80,8 @@ export const DiscoveryPlayer: React.FC<{
         ) : filteredAthletes && filteredAthletes.length > 0 ? (
           filteredAthletes.map((athlete) => {
             const athleteName = athlete.full_name || 'Athlete';
-            const positionTag = athlete.position_tag || 'Player';
+            const isScouted = Boolean(athlete.is_scouted || athlete.scout_status);
+            const statusLabel = isScouted ? 'Scouted' : 'Unassigned';
             const effPct = Number(athlete.efficiency_pct ?? 75);
             const filledCount = Math.min(5, Math.max(1, Math.round((effPct / 100) * 5)));
             const currentTeam = athlete.team_name || (athlete.has_coach && athlete.coach_name ? `Coach ${athlete.coach_name}'s Team` : null);
@@ -112,11 +113,6 @@ export const DiscoveryPlayer: React.FC<{
                     <View pointerEvents="box-none" style={{ flex: 1 }}>
                       <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>{athleteName}</Text>
-                        {athlete.is_scouted && (
-                          <View pointerEvents="none" style={{ backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                            <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>SCOUTED</Text>
-                          </View>
-                        )}
 
                         {/* Primary Dominant Badge (No raw numbers) & Compact "+ More" Action */}
                         {primaryBadge && (
@@ -161,11 +157,6 @@ export const DiscoveryPlayer: React.FC<{
                       </View>
 
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                        <View style={{ backgroundColor: 'rgba(56, 189, 248, 0.12)', borderColor: 'rgba(56, 189, 248, 0.3)', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
-                          <Text style={{ color: '#38BDF8', fontSize: 11, fontWeight: '800' }}>
-                            #{athlete.jersey_number || '0'}
-                          </Text>
-                        </View>
                         {currentTeam ? (
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
                             <Ionicons name="shield-checkmark" size={12} color="#38BDF8" />
@@ -182,8 +173,23 @@ export const DiscoveryPlayer: React.FC<{
                     </View>
                   </View>
 
-                  <View pointerEvents="none" style={styles.tagChip}>
-                    <Text style={styles.tagChipText}>{positionTag}</Text>
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.tagChip,
+                      isScouted
+                        ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                        : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.tagChipText,
+                        isScouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                      ]}
+                    >
+                      {statusLabel}
+                    </Text>
                   </View>
                 </View>
 
@@ -291,21 +297,26 @@ export const DiscoveryPlayer: React.FC<{
               <View style={{ flex: 1, paddingRight: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={modalStyles.athleteTitle}>{selectedBadgeModalAthlete?.full_name}</Text>
-                  <View style={modalStyles.positionChip}>
-                    <Text style={modalStyles.positionChipText}>
-                      {selectedBadgeModalAthlete?.position_tag || 'ATHLETE'}
+                  <View
+                    style={[
+                      modalStyles.positionChip,
+                      selectedBadgeModalAthlete?.is_scouted
+                        ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                        : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        modalStyles.positionChipText,
+                        selectedBadgeModalAthlete?.is_scouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                      ]}
+                    >
+                      {selectedBadgeModalAthlete?.is_scouted ? 'Scouted' : 'Unassigned'}
                     </Text>
                   </View>
-                  {selectedBadgeModalAthlete?.jersey_number && (
-                    <View style={modalStyles.jerseyChip}>
-                      <Text style={modalStyles.jerseyNumberText}>
-                        #{selectedBadgeModalAthlete.jersey_number}
-                      </Text>
-                    </View>
-                  )}
                 </View>
                 <Text style={modalStyles.athleteSub}>
-                  {selectedBadgeModalAthlete?.team_name || selectedBadgeModalAthlete?.province || 'Camarines Sur, Region V'} • {selectedBadgeModalAthlete?.sport_category || 'Basketball'}
+                  {selectedBadgeModalAthlete?.team_name || selectedBadgeModalAthlete?.province || 'Camarines Sur, Region V'}
                 </Text>
               </View>
 
