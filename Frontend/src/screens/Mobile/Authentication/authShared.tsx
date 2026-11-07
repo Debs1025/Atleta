@@ -28,6 +28,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { type DocumentPickerAsset } from "expo-document-picker";
 import { useController, type Control, type FieldValues, type Path } from "react-hook-form";
+import { CacheManager } from "../../../utils/cacheManager";
 import { z } from "zod";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
@@ -273,6 +274,7 @@ export async function clearAuthTokens() {
     SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null),
     SecureStore.deleteItemAsync(AUTH_REFRESH_TOKEN_KEY).catch(() => null),
     SecureStore.deleteItemAsync(AUTH_ROLE_KEY).catch(() => null),
+    CacheManager.clearUserSessionCache().catch(() => null),
   ]);
 }
 

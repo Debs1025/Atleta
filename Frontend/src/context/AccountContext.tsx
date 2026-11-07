@@ -17,6 +17,7 @@ import {
   requestAuthenticatedJson,
   type AuthRole,
 } from "../screens/Mobile/Authentication/authShared";
+import { CacheManager } from "../utils/cacheManager";
 
 export interface AccountUser {
   uid: string;
@@ -114,19 +115,31 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const unsubUsersRef = useRef<Unsubscribe | null>(null);
   const unsubProfileRef = useRef<Unsubscribe | null>(null);
 
-  // 1. Initial hydration from AsyncStorage for sub-10ms UI display
+  // 1. Initial hydration from user-scoped CacheManager for sub-10ms UI display without cross-user leakage
   useEffect(() => {
     (async () => {
       try {
-        const cached = await AsyncStorage.getItem(CACHED_ACCOUNT_STORAGE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && (parsed.cleanUid || parsed.uid || parsed.first_name)) {
-            setAccount(parsed);
-            setLoading(false);
-          }
+        const token = await getStoredAuthToken();
+        if (!token) {
+          setLoading(false);
+          return;
         }
-      } catch (_) {}
+        const payload = parseJwtPayload(token);
+        const rawUid = String(payload?.uid || payload?.user_id || payload?.sub || "").trim();
+        const cleanUid = rawUid.replace(/^(ath_|coach_|off_)/, "");
+        if (!cleanUid) {
+          setLoading(false);
+          return;
+        }
+
+        const cached = await CacheManager.get<AccountUser>("account", { userId: cleanUid, ignoreExpiry: true });
+        if (cached && (cached.cleanUid === cleanUid || cached.uid)) {
+          setAccount(cached);
+          setLoading(false);
+        }
+      } catch (_) {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -155,6 +168,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                 contact_number: data.contact_number || data.phoneNumber || prev.contact_number,
                 avatar_url: data.avatar_url || data.profile_image || prev.avatar_url,
               };
+              CacheManager.set("account", updated, { userId: cleanUid, ttlMs: 15 * 60 * 1000 }).catch(() => null);
               AsyncStorage.setItem(CACHED_ACCOUNT_STORAGE_KEY, JSON.stringify(updated)).catch(() => null);
               return updated;
             });
@@ -179,6 +193,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                 avatar_url: data.avatar_url || prev.avatar_url,
                 eligible_documents: data.eligible_documents || data.documents || prev.eligible_documents,
               };
+              CacheManager.set("account", updated, { userId: cleanUid, ttlMs: 15 * 60 * 1000 }).catch(() => null);
               AsyncStorage.setItem(CACHED_ACCOUNT_STORAGE_KEY, JSON.stringify(updated)).catch(() => null);
               return updated;
             });
@@ -325,6 +340,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         };
 
         setAccount(merged);
+        await CacheManager.set("account", merged, { userId: cleanUid, ttlMs: 15 * 60 * 1000 });
         await AsyncStorage.setItem(CACHED_ACCOUNT_STORAGE_KEY, JSON.stringify(merged)).catch(() => null);
 
         // Also update legacy caches so dependent screens have instant hydration
@@ -377,6 +393,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       const canonicalId = role === "coach" ? `coach_${cleanUid}` : `ath_${cleanUid}`;
 
       if (cleanUid) {
+        if (nextAccount) {
+          CacheManager.set("account", nextAccount, { userId: cleanUid, ttlMs: 15 * 60 * 1000 }).catch(() => null);
+        }
         // Direct Firestore writes to canonical Users collection
         const userPayload = sanitizeForFirestore({
           first_name: updates.first_name,

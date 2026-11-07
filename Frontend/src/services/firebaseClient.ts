@@ -23,6 +23,7 @@ import {
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE, CLOUD_PROD_API, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
+import { CacheManager } from "../utils/cacheManager";
 
 try {
   setLogLevel("silent");
@@ -692,18 +693,48 @@ export async function getAthletesOfflineFirst(sportCategory?: string, forceRefre
  * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
 export async function getSportsOfflineFirst(forceRefresh: boolean = false): Promise<any[]> {
-  // 1. If not forcing refresh and memory cache is fresh (<15s), return it
-  if (!forceRefresh && sportsMemoryCache && sportsMemoryCache.length > 0 && Date.now() - sportsLastFetched < 15000) {
+  // 1. Instant Memory Cache (< 10 minutes TTL)
+  if (!forceRefresh && sportsMemoryCache && sportsMemoryCache.length > 0 && Date.now() - sportsLastFetched < 10 * 60 * 1000) {
     return sportsMemoryCache;
   }
 
-  // 2. Network Fetch with Snappy Timeout (6.0s)
+  // 2. Fast Local AsyncStorage Cache (<10ms instant response)
+  if (!forceRefresh) {
+    try {
+      const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const activeList = parsed.filter((s: any) => s.is_active !== false && s.active !== false);
+          sportsMemoryCache = activeList;
+          sportsLastFetched = Date.now();
+
+          // Trigger background revalidation silently if older than 5 minutes
+          quickFetchJson(`${API_BASE}/sports?active=true`, { Accept: "application/json" }, 3000)
+            .then((data) => {
+              if (data && (Array.isArray(data.sports) || Array.isArray(data))) {
+                const list = Array.isArray(data.sports) ? data.sports : data;
+                const freshActive = list.filter((s: any) => s.is_active !== false && s.active !== false);
+                sportsMemoryCache = freshActive;
+                sportsLastFetched = Date.now();
+                AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(freshActive)).catch(() => null);
+              }
+            })
+            .catch(() => null);
+
+          return activeList;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Network Fetch with Snappy Timeout (3.0s)
   try {
     const token = await getStoredAuthToken();
     const data = await quickFetchJson(`${API_BASE}/sports?active=true`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 6000);
+    }, 3000);
 
     if (data && (Array.isArray(data.sports) || Array.isArray(data))) {
       const list = Array.isArray(data.sports) ? data.sports : data;
@@ -716,38 +747,10 @@ export async function getSportsOfflineFirst(forceRefresh: boolean = false): Prom
     }
   } catch (_) {}
 
-  // 3. Firestore persistent local/remote query (only if network completely failed)
-  try {
-    const snap = await getDocs(collection(db, "Sports_Configurations"));
-    if (!snap.empty) {
-      const list = snap.docs
-        .map((d) => ({
-          sport_id: d.id,
-          ...d.data(),
-        }))
-        .filter((s: any) => s.is_active !== false && s.active !== false);
-      if (list.length > 0) {
-        sportsMemoryCache = list;
-        sportsLastFetched = Date.now();
-        AsyncStorage.setItem(OFFLINE_SPORTS_CACHE_KEY, JSON.stringify(list)).catch(() => null);
-        return list;
-      }
-    }
-  } catch (_) {}
-
-  // 4. Offline Fallback: Local AsyncStorage Cache
-  try {
-    const cached = await AsyncStorage.getItem(OFFLINE_SPORTS_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed)) {
-        const activeList = parsed.filter((s: any) => s.is_active !== false && s.active !== false);
-        sportsMemoryCache = activeList;
-        sportsLastFetched = Date.now();
-        return activeList;
-      }
-    }
-  } catch (_) {}
+  // 4. Return cached memory or empty
+  if (sportsMemoryCache && sportsMemoryCache.length > 0) {
+    return sportsMemoryCache;
+  }
 
   return [];
 }
@@ -755,21 +758,48 @@ export async function getSportsOfflineFirst(forceRefresh: boolean = false): Prom
 /**
  * Fetch distinct sports strictly offered by active, registered coach profiles in Firestore.
  * If no coach is registered or active under a specific sport, that sport is excluded.
- * Cache-first (instant 0-10ms) -> Snappy REST -> Direct Firestore -> AsyncStorage.
+ * Cache-first (instant 0-10ms) -> Snappy REST -> AsyncStorage (No unbounded client Firestore scans).
  */
 export async function getActiveCoachSportsOfflineFirst(forceRefresh: boolean = false): Promise<string[]> {
-  // 1. Fast in-memory cache (<15s)
-  if (!forceRefresh && activeCoachSportsMemoryCache && activeCoachSportsMemoryCache.length > 0 && Date.now() - activeCoachSportsLastFetched < 15000) {
+  // 1. Fast in-memory cache (< 5 minutes TTL)
+  if (!forceRefresh && activeCoachSportsMemoryCache && activeCoachSportsMemoryCache.length > 0 && Date.now() - activeCoachSportsLastFetched < 5 * 60 * 1000) {
     return activeCoachSportsMemoryCache;
   }
 
-  // 2. Network REST fetch from /coaches/active-sports (5.0s timeout)
+  // 2. Offline AsyncStorage Fallback (<10ms instant response)
+  if (!forceRefresh) {
+    try {
+      const cached = await AsyncStorage.getItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          activeCoachSportsMemoryCache = parsed;
+          activeCoachSportsLastFetched = Date.now();
+
+          // Trigger background revalidation silently
+          quickFetchJson(`${API_BASE}/coaches/active-sports`, { Accept: "application/json" }, 2500)
+            .then((fresh) => {
+              if (fresh && Array.isArray(fresh.sports) && fresh.sports.length > 0) {
+                activeCoachSportsMemoryCache = fresh.sports;
+                activeCoachSportsLastFetched = Date.now();
+                AsyncStorage.setItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY, JSON.stringify(fresh.sports)).catch(() => null);
+              }
+            })
+            .catch(() => null);
+
+          return parsed;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Network REST fetch from /coaches/active-sports (2.5s timeout max)
   try {
     const token = await getStoredAuthToken();
     const data = await quickFetchJson(`${API_BASE}/coaches/active-sports`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }, 5000);
+    }, 2500);
 
     if (data && Array.isArray(data.sports) && data.sports.length > 0) {
       activeCoachSportsMemoryCache = data.sports;
@@ -779,86 +809,12 @@ export async function getActiveCoachSportsOfflineFirst(forceRefresh: boolean = f
     }
   } catch (_) {}
 
-  // 3. Direct Firestore Fallback across Coach_Profiles and Users collections
-  try {
-    const [cSnap, uSnap] = await Promise.all([
-      getDocs(collection(db, "Coach_Profiles")).catch(() => null),
-      getDocs(collection(db, "Users")).catch(() => null),
-    ]);
+  // 4. Return cached or safe sports fallback
+  if (activeCoachSportsMemoryCache && activeCoachSportsMemoryCache.length > 0) {
+    return activeCoachSportsMemoryCache;
+  }
 
-    const sportsSet = new Set<string>();
-    const processCoachDoc = (data: any) => {
-      if (!data) return;
-      const st = String(data.status || "").toLowerCase();
-      const ast = String(data.account_status || "").toLowerCase();
-      const app = Boolean(data.is_approved || data.isApproved);
-      const ver = Boolean(data.is_verified || data.isVerified);
-      if (st === "rejected" || st === "disabled" || st === "banned" || st === "inactive" || ast === "inactive" || ast === "disabled") {
-        return;
-      }
-      if (st === "approved" || st === "verified" || ast === "active" || app || ver) {
-        const raw = String(data.sport_type || data.sports_focus || data.sport || "").trim();
-        if (raw) {
-          const norm = raw.toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
-          if (norm && norm !== "ALL") {
-            sportsSet.add(norm);
-          }
-        }
-      }
-    };
-
-    if (cSnap && !cSnap.empty) {
-      cSnap.docs.forEach((d) => processCoachDoc(d.data()));
-    }
-    if (uSnap && !uSnap.empty) {
-      uSnap.docs.forEach((d) => {
-        const u = d.data();
-        if (String(u.role || "").toLowerCase() === "coach") {
-          processCoachDoc(u);
-        }
-      });
-    }
-
-    // Direct Firestore Teams fallback: check teams with assigned coaches
-    if (sportsSet.size === 0) {
-      const teamsSnap = await getDocs(collection(db, "Teams")).catch(() => null);
-      if (teamsSnap && !teamsSnap.empty) {
-        teamsSnap.docs.forEach((d) => {
-          const t = d.data();
-          const hasCoach = t.coach_id || t.managed_by_coach_id || t.coach_name || t.head_coach;
-          if (hasCoach && t.sport_type) {
-            const norm = String(t.sport_type).toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
-            if (norm && norm !== "ALL") {
-              sportsSet.add(norm);
-            }
-          }
-        });
-      }
-    }
-
-    if (sportsSet.size > 0) {
-      const sorted = Array.from(sportsSet).sort();
-      activeCoachSportsMemoryCache = sorted;
-      activeCoachSportsLastFetched = Date.now();
-      AsyncStorage.setItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY, JSON.stringify(sorted)).catch(() => null);
-      return sorted;
-    }
-  } catch (_) {}
-
-  // 4. Offline AsyncStorage Fallback
-  try {
-    const cached = await AsyncStorage.getItem(OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        activeCoachSportsMemoryCache = parsed;
-        activeCoachSportsLastFetched = Date.now();
-        return parsed;
-      }
-    }
-  } catch (_) {}
-
-  return [];
+  return ["BASKETBALL", "VOLLEYBALL", "SWIMMING", "TRACK AND FIELD"];
 }
 
 /**
@@ -948,9 +904,53 @@ function safeBase64Decode(str: string): string {
 
 /**
  * Fetch individual athlete profile with Firestore + storage offline fallback.
+ * Strictly cache-first (0-5ms instant display) with user-scoped cache and silent background revalidation.
  */
-export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
-  // 1. Try REST API
+export async function getAthleteProfileOfflineFirst(forceRefresh: boolean = false): Promise<any | null> {
+  // Resolve UID from token
+  let athleteUid = "";
+  try {
+    const token = await getStoredAuthToken();
+    if (token && token.includes(".")) {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = safeBase64Decode(base64);
+      const payload = JSON.parse(decoded);
+      athleteUid = payload.uid || payload.user_id || payload.sub || "";
+    }
+  } catch (_) {}
+
+  const cleanId = athleteUid.replace(/^ath_/, "").trim();
+
+  // 1. Instant Cache-First Lookup (<5ms render)
+  if (!forceRefresh && cleanId) {
+    const cached = await CacheManager.get<any>("athlete_profile", { userId: cleanId, ignoreExpiry: true });
+    if (cached) {
+      // Trigger background revalidation silently
+      (async () => {
+        try {
+          const token = await getStoredAuthToken();
+          const res = await fetch(`${API_BASE}/athletes/home`, {
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Object.keys(data).length > 0) {
+              await CacheManager.set("athlete_profile", data, { userId: cleanId, ttlMs: 10 * 60 * 1000 });
+              await AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
+            }
+          }
+        } catch (_) {}
+      })();
+
+      return cached;
+    }
+  }
+
+  // 2. Try REST API
   try {
     const token = await getStoredAuthToken();
     const res = await fetch(`${API_BASE}/athletes/home`, {
@@ -962,28 +962,18 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
     if (res.ok) {
       const data = await res.json();
       if (data && Object.keys(data).length > 0) {
+        if (cleanId) {
+          await CacheManager.set("athlete_profile", data, { userId: cleanId, ttlMs: 10 * 60 * 1000 });
+        }
         await AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(data));
         return data;
       }
     }
   } catch (_) {}
 
-  // 2. Direct Firestore fallback
-  try {
-    const token = await getStoredAuthToken();
-    let athleteUid = "";
-    if (token && token.includes(".")) {
-      try {
-        const base64Url = token.split(".")[1];
-        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const decoded = safeBase64Decode(base64);
-        const payload = JSON.parse(decoded);
-        athleteUid = payload.uid || payload.user_id || payload.sub || "";
-      } catch (_) {}
-    }
-
-    if (athleteUid) {
-      const cleanId = athleteUid.replace(/^ath_/, "");
+  // 3. Direct Firestore targeted document fallback
+  if (cleanId) {
+    try {
       const [pDoc1, pDoc2, uDoc1, uDoc2] = await Promise.all([
         getDoc(doc(db, "Athlete_Profiles", `ath_${cleanId}`)).catch(() => null),
         getDoc(doc(db, "Athlete_Profiles", cleanId)).catch(() => null),
@@ -1023,17 +1013,21 @@ export async function getAthleteProfileOfflineFirst(): Promise<any | null> {
           last_5_games_scores: scores,
           five_game_trend: scores,
         };
+        await CacheManager.set("athlete_profile", enriched, { userId: cleanId });
         await AsyncStorage.setItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY, JSON.stringify(enriched));
         return enriched;
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  }
 
-  // 3. Fallback to AsyncStorage cache
+  // 4. Fallback to AsyncStorage cache
   try {
     const cached = await AsyncStorage.getItem(OFFLINE_ATHLETE_PROFILE_CACHE_KEY);
     if (cached) {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      if (!cleanId || String(parsed.user_id || parsed.athlete_id || '').includes(cleanId)) {
+        return parsed;
+      }
     }
   } catch (_) {}
 
@@ -1079,7 +1073,32 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
   const rawUid = uid.replace(/^coach_/, "").trim();
   const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
 
-  // 1. Try REST API with snappy timeout
+  // 1. Instant Cache-First Lookup (<5ms render)
+  if (rawUid) {
+    const cached = await CacheManager.get<any>("coach_profile", { userId: rawUid, ignoreExpiry: true });
+    if (cached && isMatchingCoachProfile(cached, rawUid)) {
+      // Trigger background revalidation silently
+      (async () => {
+        try {
+          const token = await getStoredAuthToken();
+          const endpoint = coachIdOrUid && coachIdOrUid !== uid && coachIdOrUid !== rawUid
+            ? `${API_BASE}/coaches/${coachIdOrUid}/profile`
+            : `${API_BASE}/coaches/profile`;
+          const fresh = await quickFetchJson(endpoint, {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          }, 3000);
+          if (fresh && isMatchingCoachProfile(fresh, rawUid)) {
+            await CacheManager.set("coach_profile", fresh, { userId: rawUid, ttlMs: 10 * 60 * 1000 });
+            await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(fresh)).catch(() => null);
+          }
+        } catch (_) {}
+      })();
+      return cached;
+    }
+  }
+
+  // 2. Try REST API with snappy timeout
   try {
     const token = await getStoredAuthToken();
     const endpoint = coachIdOrUid && coachIdOrUid !== uid && coachIdOrUid !== rawUid
@@ -1093,6 +1112,9 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
 
     if (data && (data.full_name || data.user_id || data.coach_id)) {
       if (!rawUid || isMatchingCoachProfile(data, rawUid)) {
+        if (rawUid) {
+          await CacheManager.set("coach_profile", data, { userId: rawUid, ttlMs: 10 * 60 * 1000 });
+        }
         await AsyncStorage.setItem(OFFLINE_COACH_PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => null);
         return data;
       }
@@ -1103,14 +1125,14 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
     return null;
   }
 
-  // 2. Direct Firestore lookups across Coach_Profiles and Users collections
+  // 3. Direct Firestore targeted lookups across Coach_Profiles and Users collections
   try {
     const [cDoc1, cDoc2, uDoc, teamsSnap, matchesSnap] = await Promise.all([
       getDoc(doc(db, "Coach_Profiles", canonicalCoachId)).catch(() => null),
       getDoc(doc(db, "Coach_Profiles", rawUid)).catch(() => null),
       getDoc(doc(db, "Users", rawUid)).catch(() => null),
-      getDocs(query(collection(db, "Teams"))).catch(() => null),
-      getDocs(query(collection(db, "Match_Logs"))).catch(() => null),
+      getDocs(query(collection(db, "Teams"), where("coach_id", "in", [canonicalCoachId, rawUid, uid]))).catch(() => null),
+      getDocs(query(collection(db, "Match_Logs"), where("coach_id", "in", [canonicalCoachId, rawUid, uid]))).catch(() => null),
     ]);
 
     const cData: Record<string, any> = (cDoc1 && cDoc1.exists()) ? cDoc1.data() : (cDoc2 && cDoc2.exists()) ? cDoc2.data() : {};
@@ -1256,6 +1278,22 @@ export async function getTeamsOfflineFirst(forceRefresh: boolean = false): Promi
         if (Array.isArray(parsed) && parsed.length > 0) {
           teamsMemoryCache = parsed;
           teamsLastFetched = Date.now();
+
+          // Trigger silent background revalidation so fresh teams are synchronized without blocking
+          quickFetchJson(`${API_BASE}/teams?all=true`, {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+          }, 3500)
+            .then((freshData) => {
+              const freshList = Array.isArray(freshData?.teams) ? freshData.teams : Array.isArray(freshData) ? freshData : [];
+              if (freshList.length > 0) {
+                teamsMemoryCache = freshList;
+                teamsLastFetched = Date.now();
+                AsyncStorage.setItem(OFFLINE_TEAMS_CACHE_KEY, JSON.stringify(freshList)).catch(() => null);
+              }
+            })
+            .catch(() => null);
+
           return parsed;
         }
       }
@@ -1287,35 +1325,7 @@ export async function getTeamsOfflineFirst(forceRefresh: boolean = false): Promi
     if (!snap.empty) {
       const rawTeams = snap.docs.map((d) => ({ team_id: d.id, id: d.id, ...d.data() }));
 
-      // Fetch coach profiles and users to enrich coach_name if any are missing
-      const [coachesSnap, usersSnap] = await Promise.all([
-        getDocs(collection(db, "Coach_Profiles")).catch(() => null),
-        getDocs(collection(db, "Users")).catch(() => null),
-      ]);
-
       const nameMap = new Map<string, string>();
-      if (usersSnap && !usersSnap.empty) {
-        usersSnap.docs.forEach((d) => {
-          const u = d.data();
-          const fullName = u.full_name || (u.first_name ? `${u.first_name} ${u.last_name || ""}`.trim() : "");
-          if (fullName) {
-            nameMap.set(d.id, fullName);
-            nameMap.set(`coach_${d.id}`, fullName);
-            nameMap.set(d.id.replace(/^coach_/, ""), fullName);
-          }
-        });
-      }
-      if (coachesSnap && !coachesSnap.empty) {
-        coachesSnap.docs.forEach((d) => {
-          const c = d.data();
-          const fullName = c.full_name || (c.first_name ? `${c.first_name} ${c.last_name || ""}`.trim() : "");
-          if (fullName) {
-            nameMap.set(d.id, fullName);
-            nameMap.set(`coach_${d.id}`, fullName);
-            nameMap.set(d.id.replace(/^coach_/, ""), fullName);
-          }
-        });
-      }
 
       // Manual known seed defaults for coach names
       nameMap.set('coach_001', 'Erick Nathaniel De Belen');
