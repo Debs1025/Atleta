@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  TextInput,
+  Alert,
 } from "react-native";
 import {
   Ionicons,
@@ -21,6 +23,19 @@ interface BasketballMatchProps {
   onSaveMatch?: () => void;
 }
 
+const COMMON_INJURIES = [
+  "Ankle Sprain",
+  "Knee Strain",
+  "Hamstring Strain",
+  "Cramps",
+  "Concussion",
+  "Shoulder Strain",
+  "Wrist Sprain",
+  "Other",
+];
+
+const MATCH_PERIODS = ["Q1", "Q2", "Q3", "Q4", "OT"];
+
 function normalizeBasketballKey(rawKey: string): { standardKey?: 'pts' | 'ast' | 'reb' | 'pf' | 'stl' | 'to' | 'blk'; isStandard: boolean } {
   const k = (rawKey || '').toLowerCase().trim();
   if (k === 'pts' || k === 'points' || k === 'pts_scored') return { standardKey: 'pts', isStandard: true };
@@ -35,7 +50,14 @@ function normalizeBasketballKey(rawKey: string): { standardKey?: 'pts' | 'ast' |
 
 export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchProps) {
   const insets = useSafeAreaInsets();
-  const { session, updateBasketballStats, setSessionDetails } = useMatchSession();
+  const {
+    session,
+    updateBasketballStats,
+    setSessionDetails,
+    markAthleteInjured,
+    returnAthleteFromInjury,
+    removeInjury,
+  } = useMatchSession();
   const [dynamicConfigs, setDynamicConfigs] = useState<any[]>([]);
 
   useEffect(() => {
@@ -52,15 +74,28 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
 
   const schema = getSportStatSchema(session.sport_type, dynamicConfigs);
 
-  // Active & Bench rosters from session
-  const activeRoster = session.active_roster;
-  const benchRoster = session.bench_roster;
+  // Active, Bench & Injured rosters from session
+  const activeRoster = session.active_roster || [];
+  const benchRoster = session.bench_roster || [];
+  const injuredRoster = session.injured_roster || [];
+
+  // Rail drawer tab: 'bench' or 'injured'
+  const [activeDrawerTab, setActiveDrawerTab] = useState<'bench' | 'injured'>('bench');
 
   // Selected bench player for substitution
   const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<AthleteRosterItem | null>(null);
 
   // Selected player for "MORE" action modal (Restricted popup ONLY)
   const [selectedActionPlayer, setSelectedActionPlayer] = useState<AthleteRosterItem | null>(null);
+
+  // Injury logging & details modal states
+  const [showInjuryModal, setShowInjuryModal] = useState(false);
+  const [injuryTargetPlayer, setInjuryTargetPlayer] = useState<AthleteRosterItem | null>(null);
+  const [selectedInjuryType, setSelectedInjuryType] = useState(COMMON_INJURIES[0]);
+  const [customInjuryType, setCustomInjuryType] = useState("");
+  const [selectedQuarter, setSelectedQuarter] = useState("In-Game");
+  const [injuryNotes, setInjuryNotes] = useState("");
+  const [selectedInjuredPlayerDetail, setSelectedInjuredPlayerDetail] = useState<AthleteRosterItem | null>(null);
 
   // Handle player selection for rotation substitution swap ONLY
   const handlePlayerCardPress = (activePlayer: AthleteRosterItem) => {
@@ -89,6 +124,64 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
     } else {
       setSelectedBenchPlayer(benchPlayer);
     }
+  };
+
+  // Open injury modal for a specific athlete
+  const openInjuryModalForPlayer = (player: AthleteRosterItem) => {
+    setInjuryTargetPlayer(player);
+    setSelectedInjuryType(COMMON_INJURIES[0]);
+    setCustomInjuryType("");
+    setSelectedQuarter("In-Game");
+    setInjuryNotes("");
+    setShowInjuryModal(true);
+  };
+
+  // Confirm injury and sideline athlete
+  const handleConfirmInjury = () => {
+    if (!injuryTargetPlayer) {
+      Alert.alert("Select Athlete", "Please select an athlete to report an injury for.");
+      return;
+    }
+
+    const finalType = selectedInjuryType === "Other" && customInjuryType.trim()
+      ? customInjuryType.trim()
+      : selectedInjuryType;
+
+    markAthleteInjured(injuryTargetPlayer.athlete_id, {
+      injury_type: finalType,
+      quarter_or_set: selectedQuarter,
+      notes: injuryNotes.trim(),
+      status: "Out / Sidelined",
+      athlete: injuryTargetPlayer,
+      player_name: injuryTargetPlayer.full_name || injuryTargetPlayer.last_name,
+      jersey_number: injuryTargetPlayer.jersey_number,
+      team: injuryTargetPlayer.team_name,
+    });
+
+    setShowInjuryModal(false);
+    setActiveDrawerTab("injured");
+    Alert.alert(
+      "Athlete Sidelined",
+      `${injuryTargetPlayer.full_name || injuryTargetPlayer.last_name} has been moved to the injury list (${finalType}).`
+    );
+  };
+
+  // Return injured athlete to bench
+  const handleReturnToBench = (athleteId: string) => {
+    returnAthleteFromInjury(athleteId, "bench");
+    setSelectedInjuredPlayerDetail(null);
+    Alert.alert("Cleared for Play", "Player has been cleared and returned to the bench.");
+  };
+
+  // Remove injury record
+  const handleRemoveInjuryRecord = (athleteId: string) => {
+    const inj = (session.injuries || []).find((i) => i.athlete_id === athleteId);
+    if (inj) {
+      removeInjury(inj.id);
+    } else {
+      returnAthleteFromInjury(athleteId, "bench");
+    }
+    setSelectedInjuredPlayerDetail(null);
   };
 
   // Stat action handler for direct and modal stat updates
@@ -230,42 +323,138 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
         <Ionicons name="save-outline" size={26} color="#070D19" />
       </TouchableOpacity>
 
-      {/* Bench Rail Drawer (Bottom Fixed Bar) */}
+      {/* Bench & Injured Rail Drawer (Bottom Fixed Bar) */}
       <View style={styles.benchRailContainer}>
         <View style={styles.benchHeader}>
-          <Text style={styles.benchTitle}>BENCH ({benchRoster.length})</Text>
-          <MaterialCommunityIcons name="swap-vertical" size={22} color="#00D2FF" />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <TouchableOpacity
+              style={styles.railTabBtn}
+              onPress={() => setActiveDrawerTab("bench")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.benchTitle,
+                  activeDrawerTab === "bench" ? { color: "#00D2FF" } : { color: "#64748B" },
+                ]}
+              >
+                BENCH ({benchRoster.length})
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.railTabDivider} />
+
+            <TouchableOpacity
+              style={styles.railTabBtn}
+              onPress={() => setActiveDrawerTab("injured")}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="medical"
+                size={13}
+                color={activeDrawerTab === "injured" ? "#FF4D6D" : "#64748B"}
+              />
+              <Text
+                style={[
+                  styles.benchTitle,
+                  activeDrawerTab === "injured" ? { color: "#FF4D6D" } : { color: "#64748B" },
+                ]}
+              >
+                INJURED ({injuredRoster.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.benchHeaderActions}>
+            <TouchableOpacity
+              style={styles.logInjuryRailBtn}
+              onPress={() => {
+                setInjuryTargetPlayer(activeRoster[0] || benchRoster[0] || null);
+                setSelectedInjuryType(COMMON_INJURIES[0]);
+                setCustomInjuryType("");
+                setSelectedQuarter("In-Game");
+                setInjuryNotes("");
+                setShowInjuryModal(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={13} color="#FF4D6D" />
+              <Text style={styles.logInjuryRailBtnText}>LOG INJURY</Text>
+            </TouchableOpacity>
+
+            {activeDrawerTab === "bench" && (
+              <MaterialCommunityIcons name="swap-vertical" size={22} color="#00D2FF" />
+            )}
+          </View>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.benchListScroll}
-        >
-          {benchRoster.map((benchPlayer) => {
-            const isSelected = selectedBenchPlayer?.athlete_id === benchPlayer.athlete_id;
-            return (
-              <TouchableOpacity
-                key={benchPlayer.athlete_id}
-                style={styles.benchTileWrapper}
-                onPress={() => handleBenchPlayerPress(benchPlayer)}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    styles.benchTile,
-                    isSelected && styles.benchTileActive,
-                  ]}
+        {activeDrawerTab === "bench" ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.benchListScroll}
+          >
+            {benchRoster.length === 0 ? (
+              <Text style={styles.emptyRailText}>No reserve players on bench</Text>
+            ) : (
+              benchRoster.map((benchPlayer) => {
+                const isSelected = selectedBenchPlayer?.athlete_id === benchPlayer.athlete_id;
+                return (
+                  <TouchableOpacity
+                    key={benchPlayer.athlete_id}
+                    style={styles.benchTileWrapper}
+                    onPress={() => handleBenchPlayerPress(benchPlayer)}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={[
+                        styles.benchTile,
+                        isSelected && styles.benchTileActive,
+                      ]}
+                    >
+                      <Text style={styles.benchJerseyText}>{benchPlayer.jersey_number || '00'}</Text>
+                    </View>
+                    <Text style={styles.benchNameText} numberOfLines={1}>
+                      {benchPlayer.last_name || benchPlayer.full_name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.benchListScroll}
+          >
+            {injuredRoster.length === 0 ? (
+              <Text style={styles.emptyRailText}>No players currently sidelined with injury</Text>
+            ) : (
+              injuredRoster.map((injuredPlayer) => (
+                <TouchableOpacity
+                  key={injuredPlayer.athlete_id}
+                  style={styles.benchTileWrapper}
+                  onPress={() => setSelectedInjuredPlayerDetail(injuredPlayer)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.benchJerseyText}>{benchPlayer.jersey_number || '00'}</Text>
-                </View>
-                <Text style={styles.benchNameText} numberOfLines={1}>
-                  {benchPlayer.last_name || benchPlayer.full_name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  <View style={styles.injuredTile}>
+                    <Text style={styles.injuredJerseyText}>{injuredPlayer.jersey_number || '00'}</Text>
+                    <View style={{ position: "absolute", top: 2, right: 2 }}>
+                      <Ionicons name="medical" size={10} color="#FF4D6D" />
+                    </View>
+                  </View>
+                  <Text style={styles.benchNameText} numberOfLines={1}>
+                    {injuredPlayer.last_name || injuredPlayer.full_name}
+                  </Text>
+                  <Text style={styles.injuredBadgeText} numberOfLines={1}>
+                    {injuredPlayer.injury_type || "Injured"}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+        )}
       </View>
 
       {/* ORGANIZED "MORE" STATS MODAL */}
@@ -308,6 +497,41 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
               contentContainerStyle={{ paddingBottom: 28 }}
               showsVerticalScrollIndicator={false}
             >
+              {/* Report Player Injury Quick Action */}
+              <View style={styles.categorySection}>
+                <View style={styles.categoryHeader}>
+                  <Ionicons name="medical" size={15} color="#FF4D6D" />
+                  <Text style={[styles.categoryTitle, { color: '#FF4D6D' }]}>PLAYER STATUS / INJURY</Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: "rgba(255, 77, 109, 0.12)",
+                    borderWidth: 1,
+                    borderColor: "#FF4D6D",
+                    borderRadius: 10,
+                    paddingVertical: 11,
+                    paddingHorizontal: 14,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  onPress={() => {
+                    const target = selectedActionPlayer;
+                    setSelectedActionPlayer(null);
+                    if (target) {
+                      openInjuryModalForPlayer(target);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="medkit" size={17} color="#FF4D6D" />
+                  <Text style={{ color: "#FF4D6D", fontSize: 12, fontWeight: "900", letterSpacing: 0.5 }}>
+                    REPORT INJURY & SIDELINE PLAYER
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               {/* Organized Action Categories */}
               {schema.actionCategories && schema.actionCategories.length > 0 ? (
                 schema.actionCategories.map((cat, cIdx) => (
@@ -388,6 +612,231 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
                 </View>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* LOG PLAYER INJURY MODAL */}
+      <Modal
+        visible={showInjuryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowInjuryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "90%" }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Ionicons name="medkit" size={20} color="#FF4D6D" />
+                <Text style={styles.modalTitle}>LOG PLAYER INJURY</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowInjuryModal(false)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScrollBody}
+              contentContainerStyle={{ paddingBottom: 32 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Select Athlete (if multiple available) */}
+              <Text style={[styles.modalSubtitle, { color: "#FFFFFF", fontWeight: "800", marginTop: 8, marginBottom: 8 }]}>
+                SELECT INJURED ATHLETE
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>
+                {[...activeRoster, ...benchRoster].map((p) => {
+                  const isTarget = injuryTargetPlayer?.athlete_id === p.athlete_id;
+                  return (
+                    <TouchableOpacity
+                      key={p.athlete_id}
+                      style={[
+                        styles.injuryChip,
+                        isTarget && styles.injuryChipActive,
+                      ]}
+                      onPress={() => setInjuryTargetPlayer(p)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.injuryChipText, isTarget && styles.injuryChipTextActive]}>
+                        #{p.jersey_number || '00'} {p.last_name || p.full_name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Match Period / Quarter */}
+              <Text style={[styles.modalSubtitle, { color: "#FFFFFF", fontWeight: "800", marginBottom: 8 }]}>
+                GAME PERIOD / QUARTER
+              </Text>
+              <View style={styles.injuryChipRow}>
+                {MATCH_PERIODS.map((q) => {
+                  const isSel = selectedQuarter === q;
+                  return (
+                    <TouchableOpacity
+                      key={q}
+                      style={[styles.injuryChip, isSel && styles.injuryChipActive]}
+                      onPress={() => setSelectedQuarter(q)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.injuryChipText, isSel && styles.injuryChipTextActive]}>{q}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Injury Type */}
+              <Text style={[styles.modalSubtitle, { color: "#FFFFFF", fontWeight: "800", marginBottom: 8 }]}>
+                INJURY TYPE
+              </Text>
+              <View style={styles.injuryChipRow}>
+                {COMMON_INJURIES.map((inj) => {
+                  const isSel = selectedInjuryType === inj;
+                  return (
+                    <TouchableOpacity
+                      key={inj}
+                      style={[styles.injuryChip, isSel && styles.injuryChipActive]}
+                      onPress={() => setSelectedInjuryType(inj)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.injuryChipText, isSel && styles.injuryChipTextActive]}>{inj}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {selectedInjuryType === "Other" && (
+                <TextInput
+                  style={{
+                    backgroundColor: "#0E172A",
+                    borderWidth: 1,
+                    borderColor: "#1E293B",
+                    borderRadius: 8,
+                    color: "#FFFFFF",
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 13,
+                    marginBottom: 14,
+                  }}
+                  placeholder="Specify injury type (e.g. Elbow Hyperextension)"
+                  placeholderTextColor="#64748B"
+                  value={customInjuryType}
+                  onChangeText={setCustomInjuryType}
+                />
+              )}
+
+              {/* Notes */}
+              <Text style={[styles.modalSubtitle, { color: "#FFFFFF", fontWeight: "800", marginBottom: 8 }]}>
+                TRAINER / COACH NOTES (OPTIONAL)
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: "#0E172A",
+                  borderWidth: 1,
+                  borderColor: "#1E293B",
+                  borderRadius: 8,
+                  color: "#FFFFFF",
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  fontSize: 13,
+                  minHeight: 64,
+                  textAlignVertical: "top",
+                  marginBottom: 16,
+                }}
+                placeholder="e.g. Landed awkwardly on opponent foot. Iced immediately."
+                placeholderTextColor="#64748B"
+                value={injuryNotes}
+                onChangeText={setInjuryNotes}
+                multiline
+              />
+
+              {/* Confirm Sideline Button */}
+              <TouchableOpacity
+                style={styles.confirmInjuryBtn}
+                onPress={handleConfirmInjury}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="medical" size={18} color="#FFFFFF" />
+                <Text style={styles.confirmInjuryBtnText}>CONFIRM & SIDELINE PLAYER</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* INJURED PLAYER DETAILS MODAL */}
+      <Modal
+        visible={selectedInjuredPlayerDetail !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedInjuredPlayerDetail(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "75%" }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={[styles.modalJerseyBadge, { borderColor: "#FF4D6D", backgroundColor: "rgba(255, 77, 109, 0.15)" }]}>
+                  <Text style={[styles.modalJerseyText, { color: "#FF4D6D" }]}>
+                    #{selectedInjuredPlayerDetail?.jersey_number || '00'}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>
+                    {selectedInjuredPlayerDetail?.full_name || selectedInjuredPlayerDetail?.last_name}
+                  </Text>
+                  <Text style={[styles.modalSubtitle, { color: "#FF4D6D" }]}>
+                    SIDELINED • {selectedInjuredPlayerDetail?.injury_type || "Injured"}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedInjuredPlayerDetail(null)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ paddingVertical: 16, gap: 12 }}>
+              <View style={{ backgroundColor: "#0E172A", padding: 14, borderRadius: 10, borderWidth: 1, borderColor: "rgba(255, 77, 109, 0.2)" }}>
+                <Text style={{ color: "#64748B", fontSize: 11, fontWeight: "700", marginBottom: 4 }}>INJURY STATUS</Text>
+                <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "800" }}>
+                  {selectedInjuredPlayerDetail?.injury_type || "General Injury"} (Out / Sidelined)
+                </Text>
+                {selectedInjuredPlayerDetail?.injury_notes ? (
+                  <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 6 }}>
+                    Notes: {selectedInjuredPlayerDetail.injury_notes}
+                  </Text>
+                ) : null}
+              </View>
+
+              {/* Action Buttons */}
+              <TouchableOpacity
+                style={styles.returnToBenchBtn}
+                onPress={() => selectedInjuredPlayerDetail && handleReturnToBench(selectedInjuredPlayerDetail.athlete_id)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="fitness-outline" size={17} color="#00D2FF" />
+                <Text style={styles.returnToBenchBtnText}>CLEAR PLAYER & RETURN TO BENCH</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                onPress={() => selectedInjuredPlayerDetail && handleRemoveInjuryRecord(selectedInjuredPlayerDetail.athlete_id)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: "#EF4444", fontSize: 12, fontWeight: "700" }}>Remove Injury Record</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

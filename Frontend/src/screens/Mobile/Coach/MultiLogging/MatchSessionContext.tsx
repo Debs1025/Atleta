@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from "react";
-import { MatchLogSessionState, SportCategory, AthleteRosterItem } from "./types";
+import { MatchLogSessionState, SportCategory, AthleteRosterItem, MatchInjury } from "./types";
 
 interface MatchSessionContextType {
   session: MatchLogSessionState;
@@ -17,6 +17,22 @@ interface MatchSessionContextType {
     athleteId: string,
     stats: Partial<NonNullable<AthleteRosterItem["timing_stats"]>>
   ) => void;
+  addInjury: (injury: Omit<MatchInjury, 'id'> & { id?: string }) => void;
+  removeInjury: (injuryId: string) => void;
+  markAthleteInjured: (
+    athleteId: string,
+    injuryDetails: {
+      injury_type: string;
+      quarter_or_set?: string;
+      notes?: string;
+      status?: string;
+      player_name?: string;
+      jersey_number?: string;
+      team?: string;
+      athlete?: AthleteRosterItem;
+    }
+  ) => void;
+  returnAthleteFromInjury: (athleteId: string, targetRoster?: 'bench' | 'active') => void;
   resetSession: (wipeRoster?: boolean) => void;
 }
 
@@ -35,6 +51,8 @@ const DEFAULT_SESSION: MatchLogSessionState = {
   notes: "",
   active_roster: [],
   bench_roster: [],
+  injured_roster: [],
+  injuries: [],
 };
 
 const MatchSessionContext = createContext<MatchSessionContextType | undefined>(undefined);
@@ -177,6 +195,143 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
     });
   };
 
+  const addInjury = (injury: Omit<MatchInjury, 'id'> & { id?: string }) => {
+    const newInj: MatchInjury = {
+      ...injury,
+      id: injury.id || `inj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      logged_at: injury.logged_at || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setSession((prev) => ({
+      ...prev,
+      injuries: [...(prev.injuries || []), newInj],
+    }));
+  };
+
+  const removeInjury = (injuryId: string) => {
+    setSession((prev) => {
+      const targetInj = (prev.injuries || []).find((i) => i.id === injuryId);
+      const updatedInjuries = (prev.injuries || []).filter((i) => i.id !== injuryId);
+
+      // If the injury was tied to an athlete in injured_roster, return them to bench_roster
+      let updatedActive = prev.active_roster;
+      let updatedBench = prev.bench_roster;
+      let updatedInjured = (prev.injured_roster || []).filter((a) => {
+        if (targetInj && a.athlete_id === targetInj.athlete_id) {
+          updatedBench = [...updatedBench, { ...a, is_active_on_field: false, is_injured: false }];
+          return false;
+        }
+        return true;
+      });
+
+      return {
+        ...prev,
+        injuries: updatedInjuries,
+        active_roster: updatedActive,
+        bench_roster: updatedBench,
+        injured_roster: updatedInjured,
+      };
+    });
+  };
+
+  const markAthleteInjured = (
+    athleteId: string,
+    injuryDetails: {
+      injury_type: string;
+      quarter_or_set?: string;
+      notes?: string;
+      status?: string;
+      player_name?: string;
+      jersey_number?: string;
+      team?: string;
+      athlete?: AthleteRosterItem;
+    }
+  ) => {
+    setSession((prev) => {
+      const inActive = prev.active_roster.find((a) => a.athlete_id === athleteId);
+      const inBench = prev.bench_roster.find((a) => a.athlete_id === athleteId);
+      const targetAthlete = inActive || inBench || injuryDetails.athlete;
+
+      const remainingActive = prev.active_roster.filter((a) => a.athlete_id !== athleteId);
+      const remainingBench = prev.bench_roster.filter((a) => a.athlete_id !== athleteId);
+
+      const resolvedName = targetAthlete?.full_name || targetAthlete?.last_name || injuryDetails.player_name || "Athlete";
+      const resolvedJersey = targetAthlete?.jersey_number || injuryDetails.jersey_number || "00";
+      const resolvedTeam = targetAthlete?.team_name || injuryDetails.team || prev.team_name || "Home";
+
+      const injuredItem: AthleteRosterItem = targetAthlete
+        ? {
+            ...targetAthlete,
+            full_name: resolvedName,
+            jersey_number: resolvedJersey,
+            team_name: resolvedTeam,
+            is_active_on_field: false,
+            is_injured: true,
+            injury_type: injuryDetails.injury_type,
+            injury_notes: injuryDetails.notes || "",
+          }
+        : {
+            athlete_id: athleteId,
+            jersey_number: resolvedJersey,
+            last_name: resolvedName,
+            full_name: resolvedName,
+            position_or_event: "Player",
+            team_name: resolvedTeam,
+            is_active_on_field: false,
+            is_injured: true,
+            injury_type: injuryDetails.injury_type,
+            injury_notes: injuryDetails.notes || "",
+          };
+
+      const newInjury: MatchInjury = {
+        id: `inj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        athlete_id: athleteId,
+        player_name: resolvedName,
+        jersey_number: resolvedJersey,
+        team: resolvedTeam,
+        injury_type: injuryDetails.injury_type || "General Injury",
+        quarter_or_set: injuryDetails.quarter_or_set || "In-Game",
+        status: injuryDetails.status || "Out / Sidelined",
+        notes: injuryDetails.notes || "",
+        logged_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      return {
+        ...prev,
+        active_roster: remainingActive,
+        bench_roster: remainingBench,
+        injured_roster: [...(prev.injured_roster || []).filter((a) => a.athlete_id !== athleteId), injuredItem],
+        injuries: [...(prev.injuries || []), newInjury],
+      };
+    });
+  };
+
+  const returnAthleteFromInjury = (athleteId: string, targetRoster: 'bench' | 'active' = 'bench') => {
+    setSession((prev) => {
+      const target = (prev.injured_roster || []).find((a) => a.athlete_id === athleteId);
+      const remainingInjured = (prev.injured_roster || []).filter((a) => a.athlete_id !== athleteId);
+
+      if (!target) return prev;
+
+      const restoredAthlete: AthleteRosterItem = {
+        ...target,
+        is_injured: false,
+        is_active_on_field: targetRoster === 'active',
+      };
+
+      const updatedInjuries = (prev.injuries || []).map((inj) =>
+        inj.athlete_id === athleteId ? { ...inj, status: 'Returned to Play' } : inj
+      );
+
+      return {
+        ...prev,
+        injured_roster: remainingInjured,
+        injuries: updatedInjuries,
+        active_roster: targetRoster === 'active' ? [...prev.active_roster, restoredAthlete] : prev.active_roster,
+        bench_roster: targetRoster === 'bench' ? [...prev.bench_roster, restoredAthlete] : prev.bench_roster,
+      };
+    });
+  };
+
   const resetSession = (wipeRoster: boolean = false) => {
     if (wipeRoster) {
       setSession({
@@ -216,6 +371,8 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
         notes: "",
         active_roster: (prev.active_roster || []).map(resetRosterItem),
         bench_roster: (prev.bench_roster || []).map(resetRosterItem),
+        injured_roster: (prev.injured_roster || []).map(resetRosterItem),
+        injuries: [],
       };
     });
   };
@@ -231,6 +388,10 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
         toggleAthleteActiveStatus,
         updateBasketballStats,
         updateTimingStats,
+        addInjury,
+        removeInjury,
+        markAthleteInjured,
+        returnAthleteFromInjury,
         resetSession,
       }}
     >

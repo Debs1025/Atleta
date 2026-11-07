@@ -158,6 +158,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       away_score: awayScore,
       notes: notes || "",
       // Restored Schema Attributes:
+      injuries: session.injuries || [],
       playerStats: playerStatsArray,
       player_stats: playerStatsArray,
       player_metrics: playerStatsArray,
@@ -374,6 +375,64 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
               )}
             </View>
           </ScrollView>
+        </View>
+
+        {/* INJURIES & SIDELINED ATHLETES */}
+        <View style={[styles.statsCard, { marginTop: 14, borderColor: (session.injuries && session.injuries.length > 0) ? "rgba(255, 77, 109, 0.3)" : "#1E293B" }]}>
+          <View style={[styles.statsHeaderBlock, { borderBottomColor: "rgba(255, 77, 109, 0.15)" }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="medical" size={16} color="#FF4D6D" />
+              <Text style={[styles.statsTitle, { color: "#FFFFFF" }]}>
+                INJURIES LOGGED ({(session.injuries || []).length})
+              </Text>
+            </View>
+            <Text style={{ color: "#FF4D6D", fontSize: 11, fontWeight: "700" }}>
+              {(session.injuries || []).length > 0 ? "Sidelined" : "None"}
+            </Text>
+          </View>
+
+          {(session.injuries && session.injuries.length > 0) ? (
+            <View style={{ padding: 12, gap: 10 }}>
+              {session.injuries.map((inj, idx) => (
+                <View
+                  key={inj.id || idx}
+                  style={{
+                    backgroundColor: "rgba(255, 77, 109, 0.08)",
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 77, 109, 0.25)",
+                    borderRadius: 10,
+                    padding: 10,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "800" }}>
+                      {inj.player_name} #{inj.jersey_number || "00"}
+                    </Text>
+                    <Text style={{ color: "#FF4D6D", fontSize: 12, fontWeight: "700", marginTop: 2 }}>
+                      {inj.injury_type || "Injured"} {inj.quarter_or_set ? `• ${inj.quarter_or_set}` : ""} • {inj.status || "Out"}
+                    </Text>
+                    {inj.notes ? (
+                      <Text style={{ color: "#94A3B8", fontSize: 11, fontStyle: "italic", marginTop: 3 }}>
+                        Note: {inj.notes}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={{ backgroundColor: "rgba(255, 77, 109, 0.2)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                    <Text style={{ color: "#FF4D6D", fontSize: 11, fontWeight: "800" }}>OUT</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={{ paddingVertical: 14, paddingHorizontal: 16 }}>
+              <Text style={{ color: "#64748B", fontSize: 12, fontStyle: "italic" }}>
+                No injuries reported or logged during this match.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Vibrant Blue SAVE MATCH Button */}

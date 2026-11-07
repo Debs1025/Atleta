@@ -30,6 +30,19 @@ export interface TimingStats {
   is_foul_dq: boolean;
 }
 
+export interface MatchInjury {
+  id: string;
+  athlete_id?: string;
+  player_name: string;
+  jersey_number?: string;
+  team?: string;
+  injury_type: string;
+  quarter_or_set?: string;
+  status?: string; // 'Out', 'Sidelined', 'DNP-Injury', 'Questionable', 'Returned'
+  notes?: string;
+  logged_at?: string;
+}
+
 export interface AthleteRosterItem {
   athlete_id: string;
   jersey_number: string;
@@ -37,6 +50,9 @@ export interface AthleteRosterItem {
   full_name: string;
   position_or_event: string; // e.g. "Point Guard", "100M Free", "Discus Throw"
   is_active_on_field: boolean;
+  is_injured?: boolean;
+  injury_type?: string;
+  injury_notes?: string;
   avatar_url?: string;
   sport_type?: string;
   team_name?: string;
@@ -61,6 +77,8 @@ export interface MatchLogSessionState {
   notes: string;
   active_roster: AthleteRosterItem[];
   bench_roster: AthleteRosterItem[];
+  injured_roster?: AthleteRosterItem[];
+  injuries?: MatchInjury[];
   // Data Dictionary & Operational match schema attributes:
   tournament_id?: string | null;
   home_team_id?: string;
