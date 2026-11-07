@@ -164,9 +164,8 @@ export async function verifyCoachApprovalRealtime(uid: string): Promise<{
  */
 export async function forceRefreshTokenIfAvailable(): Promise<string | null> {
   try {
-    // Dynamic import to avoid crashes if firebase/auth is not initialized
-    const { getAuth } = require("firebase/auth");
-    const authInstance = getAuth();
+    const { auth } = require("../../../services/firebaseClient");
+    const authInstance = auth;
     if (authInstance?.currentUser && typeof authInstance.currentUser.getIdToken === "function") {
       const freshToken = await authInstance.currentUser.getIdToken(true);
       return freshToken;

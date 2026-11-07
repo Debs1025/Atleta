@@ -1,4 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+// @ts-ignore - In React Native, Metro resolves firebase/auth to dist/rn which exports getReactNativePersistence
+import { initializeAuth, getReactNativePersistence, getAuth, Auth } from "firebase/auth";
 import {
   initializeFirestore,
   persistentLocalCache,
@@ -29,11 +31,18 @@ try {
   setLogLevel("silent");
 } catch (_) {}
 
-// Suppress offline stream retry warnings from clogging dev overlays
+// Suppress offline stream retry and unauthenticated snapshot warnings from clogging dev overlays
 const origWarn = console.warn;
 console.warn = (...args: any[]) => {
   const msg = typeof args[0] === "string" ? args[0] : "";
-  if (msg.includes("@firebase/firestore") || msg.includes("WebChannelConnection") || msg.includes("transport errored")) {
+  const subMsg = args[1]?.message || (typeof args[1] === "string" ? args[1] : "");
+  if (
+    msg.includes("@firebase/firestore") ||
+    msg.includes("WebChannelConnection") ||
+    msg.includes("transport errored") ||
+    msg.includes("Missing or insufficient permissions") ||
+    subMsg.includes("Missing or insufficient permissions")
+  ) {
     return;
   }
   origWarn(...args);
@@ -62,6 +71,17 @@ const firebaseConfig = {
 };
 
 const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+let authInstance: Auth;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+} catch (_) {
+  authInstance = getAuth(app);
+}
+
+export const auth: Auth = authInstance;
 
 let dbInstance: Firestore;
 try {
