@@ -30,6 +30,7 @@ import {
   computePlayerArchetypeBadges,
   extractVerticalLeapInches,
 } from "../Discovery/playerBadgeEngine";
+import { calculateDynamicRadarCompetencies } from "./performanceUtils";
 
 interface AthletePortfolioProps {
   athlete: AthletePerformanceProfile;
@@ -234,20 +235,11 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
     const center = size / 2;
     const maxRadius = 65;
 
-    const comps = athlete.radar_competencies;
-    const hasRadarData = comps && Object.values(comps).some((v) => typeof v === "number" && v > 0);
-    const isRated = (athlete.rating_score || 0) > 0;
-    const baseVal = isRated ? Math.max(50, Math.min(95, athlete.rating_score)) : 0;
-    const fallbackComps = isRated
-      ? {
-          speed: Math.round(baseVal + 2),
-          agility: Math.round(baseVal - 2),
-          tech: Math.round(baseVal + 1),
-          iq: Math.round(baseVal + 4),
-          power: Math.round(baseVal - 3),
-        }
-      : { speed: 0, agility: 0, tech: 0, iq: 0, power: 0 };
-    const activeComps = hasRadarData ? comps : fallbackComps;
+    // Derived strictly from real logged match stats
+    const dynamicComps = calculateDynamicRadarCompetencies(athlete);
+    const comps = athlete.radar_competencies || dynamicComps;
+    const hasRadarData = Boolean(comps && Object.values(comps).some((v) => typeof v === "number" && v > 0));
+    const activeComps = hasRadarData ? comps : { speed: 0, agility: 0, tech: 0, iq: 0, power: 0 };
 
     const sanitizeVal = (val: any) => {
       const num = typeof val === "number" ? val : Number(val);
@@ -851,23 +843,48 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
 
           {/* Breakdown progress bars */}
           <View style={{ marginTop: 14, gap: 8 }}>
-            {[
-              { label: "SPEED", val: athlete.radar_competencies?.speed || ((athlete.rating_score || 0) > 0 ? Math.min(95, athlete.rating_score + 2) : 0) },
-              { label: "POWER", val: athlete.radar_competencies?.power || ((athlete.rating_score || 0) > 0 ? Math.max(50, athlete.rating_score - 3) : 0) },
-              { label: "AGILITY", val: athlete.radar_competencies?.agility || ((athlete.rating_score || 0) > 0 ? Math.max(50, athlete.rating_score - 2) : 0) },
-              { label: "BASKETBALL / SPORT IQ", val: athlete.radar_competencies?.iq || ((athlete.rating_score || 0) > 0 ? Math.min(98, athlete.rating_score + 4) : 0) },
-              { label: "TECHNIQUE", val: athlete.radar_competencies?.tech || ((athlete.rating_score || 0) > 0 ? Math.min(95, athlete.rating_score + 1) : 0) },
-            ].map((c, idx) => (
-              <View key={idx}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
-                  <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>{c.label}</Text>
-                  <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "800" }}>{c.val}%</Text>
-                </View>
-                <View style={{ height: 6, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                  <View style={{ width: `${Math.min(100, Math.max(0, c.val))}%`, height: "100%", backgroundColor: "#00C8FF", borderRadius: 3 }} />
-                </View>
-              </View>
-            ))}
+            {(() => {
+              const dynamicComps = calculateDynamicRadarCompetencies(athlete);
+              const comps = athlete.radar_competencies || dynamicComps;
+              const hasData = Boolean(comps && Object.values(comps).some((v) => typeof v === "number" && v > 0));
+
+              const metrics = [
+                { label: "SPEED", val: comps?.speed || 0, source: "Assists & Steals" },
+                { label: "POWER", val: comps?.power || 0, source: "Rebounds & Blocks" },
+                { label: "AGILITY", val: comps?.agility || 0, source: "Steals & Transition" },
+                { label: "BASKETBALL / SPORT IQ", val: comps?.iq || 0, source: "Ast/TO & PER" },
+                { label: "TECHNIQUE", val: comps?.tech || 0, source: "Field Goal %" },
+              ];
+
+              return (
+                <>
+                  {metrics.map((c, idx) => (
+                    <View key={idx}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>{c.label}</Text>
+                          <Text style={{ color: "#64748B", fontSize: 9 }}>({c.source})</Text>
+                        </View>
+                        <Text style={{ color: c.val > 0 ? "#00C8FF" : "#64748B", fontSize: 11, fontWeight: "800" }}>
+                          {c.val > 0 ? `${c.val}%` : "0%"}
+                        </Text>
+                      </View>
+                      <View style={{ height: 6, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                        <View style={{ width: `${Math.min(100, Math.max(0, c.val))}%`, height: "100%", backgroundColor: c.val > 0 ? "#00C8FF" : "transparent", borderRadius: 3 }} />
+                      </View>
+                    </View>
+                  ))}
+
+                  <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" }}>
+                    <Text style={{ color: "#64748B", fontSize: 10, textAlign: "center", fontStyle: "italic" }}>
+                      {hasData
+                        ? "Competencies derived dynamically from verified match performance."
+                        : "No match stats logged yet. Competencies calculate from match performance."}
+                    </Text>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </View>
 

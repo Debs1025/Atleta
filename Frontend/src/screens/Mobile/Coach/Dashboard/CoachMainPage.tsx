@@ -70,7 +70,7 @@ import {
   listenToCoachScoresheetRequests,
   clearFirebaseClientCaches,
 } from "../../../../services/firebaseClient";
-import { calculatePlayerRating } from "../Performance/performanceUtils";
+import { calculatePlayerRating, calculateDynamicRadarCompetencies } from "../Performance/performanceUtils";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -374,6 +374,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     let matchPts = 0;
     let matchReb = 0;
     let matchAst = 0;
+    let matchStl = 0;
+    let matchBlk = 0;
+    let matchTo = 0;
+    let matchFgm = 0;
+    let matchFga = 0;
     let matchCount = matchingMatches.length;
     let matchTrends: number[] = [];
 
@@ -385,6 +390,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         matchPts += pts;
         matchReb += Number(rawPs.reb || rawPs.stats?.rebounds || rawPs.stats?.reb || 0);
         matchAst += Number(rawPs.ast || rawPs.stats?.assists || rawPs.stats?.ast || 0);
+        matchStl += Number(rawPs.stl || rawPs.stats?.steals || rawPs.stats?.stl || 0);
+        matchBlk += Number(rawPs.blk || rawPs.stats?.blocks || rawPs.stats?.blk || 0);
+        matchTo += Number(rawPs.to || rawPs.stats?.turnovers || rawPs.stats?.to || 0);
+        matchFgm += Number(rawPs.fgm || rawPs.stats?.field_goals_made || rawPs.stats?.fgm || 0);
+        matchFga += Number(rawPs.fga || rawPs.stats?.field_goals_attempted || rawPs.stats?.fga || 0);
         matchTrends.push(pts);
       }
     });
@@ -393,39 +403,66 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const storedPpg = Number(a.averages?.ppg ?? a.stats?.ppg ?? (a.pts ? Number(a.pts) : 0));
     const storedRpg = Number(a.averages?.rpg ?? a.stats?.rpg ?? (a.reb ? Number(a.reb) : 0));
     const storedApg = Number(a.averages?.apg ?? a.stats?.apg ?? (a.ast ? Number(a.ast) : 0));
+    const storedSpg = Number(a.averages?.spg ?? a.stats?.spg ?? (a.stl ? Number(a.stl) : 0));
+    const storedBpg = Number(a.averages?.bpg ?? a.stats?.bpg ?? (a.blk ? Number(a.blk) : 0));
+    const storedTpg = Number(a.averages?.tpg ?? a.stats?.tpg ?? (a.to ? Number(a.to) : 0));
+    const storedFgPct = Number(a.averages?.fg_percentage ?? a.stats?.fg_percentage ?? a.stats?.fg_pct ?? (a.fg_pct ? Number(a.fg_pct) : 0));
     const storedPer = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? 0);
 
     let gp = storedGp;
     let ppg = storedPpg;
     let rpg = storedRpg;
     let apg = storedApg;
+    let spg = storedSpg;
+    let bpg = storedBpg;
+    let tpg = storedTpg;
+    let fgPct = storedFgPct;
     let per = storedPer;
 
     const isBasketball = (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() === "BASKETBALL";
 
-    if (matchCount > 0 && matchPts > 0) {
+    if (matchCount > 0 && (matchPts > 0 || matchReb > 0 || matchAst > 0 || matchStl > 0)) {
       if (storedGp > 0) {
         gp = storedGp + matchCount;
         ppg = Math.round(((storedPpg * storedGp + matchPts) / gp) * 10) / 10;
         rpg = Math.round(((storedRpg * storedGp + matchReb) / gp) * 10) / 10;
         apg = Math.round(((storedApg * storedGp + matchAst) / gp) * 10) / 10;
+        spg = Math.round(((storedSpg * storedGp + matchStl) / gp) * 10) / 10;
+        bpg = Math.round(((storedBpg * storedGp + matchBlk) / gp) * 10) / 10;
+        tpg = Math.round(((storedTpg * storedGp + matchTo) / gp) * 10) / 10;
       } else {
         gp = matchCount;
         ppg = Math.round((matchPts / matchCount) * 10) / 10;
         rpg = Math.round((matchReb / matchCount) * 10) / 10;
         apg = Math.round((matchAst / matchCount) * 10) / 10;
+        spg = Math.round((matchStl / matchCount) * 10) / 10;
+        bpg = Math.round((matchBlk / matchCount) * 10) / 10;
+        tpg = Math.round((matchTo / matchCount) * 10) / 10;
+      }
+      if (matchFga > 0) {
+        fgPct = Math.round((matchFgm / matchFga) * 100);
       }
     } else if (storedGp > 0 || storedPpg > 0) {
       gp = storedGp;
       ppg = storedPpg;
       rpg = storedRpg;
       apg = storedApg;
+      spg = storedSpg;
+      bpg = storedBpg;
+      tpg = storedTpg;
     }
 
     const wins = Number(a.averages?.wins ?? a.stats?.wins ?? (gp > 0 ? Math.round(gp * 0.75) : 0));
     if (!per && ppg > 0) {
       per = Math.round((ppg * 1.2 + rpg * 1.0 + apg * 1.5) * 10) / 10;
     }
+
+    // Dynamic competencies strictly derived from verified match stats
+    const dynamicCompetencies = calculateDynamicRadarCompetencies({
+      ...a,
+      averages: { ...a.averages, ppg, rpg, apg, spg, bpg, tpg, fg_percentage: fgPct, games_played: gp, wins, per_score: per },
+      stats: { ...a.stats, ppg, rpg, apg, spg, bpg, tpg, fg_pct: fgPct, fg_percentage: fgPct, games_played: gp, wins, per_score: per },
+    });
 
     // Calculate dynamic rating score accurately derived from player stats
     const dynamicRating = calculatePlayerRating({
@@ -508,7 +545,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         routine_score: gp > 0 ? Math.min(99, Math.max(50, rating - 5)) : 0,
         body_stress_pts: gp > 0 ? 20 : 0,
       },
-      radar_competencies: a.radar_competencies || undefined,
+      radar_competencies: dynamicCompetencies || a.radar_competencies || undefined,
       scoring_trends_last_10: trends,
       eligibility_documents: {
         psa_verified: Boolean(a.eligibility_documents?.psa_verified || a.documents?.psa_birth_certificate?.status === 'Verified'),
