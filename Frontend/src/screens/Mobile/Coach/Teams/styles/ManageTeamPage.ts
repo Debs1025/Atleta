@@ -281,25 +281,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontFamily: fontBoldPlatform,
   },
-  saveHeaderButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#00C8FF",
-    marginRight: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  saveHeaderButtonDisabled: {
-    backgroundColor: "rgba(0, 200, 255, 0.4)",
-  },
-  saveHeaderText: {
-    color: "#070D19",
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    fontFamily: fontBoldPlatform,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(5, 10, 24, 0.85)",

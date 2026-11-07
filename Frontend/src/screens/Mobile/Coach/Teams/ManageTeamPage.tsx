@@ -314,30 +314,14 @@ export function ManageTeamPage({
             <Text style={styles.headerTitle}>Manage Team</Text>
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            {/* Quick Header Save Button */}
-            <TouchableOpacity
-              style={[styles.saveHeaderButton, isSaving && styles.saveHeaderButtonDisabled]}
-              onPress={handleSaveRoster}
-              activeOpacity={0.8}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <ActivityIndicator size="small" color="#070D19" />
-              ) : (
-                <Text style={styles.saveHeaderText}>Save</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Minimalist Delete Team Icon Button */}
-            <TouchableOpacity
-              style={styles.deleteTeamHeaderIcon}
-              onPress={() => setShowDeleteConfirmModal(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={20} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
+          {/* Minimalist Delete Team Icon Button */}
+          <TouchableOpacity
+            style={styles.deleteTeamHeaderIcon}
+            onPress={() => setShowDeleteConfirmModal(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+          </TouchableOpacity>
         </View>
       </View>
 
