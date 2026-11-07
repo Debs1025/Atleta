@@ -17,7 +17,7 @@ interface MatchSessionContextType {
     athleteId: string,
     stats: Partial<NonNullable<AthleteRosterItem["timing_stats"]>>
   ) => void;
-  resetSession: () => void;
+  resetSession: (wipeRoster?: boolean) => void;
 }
 
 const INITIAL_ROSTER: AthleteRosterItem[] = [];
@@ -177,10 +177,46 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
     });
   };
 
-  const resetSession = () => {
-    setSession({
-      ...DEFAULT_SESSION,
-      match_id: `match_${Date.now()}`,
+  const resetSession = (wipeRoster: boolean = false) => {
+    if (wipeRoster) {
+      setSession({
+        ...DEFAULT_SESSION,
+        match_id: `match_${Date.now()}`,
+      });
+      return;
+    }
+
+    setSession((prev) => {
+      const resetRosterItem = (item: AthleteRosterItem): AthleteRosterItem => ({
+        ...item,
+        basketball_stats: {
+          pts: 0,
+          ast: 0,
+          reb: 0,
+          pf: 0,
+          stl: 0,
+          to: 0,
+          blk: 0,
+        },
+        timing_stats: {
+          timer_seconds: 0,
+          formatted_time: "00:00.00",
+          distance_meters: 0,
+          split_times: [],
+          is_foul_dq: false,
+        },
+        custom_stats: {},
+      });
+
+      return {
+        ...prev,
+        match_id: `match_${Date.now()}`,
+        game_name: "",
+        opponent_team_name: "",
+        notes: "",
+        active_roster: (prev.active_roster || []).map(resetRosterItem),
+        bench_roster: (prev.bench_roster || []).map(resetRosterItem),
+      };
     });
   };
 

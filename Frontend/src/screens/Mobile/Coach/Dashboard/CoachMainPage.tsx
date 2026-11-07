@@ -202,6 +202,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   // Navigation States
   const [activeTab, setActiveTab] = useState<NavigationTab>("Home");
   const [activeView, setActiveView] = useState<ViewState>("dashboard");
+  const [activeManualSportView, setActiveManualSportView] = useState<ViewState>("basketball_match");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   // Filters & Modals
@@ -2931,13 +2932,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 onBack={() => setActiveView("dashboard")}
                 onStartLogging={(session) => {
                   const s = (session.sport_type || "").toUpperCase();
+                  let targetView: ViewState = "basketball_match";
                   if (s.includes("SWIM")) {
-                    setActiveView("swimming_match");
+                    targetView = "swimming_match";
                   } else if (s.includes("TRACK") || s.includes("FIELD") || s.includes("RUN")) {
-                    setActiveView("track_field_match");
+                    targetView = "track_field_match";
                   } else {
-                    setActiveView("basketball_match");
+                    targetView = "basketball_match";
                   }
+                  setActiveManualSportView(targetView);
+                  setActiveView(targetView);
                 }}
               />
             )}
@@ -2945,27 +2949,36 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             {activeView === "basketball_match" && (
               <BasketballMatchScreen
                 onClose={() => setActiveView("dashboard")}
-                onSaveMatch={() => setActiveView("match_details")}
+                onSaveMatch={() => {
+                  setActiveManualSportView("basketball_match");
+                  setActiveView("match_details");
+                }}
               />
             )}
 
             {activeView === "swimming_match" && (
               <SwimmingMatchScreen
                 onClose={() => setActiveView("dashboard")}
-                onSaveMatch={() => setActiveView("match_details")}
+                onSaveMatch={() => {
+                  setActiveManualSportView("swimming_match");
+                  setActiveView("match_details");
+                }}
               />
             )}
 
             {activeView === "track_field_match" && (
               <TrackFieldMatchScreen
                 onClose={() => setActiveView("dashboard")}
-                onSaveMatch={() => setActiveView("match_details")}
+                onSaveMatch={() => {
+                  setActiveManualSportView("track_field_match");
+                  setActiveView("match_details");
+                }}
               />
             )}
 
             {activeView === "match_details" && (
               <MatchDetailsScreen
-                onBack={() => setActiveView("dashboard")}
+                onBack={() => setActiveView(activeManualSportView || "basketball_match")}
                 onDone={() => setActiveView("dashboard")}
                 onSaveComplete={handleMatchSaveCompleted}
               />

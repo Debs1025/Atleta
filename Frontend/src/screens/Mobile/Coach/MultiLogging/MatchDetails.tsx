@@ -482,9 +482,9 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
               style={[styles.discardPillBtn, { marginBottom: 0 }]}
               onPress={() => {
                 setShowDiscardModal(false);
-                resetSession();
-                if (onDone) onDone();
-                else if (onBack) onBack();
+                resetSession(false);
+                if (onBack) onBack();
+                else if (onDone) onDone();
               }}
               activeOpacity={0.85}
             >
@@ -515,7 +515,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
               style={styles.doneBtn}
               onPress={() => {
                 setShowSaveSuccessModal(false);
-                resetSession();
+                resetSession(true);
                 if (onDone) onDone();
               }}
               activeOpacity={0.85}
