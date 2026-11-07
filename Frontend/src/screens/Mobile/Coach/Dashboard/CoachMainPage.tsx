@@ -1352,21 +1352,31 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   );
 
   const availableSportCategories = useMemo(() => {
-    const relevantSports = new Set<string>();
+    const sportsSet = new Set<string>();
+
+    // 1. Coach's focused sport and roster/team sports first for quick access
     if (coachProfile?.coach_id && coachProfile?.sports_focus) {
-      relevantSports.add(coachProfile.sports_focus.toUpperCase().trim());
+      sportsSet.add(coachProfile.sports_focus.toUpperCase().trim());
     }
     teams.forEach((t) => {
-      if (t.sport_type) relevantSports.add(t.sport_type.toUpperCase().trim());
+      if (t.sport_type) sportsSet.add(t.sport_type.toUpperCase().trim());
     });
     athletesPool.forEach((a) => {
-      if (a.sport_type) relevantSports.add(a.sport_type.toUpperCase().trim());
+      if (a.sport_type) sportsSet.add(a.sport_type.toUpperCase().trim());
     });
 
-    if (relevantSports.size > 0) {
-      return ["ALL", ...Array.from(relevantSports)];
+    // 2. Add all dynamic sports configured in the system
+    if (Array.isArray(dynamicSports) && dynamicSports.length > 0) {
+      dynamicSports.forEach((s) => {
+        if (s) sportsSet.add(s.toUpperCase().trim());
+      });
     }
-    return ["ALL", ...dynamicSports];
+
+    // 3. Fallback baseline sports to ensure all core sports are always visible
+    const baselineSports = ["BASKETBALL", "VOLLEYBALL", "SWIMMING", "TRACK AND FIELD"];
+    baselineSports.forEach((s) => sportsSet.add(s));
+
+    return ["ALL", ...Array.from(sportsSet)];
   }, [coachProfile?.coach_id, coachProfile?.sports_focus, teams, athletesPool, dynamicSports]);
 
   // Ensure activeSportFilter is reset if current filter is not in available categories
