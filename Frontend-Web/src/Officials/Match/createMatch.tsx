@@ -324,6 +324,8 @@ export const extractMatchDetails = (
         team_name: r.team_name || r.team || r.institutional_affiliation || r.current_institution || r.institution || r.affiliation || r.school || r.delegation || `Delegation ${(idx % 2) + 1}`,
         distance: r.distance || r.event || r.event_name || '100m',
         finish_time: r.finish_time || r.time || r.formatted_time || '00:58.21',
+        seed_time: r.seed_time || r.seed || r.entry_time || 'NT',
+        points: typeof r.points === 'number' ? r.points : (typeof r.pts === 'number' ? r.pts : (parseFloat(r.points || r.pts) || 0)),
         split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
         efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
         is_disqualified: Boolean(r.is_disqualified),
@@ -335,6 +337,8 @@ export const extractMatchDetails = (
         team_name: p.team_name || p.team || p.institutional_affiliation || p.current_institution || p.institution || p.affiliation || p.school || p.delegation || `Delegation ${(idx % 2) + 1}`,
         distance: p.event || p.event_name || p.distance || '100m',
         finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
+        seed_time: p.seed_time || p.seed || p.entry_time || p.stats?.seed_time || p.sport_stats?.seed_time || 'NT',
+        points: typeof p.points === 'number' ? p.points : (typeof p.pts === 'number' ? p.pts : (typeof p.stats?.points === 'number' ? p.stats.points : (parseFloat(p.points || p.pts) || 0))),
         split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
         efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
         is_disqualified: Boolean(p.is_disqualified),
@@ -1307,6 +1311,8 @@ export const CreateMatch: React.FC = () => {
             team_name: r.team_name || r.team || r.institutional_affiliation || r.current_institution || r.institution || r.affiliation || r.school || r.delegation || finalHomeTeam,
             distance: r.distance || r.event || r.event_name || '100m',
             finish_time: r.finish_time || r.time || r.formatted_time || '00:58.42',
+            seed_time: r.seed_time || r.seed || r.entry_time || 'NT',
+            points: typeof r.points === 'number' ? r.points : (typeof r.pts === 'number' ? r.pts : (parseFloat(r.points || r.pts) || 0)),
             split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
             efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
             is_disqualified: Boolean(r.is_disqualified),
@@ -1319,6 +1325,8 @@ export const CreateMatch: React.FC = () => {
             team_name: p.team_name || p.team || p.delegation || `Delegation ${(idx % 2) + 1}`,
             distance: p.event || p.event_name || p.distance || '100m',
             finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
+            seed_time: p.seed_time || p.seed || p.entry_time || p.stats?.seed_time || p.sport_stats?.seed_time || 'NT',
+            points: typeof p.points === 'number' ? p.points : (typeof p.pts === 'number' ? p.pts : (typeof p.stats?.points === 'number' ? p.stats.points : (parseFloat(p.points || p.pts) || 0))),
             split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
             efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
             is_disqualified: Boolean(p.is_disqualified),
@@ -1599,6 +1607,8 @@ export const CreateMatch: React.FC = () => {
       team_name: teams[0] || homeTeam || 'Delegation 1',
       distance: '100m',
       finish_time: '00:00.00',
+      seed_time: '00:00.00',
+      points: 0,
       split_times: ['00:00.00'],
       efficiency: 100,
       is_disqualified: false,
@@ -2319,8 +2329,9 @@ export const CreateMatch: React.FC = () => {
                 <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
                 <th style={styles.statTh}>[ EVENT / DISTANCE ]</th>
                 <th style={styles.statTh}>[ FINISH TIME ]</th>
-                <th style={styles.statTh}>[ SPLIT TIMES ]</th>
-                <th style={styles.statTh}>[ EFFICIENCY ]</th>
+                <th style={styles.statTh}>[ SEED TIME ]</th>
+                <th style={styles.statTh}>[ POINTS ]</th>
+                <th style={styles.statTh}>[ PLACE ]</th>
                 <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
               </tr>
             </thead>
@@ -2387,16 +2398,25 @@ export const CreateMatch: React.FC = () => {
                       <td style={styles.statTd}>
                         <input
                           type="text"
-                          value={Array.isArray(row.split_times) ? row.split_times.join(' / ') : String(row.split_times || '')}
-                          onChange={(e) => updateRaceStat(idx, 'split_times', e.target.value.split('/').map((s) => s.trim()))}
+                          value={row.seed_time || ''}
+                          placeholder="00:00.00"
+                          onChange={(e) => updateRaceStat(idx, 'seed_time', e.target.value)}
                           style={styles.statInput}
                         />
                       </td>
                       <td style={styles.statTd}>
                         <input
                           type="number"
-                          value={row.efficiency ?? 100}
-                          onChange={(e) => updateRaceStat(idx, 'efficiency', Number(e.target.value) || 0)}
+                          value={row.points !== undefined ? row.points : 0}
+                          onChange={(e) => updateRaceStat(idx, 'points', Number(e.target.value) || 0)}
+                          style={styles.statInput}
+                        />
+                      </td>
+                      <td style={styles.statTd}>
+                        <input
+                          type="text"
+                          value={row.placement_rank || (idx + 1)}
+                          onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)}
                           style={styles.statInput}
                         />
                       </td>
@@ -2415,7 +2435,7 @@ export const CreateMatch: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
+                  <td colSpan={9} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
                     No race results extracted yet. Click below to add an athlete row.
                   </td>
                 </tr>

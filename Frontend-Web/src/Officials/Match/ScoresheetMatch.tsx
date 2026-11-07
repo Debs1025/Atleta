@@ -474,6 +474,8 @@ export const ScoresheetMatch: React.FC = () => {
       team_name: 'DELEGATION',
       distance: '100M',
       finish_time: '00:00.00',
+      seed_time: '00:00.00',
+      points: 0,
       split_times: [],
       efficiency: 0,
       is_disqualified: false,
@@ -1460,8 +1462,9 @@ export const ScoresheetMatch: React.FC = () => {
                 <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
                 <th style={styles.statTh}>[ DISTANCE ]</th>
                 <th style={styles.statTh}>[ FINISH TIME ]</th>
-                <th style={styles.statTh}>[ SPLIT TIMES ]</th>
-                <th style={styles.statTh}>[ EFFICIENCY ]</th>
+                <th style={styles.statTh}>[ SEED TIME ]</th>
+                <th style={styles.statTh}>[ POINTS ]</th>
+                <th style={styles.statTh}>[ PLACE ]</th>
                 <th style={isEditing && !isCertified ? styles.statTh : styles.statThLast}>[ STATUS ]</th>
                 {isEditing && !isCertified && (
                   <th style={styles.statThLast}>[ ACTION ]</th>
@@ -1479,9 +1482,7 @@ export const ScoresheetMatch: React.FC = () => {
                   return (
                     <tr key={`race-${idx}`} style={{ ...styles.statTr, backgroundColor: rowBg }}>
                       <td style={styles.statTd}>
-                        {isEditing && !isCertified ? (
-                          <input type="text" value={row.placement_rank} onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)} style={styles.statInput} />
-                        ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <span style={{
                             padding: '3px 8px',
                             borderRadius: '6px',
@@ -1492,7 +1493,7 @@ export const ScoresheetMatch: React.FC = () => {
                           }}>
                             {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || idx + 1}`}
                           </span>
-                        )}
+                        </div>
                       </td>
                       <td style={styles.statTdName}>
                         {isEditing && !isCertified ? (
@@ -1514,8 +1515,21 @@ export const ScoresheetMatch: React.FC = () => {
                           <input type="text" value={row.finish_time} onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)} style={styles.statInput} />
                         ) : row.finish_time}
                       </td>
-                      <td style={styles.statTd}>{Array.isArray(row.split_times) ? row.split_times.join(' / ') : '—'}</td>
-                      <td style={styles.statTd}>{row.efficiency || 0}</td>
+                      <td style={styles.statTd}>
+                        {isEditing && !isCertified ? (
+                          <input type="text" value={row.seed_time || ''} placeholder="00:00.00" onChange={(e) => updateRaceStat(idx, 'seed_time', e.target.value)} style={styles.statInput} />
+                        ) : (row.seed_time || '—')}
+                      </td>
+                      <td style={styles.statTd}>
+                        {isEditing && !isCertified ? (
+                          <input type="number" value={row.points !== undefined ? row.points : 0} onChange={(e) => updateRaceStat(idx, 'points', Number(e.target.value) || 0)} style={styles.statInput} />
+                        ) : (row.points ?? 0)}
+                      </td>
+                      <td style={styles.statTd}>
+                        {isEditing && !isCertified ? (
+                          <input type="text" value={row.placement_rank || (idx + 1)} onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)} style={styles.statInput} />
+                        ) : (row.placement_rank || (idx + 1))}
+                      </td>
                       <td style={isEditing && !isCertified ? styles.statTd : styles.statTdLast}>
                         <span style={row.is_disqualified ? styles.statusDq : styles.statusOfficial}>
                           {row.is_disqualified ? 'DQ' : 'OFFICIAL'}
@@ -1538,7 +1552,7 @@ export const ScoresheetMatch: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={isEditing && !isCertified ? 9 : 8} style={styles.tableEmptyNotice}>
+                  <td colSpan={isEditing && !isCertified ? 10 : 9} style={styles.tableEmptyNotice}>
                     No race results recorded. Upload official scoresheet below to extract results with OCR.
                   </td>
                 </tr>

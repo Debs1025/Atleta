@@ -2902,6 +2902,8 @@ export const getMatchAuditDetail = async (
             team_name: resolvedTeam,
             distance: resolvedDistance,
             finish_time: resolvedFinishTime,
+            seed_time: p.seed_time || stats.seed_time || localAthlete?.seed_time || p.seed || 'NT',
+            points: typeof p.points === 'number' ? p.points : (typeof stats.points === 'number' ? stats.points : (typeof p.pts === 'number' ? p.pts : (localAthlete?.points ?? 0))),
             split_times: Array.isArray(rawSplits) && rawSplits.length > 0 ? rawSplits : [resolvedFinishTime],
             efficiency: resolvedEfficiency,
             is_disqualified: Boolean(p.is_disqualified || stats.is_disqualified || localAthlete?.is_disqualified),

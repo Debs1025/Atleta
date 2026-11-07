@@ -232,6 +232,8 @@ export interface RaceResultRow {
   team_name?: string;
   distance: string;
   finish_time: string;
+  seed_time?: string;
+  points?: number | string;
   split_times?: string[] | number[];
   efficiency?: number;
   is_disqualified?: boolean;
