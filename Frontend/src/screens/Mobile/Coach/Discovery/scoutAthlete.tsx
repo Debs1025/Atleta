@@ -103,23 +103,39 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         {/* Athlete Name & Status Badge */}
         <View style={styles.athleteNameRow}>
           <Text style={styles.athleteNameText}>{(currentAthlete.full_name || 'ATHLETE').toUpperCase()}</Text>
-          <View
-            style={[
-              styles.positionBadge,
-              currentAthlete.is_scouted
-                ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
-                : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
-            ]}
-          >
-            <Text
-              style={[
-                styles.positionBadgeText,
-                currentAthlete.is_scouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
-              ]}
-            >
-              {currentAthlete.is_scouted ? 'SCOUTED' : 'UNASSIGNED'}
-            </Text>
-          </View>
+          {(() => {
+            const isAthleteScouted = Boolean(
+              currentAthlete.is_scouted ||
+              (currentAthlete.team_name &&
+                currentAthlete.team_name.trim().toLowerCase() !== 'unassigned' &&
+                currentAthlete.team_name.trim().toLowerCase() !== 'none') ||
+              (currentAthlete.team_id &&
+                String(currentAthlete.team_id).trim() !== '' &&
+                String(currentAthlete.team_id).trim().toLowerCase() !== 'none') ||
+              (currentAthlete.has_coach && currentAthlete.coach_name) ||
+              currentAthlete.scout_status
+            );
+
+            return (
+              <View
+                style={[
+                  styles.positionBadge,
+                  isAthleteScouted
+                    ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                    : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.positionBadgeText,
+                    isAthleteScouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                  ]}
+                >
+                  {isAthleteScouted ? 'SCOUTED' : 'UNASSIGNED'}
+                </Text>
+              </View>
+            );
+          })()}
         </View>
 
         {/* Location Subline */}

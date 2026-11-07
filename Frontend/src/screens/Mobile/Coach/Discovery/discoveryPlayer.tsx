@@ -80,11 +80,28 @@ export const DiscoveryPlayer: React.FC<{
         ) : filteredAthletes && filteredAthletes.length > 0 ? (
           filteredAthletes.map((athlete) => {
             const athleteName = athlete.full_name || 'Athlete';
-            const isScouted = Boolean(athlete.is_scouted || athlete.scout_status);
+            const hasValidTeam = Boolean(
+              (athlete.team_name &&
+                athlete.team_name.trim() !== '' &&
+                athlete.team_name.trim().toLowerCase() !== 'unassigned' &&
+                athlete.team_name.trim().toLowerCase() !== 'none') ||
+              (athlete.team_id &&
+                String(athlete.team_id).trim() !== '' &&
+                String(athlete.team_id).trim().toLowerCase() !== 'none') ||
+              (athlete.has_coach && athlete.coach_name)
+            );
+            const currentTeam = athlete.team_name &&
+              athlete.team_name.trim().toLowerCase() !== 'unassigned' &&
+              athlete.team_name.trim().toLowerCase() !== 'none'
+                ? athlete.team_name
+                : (athlete.has_coach && athlete.coach_name ? `Coach ${athlete.coach_name}'s Team` : null);
+
+            // Scouted = Athlete has a team (or is scouted by a team)
+            // Unassigned = Athlete has no team yet
+            const isScouted = Boolean(hasValidTeam || currentTeam || athlete.is_scouted || athlete.scout_status);
             const statusLabel = isScouted ? 'Scouted' : 'Unassigned';
             const effPct = Number(athlete.efficiency_pct ?? 75);
             const filledCount = Math.min(5, Math.max(1, Math.round((effPct / 100) * 5)));
-            const currentTeam = athlete.team_name || (athlete.has_coach && athlete.coach_name ? `Coach ${athlete.coach_name}'s Team` : null);
 
             // Dynamically evaluate badges from actual performance stats (sorted by dominant playstyle)
             const archetypeBadges = computePlayerArchetypeBadges(athlete);
@@ -297,23 +314,39 @@ export const DiscoveryPlayer: React.FC<{
               <View style={{ flex: 1, paddingRight: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={modalStyles.athleteTitle}>{selectedBadgeModalAthlete?.full_name}</Text>
-                  <View
-                    style={[
-                      modalStyles.positionChip,
-                      selectedBadgeModalAthlete?.is_scouted
-                        ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
-                        : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
-                    ]}
-                  >
-                    <Text
+                {(() => {
+                  const isModalAthleteScouted = Boolean(
+                    (selectedBadgeModalAthlete?.team_name &&
+                      selectedBadgeModalAthlete.team_name.trim().toLowerCase() !== 'unassigned' &&
+                      selectedBadgeModalAthlete.team_name.trim().toLowerCase() !== 'none') ||
+                    (selectedBadgeModalAthlete?.team_id &&
+                      String(selectedBadgeModalAthlete.team_id).trim() !== '' &&
+                      String(selectedBadgeModalAthlete.team_id).trim().toLowerCase() !== 'none') ||
+                    (selectedBadgeModalAthlete?.has_coach && selectedBadgeModalAthlete.coach_name) ||
+                    selectedBadgeModalAthlete?.is_scouted ||
+                    selectedBadgeModalAthlete?.scout_status
+                  );
+
+                  return (
+                    <View
                       style={[
-                        modalStyles.positionChipText,
-                        selectedBadgeModalAthlete?.is_scouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                        modalStyles.positionChip,
+                        isModalAthleteScouted
+                          ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                          : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
                       ]}
                     >
-                      {selectedBadgeModalAthlete?.is_scouted ? 'Scouted' : 'Unassigned'}
-                    </Text>
-                  </View>
+                      <Text
+                        style={[
+                          modalStyles.positionChipText,
+                          isModalAthleteScouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                        ]}
+                      >
+                        {isModalAthleteScouted ? 'Scouted' : 'Unassigned'}
+                      </Text>
+                    </View>
+                  );
+                })()}
                 </View>
                 <Text style={modalStyles.athleteSub}>
                   {selectedBadgeModalAthlete?.team_name || selectedBadgeModalAthlete?.province || 'Camarines Sur, Region V'}

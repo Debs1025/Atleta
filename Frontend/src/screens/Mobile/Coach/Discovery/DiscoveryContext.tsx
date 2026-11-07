@@ -283,7 +283,11 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const assignedCoachName = teamCoachInfo?.head_coach || a.coach_name || a.coach || a.current_affiliation?.coach_name;
 
           const scoutInfo = scoutedAthleteMap.get(normalizedId) || scoutedAthleteMap.get(rawId);
-          const isScouted = Boolean(scoutInfo || a.is_scouted);
+          const hasAssignedTeam = Boolean(
+            (assignedTeamName && assignedTeamName.trim().toLowerCase() !== 'unassigned' && assignedTeamName.trim().toLowerCase() !== 'none') ||
+            (assignedTeamId && String(assignedTeamId).trim().toLowerCase() !== 'none' && String(assignedTeamId).trim() !== '')
+          );
+          const isScouted = Boolean(scoutInfo || a.is_scouted || hasAssignedTeam);
           const scoutStatus = scoutInfo ? scoutInfo.offer_status : a.scout_status;
 
           // If athlete is accepted by coach and coach has a team, associate coach's team name if none exists
@@ -387,13 +391,13 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (per > 0) existing.calculated_per = Math.max(existing.calculated_per, per);
             if (eff > 0) existing.efficiency_pct = Math.max(existing.efficiency_pct, eff);
 
-            if (assignedTeamName && (!existing.team_name || existing.team_name === 'Team')) {
+            if (assignedTeamName && (!existing.team_name || existing.team_name === 'Team' || existing.team_name.trim().toLowerCase() === 'unassigned')) {
               existing.team_id = assignedTeamId;
               existing.team_name = assignedTeamName;
               existing.coach_name = assignedCoachName;
               existing.has_coach = true;
             }
-            if (isScouted) {
+            if (isScouted || hasAssignedTeam) {
               existing.is_scouted = true;
               if (scoutStatus) existing.scout_status = scoutStatus;
             }
@@ -519,11 +523,12 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 if (rPer > 0) existing.calculated_per = Math.max(existing.calculated_per, rPer);
                 if (rEff > 0) existing.efficiency_pct = Math.max(existing.efficiency_pct, rEff);
 
-                if ((!existing.team_name || existing.team_name === 'Team') && t.team_name) {
+                if ((!existing.team_name || existing.team_name === 'Team' || existing.team_name.trim().toLowerCase() === 'unassigned') && t.team_name) {
                   existing.team_id = t.team_id;
                   existing.team_name = t.team_name;
                   existing.coach_name = t.head_coach;
                   existing.has_coach = true;
+                  existing.is_scouted = true;
                 }
                 if ((!existing.position_tag || existing.position_tag === 'Player' || existing.position_tag === 'Unassigned') && r.position_tag) {
                   existing.position_tag = r.position_tag;
@@ -540,7 +545,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   team_name: t.team_name,
                   coach_name: t.head_coach,
                   has_coach: true,
-                  is_scouted: Boolean(scoutInfo || r.is_scouted),
+                  is_scouted: true, // In team roster, so has a team
                   scout_status: scoutInfo ? scoutInfo.offer_status : r.scout_status,
                 };
                 mappedAthletes.push(newRosterAth);
