@@ -39,6 +39,18 @@ const DEFAULT_SESSION: MatchLogSessionState = {
 
 const MatchSessionContext = createContext<MatchSessionContextType | undefined>(undefined);
 
+function normalizeBasketballKey(rawKey: string): { standardKey?: 'pts' | 'ast' | 'reb' | 'pf' | 'stl' | 'to' | 'blk'; isStandard: boolean } {
+  const k = (rawKey || '').toLowerCase().trim();
+  if (k === 'pts' || k === 'points' || k === 'pts_scored') return { standardKey: 'pts', isStandard: true };
+  if (k === 'ast' || k === 'assists') return { standardKey: 'ast', isStandard: true };
+  if (k === 'reb' || k === 'rebounds' || k === 'offensive_rebounds' || k === 'defensive_rebounds') return { standardKey: 'reb', isStandard: true };
+  if (k === 'stl' || k === 'steals') return { standardKey: 'stl', isStandard: true };
+  if (k === 'blk' || k === 'blocks') return { standardKey: 'blk', isStandard: true };
+  if (k === 'pf' || k === 'fouls' || k === 'personal_fouls') return { standardKey: 'pf', isStandard: true };
+  if (k === 'to' || k === 'turnovers') return { standardKey: 'to', isStandard: true };
+  return { isStandard: false };
+}
+
 export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<MatchLogSessionState>(DEFAULT_SESSION);
 
@@ -103,24 +115,25 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
           if (item.athlete_id !== athleteId) return item;
           const currentStats = item.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 };
           const customStats = item.custom_stats || {};
-          const isStandardKey = ['pts', 'ast', 'reb', 'pf', 'stl', 'to', 'blk'].includes(statKey);
-          const currentVal = isStandardKey
-            ? (currentStats as any)[statKey] || 0
-            : customStats[statKey] || 0;
-          const newValue = Math.max(0, currentVal + delta);
+
+          const norm = normalizeBasketballKey(statKey);
+          let updatedBasketballStats = { ...currentStats };
+
+          if (norm.isStandard && norm.standardKey) {
+            const currentVal = (currentStats as any)[norm.standardKey] || 0;
+            (updatedBasketballStats as any)[norm.standardKey] = Math.max(0, currentVal + delta);
+          }
+
+          const customVal = customStats[statKey] || 0;
+          const updatedCustomStats = {
+            ...customStats,
+            [statKey]: Math.max(0, customVal + delta),
+          };
 
           return {
             ...item,
-            basketball_stats: isStandardKey
-              ? {
-                  ...currentStats,
-                  [statKey]: newValue,
-                }
-              : currentStats,
-            custom_stats: {
-              ...customStats,
-              [statKey]: newValue,
-            },
+            basketball_stats: updatedBasketballStats,
+            custom_stats: updatedCustomStats,
           };
         });
 
