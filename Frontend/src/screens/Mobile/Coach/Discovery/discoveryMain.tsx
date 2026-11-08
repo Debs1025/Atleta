@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, TextInput, TouchableOpacity, ScrollView, Text, Image, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AtletaHeader } from '../Components/AtletaHeader';
-import { DiscoveryProvider, useDiscovery } from './DiscoveryContext';
+import { DiscoveryProvider, DiscoveryContext, useDiscovery } from './DiscoveryContext';
 import { DiscoveryPlayer } from './discoveryPlayer';
 import { DiscoveryTeams } from './discoveryTeams';
 import { DiscoveryEvent } from './discoveryEvent';
@@ -243,6 +243,10 @@ const DiscoveryContent: React.FC<DiscoveryMainProps> = ({
 };
 
 export function DiscoveryMain(props: DiscoveryMainProps) {
+  const existingContext = useContext(DiscoveryContext);
+  if (existingContext) {
+    return <DiscoveryContent {...props} />;
+  }
   return (
     <DiscoveryProvider>
       <DiscoveryContent {...props} />

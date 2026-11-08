@@ -18,16 +18,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMatchesOfflineFirst } from '../../../../services/firebaseClient';
 
 const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache_v2';
-const DISCOVERY_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes TTL for discovery dataset (Stale-While-Revalidate)
+const DISCOVERY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL for discovery dataset (Stale-While-Revalidate)
 
-let discoveryMemoryCache: {
+export interface DiscoveryCacheState {
   athletes: AthleteDiscoveryItem[];
   rankingAthletes: AthleteDiscoveryItem[];
   proposals: ScoutingProposalItem[];
   teams: DiscoveryTeamItem[];
   events: DiscoveryEventItem[];
   lastFetched: number;
-} | null = null;
+  lastSyncTimestamp: number;
+}
+
+let discoveryMemoryCache: DiscoveryCacheState | null = null;
 
 export function clearDiscoveryMemoryCache() {
   discoveryMemoryCache = null;
@@ -65,7 +68,7 @@ interface DiscoveryContextType {
   activeFilterCount: number;
 }
 
-const DiscoveryContext = createContext<DiscoveryContextType | undefined>(undefined);
+export const DiscoveryContext = createContext<DiscoveryContextType | undefined>(undefined);
 
 export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [athletes, setAthletes] = useState<AthleteDiscoveryItem[]>(discoveryMemoryCache?.athletes || []);
@@ -83,7 +86,10 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [sortRecruits, setSortRecruits] = useState<'date' | 'status'>('date');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedAthleteFilters>(DEFAULT_ADVANCED_FILTERS);
 
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const lastSyncTimestampRef = React.useRef<number>(discoveryMemoryCache?.lastSyncTimestamp || 0);
+  const [isLoading, setIsLoading] = useState<boolean>(
+    !discoveryMemoryCache?.athletes || discoveryMemoryCache.athletes.length === 0
+  );
 
   const resetAdvancedFilters = useCallback(() => {
     setAdvancedFilters(DEFAULT_ADVANCED_FILTERS);
@@ -105,19 +111,54 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const loadDiscoveryData = useCallback(async (forceRefresh: boolean = false) => {
     try {
-      setIsLoading(true);
+      const hasCached = (discoveryMemoryCache?.athletes && discoveryMemoryCache.athletes.length > 0) || athletes.length > 0;
+      if (!hasCached && !forceRefresh) {
+        setIsLoading(true);
+      }
+
       if (forceRefresh) {
         clearDiscoveryMemoryCache();
         clearAuthMicroCache();
+        lastSyncTimestampRef.current = 0;
       }
-      const [athletesRes, proposalsRes, teamsRes, coachMatchesRes, allMatchesRes, offlineMatches]: [any, any, any, any, any, any] = await Promise.all([
-        requestAuthenticatedJson('/athletes', 'GET', undefined, forceRefresh).catch(() => null),
-        requestAuthenticatedJson('/scouting/proposals/list', 'GET', undefined, forceRefresh).catch(() => null),
-        requestAuthenticatedJson('/teams?all=true', 'GET', undefined, forceRefresh).catch(() => null),
-        requestAuthenticatedJson('/matches', 'GET', undefined, forceRefresh).catch(() => null),
-        requestAuthenticatedJson('/matches?all=true', 'GET', undefined, forceRefresh).catch(() => null),
-        getMatchesOfflineFirst(forceRefresh).catch(() => []),
+
+      const syncSince = !forceRefresh && lastSyncTimestampRef.current > 0
+        ? lastSyncTimestampRef.current
+        : undefined;
+
+      const athletesUrl = syncSince ? `/athletes?since=${syncSince}` : '/athletes';
+
+      // Aux collections (teams, proposals, matches) can be skipped if recently fetched (<5 min)
+      const cacheAge = Date.now() - (discoveryMemoryCache?.lastFetched || 0);
+      const shouldFetchAux = forceRefresh || !discoveryMemoryCache || cacheAge > DISCOVERY_CACHE_TTL_MS;
+
+      const [athletesRes, proposalsRes, teamsRes, allMatchesRes]: [any, any, any, any] = await Promise.all([
+        requestAuthenticatedJson(athletesUrl, 'GET', undefined, forceRefresh).catch(() => null),
+        shouldFetchAux ? requestAuthenticatedJson('/scouting/proposals/list', 'GET', undefined, forceRefresh).catch(() => null) : Promise.resolve(discoveryMemoryCache?.proposals || []),
+        shouldFetchAux ? requestAuthenticatedJson('/teams?all=true', 'GET', undefined, forceRefresh).catch(() => null) : Promise.resolve(discoveryMemoryCache?.teams || []),
+        shouldFetchAux ? requestAuthenticatedJson('/matches?all=true', 'GET', undefined, forceRefresh).catch(() => null) : Promise.resolve(discoveryMemoryCache?.events || []),
       ]);
+
+      // If delta query returned with 0 changed documents, keep local cache intact!
+      if (athletesRes?.is_delta === true && (!athletesRes.athletes || athletesRes.athletes.length === 0)) {
+        const newSyncTime = athletesRes.sync_timestamp || Date.now();
+        lastSyncTimestampRef.current = newSyncTime;
+        if (discoveryMemoryCache) {
+          discoveryMemoryCache.lastFetched = Date.now();
+          discoveryMemoryCache.lastSyncTimestamp = newSyncTime;
+        }
+        AsyncStorage.getItem(DISCOVERY_CACHE_KEY).then((raw) => {
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              parsed.lastSyncTimestamp = newSyncTime;
+              parsed.lastFetched = Date.now();
+              AsyncStorage.setItem(DISCOVERY_CACHE_KEY, JSON.stringify(parsed)).catch(() => null);
+            } catch (_) {}
+          }
+        }).catch(() => null);
+        return;
+      }
 
       let finalAthletes: AthleteDiscoveryItem[] = [];
       let finalProposals: ScoutingProposalItem[] = [];
@@ -129,7 +170,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ? teamsRes
         : Array.isArray(teamsRes?.teams)
           ? teamsRes.teams
-          : [];
+          : (discoveryMemoryCache?.teams || []);
 
       const athleteTeamCoachMap = new Map<string, { team_id: string; team_name: string; head_coach: string }>();
 
@@ -208,7 +249,8 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         setTeams(finalTeams);
       } else {
-        setTeams([]);
+        finalTeams = discoveryMemoryCache?.teams || teams;
+        setTeams(finalTeams);
       }
 
       // 2. Map All Athletes (including players with coaches for player rankings)
@@ -557,12 +599,28 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
       }
 
-      finalAthletes = mappedAthletes;
-      setAthletes(mappedAthletes);
-      setRankingAthletes(mappedAthletes);
+      if (athletesRes?.is_delta === true) {
+        // Delta merge: update existing or append new
+        const athleteMap = new Map<string, AthleteDiscoveryItem>();
+        (discoveryMemoryCache?.athletes || athletes).forEach((a) => {
+          athleteMap.set(a.athlete_id, a);
+          const norm = a.athlete_id.replace(/^ath_/, '');
+          if (norm) athleteMap.set(norm, a);
+        });
+        mappedAthletes.forEach((a) => {
+          athleteMap.set(a.athlete_id, a);
+          const norm = a.athlete_id.replace(/^ath_/, '');
+          if (norm) athleteMap.set(norm, a);
+        });
+        finalAthletes = Array.from(new Set(athleteMap.values()));
+      } else {
+        finalAthletes = mappedAthletes;
+      }
+      setAthletes(finalAthletes);
+      setRankingAthletes(finalAthletes);
 
       // 3. Map Scouting Proposals
-      if (Array.isArray(proposalsRes)) {
+      if (Array.isArray(proposalsRes) && proposalsRes.length > 0) {
         const mappedProposals: ScoutingProposalItem[] = proposalsRes.map((p: any) => {
           const rawDate = p.date_initiated || p.updated_at || p.created_at;
           let relativeDate = 'Recent';
@@ -602,21 +660,16 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         finalProposals = mappedProposals;
         setScoutingProposals(mappedProposals);
       } else {
-        setScoutingProposals([]);
+        finalProposals = discoveryMemoryCache?.proposals || scoutingProposals;
+        setScoutingProposals(finalProposals);
       }
 
-      // 4. Map Events & Matches (merging coach matches, official tournament matches, and offline records)
-      const coachMatches = Array.isArray(coachMatchesRes?.matches)
-        ? coachMatchesRes.matches
-        : Array.isArray(coachMatchesRes)
-          ? coachMatchesRes
-          : [];
+      // 4. Map Events & Matches
       const allMatches = Array.isArray(allMatchesRes?.matches)
         ? allMatchesRes.matches
         : Array.isArray(allMatchesRes)
           ? allMatchesRes
           : [];
-      const offlineList = Array.isArray(offlineMatches) ? offlineMatches : [];
 
       const seenMatchIds = new Set<string>();
       const combinedMatches: any[] = [];
@@ -627,7 +680,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return s === 'DELETED' || s === 'REVOKED' || s === 'CANCELLED';
       };
 
-      for (const m of [...coachMatches, ...allMatches, ...offlineList]) {
+      for (const m of allMatches) {
         const id = m.match_id || m.id;
         if (id && !seenMatchIds.has(id) && !isDeletedMatch(m)) {
           seenMatchIds.add(id);
@@ -679,8 +732,12 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         finalEvents = mappedEvents;
         setEvents(mappedEvents);
       } else {
-        setEvents([]);
+        finalEvents = discoveryMemoryCache?.events || events;
+        setEvents(finalEvents);
       }
+
+      const syncTime = athletesRes?.sync_timestamp || Date.now();
+      lastSyncTimestampRef.current = syncTime;
 
       // Update in-memory discovery cache so subsequent navigations don't refetch
       discoveryMemoryCache = {
@@ -690,6 +747,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         teams: finalTeams,
         events: finalEvents,
         lastFetched: Date.now(),
+        lastSyncTimestamp: syncTime,
       };
 
       // Persist snapshot to AsyncStorage for instant cold boot (<10ms)
@@ -700,6 +758,8 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           proposals: finalProposals,
           teams: finalTeams,
           events: finalEvents,
+          lastSyncTimestamp: syncTime,
+          lastFetched: Date.now(),
         })
       ).catch(() => null);
     } catch (err) {
@@ -707,31 +767,51 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [athletes, events, scoutingProposals, teams]);
 
   // Instant cache hydration on mount (<10ms)
   useEffect(() => {
-    if (discoveryMemoryCache) return;
+    let isMounted = true;
     AsyncStorage.getItem(DISCOVERY_CACHE_KEY)
       .then((raw) => {
-        if (raw) {
+        if (!isMounted || !raw) return;
+        try {
           const cached = JSON.parse(raw);
           if (Array.isArray(cached.athletes) && cached.athletes.length > 0) {
-            setAthletes(cached.athletes);
-            setRankingAthletes(cached.athletes);
+            setAthletes((prev) => (prev.length === 0 ? cached.athletes : prev));
+            setRankingAthletes((prev) => (prev.length === 0 ? cached.athletes : prev));
+            setIsLoading(false);
           }
-          if (Array.isArray(cached.proposals)) {
-            setScoutingProposals(cached.proposals);
+          if (Array.isArray(cached.proposals) && cached.proposals.length > 0) {
+            setScoutingProposals((prev) => (prev.length === 0 ? cached.proposals : prev));
           }
-          if (Array.isArray(cached.teams)) {
-            setTeams(cached.teams);
+          if (Array.isArray(cached.teams) && cached.teams.length > 0) {
+            setTeams((prev) => (prev.length === 0 ? cached.teams : prev));
           }
-          if (Array.isArray(cached.events)) {
-            setEvents(cached.events);
+          if (Array.isArray(cached.events) && cached.events.length > 0) {
+            setEvents((prev) => (prev.length === 0 ? cached.events : prev));
           }
-        }
+          if (cached.lastSyncTimestamp) {
+            lastSyncTimestampRef.current = cached.lastSyncTimestamp;
+          }
+          if (!discoveryMemoryCache && Array.isArray(cached.athletes) && cached.athletes.length > 0) {
+            discoveryMemoryCache = {
+              athletes: cached.athletes,
+              rankingAthletes: cached.athletes,
+              proposals: cached.proposals || [],
+              teams: cached.teams || [],
+              events: cached.events || [],
+              lastFetched: cached.lastFetched || Date.now(),
+              lastSyncTimestamp: cached.lastSyncTimestamp || 0,
+            };
+          }
+        } catch (_) {}
       })
       .catch(() => null);
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -739,7 +819,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (discoveryMemoryCache && Date.now() - discoveryMemoryCache.lastFetched < DISCOVERY_CACHE_TTL_MS) {
       return;
     }
-    loadDiscoveryData();
+    loadDiscoveryData(false);
   }, [loadDiscoveryData]);
 
   const scoutAthlete = (athlete: AthleteDiscoveryItem) => {

@@ -52,6 +52,7 @@ import { MatchDetailsScreen } from "../MultiLogging/MatchDetails";
 import { MatchSessionProvider } from "../MultiLogging/MatchSessionContext";
 import { OfficialMatchesPage } from "../ScoresheetRequest/officialMatchPage";
 import { DiscoveryMain } from "../Discovery/discoveryMain";
+import { DiscoveryProvider } from "../Discovery/DiscoveryContext";
 import { PerformancePage } from "../Performance/performancePage";
 import { AthletePortfolio } from "../Performance/athletePortfolio";
 import { AllStats } from "../Performance/allStats";
@@ -2230,8 +2231,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
+    <DiscoveryProvider>
+      <View style={styles.container}>
+        <StatusBar style="light" />
 
       {/* SCREEN 6: EDIT PROFILE SCREEN */}
       {activeView === "edit_profile" && (
@@ -3540,6 +3542,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         </View>
       </Modal>
     </View>
+  </DiscoveryProvider>
   );
 }
 
