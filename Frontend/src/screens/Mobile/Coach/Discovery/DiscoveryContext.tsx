@@ -91,6 +91,15 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     !discoveryMemoryCache?.athletes || discoveryMemoryCache.athletes.length === 0
   );
 
+  const athletesRef = React.useRef(athletes);
+  athletesRef.current = athletes;
+  const teamsRef = React.useRef(teams);
+  teamsRef.current = teams;
+  const proposalsRef = React.useRef(scoutingProposals);
+  proposalsRef.current = scoutingProposals;
+  const eventsRef = React.useRef(events);
+  eventsRef.current = events;
+
   const resetAdvancedFilters = useCallback(() => {
     setAdvancedFilters(DEFAULT_ADVANCED_FILTERS);
   }, []);
@@ -111,7 +120,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const loadDiscoveryData = useCallback(async (forceRefresh: boolean = false) => {
     try {
-      const hasCached = (discoveryMemoryCache?.athletes && discoveryMemoryCache.athletes.length > 0) || athletes.length > 0;
+      const hasCached = (discoveryMemoryCache?.athletes && discoveryMemoryCache.athletes.length > 0) || athletesRef.current.length > 0;
       if (!hasCached && !forceRefresh) {
         setIsLoading(true);
       }
@@ -249,7 +258,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
         setTeams(finalTeams);
       } else {
-        finalTeams = discoveryMemoryCache?.teams || teams;
+        finalTeams = discoveryMemoryCache?.teams || teamsRef.current;
         setTeams(finalTeams);
       }
 
@@ -602,7 +611,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (athletesRes?.is_delta === true) {
         // Delta merge: update existing or append new
         const athleteMap = new Map<string, AthleteDiscoveryItem>();
-        (discoveryMemoryCache?.athletes || athletes).forEach((a) => {
+        (discoveryMemoryCache?.athletes || athletesRef.current).forEach((a) => {
           athleteMap.set(a.athlete_id, a);
           const norm = a.athlete_id.replace(/^ath_/, '');
           if (norm) athleteMap.set(norm, a);
@@ -660,7 +669,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         finalProposals = mappedProposals;
         setScoutingProposals(mappedProposals);
       } else {
-        finalProposals = discoveryMemoryCache?.proposals || scoutingProposals;
+        finalProposals = discoveryMemoryCache?.proposals || proposalsRef.current;
         setScoutingProposals(finalProposals);
       }
 
@@ -732,7 +741,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         finalEvents = mappedEvents;
         setEvents(mappedEvents);
       } else {
-        finalEvents = discoveryMemoryCache?.events || events;
+        finalEvents = discoveryMemoryCache?.events || eventsRef.current;
         setEvents(finalEvents);
       }
 
@@ -767,7 +776,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setIsLoading(false);
     }
-  }, [athletes, events, scoutingProposals, teams]);
+  }, []);
 
   // Instant cache hydration on mount (<10ms)
   useEffect(() => {
