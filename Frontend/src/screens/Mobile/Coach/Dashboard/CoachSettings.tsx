@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   ScrollView,
@@ -104,10 +103,6 @@ export function CoachSettings({
 
   // Local Reactive Client State
   const [settingsState, setSettingsState] = useState<CoachSettingsData>(settings);
-  const [philosophyInput, setPhilosophyInput] = useState<string>(
-    settings.coachingPhilosophy || settings.coaching_philosophy || ""
-  );
-  const [isSavingPhilosophy, setIsSavingPhilosophy] = useState(false);
 
   // Load persisted settings & philosophy on mount: Firestore first, then scoped cache
   useEffect(() => {
@@ -155,9 +150,6 @@ export function CoachSettings({
               }
               return updated;
             });
-            if (livePhilosophy) {
-              setPhilosophyInput(livePhilosophy);
-            }
           }
           return;
         }
@@ -168,9 +160,6 @@ export function CoachSettings({
           try {
             const parsed = JSON.parse(stored);
             setSettingsState((prev) => ({ ...prev, ...parsed }));
-            if (parsed.coachingPhilosophy || parsed.coaching_philosophy) {
-              setPhilosophyInput(parsed.coachingPhilosophy || parsed.coaching_philosophy);
-            }
           } catch (_) {}
         }
       } catch (_) {}
@@ -242,53 +231,6 @@ export function CoachSettings({
       });
     } catch (err) {
       console.warn("Settings sync error:", err);
-    }
-  };
-
-  // Coaching Philosophy Save Handler
-  const handleSavePhilosophy = async () => {
-    setIsSavingPhilosophy(true);
-    const trimmed = philosophyInput.trim();
-    try {
-      const cleanUid = await resolveCurrentCoachUid(settings.coach_id);
-      const canonicalId = cleanUid ? `coach_${cleanUid}` : "";
-      const philosophyPayload = {
-        coachingPhilosophy: trimmed,
-        coaching_philosophy: trimmed,
-        philosophy: trimmed,
-        quote: trimmed,
-        updated_at: new Date().toISOString(),
-      };
-
-      // 1. Direct Firestore write
-      if (cleanUid) {
-        await Promise.all([
-          setDoc(doc(db, "Coach_Profiles", canonicalId), philosophyPayload, { merge: true }).catch(() => null),
-          setDoc(doc(db, "Coach_Profiles", cleanUid), philosophyPayload, { merge: true }).catch(() => null),
-          setDoc(doc(db, "Users", cleanUid), philosophyPayload, { merge: true }).catch(() => null),
-        ]);
-      }
-
-      // 2. User-scoped cache update
-      const scopedKey = cleanUid ? `@atleta_coach_settings_${cleanUid}` : COACH_SETTINGS_STORAGE_KEY;
-      const updated = {
-        ...settingsState,
-        coachingPhilosophy: trimmed,
-        coaching_philosophy: trimmed,
-      };
-      setSettingsState(updated);
-      if (onUpdateSettings) onUpdateSettings(updated);
-      await AsyncStorage.setItem(scopedKey, JSON.stringify(updated)).catch(() => null);
-
-      // 3. API background sync
-      requestAuthenticatedJson("/coaches/me/profile", "PATCH", philosophyPayload).catch(() => null);
-
-      Alert.alert("Coaching Philosophy Saved", "Your coaching philosophy has been successfully updated and will be displayed to athletes.");
-    } catch (err: any) {
-      console.warn("Save philosophy error:", err);
-      Alert.alert("Error", "Could not save coaching philosophy. Please try again.");
-    } finally {
-      setIsSavingPhilosophy(false);
     }
   };
 
@@ -380,59 +322,6 @@ export function CoachSettings({
               trackColor={{ false: "#1E293B", true: "#00C8FF" }}
               thumbColor="#FFFFFF"
             />
-          </View>
-        </View>
-
-        {/* COACHING PHILOSOPHY */}
-        <Text style={styles.sectionLabel}>COACHING PHILOSOPHY</Text>
-        <View style={styles.cardBox}>
-          <View style={{ padding: 16 }}>
-            <Text style={[styles.itemSubtext, { marginBottom: 10, color: "#94A3B8" }]}>
-              Define your coaching philosophy and player expectations. This statement is displayed on your athlete-facing coach preview profile card.
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#0F172A",
-                borderColor: "#334155",
-                borderWidth: 1,
-                borderRadius: 8,
-                color: "#F8FAFC",
-                padding: 12,
-                minHeight: 88,
-                textAlignVertical: "top",
-                fontSize: 14,
-              }}
-              placeholder="e.g. Relentless effort, high athletic IQ, and character on and off the court."
-              placeholderTextColor="#64748B"
-              multiline
-              numberOfLines={4}
-              value={philosophyInput}
-              onChangeText={setPhilosophyInput}
-            />
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#00C8FF",
-                paddingVertical: 10,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                marginTop: 12,
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "row",
-              }}
-              onPress={handleSavePhilosophy}
-              disabled={isSavingPhilosophy}
-              activeOpacity={0.8}
-            >
-              {isSavingPhilosophy ? (
-                <ActivityIndicator size="small" color="#080F21" style={{ marginRight: 6 }} />
-              ) : (
-                <Ionicons name="checkmark-done" size={18} color="#080F21" style={{ marginRight: 6 }} />
-              )}
-              <Text style={{ color: "#080F21", fontWeight: "700", fontSize: 13, letterSpacing: 0.5 }}>
-                {isSavingPhilosophy ? "SAVING..." : "SAVE PHILOSOPHY"}
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
 
