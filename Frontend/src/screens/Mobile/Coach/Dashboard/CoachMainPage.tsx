@@ -2485,24 +2485,35 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
               const scoresheetUrlVal = finalData.scoresheetUrl || finalData.scoresheet_url || "";
 
+              const findMatchedRosterAthlete = (p: any) => {
+                const pName = String(p.player_name || '').trim().toLowerCase();
+                const pJersey = p.jersey_number !== undefined && p.jersey_number !== null ? String(p.jersey_number) : null;
+                return athletesPool.find((a) => {
+                  const aName = String(a.full_name || `${a.first_name || ''} ${a.last_name || ''}`).trim().toLowerCase();
+                  if (pName && (aName === pName || aName.includes(pName) || pName.includes(aName))) return true;
+                  const aLast = String(a.last_name || '').trim().toLowerCase();
+                  if (aLast && pName.includes(aLast)) return true;
+                  if (pJersey !== null && String(a.jersey_number) === pJersey) return true;
+                  return false;
+                });
+              };
+
               const homeRosterAthletes = finalData.athlete_overview
                 .filter((p) => (p.team_name || "").toUpperCase() === resolvedTeamName.toUpperCase())
                 .map((p, idx) => {
-                  const found = athletesPool.find((a) => a.full_name.toLowerCase() === p.player_name.toLowerCase());
+                  const found = findMatchedRosterAthlete(p);
                   return found?.athlete_id || p.athlete_id || `ath_ocr_home_${idx + 1}`;
                 });
 
               const awayRosterAthletes = finalData.athlete_overview
                 .filter((p) => (p.team_name || "").toUpperCase() !== resolvedTeamName.toUpperCase())
                 .map((p, idx) => {
-                  const found = athletesPool.find((a) => a.full_name.toLowerCase() === p.player_name.toLowerCase());
+                  const found = findMatchedRosterAthlete(p);
                   return found?.athlete_id || p.athlete_id || `ath_ocr_away_${idx + 1}`;
                 });
 
               const playerStatsPayload = finalData.athlete_overview.map((p, idx) => {
-                const found = athletesPool.find(
-                  (a) => a.full_name.toLowerCase() === p.player_name.toLowerCase()
-                );
+                const found = findMatchedRosterAthlete(p);
                 const athleteId = found?.athlete_id || p.athlete_id || `ath_ocr_${idx + 1}`;
                 
                 // Preserve all secondary stats verbatim from OCR without math approximations or dropping
