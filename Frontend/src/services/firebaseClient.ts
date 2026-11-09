@@ -490,6 +490,18 @@ export async function deleteTeamOfflineFirst(teamId: string): Promise<boolean> {
     console.warn("deleteTeamOfflineFirst cache error:", cacheErr);
   }
 
+  // 3. REST API deletion
+  try {
+    const token = await getStoredAuthToken();
+    await fetch(`${API_BASE}/teams/${cleanId}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).catch(() => null);
+  } catch (_) {}
+
   return true;
 }
 

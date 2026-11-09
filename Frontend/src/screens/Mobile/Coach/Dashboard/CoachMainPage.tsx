@@ -146,17 +146,28 @@ const PlayerRowItem = React.memo(
                   ? fallbackSport.toUpperCase()
                   : player.position;
 
-    const playerTeamName = (player as any).team_name;
+    const rawTeamName = String((player as any).team_name || "");
+    const parts = rawTeamName.split(" • ").map((s: string) => s.trim()).filter(Boolean);
+    const seenNames = new Set<string>();
+    const dedupedParts: string[] = [];
+    for (const p of parts) {
+      const lower = p.toLowerCase();
+      if (!seenNames.has(lower) && lower !== "unassigned" && lower !== "unassigned / no team") {
+        seenNames.add(lower);
+        dedupedParts.push(p);
+      }
+    }
+    const playerTeamName = dedupedParts.join(" • ");
 
     return (
       <View style={[styles.playerRow, !isLast && styles.playerRowBorder]}>
         <View style={styles.playerTextContainer}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
             <Text style={styles.playerName}>{player.full_name}</Text>
-            {Boolean(playerTeamName && playerTeamName !== "Unassigned" && playerTeamName !== "Unassigned / No Team") && (
+            {Boolean(playerTeamName) && (
               <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                 <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>
-                  {(playerTeamName || "").toUpperCase()}
+                  {playerTeamName.toUpperCase()}
                 </Text>
               </View>
             )}
@@ -1102,28 +1113,52 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           for (const a of [...coachTeamAthletes, ...unassignedCoachAthletes]) {
             const k = normalizeId(a.athlete_id || a.user_id);
             if (k) {
+              const rawTeamNames = (a.team_name ? a.team_name.split(" • ") : (a.team_names || []))
+                .map((n: string) => String(n || "").trim())
+                .filter(Boolean);
+
               if (!seenMap.has(k)) {
+                const uniqueNameMap = new Map<string, string>();
+                rawTeamNames.forEach((n: string) => {
+                  const lower = n.toLowerCase();
+                  if (lower !== "unassigned" && lower !== "unassigned / no team" && !uniqueNameMap.has(lower)) {
+                    uniqueNameMap.set(lower, n);
+                  }
+                });
+                const dedupedNames = Array.from(uniqueNameMap.values());
+
                 seenMap.set(k, {
                   ...a,
                   team_ids: a.team_id ? [a.team_id] : (a.team_ids || []),
-                  team_names: a.team_name ? [a.team_name] : (a.team_names || []),
+                  team_names: dedupedNames,
+                  team_name: dedupedNames.join(" • ") || (a.team_name && a.team_name !== "Unassigned" ? a.team_name : "Unassigned"),
                   teams: a.team_id ? [{ team_id: a.team_id, team_name: a.team_name }] : (a.teams || []),
                 });
               } else {
                 const existing = seenMap.get(k);
                 const existingTeamIds: string[] = existing.team_ids || (existing.team_id ? [existing.team_id] : []);
-                const existingTeamNames: string[] = existing.team_names || (existing.team_name ? [existing.team_name] : []);
+                const existingTeamNames: string[] = existing.team_names || (existing.team_name ? existing.team_name.split(" • ") : []);
                 const newTeamId = a.team_id;
                 const newTeamName = a.team_name;
                 const mergedTeamIds = Array.from(new Set([...existingTeamIds, ...(a.team_ids || (newTeamId ? [newTeamId] : []))].filter(Boolean)));
-                const mergedTeamNames = Array.from(new Set([...existingTeamNames, ...(a.team_names || (newTeamName ? [newTeamName] : []))].filter(Boolean)));
+
+                const uniqueNameMap = new Map<string, string>();
+                [...existingTeamNames, ...rawTeamNames, ...(newTeamName ? [newTeamName] : [])].forEach((n: string) => {
+                  const clean = String(n || "").trim();
+                  const lower = clean.toLowerCase();
+                  if (clean && lower !== "unassigned" && lower !== "unassigned / no team" && !uniqueNameMap.has(lower)) {
+                    uniqueNameMap.set(lower, clean);
+                  }
+                });
+                const mergedTeamNames = Array.from(uniqueNameMap.values());
+
                 seenMap.set(k, {
                   ...existing,
                   ...a,
                   team_id: existing.team_id || newTeamId,
                   team_ids: mergedTeamIds,
                   team_names: mergedTeamNames,
-                  team_name: mergedTeamNames.join(" • "),
+                  team_name: mergedTeamNames.join(" • ") || "Unassigned",
                   teams: [
                     ...(existing.teams || []),
                     ...(newTeamId && !(existing.teams || []).some((tm: any) => tm.team_id === newTeamId) ? [{ team_id: newTeamId, team_name: newTeamName }] : []),
@@ -1948,7 +1983,42 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   }, [perfAthletes, activeView, matchHistoryList]);
 
   const handleDeleteTeam = useCallback(async (teamId: string) => {
-    setTeams((prev) => prev.filter((t) => t.team_id !== teamId));
+    const deletedTeam = teams.find((t) => t.team_id === teamId);
+    const deletedTeamNameLower = (deletedTeam?.team_name || "").toLowerCase().trim();
+
+    setTeams((prev) => {
+      const remaining = prev.filter((t) => t.team_id !== teamId);
+      if (selectedTeamId === teamId) {
+        setSelectedTeamId(remaining[0]?.team_id || "");
+      }
+      return remaining;
+    });
+
+    setAthletesPool((prev) =>
+      prev.map((ath: any) => {
+        const remainingTeamIds = (ath.team_ids || (ath.team_id ? [ath.team_id] : [])).filter(
+          (id: string) => id !== teamId
+        );
+        const remainingTeams = (ath.teams || []).filter((tm: any) => tm.team_id !== teamId);
+        const remainingTeamNames = (ath.team_names || (ath.team_name ? ath.team_name.split(" • ") : []))
+          .map((n: string) => String(n || "").trim())
+          .filter((n: string) => {
+            const lower = n.toLowerCase();
+            return lower && lower !== deletedTeamNameLower && lower !== "unassigned";
+          });
+
+        const isStillAssigned = remainingTeamIds.length > 0 || remainingTeams.length > 0 || remainingTeamNames.length > 0;
+        return {
+          ...ath,
+          team_id: isStillAssigned ? remainingTeamIds[0] || remainingTeams[0]?.team_id || null : null,
+          team_ids: remainingTeamIds,
+          teams: remainingTeams,
+          team_names: remainingTeamNames,
+          team_name: isStillAssigned ? (remainingTeamNames.join(" • ") || remainingTeams[0]?.team_name || "Team") : "Unassigned",
+        };
+      })
+    );
+
     setActiveView("teams_list");
     setActiveTab("Teams");
     try {
@@ -1957,7 +2027,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     } catch (err) {
       console.warn("Delete team sync error:", err);
     }
-  }, []);
+  }, [teams, selectedTeamId]);
 
   const handleMatchSaveCompleted = useCallback((savedPayload?: any) => {
     setCoachProfile((prev) => ({
