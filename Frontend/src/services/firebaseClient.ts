@@ -61,16 +61,29 @@ const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
+const FALLBACK_FIREBASE_API_KEY = "AIzaSyDTueY4OduMENmSef3BH6ZEmSqXLiQG5Ls";
+const FALLBACK_FIREBASE_AUTH_DOMAIN = "atleta-v1.firebaseapp.com";
+const FALLBACK_FIREBASE_PROJECT_ID = "atleta-v1";
+const FALLBACK_FIREBASE_STORAGE_BUCKET = "atleta-v1.appspot.com";
+const FALLBACK_FIREBASE_MESSAGING_SENDER_ID = "1:203586668533:web:30fba3838ff5f78e9302bc";
+const FALLBACK_FIREBASE_APP_ID = "G-6ZF67G2PK2";
+
 const firebaseConfig = {
-  apiKey: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_API_KEY || runtime.process?.env?.FIREBASE_API_KEY || "",
-  authDomain: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || runtime.process?.env?.FIREBASE_AUTH_DOMAIN || "",
-  projectId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_PROJECT_ID || runtime.process?.env?.FIREBASE_PROJECT_ID || "",
-  storageBucket: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || runtime.process?.env?.FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || runtime.process?.env?.FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_APP_ID || runtime.process?.env?.FIREBASE_APP_ID || "",
+  apiKey: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_API_KEY || runtime.process?.env?.FIREBASE_API_KEY || FALLBACK_FIREBASE_API_KEY,
+  authDomain: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || runtime.process?.env?.FIREBASE_AUTH_DOMAIN || FALLBACK_FIREBASE_AUTH_DOMAIN,
+  projectId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_PROJECT_ID || runtime.process?.env?.FIREBASE_PROJECT_ID || FALLBACK_FIREBASE_PROJECT_ID,
+  storageBucket: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || runtime.process?.env?.FIREBASE_STORAGE_BUCKET || FALLBACK_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || runtime.process?.env?.FIREBASE_MESSAGING_SENDER_ID || FALLBACK_FIREBASE_MESSAGING_SENDER_ID,
+  appId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_APP_ID || runtime.process?.env?.FIREBASE_APP_ID || FALLBACK_FIREBASE_APP_ID,
 };
 
-const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let app: FirebaseApp;
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+} catch (appErr) {
+  console.warn("initializeApp fallback warning:", appErr);
+  app = getApps()[0];
+}
 
 let authInstance: Auth;
 try {
@@ -78,7 +91,12 @@ try {
     persistence: getReactNativePersistence(AsyncStorage),
   });
 } catch (_) {
-  authInstance = getAuth(app);
+  try {
+    authInstance = getAuth(app);
+  } catch (authErr) {
+    console.warn("Firebase getAuth initialization error:", authErr);
+    authInstance = {} as Auth;
+  }
 }
 
 export const auth: Auth = authInstance;
@@ -94,14 +112,27 @@ try {
   try {
     dbInstance = initializeFirestore(app, {});
   } catch (e2) {
-    dbInstance = getFirestore(app);
+    try {
+      dbInstance = getFirestore(app);
+    } catch (e3) {
+      console.warn("Firebase getFirestore error:", e3);
+      dbInstance = {} as Firestore;
+    }
   }
 }
 
 import { getStorage, FirebaseStorage } from "firebase/storage";
 
+let storageInstance: FirebaseStorage;
+try {
+  storageInstance = getStorage(app);
+} catch (storageErr) {
+  console.warn("Firebase getStorage error:", storageErr);
+  storageInstance = {} as FirebaseStorage;
+}
+
 export const db: Firestore = dbInstance;
-export const storage: FirebaseStorage = getStorage(app);
+export const storage: FirebaseStorage = storageInstance;
 
 const OFFLINE_MATCHES_CACHE_KEY = "atleta_offline_matches_cache";
 const OFFLINE_ATHLETES_CACHE_KEY = "atleta_offline_athletes_cache";
