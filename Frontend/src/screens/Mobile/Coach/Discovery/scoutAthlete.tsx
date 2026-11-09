@@ -16,7 +16,6 @@ import { AthleteDiscoveryItem } from './discoveryTypes';
 import { requestAuthenticatedJson } from '../../Authentication/authShared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  computePlayerArchetypeBadges,
   extractVerticalLeapInches,
 } from './playerBadgeEngine';
 import { getCleanBiometrics } from './biometricsFormatter';
@@ -235,106 +234,6 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
                   <Text style={styles.biometricLabel}>VERTICAL</Text>
                 </View>
                 <Text style={styles.biometricValue}>{cleanBio.vertical}</Text>
-              </View>
-            </View>
-          );
-        })()}
-
-        {/* Stats-Derived Archetype Badges */}
-        {(() => {
-          const archetypeBadges = computePlayerArchetypeBadges(currentAthlete);
-          if (!archetypeBadges || archetypeBadges.length === 0) return null;
-          return (
-            <View
-              style={{
-                marginBottom: 18,
-                backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                borderWidth: 1,
-                borderColor: 'rgba(0, 200, 255, 0.18)',
-                borderRadius: 14,
-                padding: 12,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="sparkles" size={12} color="#00C8FF" />
-                  <Text style={{ color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }}>
-                    PLAYSTYLE ARCHETYPES
-                  </Text>
-                </View>
-                <View style={{ backgroundColor: 'rgba(0, 200, 255, 0.12)', borderColor: 'rgba(0, 200, 255, 0.35)', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10 }}>
-                  <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 }}>
-                    {archetypeBadges.length} VERIFIED
-                  </Text>
-                </View>
-              </View>
-
-              {/* Structured Badges 2-Column Grid */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                {archetypeBadges.map((b, idx) => {
-                  const isSingleOrLastOdd = (archetypeBadges.length === 1) || (archetypeBadges.length % 2 === 1 && idx === archetypeBadges.length - 1);
-                  return (
-                    <View
-                      key={b.id}
-                      style={{
-                        width: isSingleOrLastOdd ? '100%' : '48.5%',
-                        backgroundColor: '#0A1424',
-                        borderColor: b.borderColor,
-                        borderWidth: 1,
-                        borderRadius: 10,
-                        paddingHorizontal: 10,
-                        paddingVertical: 8,
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      {isSingleOrLastOdd ? (
-                        // Full-width horizontal row
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, marginRight: 8 }}>
-                            <View style={{ width: 26, height: 26, borderRadius: 6, backgroundColor: b.bgColor, alignItems: 'center', justifyContent: 'center' }}>
-                              <Ionicons name={b.icon as any} size={14} color={b.color} />
-                            </View>
-                            <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800' }} numberOfLines={1}>
-                              {b.label}
-                            </Text>
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ color: '#64748B', fontSize: 9.5, fontWeight: '700', textTransform: 'uppercase' }}>
-                              {b.category}
-                            </Text>
-                            <View style={{ backgroundColor: b.bgColor, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                              <Text style={{ color: b.color, fontSize: 10, fontWeight: '800' }}>
-                                {b.metricProof}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      ) : (
-                        // 2-column stacked card
-                        <>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                            <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: b.bgColor, alignItems: 'center', justifyContent: 'center' }}>
-                              <Ionicons name={b.icon as any} size={13} color={b.color} />
-                            </View>
-                            <Text style={{ color: '#FFFFFF', fontSize: 11.5, fontWeight: '800', flex: 1 }} numberOfLines={1}>
-                              {b.label}
-                            </Text>
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Text style={{ color: '#64748B', fontSize: 9, fontWeight: '700', textTransform: 'uppercase' }}>
-                              {b.category}
-                            </Text>
-                            <View style={{ backgroundColor: b.bgColor, paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 4 }}>
-                              <Text style={{ color: b.color, fontSize: 9.5, fontWeight: '800' }}>
-                                {b.metricProof}
-                              </Text>
-                            </View>
-                          </View>
-                        </>
-                      )}
-                    </View>
-                  );
-                })}
               </View>
             </View>
           );

@@ -19,7 +19,6 @@ import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import { AthleteProfile, EligibleDocument } from "../Dashboard/HomeAnalyticsPage";
 import { AthleteProfilePageSkeleton } from "../Dashboard/AthleteSkeletons";
-import { AthleteBadgesShowcase } from "../Dashboard/AthleteBadgesShowcase";
 import {
   WorkloadWarningModal,
   AddDocumentModal,
@@ -1667,9 +1666,6 @@ export function AthleteProfilePage({
             </View>
           )}
         </View>
-
-        {/* Badges You've Unlocked (Read-Only Achievement Showcase & Milestone Progress) */}
-        <AthleteBadgesShowcase athlete={profile} />
 
         {/* Workload Analytics & Training Load Section */}
         <View style={styles.drawerContainer}>
