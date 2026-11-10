@@ -136,18 +136,53 @@ const getInitialSport = (cat?: string) => {
   return norm;
 };
 
+const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
+
+export interface CoachesCacheState {
+  teams: TeamSchema[];
+  inquiries: InquirySchema[];
+  sportChips: { label: string; value: string }[];
+  myCurrentTeamId: string;
+  myCurrentTeamName: string;
+  myJoinedTeamIds: string[];
+  lastFetched: number;
+}
+
+const COACHES_CACHE_KEY = "atleta_athlete_coaches_snapshot_cache_v2";
+const COACHES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL (Stale-While-Revalidate)
+
+let coachesMemoryCache: CoachesCacheState | null = null;
+
+export function clearCoachesMemoryCache() {
+  coachesMemoryCache = null;
+}
+
 export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onRefresh, isRefreshing }: TeamsProps) {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>("DIRECTORY");
-  const [teams, setTeams] = useState<TeamSchema[]>([]);
-  const [inquiries, setInquiries] = useState<InquirySchema[]>([]);
+  const [teams, setTeams] = useState<TeamSchema[]>(coachesMemoryCache?.teams || []);
+  const [inquiries, setInquiries] = useState<InquirySchema[]>(coachesMemoryCache?.inquiries || []);
   const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
   const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState<string>("ALL");
-  const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(DEFAULT_SPORT_CHIPS);
-  const [loading, setLoading] = useState(true);
+  const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(
+    coachesMemoryCache?.sportChips && coachesMemoryCache.sportChips.length > 1
+      ? coachesMemoryCache.sportChips
+      : DEFAULT_SPORT_CHIPS
+  );
+  const [myCurrentTeamId, setMyCurrentTeamId] = useState<string>(coachesMemoryCache?.myCurrentTeamId || "");
+  const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>(coachesMemoryCache?.myCurrentTeamName || "");
+  const [myJoinedTeamIds, setMyJoinedTeamIds] = useState<Set<string>>(
+    new Set(coachesMemoryCache?.myJoinedTeamIds || [])
+  );
+  const [loading, setLoading] = useState<boolean>(
+    !coachesMemoryCache?.teams || coachesMemoryCache.teams.length === 0
+  );
   const [refreshing, setRefreshing] = useState(false);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
+
+  const teamsRef = React.useRef(teams);
+  teamsRef.current = teams;
 
   useEffect(() => {
     let isMounted = true;
@@ -182,13 +217,58 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
     }
   }, [currentScreen, onScreenStateChange]);
 
-  const [myCurrentTeamId, setMyCurrentTeamId] = useState<string>("");
-  const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>("");
-  const [myJoinedTeamIds, setMyJoinedTeamIds] = useState<Set<string>>(new Set());
+  // Instant persistent cache hydration on mount (<10ms)
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(COACHES_CACHE_KEY)
+      .then((raw) => {
+        if (!isMounted || !raw) return;
+        try {
+          const cached: CoachesCacheState = JSON.parse(raw);
+          if (Array.isArray(cached.teams) && cached.teams.length > 0) {
+            setTeams((prev) => (prev.length === 0 ? cached.teams : prev));
+            setLoading(false);
+          }
+          if (Array.isArray(cached.inquiries) && cached.inquiries.length > 0) {
+            setInquiries((prev) => (prev.length === 0 ? cached.inquiries : prev));
+          }
+          if (Array.isArray(cached.sportChips) && cached.sportChips.length > 1) {
+            setSportChips((prev) => (prev.length <= 1 ? cached.sportChips : prev));
+          }
+          if (cached.myCurrentTeamId) {
+            setMyCurrentTeamId((prev) => prev || cached.myCurrentTeamId);
+          }
+          if (cached.myCurrentTeamName) {
+            setMyCurrentTeamName((prev) => prev || cached.myCurrentTeamName);
+          }
+          if (Array.isArray(cached.myJoinedTeamIds) && cached.myJoinedTeamIds.length > 0) {
+            setMyJoinedTeamIds((prev) => (prev.size === 0 ? new Set(cached.myJoinedTeamIds) : prev));
+          }
+
+          if (!coachesMemoryCache && Array.isArray(cached.teams) && cached.teams.length > 0) {
+            coachesMemoryCache = {
+              teams: cached.teams,
+              inquiries: cached.inquiries || [],
+              sportChips: cached.sportChips || DEFAULT_SPORT_CHIPS,
+              myCurrentTeamId: cached.myCurrentTeamId || "",
+              myCurrentTeamName: cached.myCurrentTeamName || "",
+              myJoinedTeamIds: cached.myJoinedTeamIds || [],
+              lastFetched: cached.lastFetched || Date.now(),
+            };
+          }
+        } catch (_) {}
+      })
+      .catch(() => null);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const fetchDirectoryAndInquiries = useCallback(async (isRefresh = false) => {
+    const hasCached = (coachesMemoryCache?.teams && coachesMemoryCache.teams.length > 0) || teamsRef.current.length > 0;
     try {
-      if (!isRefresh) setLoading(true);
+      if (!hasCached && !isRefresh) setLoading(true);
       const [offlineTeams, teamsRes, inquiriesRes, myTeamRes, activeCoachSports]: [any, any, any, any, string[]] = await Promise.all([
         getTeamsOfflineFirst().catch(() => []),
         requestAuthenticatedJson("/teams").catch(() => null),
@@ -317,12 +397,14 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
             }
           });
 
+          let finalSportChips = sportChips;
           if (distinctSports.size > 0) {
             const sorted = Array.from(distinctSports).sort();
             const mapped: { label: string; value: string }[] = [{ label: "ALL", value: "ALL" }];
             sorted.forEach((upper) => {
               mapped.push({ label: upper, value: upper });
             });
+            finalSportChips = mapped;
             setSportChips(mapped);
 
             setSelectedSport((current) => {
@@ -357,14 +439,29 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
             const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
             setInquiries(cachedItems);
           }
+
+          // Update in-memory & persistent cache snapshot (0ms instant access on subsequent visits)
+          const snapshot: CoachesCacheState = {
+            teams: mappedTeams,
+            inquiries: mappedInquiries,
+            sportChips: finalSportChips,
+            myCurrentTeamId: currentTeamId,
+            myCurrentTeamName: currentTeamName,
+            myJoinedTeamIds: Array.from(joinedSet),
+            lastFetched: Date.now(),
+          };
+          coachesMemoryCache = snapshot;
+          AsyncStorage.setItem(COACHES_CACHE_KEY, JSON.stringify(snapshot)).catch(() => null);
       } catch (err) {
-        setTeams([]);
-        setInquiries([]);
+        if (!hasCached) {
+          setTeams([]);
+          setInquiries([]);
+        }
       } finally {
         setLoading(false);
       }
     },
-    []
+    [sportChips]
   );
 
   const handleRefresh = useCallback(async () => {
@@ -378,6 +475,10 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
   }, [fetchDirectoryAndInquiries, onRefresh]);
 
   useEffect(() => {
+    // If memory cache is fresh, render immediately from cache and skip redundant network refetches
+    if (coachesMemoryCache && Date.now() - coachesMemoryCache.lastFetched < COACHES_CACHE_TTL_MS) {
+      return;
+    }
     fetchDirectoryAndInquiries(false);
   }, [fetchDirectoryAndInquiries]);
 

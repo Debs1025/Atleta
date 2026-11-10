@@ -11,6 +11,8 @@ import { PasswordResetScreen } from "./PasswordResetScreen";
 import { SignupScreen } from "./SignupScreen";
 import { AthleteHomePage } from "../Athlete/Dashboard/AthleteHomePage";
 import { CoachMainPage } from "../Coach/Dashboard/CoachMainPage";
+import { clearDiscoveryMemoryCache } from "../Coach/Discovery/DiscoveryContext";
+import { clearCoachesMemoryCache } from "../Athlete/Teams/Teams";
 import { verifyCoachApprovalRealtime, isCoachAccountApproved } from "./coachVerification";
 import { useAccount } from "../../../context/AccountContext";
 
@@ -47,6 +49,8 @@ export function AuthEntry() {
   const handleLogout = async () => {
     clearAuthMicroCache();
     clearFirebaseClientCaches();
+    clearDiscoveryMemoryCache();
+    clearCoachesMemoryCache();
     setAccount(null);
     try {
       await AsyncStorage.clear();
