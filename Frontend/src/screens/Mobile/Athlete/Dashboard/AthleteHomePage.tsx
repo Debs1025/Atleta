@@ -533,21 +533,32 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
               0
             ),
             last_5_games_scores: (() => {
-              const allScores = [
-                ...(Array.isArray(homeData?.last_5_games_scores) ? homeData.last_5_games_scores : []),
-                ...(Array.isArray(homeData?.five_game_trend) ? homeData.five_game_trend : []),
-                ...(Array.isArray(homeRes?.last_5_games_scores) ? homeRes.last_5_games_scores : []),
-                ...(Array.isArray(homeRes?.five_game_trend) ? homeRes.five_game_trend : []),
-                ...(Array.isArray(statsRes?.last_5_games_scores) ? statsRes.last_5_games_scores : []),
-                ...(Array.isArray(raw.stats?.last_5_games_scores) ? raw.stats.last_5_games_scores : []),
-                ...(Array.isArray(raw.averages?.last_5_games_scores) ? raw.averages.last_5_games_scores : []),
-                ...(Array.isArray(raw.scoring_trends_last_10) ? raw.scoring_trends_last_10 : []),
-                ...(Array.isArray(raw.five_game_trend) ? raw.five_game_trend : []),
-                ...(Array.isArray(stats.last_games) ? stats.last_games : []),
-                ...(Array.isArray(stats.recent_scores) ? stats.recent_scores : []),
-              ].map(Number).filter((s) => typeof s === "number" && !isNaN(s) && s > 0);
+              const candidates = [
+                homeData?.last_5_games_scores,
+                homeData?.five_game_trend,
+                homeRes?.last_5_games_scores,
+                homeRes?.five_game_trend,
+                statsRes?.last_5_games_scores,
+                raw.stats?.last_5_games_scores,
+                raw.scoring_trends_last_10,
+                raw.five_game_trend,
+                stats.last_games,
+                stats.recent_scores,
+                raw.averages?.last_5_games_scores,
+              ];
 
-              return allScores.length > 0 ? allScores.slice(-5) : [];
+              for (const candidate of candidates) {
+                if (Array.isArray(candidate) && candidate.length > 0) {
+                  const cleaned = candidate
+                    .map(Number)
+                    .filter((s) => typeof s === "number" && !isNaN(s) && s > 0);
+                  if (cleaned.length > 0) {
+                    return cleaned.slice(-5);
+                  }
+                }
+              }
+
+              return [];
             })(),
             // Swimming
             best_time_formatted: finishTime,

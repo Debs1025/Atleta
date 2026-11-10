@@ -546,7 +546,8 @@ export function ManageTeamPage({
                 )}
 
                 <TouchableOpacity
-                  style={{ padding: 2, marginLeft: 2 }}
+                  style={{ padding: 8, marginLeft: 2 }}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   onPress={() => setPlayerToRemove(player)}
                   activeOpacity={0.7}
                 >
