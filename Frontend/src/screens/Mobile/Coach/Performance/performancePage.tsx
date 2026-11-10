@@ -98,6 +98,8 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
               vertical_jump_in: a.physical_profile?.vertical_cm ? `${Math.round(a.physical_profile.vertical_cm / 2.54)}"` : "-",
             },
             averages: {
+              ...(stats || {}),
+              ...(avg || {}),
               ppg,
               rpg,
               apg,
@@ -105,6 +107,24 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
               wins: Number(avg.wins ?? stats.wins ?? 0),
               per_score: per,
               fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
+              kills: avg.kills ?? avg.spike_kills ?? stats.kills ?? stats.spike_kills ?? 0,
+              spike_kills: avg.spike_kills ?? avg.kills ?? stats.spike_kills ?? stats.kills ?? 0,
+              blocks: avg.blocks ?? avg.block_points ?? stats.blocks ?? stats.block_points ?? 0,
+              block_points: avg.block_points ?? avg.blocks ?? stats.block_points ?? stats.blocks ?? 0,
+              aces: avg.aces ?? avg.service_aces ?? stats.aces ?? stats.service_aces ?? 0,
+              service_aces: avg.service_aces ?? avg.aces ?? stats.service_aces ?? stats.aces ?? 0,
+              digs: avg.digs ?? stats.digs ?? 0,
+              assists: avg.assists ?? stats.assists ?? 0,
+              spike_accuracy: avg.spike_accuracy ?? stats.spike_accuracy ?? 0,
+              service_errors: avg.service_errors ?? stats.service_errors ?? 0,
+              pb_100m: avg.pb_100m || stats.pb_100m,
+              pb_200m: avg.pb_200m || stats.pb_200m,
+              reaction_time_s: avg.reaction_time_s || stats.reaction_time_s,
+              win_rate_pct: avg.win_rate_pct ?? stats.win_rate_pct,
+              pb_50m_free: avg.pb_50m_free || stats.pb_50m_free,
+              pb_100m_free: avg.pb_100m_free || stats.pb_100m_free,
+              swim_index_score: avg.swim_index_score ?? stats.swim_index_score,
+              podiums_count: avg.podiums_count ?? stats.podiums_count,
             },
             radar_competencies: a.radar_competencies || undefined,
             eligibility_documents: {
@@ -156,13 +176,15 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             (la.full_name && ath.full_name && la.full_name.toLowerCase() === ath.full_name.toLowerCase())
         );
         const resolvedRating = calculatePlayerRating(ath) || (matchingLive ? calculatePlayerRating(matchingLive) : 0);
-        if (matchingLive && (!ath.averages?.ppg || ath.averages.ppg === 0)) {
+        if (matchingLive) {
           return {
             ...ath,
             rating_score: resolvedRating,
-            averages: matchingLive.averages || ath.averages,
+            averages: { ...(matchingLive.averages || {}), ...(ath.averages || {}) },
             biometrics: matchingLive.biometrics || ath.biometrics,
-            scoring_trends_last_10: matchingLive.scoring_trends_last_10 || ath.scoring_trends_last_10,
+            scoring_trends_last_10: (matchingLive.scoring_trends_last_10 && matchingLive.scoring_trends_last_10.length > 0)
+              ? matchingLive.scoring_trends_last_10
+              : ath.scoring_trends_last_10,
           };
         }
         return {
@@ -315,9 +337,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                       </Text>
                     );
                   } else if (sc.includes("VOLLEY")) {
+                    const kills = athlete.averages.kills ?? athlete.averages.spike_kills ?? 0;
+                    const blocks = athlete.averages.blocks ?? athlete.averages.block_points ?? 0;
+                    const aces = athlete.averages.aces ?? athlete.averages.service_aces ?? 0;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.averages.spike_kills ?? 0} KILLS • {athlete.averages.block_points ?? 0} BLOCKS • {athlete.averages.service_aces ?? 0} ACES
+                        {kills} KILLS • {blocks} BLOCKS • {aces} ACES
                       </Text>
                     );
                   } else if (sc.includes("PICKLE")) {
@@ -329,7 +354,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                   } else {
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.averages.per_score ? `${athlete.averages.per_score} PER` : (athlete.rating_score ? `${athlete.rating_score} RATING` : "-")}
+                        {athlete.rating_score ? `${athlete.rating_score} RATING` : "-"}
                       </Text>
                     );
                   }

@@ -235,6 +235,7 @@ export const RankingPage: React.FC<RankingProps> = ({
   };
 
   const getMetricDisplayValue = (athlete: AthleteDiscoveryItem): { main: string; sub: string } => {
+    const ath = athlete as any;
     switch (effectiveMetric) {
       case 'PPG':
         return {
@@ -256,11 +257,21 @@ export const RankingPage: React.FC<RankingProps> = ({
           main: `${athlete.stats?.fg_pct ?? 0}% FG`,
           sub: `${athlete.stats?.ppg ?? 0} PPG • ${athlete.efficiency_pct ?? 75}% EFF`,
         };
-      case 'EFF':
+      case 'EFF': {
+        const sc = String(athlete.sport_category || '').toUpperCase();
+        let subText = `${athlete.calculated_per ?? 25} PER`;
+        if (sc.includes('VOLLEY')) {
+          subText = `${ath.stats?.digs ?? 0} DIGS • ${ath.stats?.spike_kills ?? 0} KILLS`;
+        } else if (sc.includes('SWIM')) {
+          subText = athlete.stats?.times_50m_free ? `${athlete.stats.times_50m_free} 50M` : 'SWIMMING';
+        } else if (sc.includes('TRACK') || sc.includes('FIELD')) {
+          subText = athlete.stats?.times_100m ? `${athlete.stats.times_100m} 100M` : 'TRACK';
+        }
         return {
           main: `${athlete.efficiency_pct ?? 75}% EFF`,
-          sub: `${athlete.calculated_per ?? 25} PER`,
+          sub: subText,
         };
+      }
       case 'SPIKE_KILLS':
         return {
           main: `${athlete.stats?.spike_kills ?? 0} KILLS`,

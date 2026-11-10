@@ -174,12 +174,19 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
         {/* Player Stats Table */}
         <Text style={styles.sectionTitle}>Player Stats</Text>
         <View style={styles.tableCard}>
-          <View style={styles.tableHeaderRow}>
-            <Text style={styles.colNameHeader}>NAME</Text>
-            <Text style={styles.colStatHeader}>PTS</Text>
-            <Text style={styles.colStatHeader}>AST</Text>
-            <Text style={styles.colStatHeader}>REB</Text>
-          </View>
+          {(() => {
+            const sc = String(matchItem?.sport_category || "").toUpperCase();
+            const isVolley = sc.includes("VOLLEY");
+
+            return (
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.colNameHeader}>NAME</Text>
+                <Text style={styles.colStatHeader}>{isVolley ? "KILLS" : "PTS"}</Text>
+                <Text style={styles.colStatHeader}>{isVolley ? "BLOCKS" : "AST"}</Text>
+                <Text style={styles.colStatHeader}>{isVolley ? "ACES" : "REB"}</Text>
+              </View>
+            );
+          })()}
 
           {loading ? (
             <View style={{ paddingVertical: 24, alignItems: "center" }}>
@@ -198,6 +205,19 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
             playerStats.map((player, idx) => {
               const playerName = player.name || player.player_name || `Athlete #${idx + 1}`;
               const playerTeam = player.team || player.team_name || "";
+              const sc = String(matchItem?.sport_category || "").toUpperCase();
+              const isVolley = sc.includes("VOLLEY");
+
+              const stat1 = isVolley
+                ? (player.kills ?? player.spike_kills ?? player.pts ?? 0)
+                : (player.pts ?? player.points ?? 0);
+              const stat2 = isVolley
+                ? (player.blocks ?? player.block_points ?? player.ast ?? 0)
+                : (player.ast ?? player.assists ?? 0);
+              const stat3 = isVolley
+                ? (player.aces ?? player.service_aces ?? player.reb ?? 0)
+                : (player.reb ?? player.rebounds ?? 0);
+
               return (
                 <View key={`${playerName}_${idx}`} style={styles.tableRow}>
                   <View style={{ flex: 1 }}>
@@ -208,9 +228,9 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
                       </Text>
                     ) : null}
                   </View>
-                  <Text style={styles.statValueText}>{player.pts ?? player.points ?? 0}</Text>
-                  <Text style={styles.statValueText}>{player.ast ?? player.assists ?? 0}</Text>
-                  <Text style={styles.statValueText}>{player.reb ?? player.rebounds ?? 0}</Text>
+                  <Text style={styles.statValueText}>{stat1}</Text>
+                  <Text style={styles.statValueText}>{stat2}</Text>
+                  <Text style={styles.statValueText}>{stat3}</Text>
                 </View>
               );
             })

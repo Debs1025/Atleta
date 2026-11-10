@@ -172,9 +172,14 @@ const PlayerRowItem = React.memo(
               </View>
             )}
           </View>
-          <Text style={styles.playerSubtitle}>
-            {formattedPos} • #{player.jersey_number}
-          </Text>
+          {(() => {
+            const hasJersey = Boolean(player.jersey_number && player.jersey_number !== "0" && player.jersey_number !== "null");
+            return (
+              <Text style={styles.playerSubtitle}>
+                {formattedPos}{hasJersey ? ` • #${player.jersey_number}` : ""}
+              </Text>
+            );
+          })()}
         </View>
 
         <TouchableOpacity
@@ -529,15 +534,26 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         vertical_jump_in: verticalIn,
       },
       averages: {
+        ...(a.stats || {}),
+        ...(a.averages || {}),
         ppg: ppg,
         rpg: rpg,
         apg: apg,
         per_score: per,
         games_played: gp,
         wins: wins,
-        fg_percentage: Number(a.averages?.fg_percentage ?? a.stats?.fg_pct ?? 0),
-        three_pt_percentage: Number(a.averages?.three_pt_percentage ?? a.stats?.three_pct ?? 0),
-        ft_percentage: Number(a.averages?.ft_percentage ?? a.stats?.ft_pct ?? 0),
+        // Volleyball stats
+        kills: a.averages?.kills ?? a.averages?.spike_kills ?? a.stats?.kills ?? a.stats?.spike_kills ?? 0,
+        spike_kills: a.averages?.spike_kills ?? a.averages?.kills ?? a.stats?.spike_kills ?? a.stats?.kills ?? 0,
+        blocks: a.averages?.blocks ?? a.averages?.block_points ?? a.stats?.blocks ?? a.stats?.block_points ?? 0,
+        block_points: a.averages?.block_points ?? a.averages?.blocks ?? a.stats?.block_points ?? a.stats?.blocks ?? 0,
+        aces: a.averages?.aces ?? a.averages?.service_aces ?? a.stats?.aces ?? a.stats?.service_aces ?? 0,
+        service_aces: a.averages?.service_aces ?? a.averages?.aces ?? a.stats?.service_aces ?? a.stats?.aces ?? 0,
+        digs: a.averages?.digs ?? a.stats?.digs ?? 0,
+        assists: a.averages?.assists ?? a.stats?.assists ?? 0,
+        spike_accuracy: a.averages?.spike_accuracy ?? a.stats?.spike_accuracy ?? 0,
+        service_errors: a.averages?.service_errors ?? a.stats?.service_errors ?? 0,
+        // Track & Swimming stats
         pb_100m: a.averages?.pb_100m || a.stats?.pb_100m,
         pb_200m: a.averages?.pb_200m || a.stats?.pb_200m,
         reaction_time_s: a.averages?.reaction_time_s || a.stats?.reaction_time_s,
@@ -546,6 +562,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         pb_100m_free: a.averages?.pb_100m_free || a.stats?.pb_100m_free,
         swim_index_score: a.averages?.swim_index_score ?? a.stats?.swim_index_score,
         podiums_count: a.averages?.podiums_count ?? a.stats?.podiums_count,
+        fg_percentage: Number(a.averages?.fg_percentage ?? a.stats?.fg_pct ?? 0),
+        three_pt_percentage: Number(a.averages?.three_pt_percentage ?? a.stats?.three_pct ?? 0),
+        ft_percentage: Number(a.averages?.ft_percentage ?? a.stats?.ft_pct ?? 0),
       },
       workload_analytics: a.workload || a.workload_analytics || {
         target_7day_effort_pts: gp > 0 ? 450 : 0,
@@ -3007,9 +3026,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onClose={() => setActiveView(previousPortfolioView || "performance")}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
-            if (matchItem.sport_category === "BASKETBALL") {
+            const matchSport = String(matchItem.sport_category || selectedPerfAthlete?.sport_category || "").toUpperCase();
+            if (matchSport.includes("BASKET") || matchSport.includes("VOLLEY")) {
               setActiveView("perf_basketball_result");
-            } else if (matchItem.sport_category === "SWIMMING") {
+            } else if (matchSport.includes("SWIM")) {
               setActiveView("perf_swimming_result");
             } else {
               setActiveView("perf_trackfield_result");

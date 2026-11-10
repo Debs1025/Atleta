@@ -430,30 +430,32 @@ export const AdvancedFilterModal: React.FC<AdvancedFilterModalProps> = ({
                 </View>
               )}
 
-              <View style={modalStyles.subSection}>
-                <Text style={modalStyles.subSectionLabel}>Minimum PER Score</Text>
-                <View style={modalStyles.chipsWrap}>
-                  {PER_OPTIONS.map((opt) => {
-                    const isSelected = draftFilters.minPer === opt.value;
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[modalStyles.chip, isSelected && modalStyles.chipActive]}
-                        onPress={() => setDraftFilters((prev) => ({
-                          ...prev,
-                          minPer: prev.minPer === opt.value ? 0 : opt.value,
-                          sortBy: prev.minPer === opt.value ? (prev.sortBy === 'PER' ? 'PER' : prev.sortBy) : 'PER',
-                        }))}
-                        activeOpacity={0.75}
-                      >
-                        <Text style={[modalStyles.chipText, isSelected && modalStyles.chipTextActive]}>
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+              {activeSportFilter === 'BASKETBALL' && (
+                <View style={modalStyles.subSection}>
+                  <Text style={modalStyles.subSectionLabel}>Minimum PER Score</Text>
+                  <View style={modalStyles.chipsWrap}>
+                    {PER_OPTIONS.map((opt) => {
+                      const isSelected = draftFilters.minPer === opt.value;
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[modalStyles.chip, isSelected && modalStyles.chipActive]}
+                          onPress={() => setDraftFilters((prev) => ({
+                            ...prev,
+                            minPer: prev.minPer === opt.value ? 0 : opt.value,
+                            sortBy: prev.minPer === opt.value ? (prev.sortBy === 'PER' ? 'PER' : prev.sortBy) : 'PER',
+                          }))}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={[modalStyles.chipText, isSelected && modalStyles.chipTextActive]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
+              )}
 
               <View style={modalStyles.subSection}>
                 <Text style={modalStyles.subSectionLabel}>Minimum Efficiency Rate</Text>

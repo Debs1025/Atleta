@@ -128,79 +128,112 @@ export const ViewMatch: React.FC<ViewMatchProps> = ({ onBack, match }) => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
           <View style={[styles.tableCard, { minWidth: 480, marginBottom: 0 }]}>
             {/* Sport-Specific Table Header */}
-            <View style={styles.tableHeaderRow}>
-              <Text style={[styles.tableHeaderLabel, { width: 170 }]}>
-                {currentMatch.sport_category === 'BASKETBALL' ? 'PLAYER' : 'ATHLETE'}
-              </Text>
-              {currentMatch.sport_category === 'BASKETBALL' ? (
-                <>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>PTS</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>REB</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>AST</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>FG%</Text>
-                </>
-              ) : currentMatch.sport_category === 'SWIMMING' ? (
-                <>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>50M</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>100M</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>200M</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1.2, textAlign: 'center' }]}>TIME</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>100M</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>200M</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>400M</Text>
-                  <Text style={[styles.tableHeaderLabel, { flex: 1.2, textAlign: 'center' }]}>TIME</Text>
-                </>
-              )}
-            </View>
+            {(() => {
+              const sc = String(currentMatch.sport_category || '').toUpperCase();
+              const isBasket = sc.includes('BASKET');
+              const isVolley = sc.includes('VOLLEY');
+              const isSwim = sc.includes('SWIM');
+
+              return (
+                <View style={styles.tableHeaderRow}>
+                  <Text style={[styles.tableHeaderLabel, { width: 170 }]}>
+                    {isBasket ? 'PLAYER' : 'ATHLETE'}
+                  </Text>
+                  {isBasket ? (
+                    <>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>PTS</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>REB</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>AST</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>FG%</Text>
+                    </>
+                  ) : isVolley ? (
+                    <>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>KILLS</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>BLOCKS</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>ACES</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>DIGS</Text>
+                    </>
+                  ) : isSwim ? (
+                    <>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>50M</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>100M</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>200M</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1.2, textAlign: 'center' }]}>TIME</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>100M</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>200M</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1, textAlign: 'center' }]}>400M</Text>
+                      <Text style={[styles.tableHeaderLabel, { flex: 1.2, textAlign: 'center' }]}>TIME</Text>
+                    </>
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Table Rows (mapped dynamically from API data payload) */}
-            {currentMatch.player_stats?.map((row, idx) => (
-              <TouchableOpacity key={idx} style={[
-                styles.tableRow,
-                { borderBottomWidth: idx === (currentMatch.player_stats?.length || 0) - 1 ? 0 : 1 }
-              ]} onPress={() => handleSelectPlayer(row.player)} activeOpacity={0.85}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: 170 }}>
-                  <View style={styles.playerBadge}>
-                    <Text style={{ color: '#00C8FF', fontSize: 10, fontWeight: '900' }}>{idx + 1}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Text style={styles.playerName}>{row.player}</Text>
-                      <Ionicons name="chevron-forward-circle-outline" size={13} color="#00C8FF" />
-                    </View>
-                    <Text style={{ color: '#64748B', fontSize: 10, marginTop: 1 }}>
-                      {row.role_team || 'Athlete'}
-                    </Text>
-                  </View>
-                </View>
+            {(() => {
+              const sc = String(currentMatch.sport_category || '').toUpperCase();
+              const isBasket = sc.includes('BASKET');
+              const isVolley = sc.includes('VOLLEY');
+              const isSwim = sc.includes('SWIM');
 
-                {currentMatch.sport_category === 'BASKETBALL' ? (
-                  <>
-                    <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center' }]}>{row.pts ?? 0}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.reb ?? 0}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.ast ?? 0}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{row.fg_pct ?? 0}%</Text>
-                  </>
-                ) : currentMatch.sport_category === 'SWIMMING' ? (
-                  <>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_50m || '-'}</Text>
-                    <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_100m || '-'}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_200m || '-'}</Text>
-                    <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{row.final_time || '-'}</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_100m || '-'}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_200m || '-'}</Text>
-                    <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{row.time_400m || '-'}</Text>
-                    <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{row.final_time || '-'}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            ))}
+              return currentMatch.player_stats?.map((row, idx) => {
+                const r = row as any;
+                return (
+                  <TouchableOpacity key={idx} style={[
+                    styles.tableRow,
+                    { borderBottomWidth: idx === (currentMatch.player_stats?.length || 0) - 1 ? 0 : 1 }
+                  ]} onPress={() => handleSelectPlayer(r.player)} activeOpacity={0.85}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: 170 }}>
+                      <View style={styles.playerBadge}>
+                        <Text style={{ color: '#00C8FF', fontSize: 10, fontWeight: '900' }}>{idx + 1}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Text style={styles.playerName}>{r.player}</Text>
+                          <Ionicons name="chevron-forward-circle-outline" size={13} color="#00C8FF" />
+                        </View>
+                        <Text style={{ color: '#64748B', fontSize: 10, marginTop: 1 }}>
+                          {r.role_team || 'Athlete'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {isBasket ? (
+                      <>
+                        <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center' }]}>{r.pts ?? 0}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{r.reb ?? 0}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{r.ast ?? 0}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{r.fg_pct ?? 0}%</Text>
+                      </>
+                    ) : isVolley ? (
+                      <>
+                        <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center' }]}>{r.kills ?? r.spike_kills ?? r.pts ?? 0}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{r.blocks ?? r.block_points ?? r.reb ?? 0}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{r.aces ?? r.service_aces ?? r.ast ?? 0}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center' }]}>{r.digs ?? 0}</Text>
+                      </>
+                    ) : isSwim ? (
+                      <>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{r.time_50m || '-'}</Text>
+                        <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{r.time_100m || '-'}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{r.time_200m || '-'}</Text>
+                        <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{r.final_time || '-'}</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={[styles.ptsValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{r.time_100m || '-'}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{r.time_200m || '-'}</Text>
+                        <Text style={[styles.astValue, { flex: 1, textAlign: 'center', fontSize: 12 }]}>{r.time_400m || '-'}</Text>
+                        <Text style={[styles.ptsValue, { flex: 1.2, textAlign: 'center', fontSize: 12 }]}>{r.final_time || '-'}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                );
+              });
+            })()}
           </View>
         </ScrollView>
 

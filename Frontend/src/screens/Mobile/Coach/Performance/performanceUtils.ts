@@ -123,14 +123,26 @@ export function calculateDynamicRadarCompetencies(athlete: any): RadarCompetenci
   const gamesPlayed = Number(averages.games_played ?? stats.games_played ?? athlete.games_played ?? 0);
   const storedPer = Number(averages.per_score ?? stats.per_score ?? stats.per ?? athlete.per ?? 0);
 
-  const sportCategory = String(athlete.sport_category || athlete.sport_type || "BASKETBALL").toUpperCase();
+  const sportCategory = String(athlete.sport_category || athlete.sport_type || athlete.sport || "BASKETBALL").toUpperCase();
 
   // If athlete already has explicit physical testing competencies recorded in DB
   const existingRadar = athlete.radar_competencies;
   const hasExistingVerified = existingRadar && Object.values(existingRadar).some((v) => typeof v === "number" && v > 0);
 
-  // Check if player has real logged match data
-  const hasMatchData = ppg > 0 || rpg > 0 || apg > 0 || spg > 0 || bpg > 0 || gamesPlayed > 0 || storedPer > 0 || fgPct > 0;
+  // Check sport-specific logged match or test data
+  const kills = Number(averages.kills ?? averages.spike_kills ?? stats.kills ?? stats.spike_kills ?? 0);
+  const blocks = Number(averages.blocks ?? averages.block_points ?? stats.blocks ?? stats.block_points ?? 0);
+  const aces = Number(averages.aces ?? averages.service_aces ?? stats.aces ?? stats.service_aces ?? 0);
+  const digs = Number(averages.digs ?? stats.digs ?? 0);
+  const assists = Number(averages.assists ?? stats.assists ?? 0);
+  const loggedFinishTime = Number(averages.finish_time_ms ?? stats.finish_time_ms ?? athlete.finish_time_ms ?? 0);
+  const hasTimes = Boolean(averages.pb_100m || stats.pb_100m || averages.pb_50m_free || stats.pb_50m_free);
+
+  const hasMatchData =
+    ppg > 0 || rpg > 0 || apg > 0 || spg > 0 || bpg > 0 ||
+    gamesPlayed > 0 || storedPer > 0 || fgPct > 0 ||
+    kills > 0 || blocks > 0 || aces > 0 || digs > 0 || assists > 0 ||
+    loggedFinishTime > 0 || hasTimes;
 
   if (!hasMatchData) {
     if (hasExistingVerified) {
@@ -146,7 +158,7 @@ export function calculateDynamicRadarCompetencies(athlete: any): RadarCompetenci
   }
 
   // 1. Basketball / Ball-games
-  if (sportCategory.includes("BASKET") || (!sportCategory.includes("VOLLEY") && !sportCategory.includes("SWIM") && !sportCategory.includes("TRACK") && !sportCategory.includes("FIELD"))) {
+  if (sportCategory.includes("BASKET") || (!sportCategory.includes("VOLLEY") && !sportCategory.includes("SWIM") && !sportCategory.includes("TRACK") && !sportCategory.includes("FIELD") && !sportCategory.includes("PICKLE"))) {
     // Dynamic PER
     let per = storedPer;
     if (per <= 0) {
@@ -196,18 +208,18 @@ export function calculateDynamicRadarCompetencies(athlete: any): RadarCompetenci
 
   // 2. Volleyball
   if (sportCategory.includes("VOLLEY")) {
-    const kills = Number(averages.kills_per_set ?? stats.kills_per_set ?? stats.kills ?? 0);
-    const blocks = Number(averages.blocks_per_set ?? stats.blocks_per_set ?? stats.blocks ?? 0);
-    const aces = Number(averages.aces_per_set ?? stats.aces_per_set ?? stats.aces ?? 0);
-    const digs = Number(averages.digs_per_set ?? stats.digs_per_set ?? stats.digs ?? 0);
-    const assists = Number(averages.assists_per_set ?? stats.assists_per_set ?? stats.assists ?? 0);
+    const vKills = Number(averages.kills_per_set ?? stats.kills_per_set ?? averages.kills ?? averages.spike_kills ?? stats.kills ?? 0);
+    const vBlocks = Number(averages.blocks_per_set ?? stats.blocks_per_set ?? averages.blocks ?? averages.block_points ?? stats.blocks ?? 0);
+    const vAces = Number(averages.aces_per_set ?? stats.aces_per_set ?? averages.aces ?? averages.service_aces ?? stats.aces ?? 0);
+    const vDigs = Number(averages.digs_per_set ?? stats.digs_per_set ?? averages.digs ?? stats.digs ?? 0);
+    const vAssists = Number(averages.assists_per_set ?? stats.assists_per_set ?? averages.assists ?? stats.assists ?? 0);
 
     return {
-      power: Math.max(50, Math.min(99, Math.round(50 + (kills * 6.5) + (blocks * 8.0)))),
-      agility: Math.max(50, Math.min(99, Math.round(50 + (digs * 7.0) + (aces * 4.0)))),
-      speed: Math.max(50, Math.min(99, Math.round(50 + (digs * 6.0) + (assists * 3.0)))),
-      iq: Math.max(50, Math.min(99, Math.round(50 + (assists * 5.0) + (digs * 3.5) + (blocks * 4.0)))),
-      tech: Math.max(50, Math.min(99, Math.round(50 + (aces * 8.0) + (kills * 4.0)))),
+      power: Math.max(50, Math.min(99, Math.round(50 + (vKills * 6.5) + (vBlocks * 8.0)))),
+      agility: Math.max(50, Math.min(99, Math.round(50 + (vDigs * 7.0) + (vAces * 4.0)))),
+      speed: Math.max(50, Math.min(99, Math.round(50 + (vDigs * 6.0) + (vAssists * 3.0)))),
+      iq: Math.max(50, Math.min(99, Math.round(50 + (vAssists * 5.0) + (vDigs * 3.5) + (vBlocks * 4.0)))),
+      tech: Math.max(50, Math.min(99, Math.round(50 + (vAces * 8.0) + (vKills * 4.0)))),
     };
   }
 

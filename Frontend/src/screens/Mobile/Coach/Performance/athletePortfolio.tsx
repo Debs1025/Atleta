@@ -40,12 +40,13 @@ interface AthletePortfolioProps {
 }
 
 export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
-  athlete,
+  athlete: rawAthlete,
   matches = [],
   onClose,
   onViewAllStats,
   onViewMatchHistory,
 }) => {
+  const athlete: any = rawAthlete;
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
@@ -485,7 +486,16 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
 
           <View style={styles.sublineTagsRow}>
             <View style={styles.tagBadge}>
-              <Ionicons name="basketball-outline" size={12} color="#00C8FF" />
+              {(() => {
+                const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+                let sportIcon: any = "trophy-outline";
+                if (sc.includes("BASKET")) sportIcon = "basketball-outline";
+                else if (sc.includes("SWIM")) sportIcon = "water-outline";
+                else if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) sportIcon = "walk-outline";
+                else if (sc.includes("VOLLEY")) sportIcon = "tennisball-outline";
+                else if (sc.includes("SOCCER") || sc.includes("FOOTBALL")) sportIcon = "football-outline";
+                return <Ionicons name={sportIcon} size={12} color="#00C8FF" />;
+              })()}
               <Text style={styles.tagBadgeText}>
                 {athlete.position_or_event}
               </Text>
@@ -508,146 +518,167 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
         </View>
 
         <View style={styles.statsGrid}>
-          {athlete.sport_category === "TRACK AND FIELD" ? (
-            <>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>100M PB</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.pb_100m || "-"}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>200M PB</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.pb_200m || "-"}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>REACTION</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.reaction_time_s || "-"}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>WIN %</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null
-                    ? `${athlete.averages.win_rate_pct}%`
-                    : "-"}
-                </Text>
-              </View>
-            </>
-          ) : athlete.sport_category === "SWIMMING" ? (
-            <>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>50M FREE</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.pb_50m_free || "-"}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>100M FREE</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.pb_100m_free || "-"}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>SWIM INDEX</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.swim_index_score ? String(athlete.averages.swim_index_score) : "-"}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>PODIUMS</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.podiums_count !== undefined && athlete.averages.podiums_count !== null
-                    ? String(athlete.averages.podiums_count)
-                    : "0"}
-                </Text>
-              </View>
-            </>
-          ) : athlete.sport_category === "VOLLEYBALL" ? (
-            <>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>KILLS</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.spike_kills ?? 0}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>BLOCKS</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.block_points ?? 0}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>ACES</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.service_aces ?? 0}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>PER</Text>
-                <Text style={styles.statValue}>
-                  {calculateDynamicPER(athlete.averages)}
-                </Text>
-              </View>
-            </>
-          ) : athlete.sport_category === "PICKLEBALL" ? (
-            <>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>POINTS</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.points_scored ?? 0}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>ACES</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.aces ?? 0}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>DINKS</Text>
-                <Text style={styles.statValue}>
-                  {athlete.averages.dinks ?? 0}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>PER</Text>
-                <Text style={styles.statValue}>
-                  {calculateDynamicPER(athlete.averages)}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>PPG</Text>
-                <Text style={styles.statValue}>
-                  {typeof athlete.averages.ppg === "number" ? athlete.averages.ppg : (athlete.averages.ppg || "0")}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>RPG</Text>
-                <Text style={styles.statValue}>
-                  {typeof athlete.averages.rpg === "number" ? athlete.averages.rpg : (athlete.averages.rpg || "0")}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>APG</Text>
-                <Text style={styles.statValue}>
-                  {typeof athlete.averages.apg === "number" ? athlete.averages.apg : (athlete.averages.apg || "0")}
-                </Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>PER</Text>
-                <Text style={styles.statValue}>
-                  {calculateDynamicPER(athlete.averages)}
-                </Text>
-              </View>
-            </>
-          )}
+          {(() => {
+            const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+            if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) {
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>100M PB</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.pb_100m || athlete.stats?.pb_100m || athlete.stats?.times_100m || "-"}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>200M PB</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.pb_200m || athlete.stats?.pb_200m || athlete.stats?.times_200m || "-"}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>REACTION</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.reaction_time_s || athlete.stats?.reaction_time_s || "-"}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>WIN %</Text>
+                    <Text style={styles.statValue}>
+                      {athlete.averages?.win_rate_pct !== undefined && athlete.averages?.win_rate_pct !== null
+                        ? `${athlete.averages.win_rate_pct}%`
+                        : (athlete.stats?.win_rate_pct !== undefined && athlete.stats?.win_rate_pct !== null ? `${athlete.stats.win_rate_pct}%` : "-")}
+                    </Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes("SWIM")) {
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>50M FREE</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.pb_50m_free || athlete.stats?.pb_50m_free || athlete.stats?.times_50m_free || "-"}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>100M FREE</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m || "-"}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>SWIM INDEX</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.swim_index_score ? String(athlete.averages.swim_index_score) : (athlete.stats?.swim_index_score ? String(athlete.stats.swim_index_score) : "-")}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>PODIUMS</Text>
+                    <Text style={styles.statValue}>
+                      {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
+                        ? String(athlete.averages.podiums_count)
+                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "0")}
+                    </Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes("VOLLEY")) {
+              const kills = athlete.averages?.kills ?? athlete.averages?.spike_kills ?? athlete.stats?.kills ?? athlete.stats?.spike_kills ?? 0;
+              const blocks = athlete.averages?.blocks ?? athlete.averages?.block_points ?? athlete.stats?.blocks ?? athlete.stats?.block_points ?? 0;
+              const aces = athlete.averages?.aces ?? athlete.averages?.service_aces ?? athlete.stats?.aces ?? athlete.stats?.service_aces ?? 0;
+              const digs = athlete.averages?.digs ?? athlete.stats?.digs ?? 0;
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>KILLS</Text>
+                    <Text style={styles.statValue}>{kills}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>BLOCKS</Text>
+                    <Text style={styles.statValue}>{blocks}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>ACES</Text>
+                    <Text style={styles.statValue}>{aces}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>DIGS</Text>
+                    <Text style={styles.statValue}>{digs}</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes("PICKLE")) {
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>POINTS</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.points_scored ?? athlete.stats?.points_scored ?? 0}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>ACES</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.aces ?? athlete.stats?.aces ?? 0}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>DINKS</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.dinks ?? athlete.stats?.dinks ?? 0}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>RATING</Text>
+                    <Text style={styles.statValue}>{athlete.rating_score || "-"}</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes("BASKET")) {
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>PPG</Text>
+                    <Text style={styles.statValue}>
+                      {typeof athlete.averages?.ppg === "number" ? athlete.averages.ppg : (athlete.averages?.ppg || "0")}
+                    </Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>RPG</Text>
+                    <Text style={styles.statValue}>
+                      {typeof athlete.averages?.rpg === "number" ? athlete.averages.rpg : (athlete.averages?.rpg || "0")}
+                    </Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>APG</Text>
+                    <Text style={styles.statValue}>
+                      {typeof athlete.averages?.apg === "number" ? athlete.averages.apg : (athlete.averages?.apg || "0")}
+                    </Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>PER</Text>
+                    <Text style={styles.statValue}>
+                      {calculateDynamicPER(athlete.averages)}
+                    </Text>
+                  </View>
+                </>
+              );
+            } else {
+              // Dynamic fallback for any other admin-configured sport
+              const stats = athlete.stats || athlete.averages || {};
+              const keys = Object.keys(stats).filter((k) => typeof stats[k] === "number" && !["id", "user_id", "games_played", "wins", "per_score"].includes(k)).slice(0, 4);
+              if (keys.length > 0) {
+                return (
+                  <>
+                    {keys.map((k) => (
+                      <View key={k} style={styles.statCard}>
+                        <Text style={styles.statLabel}>{k.replace(/_/g, " ").toUpperCase()}</Text>
+                        <Text style={styles.statValue}>{stats[k]}</Text>
+                      </View>
+                    ))}
+                  </>
+                );
+              }
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>GAMES</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.games_played ?? athlete.stats?.games_played ?? 0}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>WINS</Text>
+                    <Text style={styles.statValue}>{athlete.averages?.wins ?? athlete.stats?.wins ?? 0}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>RATING</Text>
+                    <Text style={styles.statValue}>{athlete.rating_score || "-"}</Text>
+                  </View>
+                </>
+              );
+            }
+          })()}
         </View>
 
         {/* Physical Attributes Panel */}
@@ -733,13 +764,23 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
         </Text>
 
         {/* Line Chart */}
-        <View style={styles.chartContainerCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>SCORING TRENDS</Text>
-            <Text style={styles.chartSubtext}>Last 10 Games</Text>
-          </View>
-          {renderScoringTrendsChart()}
-        </View>
+        {(() => {
+          const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+          const isTimed = sc.includes("SWIM") || sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
+          const isVolley = sc.includes("VOLLEY");
+          const chartTitle = isTimed ? "PERFORMANCE TRENDS" : isVolley ? "SCORING / STAT TRENDS" : "SCORING TRENDS";
+          const chartSub = isTimed ? "Last 10 Meets / Events" : "Last 10 Games";
+
+          return (
+            <View style={styles.chartContainerCard}>
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>{chartTitle}</Text>
+                <Text style={styles.chartSubtext}>{chartSub}</Text>
+              </View>
+              {renderScoringTrendsChart()}
+            </View>
+          );
+        })()}
 
         {/* Radar Chart */}
         <View style={styles.chartContainerCard}>
@@ -755,13 +796,55 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
               const comps = athlete.radar_competencies || dynamicComps;
               const hasData = Boolean(comps && Object.values(comps).some((v) => typeof v === "number" && v > 0));
 
-              const metrics = [
-                { label: "SPEED", val: comps?.speed || 0, source: "Assists & Steals" },
-                { label: "POWER", val: comps?.power || 0, source: "Rebounds & Blocks" },
-                { label: "AGILITY", val: comps?.agility || 0, source: "Steals & Transition" },
-                { label: "BASKETBALL / SPORT IQ", val: comps?.iq || 0, source: "Ast/TO & PER" },
-                { label: "TECHNIQUE", val: comps?.tech || 0, source: "Field Goal %" },
-              ];
+              const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+              const isVolley = sc.includes("VOLLEY");
+              const isSwim = sc.includes("SWIM");
+              const isTrack = sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
+              const isBasket = sc.includes("BASKET");
+
+              let metrics: { label: string; val: number; source: string }[] = [];
+
+              if (isVolley) {
+                metrics = [
+                  { label: "SPEED", val: comps?.speed || 0, source: "Digs & Quick Transitions" },
+                  { label: "POWER", val: comps?.power || 0, source: "Kills & Blocks" },
+                  { label: "AGILITY", val: comps?.agility || 0, source: "Digs & Service Pressure" },
+                  { label: "VOLLEYBALL IQ", val: comps?.iq || 0, source: "Assists, Setting & Court Awareness" },
+                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Aces & Attack Accuracy" },
+                ];
+              } else if (isSwim) {
+                metrics = [
+                  { label: "SPEED", val: comps?.speed || 0, source: "50m/100m Velocity" },
+                  { label: "POWER", val: comps?.power || 0, source: "Stroke Turnover & Wall Drive" },
+                  { label: "AGILITY", val: comps?.agility || 0, source: "Turn Execution & Underwater" },
+                  { label: "SWIM IQ", val: comps?.iq || 0, source: "Pacing Strategy & Rhythm" },
+                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Stroke Efficiency & Streamline" },
+                ];
+              } else if (isTrack) {
+                metrics = [
+                  { label: "SPEED", val: comps?.speed || 0, source: "Sprint PBs & Top Speed" },
+                  { label: "POWER", val: comps?.power || 0, source: "Block Clearance & Explosiveness" },
+                  { label: "AGILITY", val: comps?.agility || 0, source: "Curve Transition & Reaction Time" },
+                  { label: "TRACK IQ", val: comps?.iq || 0, source: "Race Execution & Stride Frequency" },
+                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Sprint Mechanics & Form" },
+                ];
+              } else if (isBasket) {
+                metrics = [
+                  { label: "SPEED", val: comps?.speed || 0, source: "Assists & Steals" },
+                  { label: "POWER", val: comps?.power || 0, source: "Rebounds & Blocks" },
+                  { label: "AGILITY", val: comps?.agility || 0, source: "Steals & Transition" },
+                  { label: "BASKETBALL IQ", val: comps?.iq || 0, source: "Ast/TO & Efficiency" },
+                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Field Goal % & Shooting" },
+                ];
+              } else {
+                metrics = [
+                  { label: "SPEED", val: comps?.speed || 0, source: "Movement & Pace" },
+                  { label: "POWER", val: comps?.power || 0, source: "Strength & Force" },
+                  { label: "AGILITY", val: comps?.agility || 0, source: "Agility & Reactions" },
+                  { label: "SPORT IQ", val: comps?.iq || 0, source: "Tactical Awareness" },
+                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Skill Execution" },
+                ];
+              }
 
               return (
                 <>

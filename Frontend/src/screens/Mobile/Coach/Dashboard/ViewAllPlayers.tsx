@@ -262,9 +262,14 @@ export function ViewAllPlayers({
                 >
                   <View style={{ flex: 1, marginRight: 12 }}>
                     <Text style={styles.playerName}>{player.full_name}</Text>
-                    <Text style={styles.playerMeta}>
-                      {formattedPos} • #{player.jersey_number}
-                    </Text>
+                    {(() => {
+                      const hasJersey = Boolean(player.jersey_number && player.jersey_number !== "0" && player.jersey_number !== "null");
+                      return (
+                        <Text style={styles.playerMeta}>
+                          {formattedPos}{hasJersey ? ` • #${player.jersey_number}` : ""}
+                        </Text>
+                      );
+                    })()}
                     <Text style={styles.teamTag}>{teamName}</Text>
                   </View>
 

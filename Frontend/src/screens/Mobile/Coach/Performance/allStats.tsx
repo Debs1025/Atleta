@@ -23,10 +23,11 @@ interface AllStatsProps {
 }
 
 export const AllStats: React.FC<AllStatsProps> = ({
-  athlete,
+  athlete: rawAthlete,
   onClose,
   onUpdateWorkload,
 }) => {
+  const athlete: any = rawAthlete;
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
@@ -122,542 +123,624 @@ export const AllStats: React.FC<AllStatsProps> = ({
         </View>
 
         {/* Stats Sections */}
-        {athlete.sport_category === "TRACK AND FIELD" ? (
-          <>
-            <Text style={styles.sectionTitle}>AVERAGES</Text>
-            <View style={styles.averagesTopRow}>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>100M AVG</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_100m || athlete.averages.pb_100m || "-"}
-                </Text>
-              </View>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>200M AVG</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_200m || athlete.averages.pb_200m || "-"}
-                </Text>
-              </View>
-            </View>
+        {(() => {
+          const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+          const isTrack = sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
+          const isSwim = sc.includes("SWIM");
+          const isVolley = sc.includes("VOLLEY");
+          const isPickle = sc.includes("PICKLE");
+          const isBasket = sc.includes("BASKET");
 
-            <View style={styles.averagesBottomRow}>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>REACTION</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete.averages.reaction_time_s || "-"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>START RATING</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete.averages.start_rating_pct ? `${athlete.averages.start_rating_pct}%` : "-"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>PODIUMS</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete.averages.podiums_count !== undefined && athlete.averages.podiums_count !== null
-                    ? String(athlete.averages.podiums_count)
-                    : "0"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>PERFORMANCE & SPEED SPLITS</Text>
-            <View style={styles.splitCardFull}>
-              <View style={styles.splitHeaderRow}>
-                <Text style={styles.avgLabel}>TOP SPEED (KM/H)</Text>
-              </View>
-              <Text style={styles.splitValueText}>
-                {athlete.averages.top_speed_kmh ? `${athlete.averages.top_speed_kmh} km/h` : "-"}
-              </Text>
-              <View style={styles.progressBarTrack}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${Math.min(
-                        100,
-                        athlete.averages.top_speed_kmh ? (Number(athlete.averages.top_speed_kmh) / 45) * 100 : 0
-                      )}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-
-            <View style={styles.splitCardHalfRow}>
-              <View style={styles.splitCardHalf}>
-                <Text style={styles.avgLabel}>STRIDE FREQ</Text>
-                <Text style={styles.splitValueText}>
-                  {athlete.averages.stride_freq_hz ? `${athlete.averages.stride_freq_hz} Hz` : "-"}
-                </Text>
-                <View style={styles.progressBarTrack}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(
-                          100,
-                          athlete.averages.stride_freq_hz ? (Number(athlete.averages.stride_freq_hz) / 5) * 100 : 0
-                        )}%`,
-                      },
-                    ]}
-                  />
+          if (isTrack) {
+            return (
+              <>
+                <Text style={styles.sectionTitle}>AVERAGES</Text>
+                <View style={styles.averagesTopRow}>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>100M AVG</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete.averages?.avg_100m || athlete.averages?.pb_100m || athlete.stats?.pb_100m || athlete.stats?.times_100m || "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>200M AVG</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete.averages?.avg_200m || athlete.averages?.pb_200m || athlete.stats?.pb_200m || athlete.stats?.times_200m || "-"}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.splitCardHalf}>
-                <Text style={styles.avgLabel}>WIN RATE %</Text>
-                <Text style={styles.splitValueText}>
-                  {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null
-                    ? `${athlete.averages.win_rate_pct}%`
-                    : "-"}
-                </Text>
-                <View style={styles.progressBarTrack}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(
-                          100,
-                          Math.max(0, Number(athlete.averages.win_rate_pct || 0))
-                        )}%`,
-                      },
-                    ]}
-                  />
+                <View style={styles.averagesBottomRow}>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>REACTION</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete.averages?.reaction_time_s || athlete.stats?.reaction_time_s || "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>START RATING</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete.averages?.start_rating_pct ? `${athlete.averages.start_rating_pct}%` : "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>PODIUMS</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
+                        ? String(athlete.averages.podiums_count)
+                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "0")}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </View>
 
-            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>
-                SPRINT EFFICIENCY RATING (+-)
-              </Text>
-              <Text style={styles.advancedValue}>
-                {athlete.averages.per_score !== undefined && athlete.averages.per_score !== null
-                  ? String(athlete.averages.per_score)
-                  : "0.0"}
-              </Text>
-            </View>
-
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>EVENT WINS</Text>
-              <Text style={styles.advancedValue}>
-                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                  ? String(athlete?.averages?.wins)
-                  : "0"}
-              </Text>
-            </View>
-          </>
-        ) : athlete.sport_category === "SWIMMING" ? (
-          <>
-            <Text style={styles.sectionTitle}>AVERAGES</Text>
-            <View style={styles.averagesTopRow}>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>100M FREE</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_100m_free || athlete.averages.pb_100m_free || "-"}
-                </Text>
-              </View>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>200M FREE</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete.averages.avg_200m_free || "-"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.averagesBottomRow}>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>50M FREE</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete.averages.pb_50m_free || "-"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>FLIP TURN</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete.averages.flip_turn_s || "-"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>PODIUMS</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete.averages.podiums_count !== undefined && athlete.averages.podiums_count !== null
-                    ? String(athlete.averages.podiums_count)
-                    : "0"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>STROKE & EFFICIENCY SPLITS</Text>
-            <View style={styles.splitCardFull}>
-              <View style={styles.splitHeaderRow}>
-                <Text style={styles.avgLabel}>STROKE EFFICIENCY %</Text>
-              </View>
-              <Text style={styles.splitValueText}>
-                {athlete.averages.stroke_efficiency_pct !== undefined && athlete.averages.stroke_efficiency_pct !== null
-                  ? `${athlete.averages.stroke_efficiency_pct}%`
-                  : "-"}
-              </Text>
-              <View style={styles.progressBarTrack}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${Math.min(
-                        100,
-                        Math.max(0, Number(athlete.averages.stroke_efficiency_pct || 0))
-                      )}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-
-            <View style={styles.splitCardHalfRow}>
-              <View style={styles.splitCardHalf}>
-                <Text style={styles.avgLabel}>STROKE RATE</Text>
-                <Text style={styles.splitValueText}>
-                  {athlete.averages.stroke_rate_pm ? `${athlete.averages.stroke_rate_pm}/min` : "-"}
-                </Text>
-                <View style={styles.progressBarTrack}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(
-                          100,
-                          athlete.averages.stroke_rate_pm ? (Number(athlete.averages.stroke_rate_pm) / 60) * 100 : 0
-                        )}%`,
-                      },
-                    ]}
-                  />
+                <Text style={styles.sectionTitle}>PERFORMANCE & SPEED SPLITS</Text>
+                <View style={styles.splitCardFull}>
+                  <View style={styles.splitHeaderRow}>
+                    <Text style={styles.avgLabel}>TOP SPEED (KM/H)</Text>
+                  </View>
+                  <Text style={styles.splitValueText}>
+                    {athlete.averages?.top_speed_kmh ? `${athlete.averages.top_speed_kmh} km/h` : "-"}
+                  </Text>
+                  <View style={styles.progressBarTrack}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${Math.min(
+                            100,
+                            athlete.averages?.top_speed_kmh ? (Number(athlete.averages.top_speed_kmh) / 45) * 100 : 0
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.splitCardHalf}>
-                <Text style={styles.avgLabel}>SWIM INDEX</Text>
-                <Text style={styles.splitValueText}>
-                  {athlete.averages.swim_index_score !== undefined && athlete.averages.swim_index_score !== null
-                    ? String(athlete.averages.swim_index_score)
-                    : "-"}
-                </Text>
-                <View style={styles.progressBarTrack}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(
-                          100,
-                          athlete.averages.swim_index_score ? (Number(athlete.averages.swim_index_score) / 1000) * 100 : 0
-                        )}%`,
-                      },
-                    ]}
-                  />
+                <View style={styles.splitCardHalfRow}>
+                  <View style={styles.splitCardHalf}>
+                    <Text style={styles.avgLabel}>STRIDE FREQ</Text>
+                    <Text style={styles.splitValueText}>
+                      {athlete.averages?.stride_freq_hz ? `${athlete.averages.stride_freq_hz} Hz` : "-"}
+                    </Text>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              athlete.averages?.stride_freq_hz ? (Number(athlete.averages.stride_freq_hz) / 5) * 100 : 0
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.splitCardHalf}>
+                    <Text style={styles.avgLabel}>WIN RATE %</Text>
+                    <Text style={styles.splitValueText}>
+                      {athlete.averages?.win_rate_pct !== undefined && athlete.averages?.win_rate_pct !== null
+                        ? `${athlete.averages.win_rate_pct}%`
+                        : (athlete.stats?.win_rate_pct !== undefined && athlete.stats?.win_rate_pct !== null ? `${athlete.stats.win_rate_pct}%` : "-")}
+                    </Text>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              Math.max(0, Number(athlete.averages?.win_rate_pct || athlete.stats?.win_rate_pct || 0))
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
 
-            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>
-                SWIMMING PERFORMANCE INDEX (+-)
-              </Text>
-              <Text style={styles.advancedValue}>
-                {athlete.averages.per_score !== undefined && athlete.averages.per_score !== null
-                  ? String(athlete.averages.per_score)
-                  : "0.0"}
-              </Text>
-            </View>
-
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>MEET WINS</Text>
-              <Text style={styles.advancedValue}>
-                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                  ? String(athlete?.averages?.wins)
-                  : "0"}
-              </Text>
-            </View>
-          </>
-        ) : athlete.sport_category === "VOLLEYBALL" ? (
-          <>
-            <Text style={styles.sectionTitle}>AVERAGES</Text>
-            <View style={styles.averagesTopRow}>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>KILLS</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete?.averages?.spike_kills !== undefined && athlete?.averages?.spike_kills !== null
-                    ? String(athlete?.averages?.spike_kills)
-                    : "0"}
-                </Text>
-              </View>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>BLOCKS</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete?.averages?.block_points !== undefined && athlete?.averages?.block_points !== null
-                    ? String(athlete?.averages?.block_points)
-                    : "0"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.averagesBottomRow}>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>BLOCKS</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.block_points !== undefined && athlete?.averages?.block_points !== null
-                    ? String(athlete?.averages?.block_points)
-                    : "0"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>ACES</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.service_aces !== undefined && athlete?.averages?.service_aces !== null
-                    ? String(athlete?.averages?.service_aces)
-                    : "0"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>DIGS</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.digs !== undefined && athlete?.averages?.digs !== null
-                    ? String(athlete?.averages?.digs)
-                    : "0"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>
-                VOLLEYBALL PERFORMANCE RATING (+-)
-              </Text>
-              <Text style={styles.advancedValue}>
-                {calculateDynamicPER(athlete?.averages)}
-              </Text>
-            </View>
-
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>MATCH WINS</Text>
-              <Text style={styles.advancedValue}>
-                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                  ? String(athlete?.averages?.wins)
-                  : "0"}
-              </Text>
-            </View>
-          </>
-        ) : athlete.sport_category === "PICKLEBALL" ? (
-          <>
-            <Text style={styles.sectionTitle}>AVERAGES</Text>
-            <View style={styles.averagesTopRow}>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>POINTS</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete?.averages?.points_scored !== undefined && athlete?.averages?.points_scored !== null
-                    ? String(athlete?.averages?.points_scored)
-                    : "0"}
-                </Text>
-              </View>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>ACES</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete?.averages?.aces !== undefined && athlete?.averages?.aces !== null
-                    ? String(athlete?.averages?.aces)
-                    : "0"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.averagesBottomRow}>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>DINKS</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.dinks !== undefined && athlete?.averages?.dinks !== null
-                    ? String(athlete?.averages?.dinks)
-                    : "0"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>SMASHES</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.smashes !== undefined && athlete?.averages?.smashes !== null
-                    ? String(athlete?.averages?.smashes)
-                    : "0"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>ERRORS</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.unforced_errors !== undefined && athlete?.averages?.unforced_errors !== null
-                    ? String(athlete?.averages?.unforced_errors)
-                    : "0"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>
-                PICKLEBALL RATING SCORE (+-)
-              </Text>
-              <Text style={styles.advancedValue}>
-                {calculateDynamicPER(athlete?.averages)}
-              </Text>
-            </View>
-
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>GAMES WON</Text>
-              <Text style={styles.advancedValue}>
-                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                  ? String(athlete?.averages?.wins)
-                  : "0"}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>AVERAGES</Text>
-            <View style={styles.averagesTopRow}>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>PPG</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete?.averages?.ppg !== undefined && athlete?.averages?.ppg !== null
-                    ? String(athlete?.averages?.ppg)
-                    : "0.0"}
-                </Text>
-              </View>
-              <View style={styles.averagesTopCard}>
-                <Text style={styles.avgLabel}>APG</Text>
-                <Text style={styles.avgValueLarge}>
-                  {athlete?.averages?.apg !== undefined && athlete?.averages?.apg !== null
-                    ? String(athlete?.averages?.apg)
-                    : "0.0"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.averagesBottomRow}>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>RPG</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.rpg !== undefined && athlete?.averages?.rpg !== null
-                    ? String(athlete?.averages?.rpg)
-                    : "0.0"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>BPG</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.bpg !== undefined && athlete?.averages?.bpg !== null
-                    ? String(athlete?.averages?.bpg)
-                    : "0.0"}
-                </Text>
-              </View>
-              <View style={styles.averagesSmallCard}>
-                <Text style={styles.avgLabel}>SPG</Text>
-                <Text style={styles.avgValueSmall}>
-                  {athlete?.averages?.spg !== undefined && athlete?.averages?.spg !== null
-                    ? String(athlete?.averages?.spg)
-                    : "0.0"}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>SHOOTING SPLITS</Text>
-            <View style={styles.splitCardFull}>
-              <View style={styles.splitHeaderRow}>
-                <Text style={styles.avgLabel}>FIELD GOAL %</Text>
-              </View>
-              <Text style={styles.splitValueText}>
-                {athlete?.averages?.fg_percentage !== undefined && athlete?.averages?.fg_percentage !== null
-                  ? `${athlete.averages.fg_percentage}%`
-                  : "-"}
-              </Text>
-              <View style={styles.progressBarTrack}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${Math.min(
-                        100,
-                        Math.max(0, Number(athlete?.averages?.fg_percentage || 0))
-                      )}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-
-            <View style={styles.splitCardHalfRow}>
-              <View style={styles.splitCardHalf}>
-                <Text style={styles.avgLabel}>3 POINTS %</Text>
-                <Text style={styles.splitValueText}>
-                  {athlete?.averages?.three_pt_percentage !== undefined && athlete?.averages?.three_pt_percentage !== null
-                    ? `${athlete.averages.three_pt_percentage}%`
-                    : "-"}
-                </Text>
-                <View style={styles.progressBarTrack}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(
-                          100,
-                          Math.max(0, Number(athlete?.averages?.three_pt_percentage || 0))
-                        )}%`,
-                      },
-                    ]}
-                  />
+                <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>
+                    SPRINT EFFICIENCY RATING (+-)
+                  </Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null
+                      ? String(athlete.averages.per_score)
+                      : "0.0"}
+                  </Text>
                 </View>
-              </View>
 
-              <View style={styles.splitCardHalf}>
-                <Text style={styles.avgLabel}>FREE THROWS %</Text>
-                <Text style={styles.splitValueText}>
-                  {athlete?.averages?.ft_percentage !== undefined && athlete?.averages?.ft_percentage !== null
-                    ? `${athlete.averages.ft_percentage}%`
-                    : "-"}
-                </Text>
-                <View style={styles.progressBarTrack}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${Math.min(
-                          100,
-                          Math.max(0, Number(athlete?.averages?.ft_percentage || 0))
-                        )}%`,
-                      },
-                    ]}
-                  />
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>EVENT WINS</Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                      ? String(athlete?.averages?.wins)
+                      : "0"}
+                  </Text>
                 </View>
-              </View>
-            </View>
+              </>
+            );
+          } else if (isSwim) {
+            return (
+              <>
+                <Text style={styles.sectionTitle}>AVERAGES</Text>
+                <View style={styles.averagesTopRow}>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>100M FREE</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete.averages?.avg_100m_free || athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m || "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>200M FREE</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete.averages?.avg_200m_free || athlete.averages?.pb_200m || athlete.stats?.times_200m || "-"}
+                    </Text>
+                  </View>
+                </View>
 
-            <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>
-                PLAYER EFFICIENCY RATING (+-)
-              </Text>
-              <Text style={styles.advancedValue}>
-                {calculateDynamicPER(athlete?.averages)}
-              </Text>
-            </View>
+                <View style={styles.averagesBottomRow}>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>50M FREE</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete.averages?.pb_50m_free || athlete.stats?.pb_50m_free || athlete.stats?.times_50m_free || "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>FLIP TURN</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete.averages?.flip_turn_s || "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>PODIUMS</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
+                        ? String(athlete.averages.podiums_count)
+                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "0")}
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.advancedTile}>
-              <Text style={styles.advancedLabel}>WINS</Text>
-              <Text style={styles.advancedValue}>
-                {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                  ? String(athlete?.averages?.wins)
-                  : "0"}
-              </Text>
-            </View>
-          </>
-        )}
+                <Text style={styles.sectionTitle}>STROKE & EFFICIENCY SPLITS</Text>
+                <View style={styles.splitCardFull}>
+                  <View style={styles.splitHeaderRow}>
+                    <Text style={styles.avgLabel}>STROKE EFFICIENCY %</Text>
+                  </View>
+                  <Text style={styles.splitValueText}>
+                    {athlete.averages?.stroke_efficiency_pct !== undefined && athlete.averages?.stroke_efficiency_pct !== null
+                      ? `${athlete.averages.stroke_efficiency_pct}%`
+                      : "-"}
+                  </Text>
+                  <View style={styles.progressBarTrack}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${Math.min(
+                            100,
+                            Math.max(0, Number(athlete.averages?.stroke_efficiency_pct || 0))
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.splitCardHalfRow}>
+                  <View style={styles.splitCardHalf}>
+                    <Text style={styles.avgLabel}>STROKE RATE</Text>
+                    <Text style={styles.splitValueText}>
+                      {athlete.averages?.stroke_rate_pm ? `${athlete.averages.stroke_rate_pm}/min` : (athlete.averages?.stroke_rate ? `${athlete.averages.stroke_rate}/min` : "-")}
+                    </Text>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              athlete.averages?.stroke_rate_pm ? (Number(athlete.averages.stroke_rate_pm) / 60) * 100 : (athlete.averages?.stroke_rate ? (Number(athlete.averages.stroke_rate) / 60) * 100 : 0)
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.splitCardHalf}>
+                    <Text style={styles.avgLabel}>SWIM INDEX</Text>
+                    <Text style={styles.splitValueText}>
+                      {athlete.averages?.swim_index_score !== undefined && athlete.averages?.swim_index_score !== null
+                        ? String(athlete.averages.swim_index_score)
+                        : (athlete.stats?.swim_index_score ? String(athlete.stats.swim_index_score) : "-")}
+                    </Text>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              athlete.averages?.swim_index_score ? (Number(athlete.averages.swim_index_score) / 1000) * 100 : 0
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>
+                    SWIMMING PERFORMANCE INDEX (+-)
+                  </Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null
+                      ? String(athlete.averages.per_score)
+                      : "0.0"}
+                  </Text>
+                </View>
+
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>MEET WINS</Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                      ? String(athlete?.averages?.wins)
+                      : "0"}
+                  </Text>
+                </View>
+              </>
+            );
+          } else if (isVolley) {
+            const kills = athlete?.averages?.kills ?? athlete?.averages?.spike_kills ?? athlete?.stats?.kills ?? athlete?.stats?.spike_kills ?? 0;
+            const blocks = athlete?.averages?.blocks ?? athlete?.averages?.block_points ?? athlete?.stats?.blocks ?? athlete?.stats?.block_points ?? 0;
+            const assists = athlete?.averages?.assists ?? athlete?.stats?.assists ?? 0;
+            const aces = athlete?.averages?.aces ?? athlete?.averages?.service_aces ?? athlete?.stats?.aces ?? athlete?.stats?.service_aces ?? 0;
+            const digs = athlete?.averages?.digs ?? athlete?.stats?.digs ?? 0;
+            const spikeAcc = athlete?.averages?.spike_accuracy ?? athlete?.stats?.spike_accuracy;
+            const svcErr = athlete?.averages?.service_errors ?? athlete?.stats?.service_errors ?? 0;
+
+            return (
+              <>
+                <Text style={styles.sectionTitle}>AVERAGES</Text>
+                <View style={styles.averagesTopRow}>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>KILL SPIKES</Text>
+                    <Text style={styles.avgValueLarge}>{String(kills)}</Text>
+                  </View>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>KILL BLOCKS</Text>
+                    <Text style={styles.avgValueLarge}>{String(blocks)}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.averagesBottomRow}>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>ASSISTS</Text>
+                    <Text style={styles.avgValueSmall}>{String(assists)}</Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>ACES</Text>
+                    <Text style={styles.avgValueSmall}>{String(aces)}</Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>DIGS</Text>
+                    <Text style={styles.avgValueSmall}>{String(digs)}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionTitle}>ATTACK & SERVE ACCURACY</Text>
+                <View style={styles.splitCardFull}>
+                  <View style={styles.splitHeaderRow}>
+                    <Text style={styles.avgLabel}>SPIKE ACCURACY %</Text>
+                  </View>
+                  <Text style={styles.splitValueText}>
+                    {spikeAcc !== undefined && spikeAcc !== null ? `${spikeAcc}%` : "-"}
+                  </Text>
+                  <View style={styles.progressBarTrack}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${Math.min(100, Math.max(0, Number(spikeAcc || 0)))}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>SERVICE ERRORS</Text>
+                  <Text style={styles.advancedValue}>{String(svcErr)}</Text>
+                </View>
+
+                <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>
+                    VOLLEYBALL PERFORMANCE RATING (+-)
+                  </Text>
+                  <Text style={styles.advancedValue}>
+                    {calculateDynamicPER(athlete?.averages)}
+                  </Text>
+                </View>
+
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>MATCH WINS</Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                      ? String(athlete?.averages?.wins)
+                      : "0"}
+                  </Text>
+                </View>
+              </>
+            );
+          } else if (isPickle) {
+            return (
+              <>
+                <Text style={styles.sectionTitle}>AVERAGES</Text>
+                <View style={styles.averagesTopRow}>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>POINTS</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete?.averages?.points_scored !== undefined && athlete?.averages?.points_scored !== null
+                        ? String(athlete?.averages?.points_scored)
+                        : "0"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>ACES</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete?.averages?.aces !== undefined && athlete?.averages?.aces !== null
+                        ? String(athlete?.averages?.aces)
+                        : "0"}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.averagesBottomRow}>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>DINKS</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.averages?.dinks !== undefined && athlete?.averages?.dinks !== null
+                        ? String(athlete?.averages?.dinks)
+                        : "0"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>SMASHES</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.averages?.smashes !== undefined && athlete?.averages?.smashes !== null
+                        ? String(athlete?.averages?.smashes)
+                        : "0"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>ERRORS</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.averages?.unforced_errors !== undefined && athlete?.averages?.unforced_errors !== null
+                        ? String(athlete?.averages?.unforced_errors)
+                        : "0"}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>
+                    PICKLEBALL RATING SCORE (+-)
+                  </Text>
+                  <Text style={styles.advancedValue}>
+                    {calculateDynamicPER(athlete?.averages)}
+                  </Text>
+                </View>
+
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>GAMES WON</Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                      ? String(athlete?.averages?.wins)
+                      : "0"}
+                  </Text>
+                </View>
+              </>
+            );
+          } else if (isBasket) {
+            return (
+              <>
+                <Text style={styles.sectionTitle}>AVERAGES</Text>
+                <View style={styles.averagesTopRow}>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>PPG</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete?.averages?.ppg !== undefined && athlete?.averages?.ppg !== null
+                        ? String(athlete?.averages?.ppg)
+                        : "0.0"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>APG</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete?.averages?.apg !== undefined && athlete?.averages?.apg !== null
+                        ? String(athlete?.averages?.apg)
+                        : "0.0"}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.averagesBottomRow}>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>RPG</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.averages?.rpg !== undefined && athlete?.averages?.rpg !== null
+                        ? String(athlete?.averages?.rpg)
+                        : "0.0"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>BPG</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.averages?.bpg !== undefined && athlete?.averages?.bpg !== null
+                        ? String(athlete?.averages?.bpg)
+                        : "0.0"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>SPG</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.averages?.spg !== undefined && athlete?.averages?.spg !== null
+                        ? String(athlete?.averages?.spg)
+                        : "0.0"}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionTitle}>SHOOTING SPLITS</Text>
+                <View style={styles.splitCardFull}>
+                  <View style={styles.splitHeaderRow}>
+                    <Text style={styles.avgLabel}>FIELD GOAL %</Text>
+                  </View>
+                  <Text style={styles.splitValueText}>
+                    {athlete?.averages?.fg_percentage !== undefined && athlete?.averages?.fg_percentage !== null
+                      ? `${athlete.averages.fg_percentage}%`
+                      : "-"}
+                  </Text>
+                  <View style={styles.progressBarTrack}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${Math.min(
+                            100,
+                            Math.max(0, Number(athlete?.averages?.fg_percentage || 0))
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.splitCardHalfRow}>
+                  <View style={styles.splitCardHalf}>
+                    <Text style={styles.avgLabel}>3 POINTS %</Text>
+                    <Text style={styles.splitValueText}>
+                      {athlete?.averages?.three_pt_percentage !== undefined && athlete?.averages?.three_pt_percentage !== null
+                        ? `${athlete.averages.three_pt_percentage}%`
+                        : "-"}
+                    </Text>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              Math.max(0, Number(athlete?.averages?.three_pt_percentage || 0))
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.splitCardHalf}>
+                    <Text style={styles.avgLabel}>FREE THROWS %</Text>
+                    <Text style={styles.splitValueText}>
+                      {athlete?.averages?.ft_percentage !== undefined && athlete?.averages?.ft_percentage !== null
+                        ? `${athlete.averages.ft_percentage}%`
+                        : "-"}
+                    </Text>
+                    <View style={styles.progressBarTrack}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              Math.max(0, Number(athlete?.averages?.ft_percentage || 0))
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>
+                    PLAYER EFFICIENCY RATING (+-)
+                  </Text>
+                  <Text style={styles.advancedValue}>
+                    {calculateDynamicPER(athlete?.averages)}
+                  </Text>
+                </View>
+
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>WINS</Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
+                      ? String(athlete?.averages?.wins)
+                      : "0"}
+                  </Text>
+                </View>
+              </>
+            );
+          } else {
+            // Dynamic Generic Sport Display (Never show Basketball PPG/Splits for other sports)
+            return (
+              <>
+                <Text style={styles.sectionTitle}>AVERAGES & METRICS</Text>
+                <View style={styles.averagesTopRow}>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>GAMES PLAYED</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete?.averages?.games_played ?? athlete?.stats?.games_played ?? 0}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesTopCard}>
+                    <Text style={styles.avgLabel}>WINS</Text>
+                    <Text style={styles.avgValueLarge}>
+                      {athlete?.averages?.wins ?? athlete?.stats?.wins ?? 0}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.averagesBottomRow}>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>RATING</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.rating_score || "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>EFFICIENCY</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.efficiency_pct !== undefined ? `${athlete.efficiency_pct}%` : "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.averagesSmallCard}>
+                    <Text style={styles.avgLabel}>STATUS</Text>
+                    <Text style={styles.avgValueSmall}>
+                      {athlete?.player_status || athlete?.playerStatus || "Active"}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>OVERALL PERFORMANCE SCORE</Text>
+                  <Text style={styles.advancedValue}>
+                    {athlete?.rating_score || "75"}
+                  </Text>
+                </View>
+              </>
+            );
+          }
+        })()}
 
         {/* INTERACTIVE COACH WORKLOAD ANALYTICS PANEL (image_332453.png) */}
         <View style={styles.workloadSectionContainer}>

@@ -242,121 +242,163 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         {/* Performance Analytics Section */}
         <Text style={styles.sectionTitle}>PERFORMANCE ANALYTICS</Text>
         <View style={styles.analyticsGrid}>
-          {currentAthlete.sport_category === 'BASKETBALL' ? (
-            <>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.ppg ?? 0}</Text>
-                <Text style={styles.analyticLabel}>PPG</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.rpg ?? 0}</Text>
-                <Text style={styles.analyticLabel}>RPG</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.ast ?? 0}</Text>
-                <Text style={styles.analyticLabel}>AST</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.fg_pct ?? 0}%</Text>
-                <Text style={styles.analyticLabel}>FG%</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
-                <Text style={styles.analyticLabel}>PER</Text>
-              </View>
-            </>
-          ) : currentAthlete.sport_category === 'SWIMMING' ? (
-            <>
-              <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_50m_free || 'N/A'}</Text>
-                <Text style={styles.analyticLabel}>50M FREE</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_100m || 'N/A'}</Text>
-                <Text style={styles.analyticLabel}>100M</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_200m || 'N/A'}</Text>
-                <Text style={styles.analyticLabel}>200M</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
-                <Text style={styles.analyticLabel}>PER</Text>
-              </View>
-            </>
-          ) : currentAthlete.sport_category === 'TRACK AND FIELD' ? (
-            <>
-              <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_100m || 'N/A'}</Text>
-                <Text style={styles.analyticLabel}>100M</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_200m || 'N/A'}</Text>
-                <Text style={styles.analyticLabel}>200M</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={[styles.analyticValue, { fontSize: 15 }]}>{currentAthlete.stats?.times_400m || 'N/A'}</Text>
-                <Text style={styles.analyticLabel}>400M</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
-                <Text style={styles.analyticLabel}>PER</Text>
-              </View>
-            </>
-          ) : currentAthlete.sport_category === 'VOLLEYBALL' ? (
-            <>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.spike_kills ?? 0}</Text>
-                <Text style={styles.analyticLabel}>KILLS</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.block_points ?? 0}</Text>
-                <Text style={styles.analyticLabel}>BLOCKS</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.service_aces ?? 0}</Text>
-                <Text style={styles.analyticLabel}>ACES</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
-                <Text style={styles.analyticLabel}>PER</Text>
-              </View>
-            </>
-          ) : currentAthlete.sport_category === 'PICKLEBALL' ? (
-            <>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.points_scored ?? 0}</Text>
-                <Text style={styles.analyticLabel}>POINTS</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.aces ?? 0}</Text>
-                <Text style={styles.analyticLabel}>ACES</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.dinks ?? 0}</Text>
-                <Text style={styles.analyticLabel}>DINKS</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
-                <Text style={styles.analyticLabel}>PER</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.stats?.ppg ?? 0}</Text>
-                <Text style={styles.analyticLabel}>PPG</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.calculated_per ?? 25}</Text>
-                <Text style={styles.analyticLabel}>PER</Text>
-              </View>
-              <View style={styles.analyticBox}>
-                <Text style={styles.analyticValue}>{currentAthlete.efficiency_pct ?? 75}%</Text>
-                <Text style={styles.analyticLabel}>EFF</Text>
-              </View>
-            </>
-          )}
+          {(() => {
+            const ca = currentAthlete as any;
+            const sc = String(ca.sport_category || ca.sport_type || ca.sport || '').toUpperCase();
+            if (sc.includes('BASKET')) {
+              return (
+                <>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.ppg ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>PPG</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.rpg ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>RPG</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.ast ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>AST</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.fg_pct ?? 0}%</Text>
+                    <Text style={styles.analyticLabel}>FG%</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.calculated_per ?? 25}</Text>
+                    <Text style={styles.analyticLabel}>PER</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes('SWIM')) {
+              return (
+                <>
+                  <View style={styles.analyticBox}>
+                    <Text style={[styles.analyticValue, { fontSize: 15 }]}>{ca.stats?.times_50m_free || ca.averages?.pb_50m_free || 'N/A'}</Text>
+                    <Text style={styles.analyticLabel}>50M FREE</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={[styles.analyticValue, { fontSize: 15 }]}>{ca.stats?.times_100m || ca.averages?.pb_100m_free || 'N/A'}</Text>
+                    <Text style={styles.analyticLabel}>100M</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={[styles.analyticValue, { fontSize: 15 }]}>{ca.stats?.times_200m || 'N/A'}</Text>
+                    <Text style={styles.analyticLabel}>200M</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.averages?.swim_index_score ? String(ca.averages.swim_index_score) : (ca.stats?.swim_index ? String(ca.stats.swim_index) : '-')}</Text>
+                    <Text style={styles.analyticLabel}>SWIM INDEX</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.averages?.podiums_count !== undefined ? String(ca.averages.podiums_count) : (ca.stats?.podiums !== undefined ? String(ca.stats.podiums) : '0')}</Text>
+                    <Text style={styles.analyticLabel}>PODIUMS</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes('TRACK') || sc.includes('FIELD')) {
+              return (
+                <>
+                  <View style={styles.analyticBox}>
+                    <Text style={[styles.analyticValue, { fontSize: 15 }]}>{ca.stats?.times_100m || ca.averages?.pb_100m || 'N/A'}</Text>
+                    <Text style={styles.analyticLabel}>100M</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={[styles.analyticValue, { fontSize: 15 }]}>{ca.stats?.times_200m || ca.averages?.pb_200m || 'N/A'}</Text>
+                    <Text style={styles.analyticLabel}>200M</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={[styles.analyticValue, { fontSize: 15 }]}>{ca.stats?.times_400m || 'N/A'}</Text>
+                    <Text style={styles.analyticLabel}>400M</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.averages?.reaction_time_s || ca.stats?.reaction_time || '-'}</Text>
+                    <Text style={styles.analyticLabel}>REACTION</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.averages?.win_rate_pct !== undefined ? `${ca.averages.win_rate_pct}%` : (ca.stats?.win_rate_pct !== undefined ? `${ca.stats.win_rate_pct}%` : `${ca.efficiency_pct ?? 75}%`)}</Text>
+                    <Text style={styles.analyticLabel}>WIN %</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes('VOLLEY')) {
+              const vKills = ca.stats?.kills ?? ca.stats?.spike_kills ?? ca.averages?.kills ?? ca.averages?.spike_kills ?? 0;
+              const vBlocks = ca.stats?.blocks ?? ca.stats?.block_points ?? ca.averages?.blocks ?? ca.averages?.block_points ?? 0;
+              const vAces = ca.stats?.aces ?? ca.stats?.service_aces ?? ca.averages?.aces ?? ca.averages?.service_aces ?? 0;
+              const vDigs = ca.stats?.digs ?? ca.averages?.digs ?? 0;
+              const vAcc = ca.averages?.spike_accuracy ?? ca.stats?.spike_accuracy;
+
+              return (
+                <>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{vKills}</Text>
+                    <Text style={styles.analyticLabel}>KILLS</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{vBlocks}</Text>
+                    <Text style={styles.analyticLabel}>BLOCKS</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{vAces}</Text>
+                    <Text style={styles.analyticLabel}>ACES</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{vDigs}</Text>
+                    <Text style={styles.analyticLabel}>DIGS</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{vAcc !== undefined && vAcc !== null ? `${vAcc}%` : `${ca.efficiency_pct ?? 75}%`}</Text>
+                    <Text style={styles.analyticLabel}>{vAcc !== undefined && vAcc !== null ? 'ACC %' : 'EFF'}</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes('PICKLE')) {
+              return (
+                <>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.points_scored ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>POINTS</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.aces ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>ACES</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.dinks ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>DINKS</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.smashes ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>SMASHES</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.efficiency_pct ?? 75}%</Text>
+                    <Text style={styles.analyticLabel}>EFF</Text>
+                  </View>
+                </>
+              );
+            } else {
+              return (
+                <>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.games_played ?? ca.averages?.games_played ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>GP</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.stats?.wins ?? ca.averages?.wins ?? 0}</Text>
+                    <Text style={styles.analyticLabel}>WINS</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.rating_score || '-'}</Text>
+                    <Text style={styles.analyticLabel}>RATING</Text>
+                  </View>
+                  <View style={styles.analyticBox}>
+                    <Text style={styles.analyticValue}>{ca.efficiency_pct ?? 75}%</Text>
+                    <Text style={styles.analyticLabel}>EFF</Text>
+                  </View>
+                </>
+              );
+            }
+          })()}
         </View>
 
         {/* Efficiency Progress Bar */}
