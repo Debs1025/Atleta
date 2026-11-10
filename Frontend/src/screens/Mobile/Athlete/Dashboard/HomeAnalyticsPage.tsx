@@ -569,7 +569,13 @@ export function HomeAnalyticsPage({
 
       {/* --- SPORT-SPECIFIC PERFORMANCE CHART --- */}
       <View style={styles.graphCard}>
-        <Text style={styles.graphSubHeading}>{layout.chartTitle}</Text>
+        <View style={styles.graphHeaderRow}>
+          <Text style={styles.graphSubHeading}>{layout.chartTitle}</Text>
+          <Text style={styles.graphHeaderMeta}>
+            {activeScores.length > 0 ? `${activeScores.length} of 5 Logged` : "0 Logged"}
+          </Text>
+        </View>
+
         {activeScores.length === 0 ? (
           <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
             <Text style={{ color: "#64748B", fontSize: 13, fontWeight: "600" }}>
@@ -578,29 +584,54 @@ export function HomeAnalyticsPage({
           </View>
         ) : (
           <View style={styles.barsContainer}>
-            {activeScores.map((score, index) => {
-              const isMostRecent = index === activeScores.length - 1;
+            {Array.from({ length: 5 }, (_, index) => {
+              const hasPlayed = index < activeScores.length;
+              const score = hasPlayed ? activeScores[index] : null;
+              const isMostRecent = hasPlayed && index === activeScores.length - 1;
+              const isPeak = hasPlayed && maxScore > 0 && score === maxScore;
+
               const barHeightPct =
-                maxScore > 0 && score > 0
-                  ? Math.max(15, Math.min(100, (score / maxScore) * 85))
-                  : 15;
+                hasPlayed && maxScore > 0 && (score ?? 0) > 0
+                  ? Math.max(22, Math.min(100, Math.round(((score ?? 0) / maxScore) * 100)))
+                  : 0;
+
               return (
                 <View key={index} style={styles.barColumn}>
-                  <Text style={[styles.scoreBadgeText, isMostRecent && { color: "#38BDF8", fontWeight: "900" }]}>
-                    {score}
+                  <Text
+                    style={[
+                      styles.scoreBadgeText,
+                      !hasPlayed && styles.scoreBadgeTextUnplayed,
+                      isMostRecent && styles.scoreBadgeTextRecent,
+                    ]}
+                  >
+                    {hasPlayed ? score : "—"}
                   </Text>
-                  <View style={styles.barTrackArea}>
-                    <View
-                      style={[
-                        styles.graphPillBar,
-                        { height: `${barHeightPct}%` },
-                        isMostRecent ? styles.graphPillBarHighest : styles.graphPillBarNormal,
-                      ]}
-                    />
+
+                  <View
+                    style={[
+                      styles.barTrackArea,
+                      !hasPlayed && styles.barTrackAreaUnplayed,
+                    ]}
+                  >
+                    {hasPlayed && (
+                      <View
+                        style={[
+                          styles.graphPillBar,
+                          { height: `${barHeightPct}%` },
+                          isMostRecent
+                            ? styles.graphPillBarHighest
+                            : isPeak
+                            ? styles.graphPillBarPeak
+                            : styles.graphPillBarNormal,
+                        ]}
+                      />
+                    )}
                   </View>
+
                   <Text
                     style={[
                       styles.gameLabelText,
+                      !hasPlayed && styles.gameLabelTextUnplayed,
                       isMostRecent && styles.gameLabelTextHighest,
                     ]}
                   >
