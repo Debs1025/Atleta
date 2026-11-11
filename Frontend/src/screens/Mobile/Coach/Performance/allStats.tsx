@@ -101,15 +101,35 @@ export const AllStats: React.FC<AllStatsProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Drawer Header Bar */}
+      {/* Standardized Navigation Header */}
       <View style={[styles.headerBar, { paddingTop: headerTopPadding }]}>
-        <Text style={styles.headerTitle}>STATISTICS</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", flex: 1, marginRight: 8 }}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onClose}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleGroup}>
+            <Text style={styles.headerNameText} numberOfLines={1}>
+              {athlete.full_name || athlete.name || "Athlete Advanced Stats"}
+            </Text>
+            <Text style={styles.headerSubTitleText} numberOfLines={1}>
+              {String(athlete.sport_category || athlete.sport_type || athlete.sport || "Performance Overview").toUpperCase()}
+              {athlete.position_or_event ? ` • ${athlete.position_or_event}` : athlete.team_name ? ` • ${athlete.team_name}` : ""}
+            </Text>
+          </View>
+        </View>
+
         <TouchableOpacity
           style={styles.closeButton}
           onPress={onClose}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="close" size={24} color="#FFFFFF" />
+          <Ionicons name="close" size={22} color="#94A3B8" />
         </TouchableOpacity>
       </View>
 
@@ -117,11 +137,6 @@ export const AllStats: React.FC<AllStatsProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Banner Tile */}
-        <View style={styles.bannerTile}>
-          <Text style={styles.bannerTitle}>ALL STATS</Text>
-        </View>
-
         {/* Stats Sections */}
         {(() => {
           const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
