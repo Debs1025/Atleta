@@ -6,7 +6,18 @@ import {
   ScrollView,
   Text,
   View,
+  LayoutChangeEvent,
 } from "react-native";
+import Svg, {
+  Defs,
+  LinearGradient,
+  Stop,
+  Path,
+  Line,
+  Circle,
+  Text as SvgText,
+  G,
+} from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
 import styles from "./styles/HomeAnalyticsPage";
 import { Coach } from "../Teams/Teams";
@@ -197,6 +208,9 @@ export function HomeAnalyticsPage({
   const scrollViewRef = useRef<ScrollView>(null);
   const [dynamicSports, setDynamicSports] = useState<any[]>([]);
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>("ALL");
+  const [chartMode, setChartMode] = useState<"PERFORMANCE" | "WORKLOAD">("PERFORMANCE");
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+  const [chartCanvasWidth, setChartCanvasWidth] = useState<number>(330);
 
   useEffect(() => {
     let isMounted = true;
@@ -306,6 +320,143 @@ export function HomeAnalyticsPage({
 
   const activeScores = layout.scores || [];
   const maxScore = activeScores.length > 0 ? Math.max(...activeScores, 0) : 0;
+
+  // Resolve data points for the progression chart
+  const matchProgList: any[] = Array.isArray(profile?.match_progression) ? profile.match_progression : [];
+  const workloadLogsList: any[] = Array.isArray(profile?.workload_analytics?.weekly_logs) ? profile.workload_analytics.weekly_logs : [];
+
+  const chartDataPoints: { id: string; label: string; date: string; value: number; opponent: string }[] = (() => {
+    if (chartMode === "PERFORMANCE") {
+      if (matchProgList.length > 0) {
+        return matchProgList.slice(-7).map((item, idx) => ({
+          id: item.id || `mp_${idx}`,
+          label: item.label || item.date || `G${idx + 1}`,
+          date: item.date || `Game ${idx + 1}`,
+          value: Number(item.points ?? item.score ?? 0),
+          opponent: item.opponent || `Certified Match`,
+        }));
+      }
+      if (activeScores.length > 0) {
+        return activeScores.slice(-7).map((score, idx) => ({
+          id: `score_${idx}`,
+          label: `${layout.chartPrefix || "G"}${idx + 1}`,
+          date: `Game ${idx + 1}`,
+          value: Number(score),
+          opponent: `Match ${idx + 1}`,
+        }));
+      }
+      return [];
+    } else {
+      // WORKLOAD INTENSITY
+      if (workloadLogsList.length > 0) {
+        return workloadLogsList.slice(-7).map((log: any, idx: number) => ({
+          id: `wl_${idx}`,
+          label: String(log.date || `D${idx + 1}`).slice(-5),
+          date: log.date ? `Date: ${log.date}` : `Day ${idx + 1}`,
+          value: Number(log.srpe || 7.0),
+          opponent: log.duration_minutes ? `${log.duration_minutes} min session` : `Training Load`,
+        }));
+      }
+      if (matchProgList.length > 0) {
+        return matchProgList.slice(-7).map((item, idx) => ({
+          id: item.id || `mp_wl_${idx}`,
+          label: item.label || item.date || `G${idx + 1}`,
+          date: item.date || `Game ${idx + 1}`,
+          value: Number(item.workload_intensity || 7.5),
+          opponent: `Session Exertion`,
+        }));
+      }
+      if (activeScores.length > 0) {
+        return activeScores.slice(-7).map((score, idx) => {
+          const pseudoLoad = Number(Math.min(10, Math.max(5, (Number(score) / (maxScore || 1)) * 4 + 5)).toFixed(1));
+          return {
+            id: `pseudo_wl_${idx}`,
+            label: `M${idx + 1}`,
+            date: `Game ${idx + 1}`,
+            value: pseudoLoad,
+            opponent: `Estimated Match Load`,
+          };
+        });
+      }
+      return [];
+    }
+  })();
+
+  const chartValues = chartDataPoints.map((p) => p.value);
+  const chartCount = chartDataPoints.length;
+  const chartUnit = chartMode === "PERFORMANCE" ? (layout.isTimed ? "SEC" : "PTS") : "sRPE";
+
+  const chartAvg = chartCount > 0 ? Number((chartValues.reduce((a, b) => a + b, 0) / chartCount).toFixed(1)) : 0;
+  const chartMax = chartCount > 0 ? Math.max(...chartValues) : 0;
+  const chartCurrentVal =
+    selectedPointIndex !== null && chartDataPoints[selectedPointIndex]
+      ? chartDataPoints[selectedPointIndex].value
+      : chartCount > 0
+      ? chartDataPoints[chartCount - 1].value
+      : 0;
+  const chartTrendPct =
+    chartCount >= 2
+      ? Number((((chartValues[chartCount - 1] - chartValues[0]) / Math.max(1, chartValues[0])) * 100).toFixed(1))
+      : 0;
+
+  // Chart coordinate engine
+  const chartHeight = 175;
+  const padLeft = 36;
+  const padRight = 18;
+  const padTop = 22;
+  const padBottom = 26;
+  const effW = Math.max(120, chartCanvasWidth - padLeft - padRight);
+  const effH = Math.max(60, chartHeight - padTop - padBottom);
+
+  const rawMin = chartCount > 0 ? Math.min(...chartValues) : 0;
+  const rawMax = chartCount > 0 ? Math.max(...chartValues) : 10;
+  let dispMin: number;
+  let dispMax: number;
+
+  if (rawMin === rawMax) {
+    const pad = rawMin > 0 ? Math.max(2, rawMin * 0.25) : 5;
+    dispMin = Math.max(0, rawMin - pad);
+    dispMax = rawMax + pad;
+  } else {
+    const diff = rawMax - rawMin;
+    dispMin = Math.max(0, Math.floor(rawMin - diff * 0.18));
+    dispMax = Math.ceil(rawMax + diff * 0.18);
+  }
+
+  const chartCoords = chartDataPoints.map((pt, idx) => {
+    let x: number;
+    if (chartCount === 1) {
+      x = padLeft + effW / 2;
+    } else {
+      x = padLeft + (idx / (chartCount - 1)) * effW;
+    }
+    const y = padTop + (1 - (pt.value - dispMin) / Math.max(1, dispMax - dispMin)) * effH;
+    return {
+      x: Math.round(x * 10) / 10,
+      y: Math.round(y * 10) / 10,
+      ...pt,
+    };
+  });
+
+  let linePathD = "";
+  let areaFillD = "";
+
+  if (chartCount === 1) {
+    linePathD = `M ${padLeft} ${chartCoords[0].y} L ${chartCanvasWidth - padRight} ${chartCoords[0].y}`;
+    areaFillD = "";
+  } else if (chartCount === 2) {
+    linePathD = `M ${chartCoords[0].x} ${chartCoords[0].y} L ${chartCoords[1].x} ${chartCoords[1].y}`;
+    areaFillD = `${linePathD} L ${chartCoords[1].x} ${chartHeight - padBottom} L ${chartCoords[0].x} ${chartHeight - padBottom} Z`;
+  } else if (chartCount >= 3) {
+    linePathD = `M ${chartCoords[0].x} ${chartCoords[0].y}`;
+    for (let i = 0; i < chartCoords.length - 1; i++) {
+      const p0 = chartCoords[i];
+      const p1 = chartCoords[i + 1];
+      const midX = (p0.x + p1.x) / 2;
+      linePathD += ` C ${midX} ${p0.y}, ${midX} ${p1.y}, ${p1.x} ${p1.y}`;
+    }
+    areaFillD = `${linePathD} L ${chartCoords[chartCoords.length - 1].x} ${chartHeight - padBottom} L ${chartCoords[0].x} ${chartHeight - padBottom} Z`;
+  }
 
   return (
     <ScrollView
@@ -606,80 +757,292 @@ export function HomeAnalyticsPage({
         </View>
       ) : null}
 
-      {/* --- SPORT-SPECIFIC PERFORMANCE CHART --- */}
-      <View style={styles.graphCard}>
-        <View style={styles.graphHeaderRow}>
-          <Text style={styles.graphSubHeading}>{layout.chartTitle}</Text>
-          <Text style={styles.graphHeaderMeta}>
-            {activeScores.length > 0 ? `${activeScores.length} of 5 Logged` : "0 Logged"}
-          </Text>
+      {/* --- REDESIGNED ATHLETIC PROGRESSION GRAPH --- */}
+      <View
+        style={styles.chartCard}
+        onLayout={(e: LayoutChangeEvent) => {
+          const w = e.nativeEvent.layout.width - 36; // subtract card horizontal padding (18*2)
+          if (w > 120 && Math.abs(w - chartCanvasWidth) > 2) {
+            setChartCanvasWidth(w);
+          }
+        }}
+      >
+        {/* Top Header Row with Title & Mode Selector */}
+        <View style={styles.chartTopHeader}>
+          <View style={styles.chartTitleGroup}>
+            <View style={styles.chartTitleCyanBar} />
+            <Text style={styles.chartMainTitle}>
+              {chartMode === "PERFORMANCE"
+                ? layout.chartTitle || "PERFORMANCE PROGRESSION"
+                : "WORKLOAD INTENSITY"}
+            </Text>
+          </View>
+
+          <View style={styles.chartModePillGroup}>
+            <Pressable
+              onPress={() => {
+                setChartMode("PERFORMANCE");
+                setSelectedPointIndex(null);
+              }}
+              style={[
+                styles.chartModePill,
+                chartMode === "PERFORMANCE" && styles.chartModePillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chartModePillText,
+                  chartMode === "PERFORMANCE" && styles.chartModePillTextActive,
+                ]}
+              >
+                Score
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setChartMode("WORKLOAD");
+                setSelectedPointIndex(null);
+              }}
+              style={[
+                styles.chartModePill,
+                chartMode === "WORKLOAD" && styles.chartModePillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chartModePillText,
+                  chartMode === "WORKLOAD" && styles.chartModePillTextActive,
+                ]}
+              >
+                Workload
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
-        {activeScores.length === 0 ? (
-          <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: "#64748B", fontSize: 13, fontWeight: "600" }}>
-              No recent match records logged yet.
+        <Text style={styles.chartSubtext}>
+          {chartMode === "PERFORMANCE"
+            ? "Track match output and scoring efficiency across certified games."
+            : "Monitor training exertion and physiological load adaptation over time."}
+        </Text>
+
+        {chartCount === 0 ? (
+          <View style={styles.chartEmptyStateContainer}>
+            <View style={styles.chartEmptyStateIconBox}>
+              <Ionicons name="trending-up-outline" size={24} color="#38BDF8" />
+            </View>
+            <Text style={styles.chartEmptyStateTitle}>No match records logged yet.</Text>
+            <Text style={styles.chartEmptyStateSubtext}>
+              Play or log matches with your coach to visualize your performance curve and workload progression over time.
             </Text>
           </View>
         ) : (
-          <View style={styles.barsContainer}>
-            {Array.from({ length: 5 }, (_, index) => {
-              const hasPlayed = index < activeScores.length;
-              const score = hasPlayed ? activeScores[index] : null;
-              const isMostRecent = hasPlayed && index === activeScores.length - 1;
-              const isPeak = hasPlayed && maxScore > 0 && score === maxScore;
+          <>
+            {/* KPI Summary Strip */}
+            <View style={styles.chartKpiStrip}>
+              <View>
+                <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase", marginBottom: 2 }}>
+                  {selectedPointIndex !== null ? "Selected Match" : "Latest Mark"}
+                </Text>
+                <View style={styles.chartKpiValueGroup}>
+                  <Text style={styles.chartKpiHeroValue}>{chartCurrentVal}</Text>
+                  <Text style={styles.chartKpiHeroUnit}>{chartUnit}</Text>
+                </View>
+              </View>
 
-              const barHeightPct =
-                hasPlayed && maxScore > 0 && (score ?? 0) > 0
-                  ? Math.max(22, Math.min(100, Math.round(((score ?? 0) / maxScore) * 100)))
-                  : 0;
-
-              return (
-                <View key={index} style={styles.barColumn}>
+              <View style={styles.chartKpiBadgeRow}>
+                <View style={styles.chartKpiAvgPill}>
+                  <Text style={styles.chartKpiAvgText}>Avg: {chartAvg}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.chartKpiTrendPill,
+                    chartTrendPct < 0 && {
+                      backgroundColor: "rgba(239, 68, 68, 0.14)",
+                      borderColor: "rgba(239, 68, 68, 0.3)",
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={chartTrendPct >= 0 ? "arrow-up" : "arrow-down"}
+                    size={11}
+                    color={chartTrendPct >= 0 ? "#10B981" : "#EF4444"}
+                  />
                   <Text
                     style={[
-                      styles.scoreBadgeText,
-                      !hasPlayed && styles.scoreBadgeTextUnplayed,
-                      isMostRecent && styles.scoreBadgeTextRecent,
+                      styles.chartKpiTrendText,
+                      chartTrendPct < 0 && { color: "#EF4444" },
                     ]}
                   >
-                    {hasPlayed ? score : "—"}
-                  </Text>
-
-                  <View
-                    style={[
-                      styles.barTrackArea,
-                      !hasPlayed && styles.barTrackAreaUnplayed,
-                    ]}
-                  >
-                    {hasPlayed && (
-                      <View
-                        style={[
-                          styles.graphPillBar,
-                          { height: `${barHeightPct}%` },
-                          isMostRecent
-                            ? styles.graphPillBarHighest
-                            : isPeak
-                            ? styles.graphPillBarPeak
-                            : styles.graphPillBarNormal,
-                        ]}
-                      />
-                    )}
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.gameLabelText,
-                      !hasPlayed && styles.gameLabelTextUnplayed,
-                      isMostRecent && styles.gameLabelTextHighest,
-                    ]}
-                  >
-                    {layout.chartPrefix}{index + 1}
+                    {chartTrendPct >= 0 ? `+${chartTrendPct}%` : `${chartTrendPct}%`}
                   </Text>
                 </View>
-              );
-            })}
-          </View>
+              </View>
+            </View>
+
+            {/* Interactive Floating Tooltip Callout */}
+            {selectedPointIndex !== null && chartCoords[selectedPointIndex] && (
+              <View style={styles.chartTooltipOverlay}>
+                <Text style={styles.chartTooltipTitle}>
+                  {chartCoords[selectedPointIndex].opponent} • {chartCoords[selectedPointIndex].date}
+                </Text>
+                <View style={styles.chartTooltipValueRow}>
+                  <Text style={styles.chartTooltipValue}>
+                    {chartCoords[selectedPointIndex].value} {chartUnit}
+                  </Text>
+                  {chartAvg > 0 && (
+                    <Text
+                      style={[
+                        styles.chartTooltipVariance,
+                        {
+                          color:
+                            chartCoords[selectedPointIndex].value >= chartAvg
+                              ? "#10B981"
+                              : "#EF4444",
+                        },
+                      ]}
+                    >
+                      {chartCoords[selectedPointIndex].value >= chartAvg ? "▲ +" : "▼ "}
+                      {(chartCoords[selectedPointIndex].value - chartAvg).toFixed(1)} vs Avg
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Native SVG Canvas */}
+            <View style={styles.chartSvgWrapper}>
+              <Svg width={chartCanvasWidth} height={chartHeight}>
+                <Defs>
+                  <LinearGradient id="cobaltGrad" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0%" stopColor="#2563EB" stopOpacity="0.45" />
+                    <Stop offset="50%" stopColor="#00C8FF" stopOpacity="0.18" />
+                    <Stop offset="100%" stopColor="#00C8FF" stopOpacity="0.0" />
+                  </LinearGradient>
+                  <LinearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                    <Stop offset="0%" stopColor="#2563EB" />
+                    <Stop offset="50%" stopColor="#38BDF8" />
+                    <Stop offset="100%" stopColor="#00C8FF" />
+                  </LinearGradient>
+                </Defs>
+
+                {/* Horizontal reference grid lines & Y labels */}
+                {[0, 0.5, 1].map((pct, idx) => {
+                  const y = padTop + pct * effH;
+                  const val = Number((dispMax - pct * (dispMax - dispMin)).toFixed(0));
+                  return (
+                    <G key={`grid_${idx}`}>
+                      <Line
+                        x1={padLeft}
+                        y1={y}
+                        x2={chartCanvasWidth - padRight}
+                        y2={y}
+                        stroke="rgba(148, 163, 184, 0.08)"
+                        strokeDasharray="4 4"
+                        strokeWidth={1}
+                      />
+                      <SvgText
+                        x={padLeft - 8}
+                        y={y + 3.5}
+                        fill="#64748B"
+                        fontSize={9}
+                        fontWeight="700"
+                        textAnchor="end"
+                      >
+                        {val}
+                      </SvgText>
+                    </G>
+                  );
+                })}
+
+                {/* X-axis Baseline */}
+                <Line
+                  x1={padLeft - 4}
+                  y1={chartHeight - padBottom}
+                  x2={chartCanvasWidth - padRight + 4}
+                  y2={chartHeight - padBottom}
+                  stroke="rgba(148, 163, 184, 0.16)"
+                  strokeWidth={1}
+                />
+
+                {/* Gradient Fill Under Line */}
+                {areaFillD ? <Path d={areaFillD} fill="url(#cobaltGrad)" /> : null}
+
+                {/* Main Trend Line */}
+                <Path
+                  d={linePathD}
+                  fill="none"
+                  stroke={chartCount === 1 ? "rgba(56, 189, 248, 0.45)" : "url(#lineGrad)"}
+                  strokeWidth={chartCount === 1 ? 1.5 : 3.2}
+                  strokeDasharray={chartCount === 1 ? "4 4" : undefined}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                {/* Data Points Nodes & Interactive Hit Areas */}
+                {chartCoords.map((pt, idx) => {
+                  const isSelected = selectedPointIndex === idx;
+                  const isPeak = pt.value === chartMax && chartMax > 0;
+                  return (
+                    <G
+                      key={`pt_${idx}`}
+                      onPress={() => setSelectedPointIndex(selectedPointIndex === idx ? null : idx)}
+                    >
+                      {/* Large invisible hit area */}
+                      <Circle cx={pt.x} cy={pt.y} r={22} fill="transparent" />
+
+                      {/* Selected Guide Line & Halo */}
+                      {isSelected && (
+                        <>
+                          <Line
+                            x1={pt.x}
+                            y1={padTop - 6}
+                            x2={pt.x}
+                            y2={chartHeight - padBottom}
+                            stroke="rgba(0, 200, 255, 0.35)"
+                            strokeDasharray="3 3"
+                            strokeWidth={1.5}
+                          />
+                          <Circle cx={pt.x} cy={pt.y} r={11} fill="rgba(0, 200, 255, 0.22)" />
+                        </>
+                      )}
+
+                      {/* Visible Node */}
+                      <Circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={isSelected ? 6 : isPeak ? 5 : 4}
+                        fill={isSelected ? "#00C8FF" : isPeak ? "#38BDF8" : "#2563EB"}
+                        stroke={isSelected ? "#FFFFFF" : "#38BDF8"}
+                        strokeWidth={isSelected ? 2.5 : 1.5}
+                      />
+
+                      {/* X Label */}
+                      <SvgText
+                        x={pt.x}
+                        y={chartHeight - 8}
+                        fill={isSelected ? "#00C8FF" : "#94A3B8"}
+                        fontSize={10}
+                        fontWeight={isSelected ? "900" : "700"}
+                        textAnchor="middle"
+                      >
+                        {pt.label}
+                      </SvgText>
+                    </G>
+                  );
+                })}
+              </Svg>
+            </View>
+
+            {/* Interactive hint */}
+            <View style={styles.chartInteractiveHint}>
+              <Ionicons name="finger-print-outline" size={12} color="#475569" />
+              <Text style={styles.chartInteractiveHintText}>
+                Tap any point to inspect match breakdown & variance
+              </Text>
+            </View>
+          </>
         )}
       </View>
 
