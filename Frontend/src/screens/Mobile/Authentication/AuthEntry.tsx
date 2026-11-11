@@ -166,9 +166,13 @@ export function AuthEntry() {
             setScreen("signup");
           }}
           onGoReset={() => setScreen("reset")}
-          onAuthenticated={(role) => {
+          onAuthenticated={async (role) => {
+            try {
+              await refreshAccount(true);
+            } catch (e) {
+              console.warn("Account pre-hydration notice:", e);
+            }
             setActiveRole(role);
-            refreshAccount(true);
           }}
         />
       )}
@@ -179,9 +183,13 @@ export function AuthEntry() {
             setScreen("login");
           }}
           initialSocialData={socialSignupData}
-          onAuthenticated={(role) => {
+          onAuthenticated={async (role) => {
+            try {
+              await refreshAccount(true);
+            } catch (e) {
+              console.warn("Account pre-hydration notice:", e);
+            }
             setActiveRole(role);
-            refreshAccount(true);
           }}
         />
       )}

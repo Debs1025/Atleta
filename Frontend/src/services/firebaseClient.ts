@@ -1635,4 +1635,70 @@ export function listenToCoachScoresheetRequests(
   }
 }
 
+/**
+ * Real-time listener for coach's incoming inquiries and proposals.
+ * Guarantees resolution whether user authenticated via OAuth or standard email/password,
+ * querying across canonical 'coach_' prefixed IDs, raw UIDs, and both 'coachId' and 'coach_scout_id' fields.
+ */
+export function listenToCoachInquiries(
+  coachId: string,
+  onUpdate: (inquiries: any[]) => void
+): () => void {
+  if (!coachId) return () => {};
+
+  const cleanCoachId = coachId.replace(/^coach_/, '');
+  const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${cleanCoachId}`;
+  const possibleIds = Array.from(new Set([coachId, cleanCoachId, canonicalCoachId].filter(Boolean)));
+
+  try {
+    const q1 = query(
+      collection(db, 'Scouting_Registry'),
+      where('coach_scout_id', 'in', possibleIds)
+    );
+    const q2 = query(
+      collection(db, 'Scouting_Registry'),
+      where('coachId', 'in', possibleIds)
+    );
+    const q3 = query(
+      collection(db, 'inquiries'),
+      where('coachId', 'in', possibleIds)
+    );
+
+    const docMap = new Map<string, any>();
+    const emit = () => {
+      onUpdate(Array.from(docMap.values()));
+    };
+
+    const unsub1 = onSnapshot(q1, (snapshot) => {
+      snapshot.forEach((d) => {
+        docMap.set(d.id, { id: d.id, scout_id: d.id, ...d.data() });
+      });
+      emit();
+    }, (err) => console.warn('[Inquiries] onSnapshot q1 notice:', err));
+
+    const unsub2 = onSnapshot(q2, (snapshot) => {
+      snapshot.forEach((d) => {
+        docMap.set(d.id, { id: d.id, scout_id: d.id, ...d.data() });
+      });
+      emit();
+    }, (err) => console.warn('[Inquiries] onSnapshot q2 notice:', err));
+
+    const unsub3 = onSnapshot(q3, (snapshot) => {
+      snapshot.forEach((d) => {
+        docMap.set(d.id, { id: d.id, scout_id: d.id, ...d.data() });
+      });
+      emit();
+    }, (err) => console.warn('[Inquiries] onSnapshot q3 notice:', err));
+
+    return () => {
+      unsub1();
+      unsub2();
+      unsub3();
+    };
+  } catch (err) {
+    console.warn('[Inquiries] Setup listener failed:', err);
+    return () => {};
+  }
+}
+
 export default app;

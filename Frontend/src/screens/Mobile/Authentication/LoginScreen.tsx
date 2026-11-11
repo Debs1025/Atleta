@@ -261,7 +261,9 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
       if (refreshToken) await storeAuthRefreshToken(refreshToken);
       await storeAuthRole(role);
 
-      onAuthenticated?.(role);
+      if (onAuthenticated) {
+        await onAuthenticated(role);
+      }
     } catch (error: any) {
       const msg = getAuthErrorMessage(error, `Unable to authenticate with ${provider}.`);
       if (
@@ -396,7 +398,9 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
         if (refreshToken) await storeAuthRefreshToken(refreshToken);
         await storeAuthRole(role);
 
-        onAuthenticated?.(role);
+        if (onAuthenticated) {
+          await onAuthenticated(role);
+        }
         form.reset(values);
       } catch (error: any) {
         const displayMsg = getAuthErrorMessage(error, "Invalid email or password. Please check your credentials and try again.");

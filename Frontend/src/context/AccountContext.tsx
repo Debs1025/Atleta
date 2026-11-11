@@ -64,7 +64,15 @@ export interface AccountUser {
 }
 
 export interface AccountContextType {
-  currentUser: { uid: string; cleanUid: string; email: string; role: AuthRole } | null;
+  currentUser: {
+    uid: string;
+    cleanUid: string;
+    coachId?: string;
+    coach_id?: string;
+    rawUid?: string;
+    email: string;
+    role: AuthRole;
+  } | null;
   account: AccountUser | null;
   loading: boolean;
   isRefreshing: boolean;
@@ -103,6 +111,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<{
     uid: string;
     cleanUid: string;
+    coachId?: string;
+    coach_id?: string;
+    rawUid?: string;
     email: string;
     role: AuthRole;
   } | null>(null);
@@ -236,7 +247,15 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         const canonicalId = role === "coach" ? `coach_${cleanUid}` : `ath_${cleanUid}`;
         const email = String(payload.email || "").trim();
 
-        const authUser = { uid: canonicalId, cleanUid, email, role: role as AuthRole };
+        const authUser = {
+          uid: canonicalId,
+          cleanUid,
+          coachId: canonicalId,
+          coach_id: canonicalId,
+          rawUid,
+          email,
+          role: role as AuthRole,
+        };
         setCurrentUser(authUser);
 
         // Fetch canonical User document directly from Firestore
@@ -304,6 +323,11 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         const merged: AccountUser = {
           uid: canonicalId,
           cleanUid,
+          coach_id: role === "coach" ? canonicalId : undefined,
+          coachId: role === "coach" ? canonicalId : undefined,
+          athlete_id: role === "athlete" ? canonicalId : undefined,
+          athleteId: role === "athlete" ? canonicalId : undefined,
+          user_id: cleanUid,
           email: email || userData.email || profileData.email || "",
           role: role as AuthRole,
           first_name: firstName,

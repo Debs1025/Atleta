@@ -69,8 +69,10 @@ import {
   saveTeamOfflineFirst,
   deleteTeamOfflineFirst,
   listenToCoachScoresheetRequests,
+  listenToCoachInquiries,
   clearFirebaseClientCaches,
 } from "../../../../services/firebaseClient";
+import { useAccount } from "../../../../context/AccountContext";
 import { calculatePlayerRating, calculateDynamicRadarCompetencies } from "../Performance/performanceUtils";
 
 // Font Styles
@@ -198,17 +200,18 @@ const PlayerRowItem = React.memo(
 export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
+  const { currentUser, account } = useAccount();
 
   // Local State
   const [coach, setCoach] = useState<UserCoach>({
-    user_id: "",
-    first_name: "Coach",
-    last_name: "",
-    email: "",
-    contact_number: "",
+    user_id: account?.user_id || currentUser?.cleanUid || "",
+    first_name: account?.first_name || "Coach",
+    last_name: account?.last_name || "",
+    email: account?.email || currentUser?.email || "",
+    contact_number: account?.contact_number || "",
     role: "Coach",
-    coach_id: "",
-    current_institution: "University Athletics",
+    coach_id: account?.coach_id || currentUser?.coachId || currentUser?.uid || "",
+    current_institution: account?.current_institution || "University Athletics",
     athlete_managed: [],
   });
   const [teams, setTeams] = useState<Team[]>([]);
@@ -713,11 +716,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           coachAthletesRes,
           notifsRes,
           proposalsRes,
+          inquiriesRes,
           sportsRes,
           offlineMatches,
           offlineAthletes,
           offlineProfileRes,
-        ]: [any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
+        ]: [any, any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
           withSyncTimeout(requestAuthenticatedJson("/coaches/profile", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/teams", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/sync/coach-snapshot", "GET", undefined, forceFresh).catch(() => null)),
@@ -725,6 +729,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           withSyncTimeout(requestAuthenticatedJson("/coaches/athletes", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/notifications", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/scouting/proposals/list", "GET", undefined, forceFresh).catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson("/inquiries", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(getSportsOfflineFirst(forceFresh).catch(() => []), 6000, []),
           withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 2000, []),
           withSyncTimeout(getAthletesOfflineFirst(undefined, forceFresh).catch(() => []), 1500, []),
@@ -736,10 +741,43 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         if (isMounted) {
           // Process Notifications (deduplicated by unique notification ID)
           const rawNotifs: any[] = Array.isArray(notifsRes?.notifications)
-            ? notifsRes.notifications
+            ? [...notifsRes.notifications]
             : Array.isArray(notifsRes)
-            ? notifsRes
+            ? [...notifsRes]
             : [];
+
+          const rawInquiries: any[] = Array.isArray(inquiriesRes?.inquiries)
+            ? inquiriesRes.inquiries
+            : Array.isArray(inquiriesRes)
+            ? inquiriesRes
+            : [];
+
+          const effectiveCoachId = coach?.coach_id || coach?.user_id || currentUser?.coachId || currentUser?.uid;
+          rawInquiries.forEach((inq: any) => {
+            const inqId = inq.scout_id || inq.inquiry_id || inq.id;
+            const isSentByCoach = inq.is_sender === true || inq.sender_role === "Coach" || inq.initiated_by === effectiveCoachId || inq.initiated_by === coach?.user_id || inq.initiated_by === currentUser?.cleanUid;
+            const athName = inq.athlete_name || inq.athlete_details?.full_name || "Athlete";
+            rawNotifs.push({
+              id: inqId,
+              notification_id: inqId,
+              inquiry_id: inqId,
+              scout_id: inqId,
+              type: "RECRUITMENT_INQUIRY",
+              title: inq.title || (isSentByCoach ? `Recruitment Proposal to ${athName}` : `Inquiry from ${athName}`),
+              headline: inq.headline || (isSentByCoach ? `Proposal Sent to ${athName}` : `New Inquiry from ${athName}`),
+              message: inq.message || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
+              message_body: inq.message_body || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
+              status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
+              offer_status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
+              is_read: inq.is_read || false,
+              created_at: inq.date_initiated || inq.created_at || new Date().toISOString(),
+              actionable: !isSentByCoach,
+              is_sender: isSentByCoach,
+              athlete_id: inq.athlete_id,
+              athlete_name: athName,
+            });
+          });
+
           const seenNotifIds = new Set<string>();
           const dedupedNotifs = rawNotifs.filter((n: any) => {
             const nId = String(n.notification_id || n.id || `${n.created_at}_${n.title}`);
@@ -1437,6 +1475,61 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
     return () => unsubscribe();
   }, [coach?.coach_id, coach?.user_id]);
+
+  // Real-time listener for coach's incoming recruitment inquiries & proposals
+  useEffect(() => {
+    const coachId = coach?.coach_id || coach?.user_id || currentUser?.coachId || currentUser?.uid || currentUser?.cleanUid;
+    if (!coachId) return;
+
+    const unsubscribe = listenToCoachInquiries(coachId, (inquiries) => {
+      if (!inquiries || inquiries.length === 0) return;
+
+      setNotificationsList((prevList) => {
+        const updated = [...prevList];
+
+        inquiries.forEach((inq) => {
+          const inqId = inq.scout_id || inq.inquiry_id || inq.id;
+          const isSentByCoach = inq.is_sender === true || inq.sender_role === "Coach" || inq.initiated_by === coachId || inq.initiated_by === coach?.user_id || inq.initiated_by === currentUser?.cleanUid;
+          const athName = inq.athlete_name || inq.athlete_details?.full_name || "Athlete";
+
+          const item = {
+            id: inqId,
+            notification_id: inqId,
+            inquiry_id: inqId,
+            scout_id: inqId,
+            type: "RECRUITMENT_INQUIRY",
+            title: inq.title || (isSentByCoach ? `Recruitment Proposal to ${athName}` : `Inquiry from ${athName}`),
+            headline: inq.headline || (isSentByCoach ? `Proposal Sent to ${athName}` : `New Inquiry from ${athName}`),
+            message: inq.message || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
+            message_body: inq.message_body || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
+            status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
+            offer_status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
+            is_read: inq.is_read || false,
+            created_at: inq.date_initiated || inq.created_at || new Date().toISOString(),
+            actionable: !isSentByCoach,
+            is_sender: isSentByCoach,
+            athlete_id: inq.athlete_id,
+            athlete_name: athName,
+          };
+
+          const existIdx = updated.findIndex(
+            (n: any) => (n.inquiry_id || n.scout_id || n.id || n.notification_id) === inqId
+          );
+          if (existIdx >= 0) {
+            updated[existIdx] = { ...updated[existIdx], ...item };
+          } else {
+            updated.unshift(item);
+          }
+        });
+
+        const unreadCount = updated.filter((n: any) => !n.is_read && n.status !== "READ").length;
+        setUnreadNotifCount(unreadCount);
+        return updated;
+      });
+    });
+
+    return () => unsubscribe();
+  }, [coach?.coach_id, coach?.user_id, currentUser?.coachId, currentUser?.uid, currentUser?.cleanUid]);
 
   // Current Selected Team
   const currentTeam = useMemo(
