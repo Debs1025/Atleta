@@ -998,31 +998,6 @@ export function HomeAnalyticsPage({
         )}
       </View>
 
-      {/* --- VIEW ALL STATS ACTION CARD --- */}
-      <TouchableOpacity
-        style={styles.viewAllStatsBannerCard}
-        onPress={() => setShowAllStatsModal(true)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.viewAllStatsBannerContent}>
-          <View style={styles.viewAllStatsBannerIconBox}>
-            <Ionicons name="bar-chart" size={24} color="#00C8FF" />
-          </View>
-          <View style={styles.viewAllStatsBannerTextContainer}>
-            <View style={styles.viewAllStatsBannerTitleRow}>
-              <Text style={styles.viewAllStatsBannerTitle}>VIEW ALL STATS</Text>
-              <View style={styles.coachVerifiedPill}>
-                <Ionicons name="shield-checkmark" size={10} color="#00C8FF" />
-                <Text style={styles.coachVerifiedPillText}>IN-DEPTH</Text>
-              </View>
-            </View>
-            <Text style={styles.viewAllStatsBannerSubtext}>
-              Averages, shooting efficiency, tactical coach metrics & training workload
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward-circle" size={26} color="#00C8FF" />
-        </View>
-      </TouchableOpacity>
 
       {/* --- TEAM & COACH SECTION --- */}
       <View style={styles.sectionBlock}>
