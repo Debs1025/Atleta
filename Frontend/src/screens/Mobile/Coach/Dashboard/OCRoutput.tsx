@@ -324,14 +324,42 @@ export function OCRoutput({
         };
     }, []);
 
-    const activeSportSchema = useMemo(() => {
-        return getSportStatSchema(currentActiveMatch.sport_type || "BASKETBALL", customSchemas);
-    }, [currentActiveMatch.sport_type, customSchemas]);
+    const [manualSportOverride, setManualSportOverride] = useState<string | null>(null);
 
-    const sportUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
+    // Contextual text analysis to disambiguate Track & Field vs Swimming
+    const allContextText = useMemo(() => {
+        const anyMatch = currentActiveMatch as any;
+        return [
+            anyMatch.sport_type || "",
+            anyMatch.event_name || "",
+            anyMatch.match_name || "",
+            anyMatch.game_name || "",
+            anyMatch.customGameTitle || "",
+            anyMatch.team_name || "",
+            anyMatch.opponent_team_name || "",
+            ...athleteStats.map((a: any) => `${a.event || ''} ${a.event_name || ''} ${a.team_name || ''} ${a.player_name || ''}`),
+        ].join(" ").toUpperCase();
+    }, [currentActiveMatch, athleteStats]);
+
+    const hasExplicitTrackKeywords = /DASH|100MD|200MD|400MD|800MD|1500MD|RELAY|4X100|4X400|LONG\s*JUMP|LONGJUMP|SHOT\s*PUT|SHOTPUT|DISCUS|JAVELIN|HURDLE|TRACK|FIELD|RUNNERS?|ATHLETICS?|SPRINT|POLE\s*VAULT|TRIPLE\s*JUMP|HIGH\s*JUMP/i.test(allContextText);
+    const hasExplicitSwimKeywords = /FREESTYLE|BUTTERFLY|BREASTSTROKE|BACKSTROKE|\bIM\b|MEDLEY|SWIM|POOL/i.test(allContextText);
+
+    const detectedEffectiveSport = manualSportOverride || (() => {
+        const rawUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
+        if ((rawUpper.includes("SWIM") || rawUpper.includes("BASKET")) && hasExplicitTrackKeywords && !hasExplicitSwimKeywords) {
+            return "TRACK & FIELD";
+        }
+        return rawUpper;
+    })();
+
+    const activeSportSchema = useMemo(() => {
+        return getSportStatSchema(detectedEffectiveSport, customSchemas);
+    }, [detectedEffectiveSport, customSchemas]);
+
+    const sportUpper = detectedEffectiveSport.toUpperCase();
     const isVolleyball = sportUpper.includes("VOLLEY");
-    const isSwimming = sportUpper.includes("SWIM");
     const isTrack = sportUpper.includes("TRACK") || sportUpper.includes("RUN") || sportUpper.includes("FIELD") || sportUpper.includes("ATHLETIC");
+    const isSwimming = !isTrack && sportUpper.includes("SWIM");
     const isRacket = sportUpper.includes("BADMINTON") || sportUpper.includes("PICKLE") || sportUpper.includes("TENNIS");
     const isSoccer = sportUpper.includes("SOCCER") || sportUpper.includes("FOOTBALL");
     const isBaseball = sportUpper.includes("BASE") || sportUpper.includes("SOFT");
@@ -544,11 +572,24 @@ export function OCRoutput({
                 const itemIdx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
                 if (itemIdx === -1) return prev;
                 const numVal = parseInt(value, 10);
-                const isNumericField = !['time', 'finish_time', 'seed_time', 'seed', 'split', 'split_time', 'event', 'event_name', 'fg_pct', 'hitting_pct'].includes(field);
-                updated[itemIdx] = {
+                const isNumericField = !['team_name', 'team', 'school', 'time_or_distance', 'time', 'distance', 'qts', 'finish_time', 'seed_time', 'seed', 'split', 'split_time', 'event', 'event_name', 'fg_pct', 'hitting_pct'].includes(field);
+                const updatedAthlete = {
                     ...updated[itemIdx],
                     [field]: isNumericField ? (isNaN(numVal) ? 0 : numVal) : value,
                 };
+                if (field === 'team_name') {
+                    updatedAthlete.team = value;
+                }
+                if (field === 'time_or_distance') {
+                    updatedAthlete.time = value;
+                    updatedAthlete.distance = value;
+                    updatedAthlete.finish_time = value;
+                }
+                if (field === 'qts') {
+                    updatedAthlete.qualifying_time = value;
+                    updatedAthlete.seed_time = value;
+                }
+                updated[itemIdx] = updatedAthlete;
                 return updated;
             });
         },
@@ -641,6 +682,7 @@ export function OCRoutput({
 
             onConfirmSave({
                 ...currentActiveMatch,
+                sport_type: detectedEffectiveSport,
                 athlete_overview: athleteStats,
                 playerStats: playerStatsList,
                 player_stats: playerStatsList,
@@ -678,6 +720,35 @@ export function OCRoutput({
                         <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitleBeside}>OCR RESULT • {sportDisplayName}</Text>
+                    <TouchableOpacity
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: 'rgba(0, 200, 255, 0.12)',
+                            borderColor: '#00C8FF',
+                            borderWidth: 1,
+                            borderRadius: 14,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            marginLeft: 'auto',
+                        }}
+                        onPress={() => {
+                            if (isTrack) {
+                                setManualSportOverride('SWIMMING');
+                            } else if (isSwimming) {
+                                setManualSportOverride('TRACK & FIELD');
+                            } else {
+                                setManualSportOverride(sportUpper.includes('BASKET') ? 'TRACK & FIELD' : 'BASKETBALL');
+                            }
+                        }}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="swap-horizontal" size={13} color="#00C8FF" />
+                        <Text style={{ color: '#00C8FF', fontSize: 11, fontWeight: '700' }}>
+                            {isTrack ? "TRACK" : isSwimming ? "SWIM" : sportDisplayName.slice(0, 5)}
+                        </Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -776,11 +847,11 @@ export function OCRoutput({
                                 </Text>
                             </View>
                             <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
-                                <Text style={styles.identityLabel}>TOP RECORDED TIME</Text>
+                                <Text style={styles.identityLabel}>{isTrack ? "TOP MARK / TIME" : "TOP RECORDED TIME"}</Text>
                                 <Text style={styles.teamScoreNum}>
                                     {(() => {
-                                        const top = athleteStats.find((a) => a.finish_time || a.time);
-                                        return top?.finish_time || top?.time || "00:00.00";
+                                        const top = athleteStats.find((a) => a.time_or_distance || a.finish_time || a.time || a.distance);
+                                        return top?.time_or_distance || top?.finish_time || top?.time || top?.distance || "00:00.00";
                                     })()}
                                 </Text>
                             </View>
@@ -946,6 +1017,15 @@ export function OCRoutput({
 
                                     {activeSportSchema?.tableHeaders?.map((header) => {
                                         const rawVal = (() => {
+                                            if (header.key === 'team_name' || header.key === 'team' || header.key === 'school') {
+                                                return item.team_name || item.team || item.school || item.stats?.team_name || item.stats?.school;
+                                            }
+                                            if (header.key === 'time_or_distance') {
+                                                return item.time_or_distance || item.time || item.distance || item.finish_time || item.mark || item.stats?.time_or_distance || item.stats?.time || item.stats?.distance;
+                                            }
+                                            if (header.key === 'qts') {
+                                                return item.qts || item.seed_time || item.seed || item.qualifying_time || item.stats?.qts || item.stats?.seed_time;
+                                            }
                                             if (header.key === 'finish_time') {
                                                 return item.finish_time || item.time || item.final_time || item.stats?.finish_time || item.stats?.time || item.custom_stats?.finish_time;
                                             }
@@ -962,7 +1042,13 @@ export function OCRoutput({
                                         })();
                                         const fallbackVal = header.key === "pts" ? item.pts : (header.key === "min" ? item.min : undefined);
                                         const val = rawVal !== undefined ? rawVal : fallbackVal;
-                                        const isTimeOrRankField = ['finish_time', 'seed_time', 'time', 'rank', 'place'].includes(header.key);
+                                        const isTimeOrRankField = [
+                                            'team_name', 'team', 'school',
+                                            'time_or_distance', 'distance',
+                                            'finish_time', 'seed_time', 'time',
+                                            'qts', 'seed', 'qualifying_time',
+                                            'rank', 'place'
+                                        ].includes(header.key);
                                         const isNumeric = !isTimeOrRankField && (typeof val === "number" || (!isNaN(Number(val)) && val !== "" && val !== undefined));
 
                                         return isEditing ? (
@@ -996,7 +1082,10 @@ export function OCRoutput({
                                 <Text style={styles.cellNameText}>TOTAL</Text>
                                 {activeSportSchema?.tableHeaders?.map((header) => {
                                     const isNonSummableHeader = [
-                                        'finish_time', 'seed_time', 'time', 'split', 'split_time',
+                                        'team_name', 'team', 'school',
+                                        'time_or_distance', 'distance',
+                                        'finish_time', 'seed_time', 'time',
+                                        'qts', 'seed', 'qualifying_time', 'split', 'split_time',
                                         'rank', 'place', 'lane', 'heat', 'event', 'jersey_number'
                                     ].includes(header.key);
 
@@ -1177,11 +1266,11 @@ export function OCRoutput({
                                 <Text style={styles.metricValue}>{athleteStats.length}</Text>
                             </View>
                             <View style={styles.metricCard}>
-                                <Text style={styles.metricLabel}>TOP RECORDED TIME</Text>
+                                <Text style={styles.metricLabel}>{isTrack ? "TOP MARK / TIME" : "TOP RECORDED TIME"}</Text>
                                 <Text style={styles.metricValue}>
                                     {(() => {
-                                        const top = athleteStats.find((a) => a.finish_time || a.time);
-                                        return top?.finish_time || top?.time || "RECORDED";
+                                        const top = athleteStats.find((a) => a.time_or_distance || a.finish_time || a.time || a.distance);
+                                        return top?.time_or_distance || top?.finish_time || top?.time || top?.distance || "RECORDED";
                                     })()}
                                 </Text>
                             </View>

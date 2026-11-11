@@ -446,34 +446,35 @@ const TRACK_FIELD_SCHEMA: SportStatSchema = {
   sportDisplayName: 'TRACK & FIELD',
   isTimed: true,
   formatSummary: (s: any, c?: any) => {
-    const att = s?.reb ?? c?.attempts ?? 0;
-    const splits = s?.ast ?? c?.splits ?? 0;
-    return `${att} ATTEMPTS • ${splits} SPLITS`;
+    const timeOrDist = s?.time_or_distance ?? s?.time ?? s?.distance ?? c?.time ?? c?.distance ?? '--';
+    const qts = s?.qts ?? c?.qts ?? '--';
+    const rank = s?.rank ?? s?.place ?? c?.rank ?? c?.place ?? '--';
+    return `${timeOrDist} • QTS: ${qts} • Place: ${rank}`;
   },
   primaryActions: [
-    { label: '+ATTEMPT', statKey: 'reb', delta: 1 },
-    { label: '+SPLIT', statKey: 'ast', delta: 1 },
-    { label: '+CLEAR', statKey: 'stl', delta: 1 },
+    { label: '+TIME/DIST', statKey: 'time_or_distance', delta: 1 },
+    { label: '+QTS', statKey: 'qts', delta: 1 },
+    { label: '+PLACE', statKey: 'rank', delta: 1 },
   ],
   multiPointOptions: [],
   secondaryActions: [
-    { label: 'CLEAR (+1)', statKey: 'stl', delta: 1, icon: 'checkmark-circle-outline', color: '#10B981' },
+    { label: 'RECORD MARK', statKey: 'time_or_distance', delta: 1, icon: 'timer-outline', color: '#00D2FF' },
     { label: 'FOUL (+1)', statKey: 'pf', delta: 1, icon: 'warning-outline', color: '#EF4444' },
     { label: 'FAILED ATTEMPT', statKey: 'to', delta: 1, icon: 'close-circle-outline', color: '#F97316' },
   ],
   actionCategories: [
     {
-      name: 'ATTEMPTS & EXECUTION',
+      name: 'RACE & FIELD MARKS',
       icon: 'speedometer-outline',
       color: '#00D2FF',
       actions: [
-        { label: '+1 ATTEMPT', statKey: 'reb', delta: 1, icon: 'add-circle-outline', color: '#00D2FF' },
-        { label: '+1 SPLIT', statKey: 'ast', delta: 1, icon: 'timer-outline', color: '#38BDF8' },
-        { label: '+1 CLEAR / MARK', statKey: 'stl', delta: 1, icon: 'checkmark-circle-outline', color: '#10B981' },
+        { label: 'RECORD TIME/DIST', statKey: 'time_or_distance', delta: 1, icon: 'timer-outline', color: '#00D2FF' },
+        { label: 'SET QTS STANDARD', statKey: 'qts', delta: 1, icon: 'flag-outline', color: '#38BDF8' },
+        { label: 'SET PLACE / RANK', statKey: 'rank', delta: 1, icon: 'medal-outline', color: '#10B981' },
       ],
     },
     {
-      name: 'FOULS & FAILS',
+      name: 'FOULS & FAULTS',
       icon: 'warning-outline',
       color: '#EF4444',
       actions: [
@@ -483,11 +484,10 @@ const TRACK_FIELD_SCHEMA: SportStatSchema = {
     },
   ],
   tableHeaders: [
-    { label: 'ATT', key: 'reb' },
-    { label: 'SPLITS', key: 'ast' },
-    { label: 'CLR', key: 'stl' },
-    { label: 'FLT', key: 'pf' },
-    { label: 'FAILS', key: 'to' },
+    { label: 'TEAM', shortLabel: 'TEAM', key: 'team_name', width: 135 },
+    { label: 'TIME / DISTANCE', shortLabel: 'TIME / DIST', key: 'time_or_distance', width: 125 },
+    { label: 'QTS', shortLabel: 'QTS', key: 'qts', width: 90 },
+    { label: 'PLACE', shortLabel: 'PLACE', key: 'rank', width: 75 },
   ],
 };
 

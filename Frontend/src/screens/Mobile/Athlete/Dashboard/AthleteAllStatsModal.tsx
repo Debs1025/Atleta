@@ -1023,3 +1023,4 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 };
 
 export default AthleteAllStatsModal;
+

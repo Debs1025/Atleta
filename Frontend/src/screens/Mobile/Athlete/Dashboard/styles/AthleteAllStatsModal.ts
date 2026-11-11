@@ -510,3 +510,4 @@ export const styles = StyleSheet.create({
     fontFamily: fontBoldPlatform,
   },
 });
+

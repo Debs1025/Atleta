@@ -9,7 +9,7 @@
     ],
     "facebookAppId": "1478346524097898",
     "facebookDisplayName": "Atleta",
-    "version": "0.1.15",
+    "version": "0.1.16",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.anonymous.atleta",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0D14"
