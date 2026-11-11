@@ -38,10 +38,11 @@ export const styles = StyleSheet.create({
   },
   headerTitleBeside: {
     color: "#FFFFFF",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     fontFamily: fontBoldPlatform,
+    flex: 1,
   },
   backIconButton: {
     width: 36,

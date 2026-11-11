@@ -327,22 +327,22 @@ export function OCRoutput({
     const [manualSportOverride, setManualSportOverride] = useState<string | null>(null);
 
     // Contextual text analysis to disambiguate Track & Field vs Swimming
-    const allContextText = useMemo(() => {
+    const nonSportContextText = useMemo(() => {
         const anyMatch = currentActiveMatch as any;
         return [
-            anyMatch.sport_type || "",
             anyMatch.event_name || "",
             anyMatch.match_name || "",
             anyMatch.game_name || "",
             anyMatch.customGameTitle || "",
+            anyMatch.event || "",
             anyMatch.team_name || "",
             anyMatch.opponent_team_name || "",
             ...athleteStats.map((a: any) => `${a.event || ''} ${a.event_name || ''} ${a.team_name || ''} ${a.player_name || ''}`),
         ].join(" ").toUpperCase();
     }, [currentActiveMatch, athleteStats]);
 
-    const hasExplicitTrackKeywords = /DASH|100MD|200MD|400MD|800MD|1500MD|RELAY|4X100|4X400|LONG\s*JUMP|LONGJUMP|SHOT\s*PUT|SHOTPUT|DISCUS|JAVELIN|HURDLE|TRACK|FIELD|RUNNERS?|ATHLETICS?|SPRINT|POLE\s*VAULT|TRIPLE\s*JUMP|HIGH\s*JUMP/i.test(allContextText);
-    const hasExplicitSwimKeywords = /FREESTYLE|BUTTERFLY|BREASTSTROKE|BACKSTROKE|\bIM\b|MEDLEY|SWIM|POOL/i.test(allContextText);
+    const hasExplicitTrackKeywords = /DASH|100MD|200MD|400MD|800MD|1500MD|RELAY|4X100|4X400|LONG\s*JUMP|LONGJUMP|SHOT\s*PUT|SHOTPUT|DISCUS|JAVELIN|HURDLE|TRACK|FIELD|RUNNERS?|ATHLETICS?|SPRINT|POLE\s*VAULT|TRIPLE\s*JUMP|HIGH\s*JUMP/i.test(nonSportContextText);
+    const hasExplicitSwimKeywords = /FREESTYLE|BUTTERFLY|BREASTSTROKE|BACKSTROKE|\bIM\b|MEDLEY|POOL|STROKE/i.test(nonSportContextText);
 
     const detectedEffectiveSport = manualSportOverride || (() => {
         const rawUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
@@ -719,7 +719,7 @@ export function OCRoutput({
                     >
                         <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitleBeside}>OCR RESULT • {sportDisplayName}</Text>
+                    <Text style={styles.headerTitleBeside} numberOfLines={1}>OCR RESULT • {sportDisplayName}</Text>
                     <TouchableOpacity
                         style={{
                             flexDirection: 'row',
