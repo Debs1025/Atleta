@@ -586,6 +586,12 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
             : (profileRes?.past_teams && profileRes.past_teams.length > 0)
               ? profileRes.past_teams
               : (raw.past_teams || []),
+          advanced_coach_stats:
+            homeData?.advanced_coach_stats ||
+            profileRes?.advanced_coach_stats ||
+            statsRes?.advanced_coach_stats ||
+            raw.advanced_coach_stats ||
+            undefined,
           auth_provider: raw.provider || raw.auth_provider || raw.user?.provider || "password",
         };
         setProfile(mappedProfile);
