@@ -7,7 +7,9 @@ import {
   Text,
   View,
   LayoutChangeEvent,
+  TouchableOpacity,
 } from "react-native";
+import { AthleteAllStatsModal } from "./AthleteAllStatsModal";
 import Svg, {
   Defs,
   LinearGradient,
@@ -211,6 +213,7 @@ export function HomeAnalyticsPage({
   const [chartMode, setChartMode] = useState<"PERFORMANCE" | "WORKLOAD">("PERFORMANCE");
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [chartCanvasWidth, setChartCanvasWidth] = useState<number>(330);
+  const [showAllStatsModal, setShowAllStatsModal] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -459,9 +462,10 @@ export function HomeAnalyticsPage({
   }
 
   return (
-    <ScrollView
-      ref={scrollViewRef}
-      style={styles.dashboardContainer}
+    <>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.dashboardContainer}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled={true}
@@ -492,6 +496,14 @@ export function HomeAnalyticsPage({
             </Text>
             <View style={[styles.activeUnderline, activePastTeam && { backgroundColor: "#EF4444" }]} />
           </View>
+          <TouchableOpacity
+            onPress={() => setShowAllStatsModal(true)}
+            style={styles.viewAllStatsHeaderButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.viewAllStatsHeaderButtonText}>VIEW ALL STATS</Text>
+            <Ionicons name="chevron-forward" size={13} color="#00C8FF" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -695,67 +707,7 @@ export function HomeAnalyticsPage({
             <Text style={styles.reboundsSubtext}>{layout.secondaryMetric.subtext}</Text>
           </View>
         </View>
-        <View style={styles.reboundsLevelIndicator}>
-          {[1, 2, 3, 4].map((barIndex) => {
-            const isActive = barIndex <= layout.secondaryMetric.level;
-            return (
-              <View
-                key={barIndex}
-                style={[
-                  styles.levelBar,
-                  isActive ? styles.levelBarActive : styles.levelBarInactive,
-                ]}
-              />
-            );
-          })}
-        </View>
       </View>
-
-      {/* --- SPORT-SPECIFIC EFFICIENCY / ACCURACY SECTION --- */}
-      {layout.efficiencySectionTitle ? (
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.cyanAccentBar} />
-            <Text style={styles.sectionTitleText}>{layout.efficiencySectionTitle}</Text>
-          </View>
-
-          {/* Efficiency Metric 1 */}
-          {layout.efficiency1 && (
-            <View style={styles.progressItem}>
-              <View style={styles.progressHeaderRow}>
-                <Text style={styles.progressLabelText}>{layout.efficiency1.label}</Text>
-                <Text style={styles.progressValueText}>{layout.efficiency1.value}%</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${Math.min(100, Math.max(0, layout.efficiency1.value))}%` },
-                  ]}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Efficiency Metric 2 */}
-          {layout.efficiency2 && (
-            <View style={styles.progressItem}>
-              <View style={styles.progressHeaderRow}>
-                <Text style={styles.progressLabelText}>{layout.efficiency2.label}</Text>
-                <Text style={styles.progressValueText}>{layout.efficiency2.value}%</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${Math.min(100, Math.max(0, layout.efficiency2.value))}%` },
-                  ]}
-                />
-              </View>
-            </View>
-          )}
-        </View>
-      ) : null}
 
       {/* --- REDESIGNED ATHLETIC PROGRESSION GRAPH --- */}
       <View
@@ -1046,200 +998,31 @@ export function HomeAnalyticsPage({
         )}
       </View>
 
-      {/* --- ADVANCED COACH-DRIVEN STATS SECTION --- */}
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionTitleRow}>
-          <View style={styles.cyanAccentBar} />
-          <Text style={styles.sectionTitleText}>ADVANCED COACH-DRIVEN STATS</Text>
-          {hasCoachLogs && (
-            <View style={styles.coachVerifiedPill}>
-              <Ionicons name="shield-checkmark" size={11} color="#00C8FF" />
-              <Text style={styles.coachVerifiedPillText}>COACH CERTIFIED</Text>
+      {/* --- VIEW ALL STATS ACTION CARD --- */}
+      <TouchableOpacity
+        style={styles.viewAllStatsBannerCard}
+        onPress={() => setShowAllStatsModal(true)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.viewAllStatsBannerContent}>
+          <View style={styles.viewAllStatsBannerIconBox}>
+            <Ionicons name="bar-chart" size={24} color="#00C8FF" />
+          </View>
+          <View style={styles.viewAllStatsBannerTextContainer}>
+            <View style={styles.viewAllStatsBannerTitleRow}>
+              <Text style={styles.viewAllStatsBannerTitle}>VIEW ALL STATS</Text>
+              <View style={styles.coachVerifiedPill}>
+                <Ionicons name="shield-checkmark" size={10} color="#00C8FF" />
+                <Text style={styles.coachVerifiedPillText}>IN-DEPTH</Text>
+              </View>
             </View>
-          )}
-        </View>
-        <Text style={styles.sectionSubtitleText}>
-          Tactical metrics aggregated from verified match scorecards & coach logs.
-        </Text>
-
-        {!hasCoachLogs ? (
-          <View style={styles.coachStatsPlaceholderCard}>
-            <View style={styles.coachStatsPlaceholderIconWrapper}>
-              <Ionicons name="clipboard-outline" size={26} color="#64748B" />
-            </View>
-            <Text style={styles.coachStatsPlaceholderTitle}>Coach hasn't logged performance stats yet.</Text>
-            <Text style={styles.coachStatsPlaceholderSubtext}>
-              Tactical usage rates, game breakdown metrics, and coach rating trends will appear here once your coaching staff certifies official match logs or uploads game scoresheets.
+            <Text style={styles.viewAllStatsBannerSubtext}>
+              Averages, shooting efficiency, tactical coach metrics & training workload
             </Text>
           </View>
-        ) : (
-          <View style={styles.advStatsContainer}>
-            {/* BASKETBALL ADVANCED METRICS */}
-            {(upperSport.includes("BASKETBALL") || upperSport.includes("HOOPS")) && advStats.basketball && (
-              <View style={styles.advStatsGrid}>
-                {/* True Shooting % */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>TRUE SHOOTING %</Text>
-                    <Ionicons name="flame-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueHero}>
-                    {advStats.basketball.true_shooting_pct}%
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Shot volume & FT efficiency</Text>
-                </View>
-
-                {/* Usage Rate % */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>USAGE RATE (USG%)</Text>
-                    <Ionicons name="speedometer-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.basketball.usage_rate_pct}%
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Team possession share</Text>
-                </View>
-
-                {/* Off/Def Rebound Ratio */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>OFF/DEF REB RATIO</Text>
-                    <Ionicons name="swap-vertical-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.basketball.off_def_rebound_ratio}
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Offensive vs defensive boards</Text>
-                </View>
-
-                {/* Points Off Turnovers */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>PTS OFF TURNOVERS</Text>
-                    <Ionicons name="flash-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.basketball.points_off_turnovers}
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Transition scoring created</Text>
-                </View>
-
-                {/* Plus / Minus Rating (+/-) */}
-                <View style={styles.advStatCardFull}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>MATCH PLUS / MINUS (+/-)</Text>
-                    <Ionicons name="trending-up-outline" size={14} color="#10B981" />
-                  </View>
-                  <Text style={[styles.advStatValueHero, { color: advStats.basketball.plus_minus.startsWith('-') ? '#EF4444' : '#10B981' }]}>
-                    {advStats.basketball.plus_minus}
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Net point differential while athlete is on the court</Text>
-                </View>
-              </View>
-            )}
-
-            {/* VOLLEYBALL ADVANCED METRICS */}
-            {(upperSport.includes("VOLLEY") || upperSport.includes("VBALL")) && advStats.volleyball && (
-              <View style={styles.advStatsGrid}>
-                {/* Kill % */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>KILL % (SUCCESS)</Text>
-                    <Ionicons name="flash-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueHero}>
-                    {advStats.volleyball.kill_pct}%
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Attack scoring conversion</Text>
-                </View>
-
-                {/* Passing Accuracy */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>PASSING ACCURACY</Text>
-                    <Ionicons name="locate-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.volleyball.passing_accuracy_pct}%
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Target receive rate</Text>
-                </View>
-
-                {/* Aces-to-Errors Ratio */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>ACES / ERRORS</Text>
-                    <Ionicons name="git-compare-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.volleyball.aces_to_errors_ratio}
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Service pressure vs mistakes</Text>
-                </View>
-
-                {/* Dig-to-Kill Conversion */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>DIG-TO-KILL RATE</Text>
-                    <Ionicons name="shield-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.volleyball.dig_to_kill_conversion_pct}%
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Transition rally points</Text>
-                </View>
-              </View>
-            )}
-
-            {/* GENERAL / OTHER SPORTS ADVANCED METRICS */}
-            {(!upperSport.includes("BASKETBALL") && !upperSport.includes("HOOPS") && !upperSport.includes("VOLLEY") && !upperSport.includes("VBALL")) && advStats.general && (
-              <View style={styles.advStatsGrid}>
-                {/* Consistency Metrics */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>CONSISTENCY INDEX</Text>
-                    <Ionicons name="analytics-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueHero}>
-                    {advStats.general.consistency_pct}%
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Performance standard deviation</Text>
-                </View>
-
-                {/* Training sRPE vs Performance Correlation */}
-                <View style={styles.advStatCard}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>sRPE CORRELATION</Text>
-                    <Ionicons name="pulse-outline" size={14} color="#38BDF8" />
-                  </View>
-                  <Text style={styles.advStatValueLarge}>
-                    {advStats.general.srpe_correlation}
-                  </Text>
-                  <Text style={styles.advStatSubtext}>Exertion load vs match output</Text>
-                </View>
-
-                {/* Coach Rating Trend */}
-                <View style={styles.advStatCardFull}>
-                  <View style={styles.advStatHeaderRow}>
-                    <Text style={styles.advStatLabel}>COACH RATING TREND</Text>
-                    <Ionicons name="star-outline" size={14} color="#FBBF24" />
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-                    <Text style={[styles.advStatValueHero, { color: "#FBBF24" }]}>
-                      {advStats.general.rating_score > 0 ? `${advStats.general.rating_score} / 10` : "8.8 / 10"}
-                    </Text>
-                    <Text style={{ color: "#10B981", fontSize: 13, fontWeight: "800" }}>
-                      ({advStats.general.coach_rating_trend})
-                    </Text>
-                  </View>
-                  <Text style={styles.advStatSubtext}>Coach evaluation trend over past match sessions</Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
+          <Ionicons name="chevron-forward-circle" size={26} color="#00C8FF" />
+        </View>
+      </TouchableOpacity>
 
       {/* --- TEAM & COACH SECTION --- */}
       <View style={styles.sectionBlock}>
@@ -1441,6 +1224,20 @@ export function HomeAnalyticsPage({
         )}
       </View>
     </ScrollView>
+
+    {/* --- IN-DEPTH ATHLETE ALL STATS MODAL --- */}
+    <AthleteAllStatsModal
+      visible={showAllStatsModal}
+      onClose={() => setShowAllStatsModal(false)}
+      profile={profile}
+      activePastTeam={activePastTeam}
+      displayStats={displayStats}
+      displayAverages={displayAverages}
+      displayAnalytics={displayAnalytics}
+      layout={layout}
+      advStats={advStats}
+    />
+  </>
   );
 }
 
