@@ -133,3 +133,4 @@ export function useInquiries(targetId?: string) {
 }
 
 export const useCoachInquiries = useInquiries;
+

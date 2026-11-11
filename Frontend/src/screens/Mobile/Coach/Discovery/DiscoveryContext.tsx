@@ -17,7 +17,7 @@ import { requestAuthenticatedJson, clearAuthMicroCache } from '../../Authenticat
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMatchesOfflineFirst } from '../../../../services/firebaseClient';
 
-const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache_v2';
+const DISCOVERY_CACHE_KEY = 'atleta_discovery_snapshot_cache_v3';
 const DISCOVERY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL for discovery dataset (Stale-While-Revalidate)
 
 export interface DiscoveryCacheState {
@@ -338,8 +338,9 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             (assignedTeamName && assignedTeamName.trim().toLowerCase() !== 'unassigned' && assignedTeamName.trim().toLowerCase() !== 'none') ||
             (assignedTeamId && String(assignedTeamId).trim().toLowerCase() !== 'none' && String(assignedTeamId).trim() !== '')
           );
-          const isScouted = Boolean(scoutInfo || a.is_scouted || hasAssignedTeam);
-          const scoutStatus = scoutInfo ? scoutInfo.offer_status : a.scout_status;
+          // Only scouted if explicitly present in this coach's sent scouting proposals
+          const isScouted = Boolean(scoutInfo);
+          const scoutStatus = scoutInfo ? scoutInfo.offer_status : undefined;
 
           // If athlete is accepted by coach and coach has a team, associate coach's team name if none exists
           if (!assignedTeamName && scoutStatus === 'ACCEPTED' && finalTeams.length > 0) {
@@ -448,7 +449,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               existing.coach_name = assignedCoachName;
               existing.has_coach = true;
             }
-            if (isScouted || hasAssignedTeam) {
+            if (isScouted) {
               existing.is_scouted = true;
               if (scoutStatus) existing.scout_status = scoutStatus;
             }
@@ -579,7 +580,6 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   existing.team_name = t.team_name;
                   existing.coach_name = t.head_coach;
                   existing.has_coach = true;
-                  existing.is_scouted = true;
                 }
                 if ((!existing.position_tag || existing.position_tag === 'Player' || existing.position_tag === 'Unassigned') && r.position_tag) {
                   existing.position_tag = r.position_tag;
@@ -596,8 +596,8 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                   team_name: t.team_name,
                   coach_name: t.head_coach,
                   has_coach: true,
-                  is_scouted: true, // In team roster, so has a team
-                  scout_status: scoutInfo ? scoutInfo.offer_status : r.scout_status,
+                  is_scouted: Boolean(scoutInfo),
+                  scout_status: scoutInfo ? scoutInfo.offer_status : undefined,
                 };
                 mappedAthletes.push(newRosterAth);
                 if (rNameKey) athleteByName.set(rNameKey, newRosterAth);

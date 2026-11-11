@@ -29,7 +29,21 @@ export const DiscoveryPlayer: React.FC<{
     filteredAthletes,
     setSelectedAthlete,
     isLoading,
+    scoutingProposals,
   } = useDiscovery();
+
+  const scoutList = React.useMemo(() => {
+    const list = new Set<string>();
+    (scoutingProposals || []).forEach((p) => {
+      const raw = String(p.athlete_id || (p as any).id || '').trim();
+      if (raw) {
+        list.add(raw);
+        list.add(raw.replace(/^ath_/, ''));
+        list.add(`ath_${raw.replace(/^ath_/, '')}`);
+      }
+    });
+    return list;
+  }, [scoutingProposals]);
 
   const handleOpenAthlete = (athlete: AthleteDiscoveryItem) => {
     setSelectedAthlete(athlete);
@@ -74,10 +88,21 @@ export const DiscoveryPlayer: React.FC<{
                 ? athlete.team_name
                 : (athlete.has_coach && athlete.coach_name ? `Coach ${athlete.coach_name}'s Team` : null);
 
-            // Scouted = Athlete has a team (or is scouted by a team)
-            // Unassigned = Athlete has no team yet
-            const isScouted = Boolean(hasValidTeam || currentTeam || athlete.is_scouted || athlete.scout_status);
-            const statusLabel = isScouted ? 'Scouted' : 'Unassigned';
+            const athleteRawId = athlete.athlete_id || (athlete as any).user_id || '';
+            const athleteNormId = athleteRawId.replace(/^ath_/, '');
+            const isScouted = Boolean(
+              scoutList.has(athleteRawId) ||
+              scoutList.has(athleteNormId) ||
+              athlete.is_scouted
+            );
+            const isAccepted = athlete.scout_status === 'ACCEPTED';
+            const statusLabel = isAccepted
+              ? 'Accepted'
+              : isScouted
+                ? 'Scouted'
+                : (athlete.recruitment_status && athlete.recruitment_status.toLowerCase() !== 'unassigned'
+                    ? athlete.recruitment_status
+                    : 'Available');
             const effPct = Number(athlete.efficiency_pct ?? 75);
             const filledCount = Math.min(5, Math.max(1, Math.round((effPct / 100) * 5)));
 
@@ -123,15 +148,21 @@ export const DiscoveryPlayer: React.FC<{
                     pointerEvents="none"
                     style={[
                       styles.tagChip,
-                      isScouted
-                        ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
-                        : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
+                      isAccepted
+                        ? { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981' }
+                        : isScouted
+                          ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                          : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
                     ]}
                   >
                     <Text
                       style={[
                         styles.tagChipText,
-                        isScouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                        isAccepted
+                          ? { color: '#10B981' }
+                          : isScouted
+                            ? { color: '#00C8FF' }
+                            : { color: '#94A3B8' },
                       ]}
                     >
                       {statusLabel}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,10 +29,21 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
-  const { selectedAthlete: contextAthlete, scoutAthlete } = useDiscovery();
+  const { selectedAthlete: contextAthlete, scoutAthlete, scoutingProposals } = useDiscovery();
   const currentAthlete = athlete || contextAthlete;
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  const isAthleteScouted = useMemo(() => {
+    if (!currentAthlete) return false;
+    const rawId = currentAthlete.athlete_id || (currentAthlete as any).user_id || '';
+    const normId = rawId.replace(/^ath_/, '');
+    const inProposals = (scoutingProposals || []).some((p) => {
+      const pAthId = String(p.athlete_id || (p as any).id || '').trim();
+      return pAthId === rawId || pAthId.replace(/^ath_/, '') === normId;
+    });
+    return Boolean(inProposals || currentAthlete.is_scouted);
+  }, [currentAthlete, scoutingProposals]);
 
   if (!currentAthlete) {
     return (
@@ -103,34 +114,37 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
         <View style={styles.athleteNameRow}>
           <Text style={styles.athleteNameText}>{(currentAthlete.full_name || 'ATHLETE').toUpperCase()}</Text>
           {(() => {
-            const isAthleteScouted = Boolean(
-              currentAthlete.is_scouted ||
-              (currentAthlete.team_name &&
-                currentAthlete.team_name.trim().toLowerCase() !== 'unassigned' &&
-                currentAthlete.team_name.trim().toLowerCase() !== 'none') ||
-              (currentAthlete.team_id &&
-                String(currentAthlete.team_id).trim() !== '' &&
-                String(currentAthlete.team_id).trim().toLowerCase() !== 'none') ||
-              (currentAthlete.has_coach && currentAthlete.coach_name) ||
-              currentAthlete.scout_status
-            );
+            const isAccepted = currentAthlete.scout_status === 'ACCEPTED';
+            const statusLabel = isAccepted
+              ? 'ACCEPTED'
+              : isAthleteScouted
+                ? 'SCOUTED'
+                : (currentAthlete.recruitment_status && currentAthlete.recruitment_status.toLowerCase() !== 'unassigned'
+                    ? currentAthlete.recruitment_status.toUpperCase()
+                    : 'AVAILABLE');
 
             return (
               <View
                 style={[
                   styles.positionBadge,
-                  isAthleteScouted
-                    ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
-                    : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
+                  isAccepted
+                    ? { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981' }
+                    : isAthleteScouted
+                      ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                      : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
                 ]}
               >
                 <Text
                   style={[
                     styles.positionBadgeText,
-                    isAthleteScouted ? { color: '#00C8FF' } : { color: '#94A3B8' },
+                    isAccepted
+                      ? { color: '#10B981' }
+                      : isAthleteScouted
+                        ? { color: '#00C8FF' }
+                        : { color: '#94A3B8' },
                   ]}
                 >
-                  {isAthleteScouted ? 'SCOUTED' : 'UNASSIGNED'}
+                  {statusLabel}
                 </Text>
               </View>
             );
@@ -169,13 +183,13 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
                 ) : null}
               </View>
             </View>
-            {currentAthlete.is_scouted && (
+            {isAthleteScouted && (
               <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: '#10B981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
                 <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '800' }}>SCOUTED</Text>
               </View>
             )}
           </View>
-        ) : currentAthlete.is_scouted ? (
+        ) : isAthleteScouted ? (
           <View style={{
             backgroundColor: '#0F172A',
             borderRadius: 10,
@@ -433,7 +447,7 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
 
         {/* Primary Scout Player Button */}
         <TouchableOpacity style={styles.scoutButton} onPress={handleScoutPress} activeOpacity={0.85}>
-          <Text style={styles.scoutButtonText}>SCOUT PLAYER</Text>
+          <Text style={styles.scoutButtonText}>{isAthleteScouted ? 'RE-SCOUT PLAYER' : 'SCOUT PLAYER'}</Text>
         </TouchableOpacity>
       </ScrollView>
 

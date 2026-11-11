@@ -58,7 +58,21 @@ export const RankingPage: React.FC<RankingProps> = ({
     setAdvancedFilters,
     resetAdvancedFilters,
     activeFilterCount,
+    scoutingProposals,
   } = useDiscovery();
+
+  const scoutList = useMemo(() => {
+    const list = new Set<string>();
+    (scoutingProposals || []).forEach((p) => {
+      const raw = String(p.athlete_id || (p as any).id || '').trim();
+      if (raw) {
+        list.add(raw);
+        list.add(raw.replace(/^ath_/, ''));
+        list.add(`ath_${raw.replace(/^ath_/, '')}`);
+      }
+    });
+    return list;
+  }, [scoutingProposals]);
 
   const sourceAthletes = (rankingAthletes && rankingAthletes.length > 0) ? rankingAthletes : athletes;
 
@@ -472,25 +486,33 @@ export const RankingPage: React.FC<RankingProps> = ({
                           {athlete.full_name || 'Athlete'}
                         </Text>
                         {(() => {
+                          const athleteRawId = athlete.athlete_id || (athlete as any).user_id || '';
+                          const athleteNormId = athleteRawId.replace(/^ath_/, '');
                           const isAthleteScouted = Boolean(
-                            athlete.is_scouted ||
-                            (athlete.team_name &&
-                              athlete.team_name.trim().toLowerCase() !== 'unassigned' &&
-                              athlete.team_name.trim().toLowerCase() !== 'none') ||
-                            (athlete.team_id &&
-                              String(athlete.team_id).trim() !== '' &&
-                              String(athlete.team_id).trim().toLowerCase() !== 'none') ||
-                            (athlete.has_coach && athlete.coach_name) ||
-                            athlete.scout_status
+                            scoutList.has(athleteRawId) ||
+                            scoutList.has(athleteNormId) ||
+                            athlete.is_scouted
                           );
+                          const isAccepted = athlete.scout_status === 'ACCEPTED';
+                          const statusLabel = isAccepted
+                            ? 'ACCEPTED'
+                            : isAthleteScouted
+                              ? 'SCOUTED'
+                              : (athlete.recruitment_status && athlete.recruitment_status.toLowerCase() !== 'unassigned'
+                                  ? athlete.recruitment_status.toUpperCase()
+                                  : 'AVAILABLE');
 
-                          return isAthleteScouted ? (
+                          return isAccepted ? (
+                            <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                              <Text style={{ color: '#10B981', fontSize: 9, fontWeight: '800' }}>{statusLabel}</Text>
+                            </View>
+                          ) : isAthleteScouted ? (
                             <View style={{ backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
-                              <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>SCOUTED</Text>
+                              <Text style={{ color: '#00C8FF', fontSize: 9, fontWeight: '800' }}>{statusLabel}</Text>
                             </View>
                           ) : (
                             <View style={{ backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)', borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
-                              <Text style={{ color: '#94A3B8', fontSize: 9, fontWeight: '800' }}>UNASSIGNED</Text>
+                              <Text style={{ color: '#94A3B8', fontSize: 9, fontWeight: '800' }}>{statusLabel}</Text>
                             </View>
                           );
                         })()}
