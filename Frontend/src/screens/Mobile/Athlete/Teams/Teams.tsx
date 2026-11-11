@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
   Alert,
   Animated,
@@ -16,80 +16,40 @@ import { TeamDetailsScreen } from "./TeamDetails";
 import { InquireCoachScreen } from "./InquireCoach";
 import { InquiriesScreen } from "./Inquiries";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
-import { getActiveCoachSportsOfflineFirst, getTeamsOfflineFirst, db } from "../../../../services/firebaseClient";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../../../services/firebaseClient";
+import {
+  Coach,
+  TeamSchema,
+  CoachProfileSchema,
+  InquirySchema,
+  CoachesCacheState,
+  DEFAULT_SPORT_CHIPS,
+  clearCoachesMemoryCache,
+  CoachesContext,
+  CoachesProvider,
+  useCoaches,
+} from "./CoachesContext";
 
-//schemas
-export interface Coach {
-  coach_id: string;
-  full_name: string;
-  role_title: string;
-  years_experience: string;
-  quote: string;
-  avatar_url?: string;
-  is_verified?: boolean;
-}
-
-export interface TeamSchema {
-  team_id: string;
-  team_name: string;
-  sport_type: string;
-  managed_by_coach_id: string;
-  created_at: string;
-  roster_athletes: string[]; // List of athlete UUIDs
-  program_type_tag?: string; // e.g. "ELITE VARSITY PROGRAM"
-  description: string;
-  region: string; // e.g. "Bicol"
-  is_my_team?: boolean;
-  head_coach: Coach;
-}
-
-export interface CoachProfileSchema {
-  coach_id: string;
-  full_name: string;
-  institution: string;
-  role_title: string;
-  sport?: string;
-  sport_type?: string;
-  avatar_url?: string;
-  tags: string[]; // ["VARSITY", "RECRUITER", "ACTIVE SCOUTING"]
-  years_experience: string; // "15+"
-  core_specialties: string[];
-  success_rate?: string;
-  recruits_placed?: string;
-  philosophy: string;
-  quote: string;
-  certificates: string[];
-  contact_info: {
-    email: string;
-    facebook: string;
-    phone: string;
-  };
-}
-
-export interface InquirySchema {
-  inquiry_id: string;
-  coach_name: string;
-  institution_sport: string;
-  status: "ACCEPTED" | "PENDING" | "DECLINED";
-  updated_at_relative: string;
-  sub_note?: string; // e.g. "Roster Full"
-}
+// Re-export schemas and cache functions for backwards compatibility across all modules
+export {
+  Coach,
+  TeamSchema,
+  CoachProfileSchema,
+  InquirySchema,
+  CoachesCacheState,
+  clearCoachesMemoryCache,
+};
 
 type ScreenState = "DIRECTORY" | "TEAM_DETAILS" | "COACH_PROFILE" | "INQUIRIES";
 
-interface TeamsProps {
+export interface TeamsProps {
   onNavigateTab?: (tabName: "HOME" | "COACHES" | "PROFILE") => void;
   onScreenStateChange?: (isSubScreen: boolean) => void;
   athleteCategory?: string;
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }
-
-const DEFAULT_SPORT_CHIPS: { label: string; value: string }[] = [
-  { label: "ALL", value: "ALL" },
-];
 
 const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
   const norm = sportValue.toUpperCase().trim();
@@ -127,89 +87,31 @@ const renderSportChipIcon = (sportValue: string, isSelected: boolean) => {
   return <Ionicons name="trophy-outline" size={16} color={tintColor} />;
 };
 
-const getInitialSport = (cat?: string) => {
-  if (!cat) return "ALL";
-  const norm = cat.toUpperCase().trim();
-  if (norm === "ALL") return "ALL";
-  if (norm.includes("SWIM")) return "SWIMMING";
-  if (norm.includes("TRACK") || norm.includes("FIELD")) return "TRACK AND FIELD";
-  return norm;
-};
-
-const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
-
-export interface CoachesCacheState {
-  teams: TeamSchema[];
-  inquiries: InquirySchema[];
-  sportChips: { label: string; value: string }[];
-  myCurrentTeamId: string;
-  myCurrentTeamName: string;
-  myJoinedTeamIds: string[];
-  lastFetched: number;
-}
-
-const COACHES_CACHE_KEY = "atleta_athlete_coaches_snapshot_cache_v2";
-const COACHES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL (Stale-While-Revalidate)
-
-let coachesMemoryCache: CoachesCacheState | null = null;
-
-export function clearCoachesMemoryCache() {
-  coachesMemoryCache = null;
-}
-
-export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onRefresh, isRefreshing }: TeamsProps) {
+function TeamsContent({
+  onNavigateTab,
+  onScreenStateChange,
+  athleteCategory,
+  onRefresh,
+  isRefreshing,
+}: TeamsProps) {
   const [currentScreen, setCurrentScreen] = useState<ScreenState>("DIRECTORY");
-  const [teams, setTeams] = useState<TeamSchema[]>(coachesMemoryCache?.teams || []);
-  const [inquiries, setInquiries] = useState<InquirySchema[]>(coachesMemoryCache?.inquiries || []);
   const [selectedTeam, setSelectedTeam] = useState<TeamSchema | null>(null);
   const [selectedCoach, setSelectedCoach] = useState<CoachProfileSchema | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSport, setSelectedSport] = useState<string>("ALL");
-  const [sportChips, setSportChips] = useState<{ label: string; value: string }[]>(
-    coachesMemoryCache?.sportChips && coachesMemoryCache.sportChips.length > 1
-      ? coachesMemoryCache.sportChips
-      : DEFAULT_SPORT_CHIPS
-  );
-  const [myCurrentTeamId, setMyCurrentTeamId] = useState<string>(coachesMemoryCache?.myCurrentTeamId || "");
-  const [myCurrentTeamName, setMyCurrentTeamName] = useState<string>(coachesMemoryCache?.myCurrentTeamName || "");
-  const [myJoinedTeamIds, setMyJoinedTeamIds] = useState<Set<string>>(
-    new Set(coachesMemoryCache?.myJoinedTeamIds || [])
-  );
-  const [loading, setLoading] = useState<boolean>(
-    !coachesMemoryCache?.teams || coachesMemoryCache.teams.length === 0
-  );
   const [refreshing, setRefreshing] = useState(false);
   const pulseAnim = useState(new Animated.Value(0.3))[0];
 
-  const teamsRef = React.useRef(teams);
-  teamsRef.current = teams;
-
-  useEffect(() => {
-    let isMounted = true;
-    getActiveCoachSportsOfflineFirst()
-      .then((sports: string[]) => {
-        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
-        const seen = new Set<string>(["ALL"]);
-        const mapped: { label: string; value: string }[] = [{ label: "ALL", value: "ALL" }];
-        sports.forEach((raw: string) => {
-          const upper = String(raw).toUpperCase().trim();
-          if (!upper || upper === "ALL" || seen.has(upper)) return;
-          seen.add(upper);
-          mapped.push({ label: upper, value: upper });
-        });
-        if (mapped.length > 1) {
-          setSportChips(mapped);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    // Keep ALL as default so athletes see all sports teams
-  }, [athleteCategory]);
+  const {
+    teams,
+    inquiries,
+    sportChips,
+    selectedSport,
+    setSelectedSport,
+    searchQuery,
+    setSearchQuery,
+    isLoading,
+    refreshCoaches,
+    filteredTeams,
+  } = useCoaches();
 
   useEffect(() => {
     if (onScreenStateChange) {
@@ -217,273 +119,18 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
     }
   }, [currentScreen, onScreenStateChange]);
 
-  // Instant persistent cache hydration on mount (<10ms)
-  useEffect(() => {
-    let isMounted = true;
-    AsyncStorage.getItem(COACHES_CACHE_KEY)
-      .then((raw) => {
-        if (!isMounted || !raw) return;
-        try {
-          const cached: CoachesCacheState = JSON.parse(raw);
-          if (Array.isArray(cached.teams) && cached.teams.length > 0) {
-            setTeams((prev) => (prev.length === 0 ? cached.teams : prev));
-            setLoading(false);
-          }
-          if (Array.isArray(cached.inquiries) && cached.inquiries.length > 0) {
-            setInquiries((prev) => (prev.length === 0 ? cached.inquiries : prev));
-          }
-          if (Array.isArray(cached.sportChips) && cached.sportChips.length > 1) {
-            setSportChips((prev) => (prev.length <= 1 ? cached.sportChips : prev));
-          }
-          if (cached.myCurrentTeamId) {
-            setMyCurrentTeamId((prev) => prev || cached.myCurrentTeamId);
-          }
-          if (cached.myCurrentTeamName) {
-            setMyCurrentTeamName((prev) => prev || cached.myCurrentTeamName);
-          }
-          if (Array.isArray(cached.myJoinedTeamIds) && cached.myJoinedTeamIds.length > 0) {
-            setMyJoinedTeamIds((prev) => (prev.size === 0 ? new Set(cached.myJoinedTeamIds) : prev));
-          }
-
-          if (!coachesMemoryCache && Array.isArray(cached.teams) && cached.teams.length > 0) {
-            coachesMemoryCache = {
-              teams: cached.teams,
-              inquiries: cached.inquiries || [],
-              sportChips: cached.sportChips || DEFAULT_SPORT_CHIPS,
-              myCurrentTeamId: cached.myCurrentTeamId || "",
-              myCurrentTeamName: cached.myCurrentTeamName || "",
-              myJoinedTeamIds: cached.myJoinedTeamIds || [],
-              lastFetched: cached.lastFetched || Date.now(),
-            };
-          }
-        } catch (_) {}
-      })
-      .catch(() => null);
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const fetchDirectoryAndInquiries = useCallback(async (isRefresh = false) => {
-    const hasCached = (coachesMemoryCache?.teams && coachesMemoryCache.teams.length > 0) || teamsRef.current.length > 0;
-    try {
-      if (!hasCached && !isRefresh) setLoading(true);
-      const [offlineTeams, teamsRes, inquiriesRes, myTeamRes, activeCoachSports]: [any, any, any, any, string[]] = await Promise.all([
-        getTeamsOfflineFirst().catch(() => []),
-        requestAuthenticatedJson("/teams").catch(() => null),
-        requestAuthenticatedJson("/inquiries").catch(() => null),
-        requestAuthenticatedJson("/athletes/team").catch(() => null),
-        getActiveCoachSportsOfflineFirst(isRefresh).catch(() => []),
-      ]);
-
-        const currentTeamId = myTeamRes?.team?.team_id || myTeamRes?.team_id || "";
-          const currentTeamName = myTeamRes?.team?.team_name || myTeamRes?.team_name || "";
-          setMyCurrentTeamId(currentTeamId);
-          setMyCurrentTeamName(currentTeamName);
-
-          const joinedSet = new Set<string>();
-          if (currentTeamId) joinedSet.add(currentTeamId);
-
-          // Collect from multiple assigned teams
-          const assignedArr = myTeamRes?.assigned_teams || myTeamRes?.teams || [];
-          if (Array.isArray(assignedArr)) {
-            assignedArr.forEach((t: any) => {
-              const tid = t.team_id || t.id;
-              if (tid) joinedSet.add(tid);
-            });
-          }
-
-          // Collect from accepted inquiries
-          const rawInq = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
-          if (Array.isArray(rawInq)) {
-            rawInq.forEach((inq: any) => {
-              const st = (inq.offer_status || inq.status || "").toUpperCase();
-              if (st === "ACCEPTED" || st === "JOINED") {
-                const tid = inq.team_id || inq.scout_id;
-                if (tid) joinedSet.add(tid);
-              }
-            });
-          }
-
-          setMyJoinedTeamIds(joinedSet);
-
-          const restTeams = teamsRes?.teams || (Array.isArray(teamsRes) ? teamsRes : []);
-          let rawList = [...restTeams, ...(Array.isArray(offlineTeams) ? offlineTeams : [])];
-          if (rawList.length === 0) {
-            try {
-              const snap = await getDocs(collection(db, "Teams"));
-              if (!snap.empty) {
-                rawList = snap.docs.map((d) => ({ team_id: d.id, id: d.id, ...d.data() }));
-              }
-            } catch (_) {}
-          }
-
-          const mergedMap = new Map<string, any>();
-          rawList.forEach((item: any) => {
-            const tid = item.team_id || item.id;
-            if (!tid) return;
-            const existing = mergedMap.get(tid);
-            if (!existing) {
-              mergedMap.set(tid, item);
-            } else {
-              const existingCoach = existing.coach_name || existing.head_coach?.full_name;
-              const itemCoach = item.coach_name || item.head_coach?.full_name;
-              const isExistingPlaceholder =
-                !existingCoach ||
-                existingCoach.trim().toLowerCase() === "coach" ||
-                existingCoach.trim().toLowerCase() === "head coach";
-              const isItemReal =
-                itemCoach &&
-                itemCoach.trim().toLowerCase() !== "coach" &&
-                itemCoach.trim().toLowerCase() !== "head coach";
-              if (isExistingPlaceholder && isItemReal) {
-                mergedMap.set(tid, { ...existing, ...item });
-              } else {
-                mergedMap.set(tid, { ...item, ...existing });
-              }
-            }
-          });
-          const rawTeams = Array.from(mergedMap.values());
-
-          const mappedTeams: TeamSchema[] = rawTeams
-            .map((t: any, idx: number) => {
-              const isMyTeam = Boolean(
-                (currentTeamId && (t.team_id === currentTeamId || t.id === currentTeamId)) ||
-                (currentTeamName && t.team_name && t.team_name.trim().toLowerCase() === currentTeamName.trim().toLowerCase())
-              );
-              const coachName = (
-                t.coach_name ||
-                t.head_coach?.full_name ||
-                (t.coach_first_name ? `${t.coach_first_name} ${t.coach_last_name || ""}`.trim() : "") ||
-                "Head Coach"
-              );
-              return {
-                team_id: t.team_id || `team_${idx}`,
-                team_name: t.team_name || "Varsity Team",
-                sport_type: (t.sport_type || "BASKETBALL").toUpperCase() as any,
-                managed_by_coach_id: t.coach_id || t.managed_by_coach_id || "",
-                created_at: t.timestamp || new Date().toISOString(),
-                roster_athletes: Array(t.athlete_count || (Array.isArray(t.roster_list) ? t.roster_list.length : 0)).fill("ath_uuid"),
-                program_type_tag: `${(t.division || "VARSITY").toUpperCase()} PROGRAM`,
-                description: t.description || t.mission_statement || `Official ${t.sport_type || "Sports"} program in ${t.region || t.province || "Camarines Sur"}.`,
-                region: t.region || t.province || "Camarines Sur",
-                is_my_team: isMyTeam,
-                head_coach: {
-                  coach_id: t.coach_id || t.managed_by_coach_id || "",
-                  full_name: (coachName.trim().toLowerCase() !== "coach" ? coachName : "Head Coach").toUpperCase(),
-                  role_title: t.head_coach?.role_title || `${(t.sport_type || "Varsity").toUpperCase()} HEAD COACH`,
-                  years_experience: t.years_experience ? `${t.years_experience} Years` : (t.head_coach?.years_experience || "Experienced Coach"),
-                  quote: t.quote || t.head_coach?.quote || "Dedicated to athletic excellence and player development.",
-                },
-              };
-            });
-          setTeams(mappedTeams);
-
-          // Dynamically bind sports chips strictly to active sports available from coach profiles in Firestore
-          const distinctSports = new Set<string>();
-          if (Array.isArray(activeCoachSports)) {
-            activeCoachSports.forEach((s) => {
-              const norm = String(s).toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
-              if (norm && norm !== "ALL") distinctSports.add(norm);
-            });
-          }
-          // Also incorporate active sports confirmed from managed teams with coaches
-          mappedTeams.forEach((t) => {
-            const hasCoach = t.managed_by_coach_id || (t.head_coach?.full_name && t.head_coach.full_name !== "HEAD COACH");
-            if (hasCoach && t.sport_type) {
-              const norm = String(t.sport_type).toUpperCase().replace(/&/g, "AND").replace(/\s+/g, " ").trim();
-              if (norm && norm !== "ALL") distinctSports.add(norm);
-            }
-          });
-
-          let finalSportChips = sportChips;
-          if (distinctSports.size > 0) {
-            const sorted = Array.from(distinctSports).sort();
-            const mapped: { label: string; value: string }[] = [{ label: "ALL", value: "ALL" }];
-            sorted.forEach((upper) => {
-              mapped.push({ label: upper, value: upper });
-            });
-            finalSportChips = mapped;
-            setSportChips(mapped);
-
-            setSelectedSport((current) => {
-              if (current && current !== "ALL") {
-                const isValid = sorted.some(
-                  (s) => normSport(s) === normSport(current)
-                );
-                return isValid ? current : "ALL";
-              }
-              return current;
-            });
-          }
-
-          const rawInquiries = inquiriesRes?.inquiries || (Array.isArray(inquiriesRes) ? inquiriesRes : []);
-          const mappedInquiries: InquirySchema[] = rawInquiries.map((inq: any, idx: number) => {
-            const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
-            const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";
-            return {
-              inquiry_id: inq.scout_id || inq.inquiry_id || `inq_${idx}`,
-              coach_name: inq.coach_name || "Coach",
-              institution_sport: `${inq.current_institution || inq.institution || "Varsity"} • ${inq.sport_type || inq.role_title || "Basketball"}`,
-              status: mappedStatus as any,
-              updated_at_relative: `Sent: ${inq.date_initiated ? new Date(inq.date_initiated).toLocaleDateString() : "Recently"}`,
-              sub_note: inq.decline_reason || inq.sub_note || undefined,
-            };
-          });
-
-          if (inquiriesRes) {
-            setInquiries(mappedInquiries);
-          } else {
-            const cachedStr = await AsyncStorage.getItem("atleta_offline_inquiries_cache").catch(() => null);
-            const cachedItems: InquirySchema[] = cachedStr ? JSON.parse(cachedStr) : [];
-            setInquiries(cachedItems);
-          }
-
-          // Update in-memory & persistent cache snapshot (0ms instant access on subsequent visits)
-          const snapshot: CoachesCacheState = {
-            teams: mappedTeams,
-            inquiries: mappedInquiries,
-            sportChips: finalSportChips,
-            myCurrentTeamId: currentTeamId,
-            myCurrentTeamName: currentTeamName,
-            myJoinedTeamIds: Array.from(joinedSet),
-            lastFetched: Date.now(),
-          };
-          coachesMemoryCache = snapshot;
-          AsyncStorage.setItem(COACHES_CACHE_KEY, JSON.stringify(snapshot)).catch(() => null);
-      } catch (err) {
-        if (!hasCached) {
-          setTeams([]);
-          setInquiries([]);
-        }
-      } finally {
-        setLoading(false);
-      }
-    },
-    [sportChips]
-  );
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchDirectoryAndInquiries(true);
+      await refreshCoaches();
       if (onRefresh) onRefresh();
     } finally {
       setRefreshing(false);
     }
-  }, [fetchDirectoryAndInquiries, onRefresh]);
+  }, [refreshCoaches, onRefresh]);
 
   useEffect(() => {
-    // If memory cache is fresh, render immediately from cache and skip redundant network refetches
-    if (coachesMemoryCache && Date.now() - coachesMemoryCache.lastFetched < COACHES_CACHE_TTL_MS) {
-      return;
-    }
-    fetchDirectoryAndInquiries(false);
-  }, [fetchDirectoryAndInquiries]);
-
-  useEffect(() => {
-    if (loading) {
+    if (isLoading && (!filteredTeams || filteredTeams.length === 0)) {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -501,7 +148,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
       loop.start();
       return () => loop.stop();
     }
-  }, [loading, pulseAnim]);
+  }, [isLoading, filteredTeams, pulseAnim]);
 
   const handleOpenTeam = async (team: TeamSchema) => {
     setSelectedTeam(team);
@@ -640,33 +287,6 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
     })();
   };
 
-  const normSport = (s: string) => (s || "").toUpperCase().replace(/&/g, "AND").replace(/\s+/g, "").trim();
-
-  const filteredTeams = teams.filter((team) => {
-    // Hide teams the athlete has already joined so they cannot re-join or see redundant listings
-    if (
-      team.is_my_team ||
-      myJoinedTeamIds.has(team.team_id) ||
-      myJoinedTeamIds.has((team as any).id) ||
-      (myCurrentTeamId && (team.team_id === myCurrentTeamId || (team as any).id === myCurrentTeamId)) ||
-      (myCurrentTeamName && team.team_name && team.team_name.trim().toLowerCase() === myCurrentTeamName.trim().toLowerCase())
-    ) {
-      return false;
-    }
-
-    const matchesSearch =
-      team.team_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      team.sport_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      team.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      team.head_coach.full_name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSport = !selectedSport || selectedSport === "ALL"
-      ? true
-      : normSport(team.sport_type) === normSport(selectedSport) ||
-        normSport(team.sport_type).includes(normSport(selectedSport)) ||
-        normSport(selectedSport).includes(normSport(team.sport_type));
-    return matchesSearch && matchesSport;
-  });
-
   // SCREEN ROUTING RENDER
   if (currentScreen === "TEAM_DETAILS" && selectedTeam) {
     return (
@@ -739,7 +359,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing || !!isRefreshing}
+            refreshing={refreshing || (isLoading && filteredTeams.length > 0)}
             onRefresh={handleRefresh}
             tintColor="#00C8FF"
             colors={["#00C8FF"]}
@@ -824,7 +444,7 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
         <Text style={styles.sectionTitle}>Teams</Text>
 
         {/* Skeleton Loaders or Team Cards List */}
-        {loading ? (
+        {isLoading && (!filteredTeams || filteredTeams.length === 0) ? (
           <View style={styles.skeletonContainer}>
             {[1, 2, 3].map((key) => (
               <Animated.View
@@ -879,5 +499,14 @@ export function Teams({ onNavigateTab, onScreenStateChange, athleteCategory, onR
   );
 }
 
-
-
+export function Teams(props: TeamsProps) {
+  const existingContext = useContext(CoachesContext);
+  if (existingContext) {
+    return <TeamsContent {...props} />;
+  }
+  return (
+    <CoachesProvider athleteCategory={props.athleteCategory}>
+      <TeamsContent {...props} />
+    </CoachesProvider>
+  );
+}

@@ -7,6 +7,7 @@ import { HomeAnalyticsPage, AthleteProfile, EligibleDocument } from "./HomeAnaly
 import { AthleteProfilePage } from "../Profile/AthleteProfilePage";
 import { NotificationPage, NotificationItem } from "./Notification";
 import { Teams } from "../Teams/Teams";
+import { CoachesProvider } from "../Teams/CoachesContext";
 import { TeamProfileScreen } from "./TeamProfile";
 import { CoachProfileScreen } from "./CoachProfile";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
@@ -82,7 +83,7 @@ interface AthleteHomePageProps {
   onLogout?: () => void;
 }
 
-export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
+function AthleteHomePageContent({ onLogout }: AthleteHomePageProps) {
   const [activeTab, setActiveTab] = useState<TabType>("HOME");
   const [dashboardScreen, setDashboardScreen] = useState<
     "HOME_MAIN" | "TEAM_PROFILE" | "COACH_PROFILE"
@@ -1095,6 +1096,14 @@ export function AthleteHomePage({ onLogout }: AthleteHomePageProps) {
       </View>
       )}
     </View>
+  );
+}
+
+export function AthleteHomePage(props: AthleteHomePageProps) {
+  return (
+    <CoachesProvider>
+      <AthleteHomePageContent {...props} />
+    </CoachesProvider>
   );
 }
 
