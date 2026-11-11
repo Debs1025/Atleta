@@ -324,8 +324,6 @@ export function OCRoutput({
         };
     }, []);
 
-    const [manualSportOverride, setManualSportOverride] = useState<string | null>(null);
-
     // Contextual text analysis to disambiguate Track & Field vs Swimming
     const nonSportContextText = useMemo(() => {
         const anyMatch = currentActiveMatch as any;
@@ -344,7 +342,7 @@ export function OCRoutput({
     const hasExplicitTrackKeywords = /DASH|100MD|200MD|400MD|800MD|1500MD|RELAY|4X100|4X400|LONG\s*JUMP|LONGJUMP|SHOT\s*PUT|SHOTPUT|DISCUS|JAVELIN|HURDLE|TRACK|FIELD|RUNNERS?|ATHLETICS?|SPRINT|POLE\s*VAULT|TRIPLE\s*JUMP|HIGH\s*JUMP/i.test(nonSportContextText);
     const hasExplicitSwimKeywords = /FREESTYLE|BUTTERFLY|BREASTSTROKE|BACKSTROKE|\bIM\b|MEDLEY|POOL|STROKE/i.test(nonSportContextText);
 
-    const detectedEffectiveSport = manualSportOverride || (() => {
+    const detectedEffectiveSport = (() => {
         const rawUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
         if ((rawUpper.includes("SWIM") || rawUpper.includes("BASKET")) && hasExplicitTrackKeywords && !hasExplicitSwimKeywords) {
             return "TRACK & FIELD";
@@ -720,35 +718,6 @@ export function OCRoutput({
                         <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitleBeside} numberOfLines={1}>OCR RESULT • {sportDisplayName}</Text>
-                    <TouchableOpacity
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 4,
-                            backgroundColor: 'rgba(0, 200, 255, 0.12)',
-                            borderColor: '#00C8FF',
-                            borderWidth: 1,
-                            borderRadius: 14,
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                            marginLeft: 'auto',
-                        }}
-                        onPress={() => {
-                            if (isTrack) {
-                                setManualSportOverride('SWIMMING');
-                            } else if (isSwimming) {
-                                setManualSportOverride('TRACK & FIELD');
-                            } else {
-                                setManualSportOverride(sportUpper.includes('BASKET') ? 'TRACK & FIELD' : 'BASKETBALL');
-                            }
-                        }}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="swap-horizontal" size={13} color="#00C8FF" />
-                        <Text style={{ color: '#00C8FF', fontSize: 11, fontWeight: '700' }}>
-                            {isTrack ? "TRACK" : isSwimming ? "SWIM" : sportDisplayName.slice(0, 5)}
-                        </Text>
-                    </TouchableOpacity>
                 </View>
             </View>
 

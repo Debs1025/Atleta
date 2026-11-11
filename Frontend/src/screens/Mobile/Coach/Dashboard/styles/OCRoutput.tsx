@@ -38,9 +38,9 @@ export const styles = StyleSheet.create({
   },
   headerTitleBeside: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: "900",
-    letterSpacing: 0.8,
+    letterSpacing: 1.0,
     fontFamily: fontBoldPlatform,
     flex: 1,
   },
