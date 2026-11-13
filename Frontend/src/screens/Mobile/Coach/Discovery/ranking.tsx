@@ -318,29 +318,29 @@ export const RankingPage: React.FC<RankingProps> = ({
         };
       case 'TIME_50M':
         return {
-          main: athlete.stats?.times_50m_free || '24.8s',
-          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
+          main: athlete.stats?.times_50m_free || (athlete as any).averages?.pb_50m_free || '-',
+          sub: athlete.efficiency_pct !== undefined && athlete.efficiency_pct !== null ? `${athlete.efficiency_pct}% EFF` : '-',
         };
       case 'TIME_100M':
         return {
-          main: athlete.stats?.times_100m || '10.9s',
-          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
+          main: athlete.stats?.times_100m || (athlete as any).averages?.pb_100m || (athlete as any).averages?.pb_100m_free || '-',
+          sub: athlete.efficiency_pct !== undefined && athlete.efficiency_pct !== null ? `${athlete.efficiency_pct}% EFF` : '-',
         };
       case 'TIME_200M':
         return {
-          main: athlete.stats?.times_200m || '22.4s',
-          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
+          main: athlete.stats?.times_200m || (athlete as any).averages?.pb_200m || '-',
+          sub: athlete.efficiency_pct !== undefined && athlete.efficiency_pct !== null ? `${athlete.efficiency_pct}% EFF` : '-',
         };
       case 'TIME_400M':
         return {
-          main: athlete.stats?.times_400m || '49.8s',
-          sub: `${athlete.efficiency_pct ?? 85}% EFF`,
+          main: athlete.stats?.times_400m || (athlete as any).averages?.pb_400m || '-',
+          sub: athlete.efficiency_pct !== undefined && athlete.efficiency_pct !== null ? `${athlete.efficiency_pct}% EFF` : '-',
         };
       case 'PER':
       default:
         return {
-          main: `${athlete.calculated_per ?? 25} PER`,
-          sub: `${athlete.efficiency_pct ?? 75}% EFF`,
+          main: athlete.calculated_per !== undefined && athlete.calculated_per !== null ? `${athlete.calculated_per} PER` : '-',
+          sub: athlete.efficiency_pct !== undefined && athlete.efficiency_pct !== null ? `${athlete.efficiency_pct}% EFF` : '-',
         };
     }
   };

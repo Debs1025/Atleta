@@ -484,9 +484,9 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                 </>
               );
             } else if (isTrack) {
-              const topSpeed = Number(displayAverages?.top_speed_kmh ?? 32.5);
-              const strideFreq = Number(displayAverages?.stride_freq_hz ?? 4.2);
-              const winRate = Number(displayAverages?.win_rate_pct ?? 78);
+              const topSpeed = displayAverages?.top_speed_kmh;
+              const strideFreq = displayAverages?.stride_freq_hz;
+              const winRate = displayAverages?.win_rate_pct;
 
               return (
                 <>
@@ -494,12 +494,12 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                     <View style={styles.splitHeaderRow}>
                       <Text style={styles.avgLabel}>TOP SPEED (KM/H)</Text>
                     </View>
-                    <Text style={styles.splitValueText}>{topSpeed} km/h</Text>
+                    <Text style={styles.splitValueText}>{topSpeed !== undefined && topSpeed !== null ? `${topSpeed} km/h` : "-"}</Text>
                     <View style={styles.progressBarTrack}>
                       <View
                         style={[
                           styles.progressBarFill,
-                          { width: `${Math.min(100, (topSpeed / 45) * 100)}%` },
+                          { width: `${topSpeed ? Math.min(100, (Number(topSpeed) / 45) * 100) : 0}%` },
                         ]}
                       />
                     </View>
@@ -508,12 +508,12 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                   <View style={styles.splitCardHalfRow}>
                     <View style={styles.splitCardHalf}>
                       <Text style={styles.avgLabel}>STRIDE FREQ</Text>
-                      <Text style={styles.splitValueText}>{strideFreq} Hz</Text>
+                      <Text style={styles.splitValueText}>{strideFreq !== undefined && strideFreq !== null ? `${strideFreq} Hz` : "-"}</Text>
                       <View style={styles.progressBarTrack}>
                         <View
                           style={[
                             styles.progressBarFill,
-                            { width: `${Math.min(100, (strideFreq / 5) * 100)}%` },
+                            { width: `${strideFreq ? Math.min(100, (Number(strideFreq) / 5) * 100) : 0}%` },
                           ]}
                         />
                       </View>
@@ -521,12 +521,12 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 
                     <View style={styles.splitCardHalf}>
                       <Text style={styles.avgLabel}>WIN RATE %</Text>
-                      <Text style={styles.splitValueText}>{winRate}%</Text>
+                      <Text style={styles.splitValueText}>{winRate !== undefined && winRate !== null ? `${winRate}%` : "-"}</Text>
                       <View style={styles.progressBarTrack}>
                         <View
                           style={[
                             styles.progressBarFill,
-                            { width: `${Math.min(100, winRate)}%` },
+                            { width: `${winRate ? Math.min(100, Number(winRate)) : 0}%` },
                           ]}
                         />
                       </View>
@@ -535,9 +535,9 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                 </>
               );
             } else if (isSwim) {
-              const strokeEff = Number(displayAverages?.stroke_efficiency_pct ?? layout?.efficiency1?.value ?? 84);
-              const strokeRate = Number(displayAverages?.stroke_rate_pm ?? 46);
-              const swimIndex = Number(displayAverages?.swim_index_score ?? 780);
+              const strokeEff = displayAverages?.stroke_efficiency_pct ?? layout?.efficiency1?.value;
+              const strokeRate = displayAverages?.stroke_rate_pm ?? displayAverages?.stroke_rate;
+              const swimIndex = displayAverages?.swim_index_score;
 
               return (
                 <>
@@ -545,12 +545,12 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                     <View style={styles.splitHeaderRow}>
                       <Text style={styles.avgLabel}>STROKE EFFICIENCY %</Text>
                     </View>
-                    <Text style={styles.splitValueText}>{strokeEff}%</Text>
+                    <Text style={styles.splitValueText}>{strokeEff !== undefined && strokeEff !== null ? `${strokeEff}%` : "-"}</Text>
                     <View style={styles.progressBarTrack}>
                       <View
                         style={[
                           styles.progressBarFill,
-                          { width: `${Math.min(100, strokeEff)}%` },
+                          { width: `${strokeEff ? Math.min(100, Number(strokeEff)) : 0}%` },
                         ]}
                       />
                     </View>
@@ -559,12 +559,12 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                   <View style={styles.splitCardHalfRow}>
                     <View style={styles.splitCardHalf}>
                       <Text style={styles.avgLabel}>STROKE RATE</Text>
-                      <Text style={styles.splitValueText}>{strokeRate}/min</Text>
+                      <Text style={styles.splitValueText}>{strokeRate !== undefined && strokeRate !== null ? `${strokeRate}/min` : "-"}</Text>
                       <View style={styles.progressBarTrack}>
                         <View
                           style={[
                             styles.progressBarFill,
-                            { width: `${Math.min(100, (strokeRate / 60) * 100)}%` },
+                            { width: `${strokeRate ? Math.min(100, (Number(strokeRate) / 60) * 100) : 0}%` },
                           ]}
                         />
                       </View>
@@ -572,12 +572,12 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 
                     <View style={styles.splitCardHalf}>
                       <Text style={styles.avgLabel}>SWIM INDEX</Text>
-                      <Text style={styles.splitValueText}>{swimIndex}</Text>
+                      <Text style={styles.splitValueText}>{swimIndex !== undefined && swimIndex !== null ? String(swimIndex) : "-"}</Text>
                       <View style={styles.progressBarTrack}>
                         <View
                           style={[
                             styles.progressBarFill,
-                            { width: `${Math.min(100, (swimIndex / 1000) * 100)}%` },
+                            { width: `${swimIndex ? Math.min(100, (Number(swimIndex) / 1000) * 100) : 0}%` },
                           ]}
                         />
                       </View>

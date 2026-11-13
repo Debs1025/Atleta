@@ -125,7 +125,7 @@ export const MetricProgressionModal: React.FC<MetricProgressionModalProps> = ({
     return "100m Dash";
   }, [propEventTitle, metricKey, sportCategory]);
 
-  const buildFallbackProgression = useCallback(
+  const createEmptyProgression = useCallback(
     (
       athId: string,
       athName: string,
@@ -133,146 +133,19 @@ export const MetricProgressionModal: React.FC<MetricProgressionModalProps> = ({
       key: string,
       title: string,
       mark: string
-    ): MetricProgressionResponse => {
-      const isDistance = title.toLowerCase().includes("jump") || title.toLowerCase().includes("throw");
-      const isLowerBetter = !isDistance;
-      const unit = isDistance ? "m" : "s";
-
-      let baseVal = 0;
-      const match = mark.match(/(\d+(\.\d+)?)/);
-      if (match) {
-        if (mark.includes(":") && mark.split(":").length === 2) {
-          const parts = mark.split(":");
-          baseVal = parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-        } else {
-          baseVal = parseFloat(match[1]);
-        }
-      }
-      if (!baseVal || isNaN(baseVal) || baseVal <= 0) {
-        baseVal = key.includes("100m") ? 54.10 : key.includes("200m") ? 118.20 : 24.82;
-      }
-
-      const now = Date.now();
-      const dayMs = 24 * 60 * 60 * 1000;
-
-      const milestones = isLowerBetter
-        ? [
-            { delta: 0, daysAgo: 2, meet: "2026 Inter-School Championship", loc: "Metro Naga Sports Complex", rank: 1 },
-            { delta: 0.35, daysAgo: 16, meet: "UAAP Regional Qualifiers", loc: "PhilSports Complex", rank: 2 },
-            { delta: 0.72, daysAgo: 38, meet: "National Open Invitationals", loc: "Rizal Memorial Stadium", rank: 2 },
-            { delta: 1.15, daysAgo: 65, meet: "Pre-Season Time Trials", loc: "University Athletics Oval", rank: 3 },
-          ]
-        : [
-            { delta: 0, daysAgo: 2, meet: "2026 Inter-School Championship", loc: "Metro Naga Sports Complex", rank: 1 },
-            { delta: -0.15, daysAgo: 16, meet: "UAAP Regional Qualifiers", loc: "PhilSports Complex", rank: 2 },
-            { delta: -0.32, daysAgo: 38, meet: "National Open Invitationals", loc: "Rizal Memorial Stadium", rank: 3 },
-            { delta: -0.55, daysAgo: 65, meet: "Pre-Season Time Trials", loc: "University Athletics Oval", rank: 4 },
-          ];
-
-      const chronoRecords: MetricProgressionRecord[] = [];
-      milestones.forEach((m, idx) => {
-        const calculatedVal = Math.max(0.01, +(baseVal + m.delta).toFixed(2));
-        const recDate = new Date(now - m.daysAgo * dayMs);
-        const displayDate = recDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        let valFormatted = `${calculatedVal.toFixed(2)}${unit}`;
-        if (title === "200m Freestyle" && calculatedVal > 60) {
-          const mins = Math.floor(calculatedVal / 60);
-          const secs = (calculatedVal % 60).toFixed(2);
-          valFormatted = `${mins}:${secs.padStart(5, "0")}`;
-        }
-
-        chronoRecords.push({
-          id: `fb_hist_${idx}_${athId}`,
-          meet_name: m.meet,
-          location: m.loc,
-          date: recDate.toISOString(),
-          display_date: displayDate,
-          formatted_value: valFormatted,
-          numeric_value: calculatedVal,
-          unit,
-          is_lower_better: isLowerBetter,
-          rank: m.rank,
-          is_official: true,
-        });
-      });
-
-      chronoRecords.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      let bestNum = chronoRecords[0].numeric_value;
-      chronoRecords.forEach((r) => {
-        if (isLowerBetter) {
-          if (r.numeric_value <= bestNum) bestNum = r.numeric_value;
-        } else {
-          if (r.numeric_value >= bestNum) bestNum = r.numeric_value;
-        }
-      });
-
-      const calculated: MetricProgressionRecord[] = [];
-      for (let i = 0; i < chronoRecords.length; i++) {
-        const cur = chronoRecords[i];
-        const prev = i > 0 ? chronoRecords[i - 1] : null;
-        let delta = 0;
-        let isImprovement = false;
-        let deltaDisplay = "Baseline";
-
-        if (prev) {
-          delta = +(cur.numeric_value - prev.numeric_value).toFixed(2);
-          if (isLowerBetter) {
-            if (delta < 0) {
-              isImprovement = true;
-              deltaDisplay = `${Math.abs(delta).toFixed(2)}${unit} Improved`;
-            } else if (delta > 0) {
-              isImprovement = false;
-              deltaDisplay = `+${delta.toFixed(2)}${unit}`;
-            } else {
-              deltaDisplay = `0.00${unit}`;
-            }
-          } else {
-            if (delta > 0) {
-              isImprovement = true;
-              deltaDisplay = `+${delta.toFixed(2)}${unit} Improved`;
-            } else if (delta < 0) {
-              isImprovement = false;
-              deltaDisplay = `${delta.toFixed(2)}${unit}`;
-            } else {
-              deltaDisplay = `0.00${unit}`;
-            }
-          }
-        }
-
-        const isPB = cur.numeric_value === bestNum;
-        calculated.push({
-          ...cur,
-          delta_from_previous: prev ? delta : undefined,
-          delta_display: deltaDisplay,
-          is_improvement: isImprovement,
-          is_personal_best: isPB,
-        });
-      }
-
-      const sparklinePoints = calculated.map((r, idx) => ({
-        x: idx,
-        y: r.numeric_value,
-        label: r.display_date,
-        value: r.numeric_value,
-      }));
-
-      const displayList = [...calculated].reverse();
-
-      return {
-        athlete_id: athId,
-        athlete_name: athName,
-        sport,
-        metric_key: key,
-        event_title: title,
-        current_mark: displayList[0]?.formatted_value || mark,
-        personal_best: displayList.find((r) => r.is_personal_best)?.formatted_value || mark,
-        is_lower_better: isLowerBetter,
-        total_records: displayList.length,
-        records: displayList,
-        sparkline_points: sparklinePoints,
-      };
-    },
+    ): MetricProgressionResponse => ({
+      athlete_id: athId,
+      athlete_name: athName,
+      sport,
+      metric_key: key,
+      event_title: title,
+      current_mark: mark && mark !== "N/A" ? mark : "-",
+      personal_best: mark && mark !== "N/A" ? mark : "-",
+      is_lower_better: true,
+      total_records: 0,
+      records: [],
+      sparkline_points: [],
+    }),
     []
   );
 
@@ -292,19 +165,19 @@ export const MetricProgressionModal: React.FC<MetricProgressionModalProps> = ({
       )}&sport=${encodeURIComponent(sportCategory || "")}`;
 
       const res: any = await requestAuthenticatedJson(url, "GET");
-      if (res && Array.isArray(res.records) && res.records.length > 0) {
+      if (res && Array.isArray(res.records)) {
         setData(res);
       } else {
-        setData(buildFallbackProgression(athleteId, athleteName, sportCategory, metricKey, displayTitle, initialMark));
+        setData(createEmptyProgression(athleteId, athleteName, sportCategory, metricKey, displayTitle, initialMark));
       }
     } catch (err) {
-      console.warn("MetricProgressionModal loadData error, using progression fallback:", err);
-      setData(buildFallbackProgression(athleteId, athleteName, sportCategory, metricKey, displayTitle, initialMark));
+      console.warn("MetricProgressionModal loadData error:", err);
+      setData(createEmptyProgression(athleteId, athleteName, sportCategory, metricKey, displayTitle, initialMark));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [visible, athleteId, metricKey, sportCategory, displayTitle, initialMark, athleteName, buildFallbackProgression]);
+  }, [visible, athleteId, metricKey, sportCategory, displayTitle, initialMark, athleteName, createEmptyProgression]);
 
   useEffect(() => {
     if (visible) {

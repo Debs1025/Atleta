@@ -565,16 +565,17 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                     <Text style={styles.statValue}>
                       {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
                         ? String(athlete.averages.podiums_count)
-                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "0")}
+                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "-")}
                     </Text>
                   </View>
                 </>
               );
             } else if (sc.includes("VOLLEY")) {
-              const kills = athlete.averages?.kills ?? athlete.averages?.spike_kills ?? athlete.stats?.kills ?? athlete.stats?.spike_kills ?? 0;
-              const blocks = athlete.averages?.blocks ?? athlete.averages?.block_points ?? athlete.stats?.blocks ?? athlete.stats?.block_points ?? 0;
-              const aces = athlete.averages?.aces ?? athlete.averages?.service_aces ?? athlete.stats?.aces ?? athlete.stats?.service_aces ?? 0;
-              const digs = athlete.averages?.digs ?? athlete.stats?.digs ?? 0;
+              const hasVolleyStats = athlete.averages?.kills !== undefined || athlete.stats?.kills !== undefined || (athlete.averages?.games_played || athlete.stats?.games_played || 0) > 0;
+              const kills = athlete.averages?.kills ?? athlete.averages?.spike_kills ?? athlete.stats?.kills ?? athlete.stats?.spike_kills ?? (hasVolleyStats ? 0 : "-");
+              const blocks = athlete.averages?.blocks ?? athlete.averages?.block_points ?? athlete.stats?.blocks ?? athlete.stats?.block_points ?? (hasVolleyStats ? 0 : "-");
+              const aces = athlete.averages?.aces ?? athlete.averages?.service_aces ?? athlete.stats?.aces ?? athlete.stats?.service_aces ?? (hasVolleyStats ? 0 : "-");
+              const digs = athlete.averages?.digs ?? athlete.stats?.digs ?? (hasVolleyStats ? 0 : "-");
               return (
                 <>
                   <View style={styles.statCard}>
@@ -596,19 +597,20 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                 </>
               );
             } else if (sc.includes("PICKLE")) {
+              const hasPickleStats = (athlete.averages?.games_played || athlete.stats?.games_played || 0) > 0 || athlete.averages?.points_scored !== undefined;
               return (
                 <>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>POINTS</Text>
-                    <Text style={styles.statValue}>{athlete.averages?.points_scored ?? athlete.stats?.points_scored ?? 0}</Text>
+                    <Text style={styles.statValue}>{hasPickleStats ? (athlete.averages?.points_scored ?? athlete.stats?.points_scored ?? 0) : "-"}</Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>ACES</Text>
-                    <Text style={styles.statValue}>{athlete.averages?.aces ?? athlete.stats?.aces ?? 0}</Text>
+                    <Text style={styles.statValue}>{hasPickleStats ? (athlete.averages?.aces ?? athlete.stats?.aces ?? 0) : "-"}</Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>DINKS</Text>
-                    <Text style={styles.statValue}>{athlete.averages?.dinks ?? athlete.stats?.dinks ?? 0}</Text>
+                    <Text style={styles.statValue}>{hasPickleStats ? (athlete.averages?.dinks ?? athlete.stats?.dinks ?? 0) : "-"}</Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>RATING</Text>
@@ -617,30 +619,31 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                 </>
               );
             } else if (sc.includes("BASKET")) {
+              const hasBasketStats = (athlete.averages?.games_played || athlete.stats?.games_played || 0) > 0 || athlete.averages?.ppg !== undefined;
               return (
                 <>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>PPG</Text>
                     <Text style={styles.statValue}>
-                      {typeof athlete.averages?.ppg === "number" ? athlete.averages.ppg : (athlete.averages?.ppg || "0")}
+                      {hasBasketStats ? (typeof athlete.averages?.ppg === "number" ? athlete.averages.ppg : (athlete.averages?.ppg || "0")) : "-"}
                     </Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>RPG</Text>
                     <Text style={styles.statValue}>
-                      {typeof athlete.averages?.rpg === "number" ? athlete.averages.rpg : (athlete.averages?.rpg || "0")}
+                      {hasBasketStats ? (typeof athlete.averages?.rpg === "number" ? athlete.averages.rpg : (athlete.averages?.rpg || "0")) : "-"}
                     </Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>APG</Text>
                     <Text style={styles.statValue}>
-                      {typeof athlete.averages?.apg === "number" ? athlete.averages.apg : (athlete.averages?.apg || "0")}
+                      {hasBasketStats ? (typeof athlete.averages?.apg === "number" ? athlete.averages.apg : (athlete.averages?.apg || "0")) : "-"}
                     </Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>PER</Text>
                     <Text style={styles.statValue}>
-                      {calculateDynamicPER(athlete.averages)}
+                      {hasBasketStats ? calculateDynamicPER(athlete.averages) : "-"}
                     </Text>
                   </View>
                 </>

@@ -228,12 +228,12 @@ export function calculateDynamicRadarCompetencies(athlete: any): RadarCompetenci
   const reaction = Number(averages.reaction_time_s ?? stats.reaction_time_s ?? 0);
   const swimIndex = Number(averages.swim_index_score ?? stats.swim_index_score ?? 0);
 
-  const baseSpeed = finishTime > 0 ? Math.round(98 - Math.max(0, (finishTime / 1000 - 10.5) * 6)) : 75;
+  const baseSpeed = finishTime > 0 ? Math.round(98 - Math.max(0, (finishTime / 1000 - 10.5) * 6)) : (swimIndex > 0 ? Math.min(99, Math.round(swimIndex / 10)) : 0);
   return {
-    speed: Math.max(50, Math.min(99, baseSpeed)),
-    power: Math.max(50, Math.min(99, Math.round(baseSpeed * 0.95))),
-    agility: Math.max(50, Math.min(99, reaction > 0 ? Math.round(99 - (reaction - 0.12) * 100) : baseSpeed)),
-    iq: Math.max(50, Math.min(99, Math.round(baseSpeed * 0.92))),
-    tech: Math.max(50, Math.min(99, swimIndex > 0 ? swimIndex : Math.round(baseSpeed * 0.94))),
+    speed: Math.max(0, Math.min(99, baseSpeed)),
+    power: Math.max(0, Math.min(99, Math.round(baseSpeed * 0.95))),
+    agility: Math.max(0, Math.min(99, reaction > 0 ? Math.round(99 - (reaction - 0.12) * 100) : baseSpeed)),
+    iq: Math.max(0, Math.min(99, Math.round(baseSpeed * 0.92))),
+    tech: Math.max(0, Math.min(99, swimIndex > 0 ? Math.min(99, Math.round(swimIndex / 10)) : Math.round(baseSpeed * 0.94))),
   };
 }

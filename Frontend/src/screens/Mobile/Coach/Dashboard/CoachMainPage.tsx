@@ -472,7 +472,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       tpg = storedTpg;
     }
 
-    const wins = Number(a.averages?.wins ?? a.stats?.wins ?? (gp > 0 ? Math.round(gp * 0.75) : 0));
+    const wins = Number(a.averages?.wins ?? a.stats?.wins ?? 0);
     if (!per && ppg > 0) {
       per = Math.round((ppg * 1.2 + rpg * 1.0 + apg * 1.5) * 10) / 10;
     }
@@ -570,14 +570,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         ft_percentage: Number(a.averages?.ft_percentage ?? a.stats?.ft_pct ?? 0),
       },
       workload_analytics: a.workload || a.workload_analytics || {
-        target_7day_effort_pts: gp > 0 ? 450 : 0,
-        current_7day_acute_load: gp > 0 ? 400 : 0,
-        current_28day_chronic_load: gp > 0 ? 380 : 0,
-        calculated_acwr: gp > 0 ? 1.05 : 0,
-        workout_score: gp > 0 ? Math.min(99, Math.max(50, rating)) : 0,
-        fatigue_meter: gp > 0 ? 25 : 0,
-        routine_score: gp > 0 ? Math.min(99, Math.max(50, rating - 5)) : 0,
-        body_stress_pts: gp > 0 ? 20 : 0,
+        target_7day_effort_pts: 0,
+        current_7day_acute_load: 0,
+        current_28day_chronic_load: 0,
+        calculated_acwr: 0,
+        workout_score: 0,
+        fatigue_meter: 0,
+        routine_score: 0,
+        body_stress_pts: 0,
       },
       radar_competencies: dynamicCompetencies || a.radar_competencies || undefined,
       scoring_trends_last_10: trends,

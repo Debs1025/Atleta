@@ -257,9 +257,9 @@ export const AllStats: React.FC<AllStatsProps> = ({
                     SPRINT EFFICIENCY RATING (+-)
                   </Text>
                   <Text style={styles.advancedValue}>
-                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null
+                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null && athlete.averages?.per_score > 0
                       ? String(athlete.averages.per_score)
-                      : "0.0"}
+                      : "-"}
                   </Text>
                 </View>
 
@@ -268,7 +268,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                   <Text style={styles.advancedValue}>
                     {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
                       ? String(athlete?.averages?.wins)
-                      : "0"}
+                      : "-"}
                   </Text>
                 </View>
               </>
@@ -360,9 +360,9 @@ export const AllStats: React.FC<AllStatsProps> = ({
                     SWIMMING PERFORMANCE INDEX (+-)
                   </Text>
                   <Text style={styles.advancedValue}>
-                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null
+                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null && athlete.averages?.per_score > 0
                       ? String(athlete.averages.per_score)
-                      : "0.0"}
+                      : "-"}
                   </Text>
                 </View>
 
@@ -371,7 +371,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                   <Text style={styles.advancedValue}>
                     {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
                       ? String(athlete?.averages?.wins)
-                      : "0"}
+                      : "-"}
                   </Text>
                 </View>
               </>
