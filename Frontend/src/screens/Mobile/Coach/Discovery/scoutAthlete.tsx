@@ -300,8 +300,8 @@ export const ScoutAthlete: React.FC<ScoutAthleteProps> = ({ onBack, athlete }) =
                     <Text style={styles.analyticLabel}>200M</Text>
                   </View>
                   <View style={styles.analyticBox}>
-                    <Text style={styles.analyticValue}>{ca.averages?.swim_index_score ? String(ca.averages.swim_index_score) : (ca.stats?.swim_index ? String(ca.stats.swim_index) : '-')}</Text>
-                    <Text style={styles.analyticLabel}>SWIM INDEX</Text>
+                    <Text style={styles.analyticValue}>{ca.averages?.wins !== undefined ? String(ca.averages.wins) : (ca.stats?.wins !== undefined ? String(ca.stats.wins) : '-')}</Text>
+                    <Text style={styles.analyticLabel}>WINS</Text>
                   </View>
                   <View style={styles.analyticBox}>
                     <Text style={styles.analyticValue}>{ca.averages?.podiums_count !== undefined ? String(ca.averages.podiums_count) : (ca.stats?.podiums !== undefined ? String(ca.stats.podiums) : '0')}</Text>

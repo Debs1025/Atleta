@@ -21,6 +21,7 @@ import Svg, {
 import { collection, getDocs, limit, query } from "firebase/firestore";
 import { db } from "../../../services/firebaseClient";
 import { requestAuthenticatedJson } from "../Authentication/authShared";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -82,10 +83,20 @@ const SWIMMING_EVENTS: EventFilterOption[] = [
   { key: "50m_free", label: "50m Freestyle", shortLabel: "50M FREE", iconName: "water-outline" },
   { key: "100m_free", label: "100m Freestyle", shortLabel: "100M FREE", iconName: "water-outline" },
   { key: "200m_free", label: "200m Freestyle", shortLabel: "200M FREE", iconName: "water-outline" },
+  { key: "400m_free", label: "400m Freestyle", shortLabel: "400M FREE", iconName: "water-outline" },
+  { key: "800m_free", label: "800m Freestyle", shortLabel: "800M FREE", iconName: "water-outline" },
+  { key: "1500m_free", label: "1500m Freestyle", shortLabel: "1500M FREE", iconName: "water-outline" },
+  { key: "50m_back", label: "50m Backstroke", shortLabel: "50M BACK", iconName: "water-outline" },
   { key: "100m_back", label: "100m Backstroke", shortLabel: "100M BACK", iconName: "water-outline" },
-  { key: "100m_fly", label: "100m Butterfly", shortLabel: "100M FLY", iconName: "flame-outline" },
+  { key: "200m_back", label: "200m Backstroke", shortLabel: "200M BACK", iconName: "water-outline" },
+  { key: "50m_breast", label: "50m Breaststroke", shortLabel: "50M BREAST", iconName: "shield-outline" },
   { key: "100m_breast", label: "100m Breaststroke", shortLabel: "100M BREAST", iconName: "shield-outline" },
+  { key: "200m_breast", label: "200m Breaststroke", shortLabel: "200M BREAST", iconName: "shield-outline" },
+  { key: "50m_fly", label: "50m Butterfly", shortLabel: "50M FLY", iconName: "flame-outline" },
+  { key: "100m_fly", label: "100m Butterfly", shortLabel: "100M FLY", iconName: "flame-outline" },
+  { key: "200m_fly", label: "200m Butterfly", shortLabel: "200M FLY", iconName: "flame-outline" },
   { key: "200m_im", label: "200m Medley (IM)", shortLabel: "200M IM", iconName: "star-outline" },
+  { key: "400m_im", label: "400m Medley (IM)", shortLabel: "400M IM", iconName: "star-outline" },
   { key: "flip_turn", label: "Flip Turn Split", shortLabel: "FLIP TURN", iconName: "refresh-outline" },
 ];
 
@@ -126,13 +137,20 @@ export function isTargetEvent(eventStr: string, key: string): boolean {
   const e = eventStr.toUpperCase();
   const k = key.toLowerCase();
 
+  const cleanE = e.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanK = k.replace(/[^a-z0-9]/g, '');
+  if (cleanE === cleanK || cleanE.includes(cleanK) || cleanK.includes(cleanE)) return true;
+
   if (k === "50m_free") return e.includes("50") && (e.includes("FREE") || e.includes("SWIM"));
   if (k === "100m_free") return e.includes("100") && (e.includes("FREE") || e.includes("SWIM"));
   if (k === "200m_free") return e.includes("200") && (e.includes("FREE") || e.includes("SWIM"));
-  if (k === "100m_back") return e.includes("BACK");
-  if (k === "100m_fly") return e.includes("FLY") || e.includes("BUTTERFLY");
-  if (k === "100m_breast") return e.includes("BREAST");
-  if (k === "200m_im") return e.includes("IM") || e.includes("MEDLEY");
+  if (k === "400m_free") return e.includes("400") && (e.includes("FREE") || e.includes("SWIM"));
+  if (k === "800m_free") return e.includes("800") && (e.includes("FREE") || e.includes("SWIM"));
+  if (k === "1500m_free") return e.includes("1500") && (e.includes("FREE") || e.includes("SWIM"));
+  if (k.includes("back")) return e.includes("BACK") && (!k.includes("50") || e.includes("50")) && (!k.includes("100") || e.includes("100")) && (!k.includes("200") || e.includes("200"));
+  if (k.includes("fly")) return (e.includes("FLY") || e.includes("BUTTERFLY")) && (!k.includes("50") || e.includes("50")) && (!k.includes("100") || e.includes("100")) && (!k.includes("200") || e.includes("200"));
+  if (k.includes("breast")) return e.includes("BREAST") && (!k.includes("50") || e.includes("50")) && (!k.includes("100") || e.includes("100")) && (!k.includes("200") || e.includes("200"));
+  if (k.includes("im")) return (e.includes("IM") || e.includes("MEDLEY")) && (!k.includes("200") || e.includes("200")) && (!k.includes("400") || e.includes("400"));
   if (k === "flip_turn") return e.includes("FLIP") || e.includes("TURN");
 
   if (k === "100m") return e.includes("100") && (e.includes("DASH") || e.includes("MD") || e.includes("RUN") || e.includes("SPRINT") || (!e.includes("FREE") && !e.includes("SWIM")));
@@ -140,7 +158,10 @@ export function isTargetEvent(eventStr: string, key: string): boolean {
   if (k === "400m") return e.includes("400") && (e.includes("DASH") || e.includes("MD") || e.includes("RUN"));
   if (k === "800m") return e.includes("800");
   if (k === "1500m") return e.includes("1500");
+  if (k === "pole_vault") return e.includes("POLE") || e.includes("VAULT");
+  if (k === "high_jump") return e.includes("HIGH") && e.includes("JUMP");
   if (k === "long_jump") return e.includes("LONG") && e.includes("JUMP");
+  if (k === "triple_jump") return e.includes("TRIPLE") && e.includes("JUMP");
   if (k === "shot_put") return e.includes("SHOT") && e.includes("PUT");
   if (k === "discus") return e.includes("DISCUS");
   if (k === "javelin") return e.includes("JAVELIN");
@@ -160,10 +181,11 @@ export function matchesAthlete(p: any, targetId: string, targetName: string): bo
     return true;
   }
 
-  const pName = (p.player_name || p.name || "").toLowerCase().trim();
+  const pName = (p.player_name || p.name || p.full_name || p.athlete_name || "").toLowerCase().trim();
   const tName = (targetName || "").toLowerCase().trim();
   if (pName && tName) {
     if (pName === tName) return true;
+    if (pName.includes(tName) || tName.includes(pName)) return true;
     const pParts = pName.split(/\s+/).filter(Boolean);
     const tParts = tName.split(/\s+/).filter(Boolean);
     const pLast = pParts[pParts.length - 1];
@@ -181,27 +203,49 @@ export function resolveBaselinePersonalBest(
   avg: any = {},
   stats: any = {}
 ): string {
+  const combined = { ...stats, ...avg };
+  const cleanKey = eventKey.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+  const directKeys = [
+    `pb_${cleanKey}`,
+    `avg_${cleanKey}`,
+    `times_${cleanKey}`,
+    cleanKey,
+    `pb_${eventKey}`,
+  ];
+  for (const k of directKeys) {
+    if (combined[k] && combined[k] !== "-" && combined[k] !== "N/A" && combined[k] !== "00:00.00") {
+      return String(combined[k]);
+    }
+  }
+
   const isSwim = sport.toUpperCase().includes("SWIM");
   if (isSwim) {
-    if (eventKey === "50m_free") return avg.pb_50m_free || stats.pb_50m_free || stats.times_50m_free || "N/A";
-    if (eventKey === "100m_free") return avg.pb_100m_free || avg.avg_100m_free || stats.times_100m || "N/A";
-    if (eventKey === "200m_free") return avg.avg_200m_free || avg.pb_200m || stats.times_200m || "N/A";
-    if (eventKey === "100m_back") return avg.pb_100m_back || stats.times_100m_back || "N/A";
-    if (eventKey === "100m_fly") return avg.pb_100m_fly || stats.times_100m_fly || "N/A";
-    if (eventKey === "100m_breast") return avg.pb_100m_breast || stats.times_100m_breast || "N/A";
-    if (eventKey === "200m_im") return avg.pb_200m_im || stats.times_200m_im || "N/A";
-    if (eventKey === "flip_turn") return avg.flip_turn_s || "N/A";
+    if (cleanKey.includes("50") && cleanKey.includes("free")) return combined.pb_50m_free || combined.times_50m_free || "N/A";
+    if (cleanKey.includes("100") && cleanKey.includes("free")) return combined.pb_100m_free || combined.avg_100m_free || "N/A";
+    if (cleanKey.includes("200") && cleanKey.includes("free")) return combined.avg_200m_free || combined.pb_200m || "N/A";
+    if (cleanKey.includes("400") && cleanKey.includes("free")) return combined.pb_400m_free || "N/A";
+    if (cleanKey.includes("800") && cleanKey.includes("free")) return combined.pb_800m_free || "N/A";
+    if (cleanKey.includes("1500") && cleanKey.includes("free")) return combined.pb_1500m_free || "N/A";
+    if (cleanKey.includes("back")) return combined.pb_100m_back || combined.times_100m_back || combined.pb_50m_back || combined.pb_200m_back || "N/A";
+    if (cleanKey.includes("fly")) return combined.pb_100m_fly || combined.times_100m_fly || combined.pb_50m_fly || combined.pb_200m_fly || "N/A";
+    if (cleanKey.includes("breast")) return combined.pb_100m_breast || combined.times_100m_breast || combined.pb_50m_breast || combined.pb_200m_breast || "N/A";
+    if (cleanKey.includes("im")) return combined.pb_200m_im || combined.times_200m_im || combined.pb_400m_im || "N/A";
+    if (cleanKey.includes("turn")) return combined.flip_turn_s || "N/A";
   } else {
-    if (eventKey === "100m") return avg.pb_100m || avg.avg_100m || stats.times_100m || "N/A";
-    if (eventKey === "200m") return avg.pb_200m || avg.avg_200m || stats.times_200m || "N/A";
-    if (eventKey === "400m") return avg.pb_400m || stats.times_400m || "N/A";
-    if (eventKey === "800m") return avg.pb_800m || stats.times_800m || "N/A";
-    if (eventKey === "1500m") return avg.pb_1500m || stats.times_1500m || "N/A";
-    if (eventKey === "long_jump") return avg.pb_long_jump || stats.long_jump || "N/A";
-    if (eventKey === "shot_put") return avg.pb_shot_put || stats.shot_put || "N/A";
-    if (eventKey === "discus") return avg.pb_discus || stats.discus || "N/A";
-    if (eventKey === "javelin") return avg.pb_javelin || stats.javelin || "N/A";
-    if (eventKey === "reaction") return avg.reaction_time_s || stats.reaction_time || "N/A";
+    if (cleanKey.includes("100")) return combined.pb_100m || combined.avg_100m || combined.times_100m || "N/A";
+    if (cleanKey.includes("200")) return combined.pb_200m || combined.avg_200m || combined.times_200m || "N/A";
+    if (cleanKey.includes("400")) return combined.pb_400m || combined.times_400m || "N/A";
+    if (cleanKey.includes("800")) return combined.pb_800m || combined.times_800m || "N/A";
+    if (cleanKey.includes("1500")) return combined.pb_1500m || combined.times_1500m || "N/A";
+    if (cleanKey.includes("vault")) return combined.pb_pole_vault || combined.pole_vault || "N/A";
+    if (cleanKey.includes("high") && cleanKey.includes("jump")) return combined.pb_high_jump || combined.high_jump || "N/A";
+    if (cleanKey.includes("long") && cleanKey.includes("jump")) return combined.pb_long_jump || combined.long_jump || "N/A";
+    if (cleanKey.includes("triple")) return combined.pb_triple_jump || combined.triple_jump || "N/A";
+    if (cleanKey.includes("shot")) return combined.pb_shot_put || combined.shot_put || "N/A";
+    if (cleanKey.includes("discus")) return combined.pb_discus || combined.discus || "N/A";
+    if (cleanKey.includes("javelin")) return combined.pb_javelin || combined.javelin || "N/A";
+    if (cleanKey.includes("reaction")) return combined.reaction_time_s || combined.reaction_time || "N/A";
   }
   return "N/A";
 }
@@ -292,97 +336,146 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
       const extracted: EventProgressionRecord[] = [];
       const seenMatchIds = new Set<string>();
 
-      // 1. Process matches passed via props
-      if (Array.isArray(matches) && matches.length > 0) {
-        matches.forEach((m: any) => {
-          const mId = m.match_id || m.id;
-          if (mId && seenMatchIds.has(mId)) return;
-          if (mId) seenMatchIds.add(mId);
+      const processSingleMatch = (m: any) => {
+        if (!m) return;
+        const mId = m.match_id || m.id || m.metric_id;
+        if (mId && seenMatchIds.has(mId)) return;
 
-          const playerStats = Array.isArray(m.player_stats) ? m.player_stats : [];
-          playerStats.forEach((p: any) => {
-            if (matchesAthlete(p, athleteId, athleteName)) {
-              const rowEvent = p.event || p.event_name || m.event_or_opponent || m.event_name || "";
-              if (isTargetEvent(rowEvent, selectedEventKey)) {
-                const rawVal = p.time || p.finish_time || p.time_or_distance || p.distance || "";
-                const numVal = parseToNumeric(rawVal);
-                if (numVal > 0) {
-                  const mDate = m.match_date || m.date || m.timestamp || m.full_date || new Date().toISOString();
-                  const d = new Date(mDate);
-                  const displayDate = !isNaN(d.getTime())
-                    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                    : "Official Meet";
+        // Case A: The item is an individual Performance_Metrics record or player's match_history doc
+        const isIndividualMetric =
+          Boolean(m.metric_id) ||
+          (Boolean(m.athlete_id) && matchesAthlete(m, athleteId, athleteName) && Boolean(m.finish_time || m.time || m.mark || m.formatted_time));
 
-                  extracted.push({
-                    id: `${mId}_${p.athlete_id || p.index || Math.random().toString(36).substring(2, 6)}`,
-                    meet_name: m.custom_game_title || m.game_name || m.match_name || m.event_or_opponent || "Official Match",
-                    location: m.location || "Official Sports Complex",
-                    date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
-                    display_date: displayDate,
-                    formatted_value: String(rawVal).trim().endsWith(unit) ? String(rawVal).trim() : `${rawVal}${unit}`,
-                    numeric_value: numVal,
-                    unit,
-                    is_lower_better: isLowerBetter,
-                    rank: p.rank || p.place || 1,
-                    qts: p.qts || undefined,
-                    is_official: m.is_official !== false,
-                    notes: p.notes || undefined,
-                  });
-                }
+        if (isIndividualMetric) {
+          const rowEvent = m.event_key || m.event || m.event_name || m.position || m.meet_name || "";
+          if (isTargetEvent(rowEvent, selectedEventKey)) {
+            const rawVal = isDistance
+              ? (m.mark || m.distance || m.distance_meters || m.time_or_distance)
+              : (m.finish_time || m.time || m.formatted_time || m.time_or_distance);
+            const numVal = parseToNumeric(rawVal);
+            if (numVal > 0) {
+              if (mId) seenMatchIds.add(mId);
+              const mDate = m.match_date || m.date || m.timestamp || m.created_at || new Date().toISOString();
+              const d = new Date(mDate);
+              const displayDate = !isNaN(d.getTime())
+                ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                : "Official Meet";
+
+              extracted.push({
+                id: `${mId || m.metric_id}_${athleteId}`,
+                meet_name: m.meet_name || m.custom_game_title || m.game_name || m.match_name || "Official Meet",
+                location: m.location || "Official Sports Complex",
+                date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
+                display_date: displayDate,
+                formatted_value: String(rawVal).trim().endsWith(unit) ? String(rawVal).trim() : `${rawVal}${unit}`,
+                numeric_value: numVal,
+                unit,
+                is_lower_better: isLowerBetter,
+                rank: m.rank || 1,
+                qts: m.qts || undefined,
+                is_official: m.is_official !== false,
+                notes: m.notes || undefined,
+              });
+              return;
+            }
+          }
+        }
+
+        // Case B: The item is a full match scorecard containing player_stats / playerStats
+        const playerStats = Array.isArray(m.player_stats) && m.player_stats.length > 0
+          ? m.player_stats
+          : (Array.isArray(m.playerStats) && m.playerStats.length > 0
+            ? m.playerStats
+            : (Array.isArray(m.players) ? m.players : []));
+
+        let hasMatchedPlayer = false;
+        playerStats.forEach((p: any) => {
+          if (matchesAthlete(p, athleteId, athleteName)) {
+            const rowEvent = p.event_key || p.event || p.event_name || p.position || m.event_or_opponent || m.event_name || "";
+            if (isTargetEvent(rowEvent, selectedEventKey)) {
+              const rawVal = isDistance
+                ? (p.mark || p.distance || p.distance_meters || p.time_or_distance)
+                : (p.finish_time || p.time || p.formatted_time || p.time_or_distance);
+              const numVal = parseToNumeric(rawVal);
+              if (numVal > 0) {
+                hasMatchedPlayer = true;
+                const mDate = m.match_date || m.date || m.timestamp || m.full_date || m.created_at || new Date().toISOString();
+                const d = new Date(mDate);
+                const displayDate = !isNaN(d.getTime())
+                  ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                  : "Official Meet";
+
+                extracted.push({
+                  id: `${mId}_${p.athlete_id || p.index || Math.random().toString(36).substring(2, 6)}`,
+                  meet_name: m.custom_game_title || m.game_name || m.match_name || m.event_or_opponent || "Official Match",
+                  location: m.location || "Official Sports Complex",
+                  date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
+                  display_date: displayDate,
+                  formatted_value: String(rawVal).trim().endsWith(unit) ? String(rawVal).trim() : `${rawVal}${unit}`,
+                  numeric_value: numVal,
+                  unit,
+                  is_lower_better: isLowerBetter,
+                  rank: p.rank || p.place || 1,
+                  qts: p.qts || undefined,
+                  is_official: m.is_official !== false,
+                  notes: p.notes || undefined,
+                });
               }
             }
-          });
+          }
         });
+
+        if (hasMatchedPlayer && mId) {
+          seenMatchIds.add(mId);
+        }
+      };
+
+      // 1. Process matches passed via props
+      if (Array.isArray(matches) && matches.length > 0) {
+        matches.forEach(processSingleMatch);
       }
 
-      // 2. Query Firestore Match_Logs collection directly
+      // 2. Query local offline matches cache (atleta_offline_matches_cache)
+      try {
+        const localMatchesRaw = await AsyncStorage.getItem("atleta_offline_matches_cache");
+        if (localMatchesRaw) {
+          const localMatches = JSON.parse(localMatchesRaw);
+          if (Array.isArray(localMatches)) {
+            localMatches.forEach(processSingleMatch);
+          }
+        }
+      } catch (_) {}
+
+      // 3. Query coach dashboard cache (coach_dashboard_cache)
+      try {
+        const coachCacheRaw = await AsyncStorage.getItem("coach_dashboard_cache");
+        if (coachCacheRaw) {
+          const coachCache = JSON.parse(coachCacheRaw);
+          if (Array.isArray(coachCache.matchHistoryList)) {
+            coachCache.matchHistoryList.forEach(processSingleMatch);
+          }
+        }
+      } catch (_) {}
+
+      // 4. Query Firestore Match_Logs collection
       try {
         const snap = await getDocs(query(collection(db, "Match_Logs"), limit(60)));
         if (snap && !snap.empty) {
           snap.forEach((doc) => {
-            const m = doc.data();
-            const mId = doc.id;
-            if (seenMatchIds.has(mId)) return;
-            seenMatchIds.add(mId);
-
-            const playerStats = Array.isArray(m.player_stats) ? m.player_stats : [];
-            playerStats.forEach((p: any) => {
-              if (matchesAthlete(p, athleteId, athleteName)) {
-                const rowEvent = p.event || p.event_name || m.event_name || m.custom_game_title || "";
-                if (isTargetEvent(rowEvent, selectedEventKey)) {
-                  const rawVal = p.time || p.finish_time || p.time_or_distance || p.distance || "";
-                  const numVal = parseToNumeric(rawVal);
-                  if (numVal > 0) {
-                    const mDate = m.match_date || m.timestamp || new Date().toISOString();
-                    const d = new Date(mDate);
-                    const displayDate = !isNaN(d.getTime())
-                      ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                      : "Official Meet";
-
-                    extracted.push({
-                      id: `${mId}_${p.athlete_id || p.index || Math.random().toString(36).substring(2, 6)}`,
-                      meet_name: m.custom_game_title || m.game_name || m.match_name || "Official Meet",
-                      location: m.location || "Official Sports Complex",
-                      date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
-                      display_date: displayDate,
-                      formatted_value: String(rawVal).trim().endsWith(unit) ? String(rawVal).trim() : `${rawVal}${unit}`,
-                      numeric_value: numVal,
-                      unit,
-                      is_lower_better: isLowerBetter,
-                      rank: p.rank || p.place || 1,
-                      qts: p.qts || undefined,
-                      is_official: m.is_official !== false,
-                      notes: p.notes || undefined,
-                    });
-                  }
-                }
-              }
-            });
+            processSingleMatch({ id: doc.id, ...doc.data() });
           });
         }
-      } catch (err) {
-        // Continue if offline or permission fails
-      }
+      } catch (_) {}
+
+      // 5. Query Firestore Performance_Metrics collection
+      try {
+        const metricsSnap = await getDocs(query(collection(db, "Performance_Metrics"), limit(60)));
+        if (metricsSnap && !metricsSnap.empty) {
+          metricsSnap.forEach((doc) => {
+            processSingleMatch({ id: doc.id, ...doc.data() });
+          });
+        }
+      } catch (_) {}
 
       // 3. Fallback to authenticated backend endpoint if Firestore client was blocked
       if (extracted.length === 0) {

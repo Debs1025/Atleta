@@ -825,15 +825,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const dateShort = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
               const dateFull = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
 
+              const playerStatsArr = Array.isArray(m.player_stats) && m.player_stats.length > 0
+                ? m.player_stats
+                : (Array.isArray(m.playerStats) ? m.playerStats : []);
+              const athIds = m.athlete_ids || m.roster_athletes || m.rosterAthletes || playerStatsArr.map((p: any) => p.athlete_id).filter(Boolean);
+
               return {
                 match_id: m.match_id || m.id || `match_${Date.now()}`,
                 team_id: m.team_id,
                 coach_id: m.coach_id,
                 coaching_staff: Array.isArray(m.coaching_staff) ? m.coaching_staff : (m.coach_id ? [m.coach_id] : []),
+                match_date: rawD || (d && !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString()),
                 date_formatted: dateShort,
                 full_date: dateFull,
                 date_group: "MATCH LOGS",
                 event_or_opponent: `${homeName} vs ${oppName}`,
+                game_name: m.game_name || m.match_name,
+                match_name: m.match_name || m.game_name,
+                location: m.location,
                 score_or_time_summary: hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS")),
                 sport_category: (m.sport_type || "BASKETBALL").toUpperCase(),
                 result_badge_text: m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS"),
@@ -842,7 +851,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 away_team: oppName,
                 home_score: hScore,
                 away_score: aScore,
-                player_stats: m.player_stats || [],
+                athlete_ids: athIds,
+                roster_athletes: athIds,
+                player_stats: playerStatsArr,
+                playerStats: playerStatsArr,
                 coach_notes: m.notes ? [m.notes] : ["Match recorded."],
               };
             });
@@ -2170,12 +2182,35 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         }
       }
 
+      const mappedPlayerStats = (savedPayload.player_stats || []).map((p: any) => ({
+        athlete_id: p.athlete_id || p.user_id || p.id,
+        user_id: p.user_id || p.athlete_id,
+        player_name: p.player_name || p.name || "",
+        name: p.player_name || p.name || "",
+        team: p.team_name || savedPayload.home_team_name || "ATLETA",
+        pts: Number(p.pts ?? p.stats?.points ?? 0),
+        ast: Number(p.ast ?? p.stats?.assists ?? 0),
+        reb: Number(p.reb ?? p.stats?.rebounds ?? 0),
+        time: p.finish_time || p.time || "",
+        finish_time: p.finish_time || p.time || "",
+        mark: p.mark || p.distance || "",
+        event: p.event || p.event_name || p.position || "",
+        event_name: p.event_name || p.event || p.position || "",
+        event_key: p.event_key || "",
+        position: p.position || p.event || "",
+        rank: p.rank || 1,
+        stats: p.stats || {},
+      }));
+
       const newMatchItem: MatchHistoryItem = {
         match_id: matchId,
+        match_date: savedPayload.match_date || new Date().toISOString(),
         date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
         date_group: "CURRENT LOGS",
         event_or_opponent: `${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"}`,
+        game_name: savedPayload.game_name || savedPayload.match_name,
+        match_name: savedPayload.match_name || savedPayload.game_name,
         score_or_time_summary: summaryDisplay,
         sport_category: sport,
         result_badge_text: gameResult,
@@ -2184,26 +2219,20 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         away_team: savedPayload.opponent_team_name || "OPPONENT",
         home_score: homePts,
         away_score: awayPts,
-        entries_count: Array.isArray(savedPayload.player_stats) ? savedPayload.player_stats.length : 1,
-        player_stats: (savedPayload.player_stats || []).map((p: any) => ({
-          name: p.player_name,
-          team: p.team_name || savedPayload.home_team_name || "ATLETA",
-          pts: Number(p.pts ?? p.stats?.points ?? 0),
-          ast: Number(p.ast ?? p.stats?.assists ?? 0),
-          reb: Number(p.reb ?? p.stats?.rebounds ?? 0),
-          time: p.finish_time || p.time || "",
-          mark: p.mark || p.distance || "",
-          event: p.event || p.event_name || "",
-        })),
-        leaderboard_entries: (savedPayload.player_stats || []).map((p: any, idx: number) => {
-          let scoreText = `${p.pts ?? p.stats?.points ?? 0} pts`;
+        athlete_ids: mappedPlayerStats.map((p: any) => p.athlete_id).filter(Boolean),
+        roster_athletes: mappedPlayerStats.map((p: any) => p.athlete_id).filter(Boolean),
+        entries_count: mappedPlayerStats.length > 0 ? mappedPlayerStats.length : 1,
+        player_stats: mappedPlayerStats,
+        playerStats: mappedPlayerStats,
+        leaderboard_entries: mappedPlayerStats.map((p: any, idx: number) => {
+          let scoreText = `${p.pts ?? 0} pts`;
           if (isSwim || isTrack) {
-            scoreText = p.mark || p.finish_time || p.time || (p.distance_meters ? `${p.distance_meters}m` : "Finished");
+            scoreText = p.mark || p.finish_time || p.time || "Finished";
           }
           return {
             rank: idx + 1,
-            name: p.player_name,
-            detail: p.event || p.event_name || p.team_name || savedPayload.home_team_name || "ATLETA",
+            name: p.player_name || p.name,
+            detail: p.event || p.event_name || p.team || savedPayload.home_team_name || "ATLETA",
             time_or_score: scoreText,
           };
         }),

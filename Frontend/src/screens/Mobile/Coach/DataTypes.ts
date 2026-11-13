@@ -326,25 +326,27 @@ export interface MatchHistoryItem {
   result_badge_text: string; // e.g. "RESULT W", "RESULT 1ST", "RESULT 3rd"
   score_or_time_summary: string; // e.g. "98 - 92", "54.12s - 1st Place", "23.45s - 1st Place"
   is_official: boolean;
+  match_date?: string;
   full_date?: string; // e.g. "May 24, 2024"
+  game_name?: string;
+  match_name?: string;
   game_type?: string; // e.g. "TUNE UP GAME", "FINALS"
+  location?: string;
   entries_count?: number;
   home_team?: string;
   away_team?: string;
   home_score?: number;
   away_score?: number;
+  athlete_ids?: string[];
+  roster_athletes?: string[];
   leaderboard_entries?: {
     rank: number;
     name: string;
     detail?: string;
     time_or_score: string;
   }[];
-  player_stats?: {
-    name: string;
-    pts: number;
-    ast: number;
-    reb: number;
-  }[];
+  player_stats?: any[];
+  playerStats?: any[];
   coach_notes?: string[];
 }
 

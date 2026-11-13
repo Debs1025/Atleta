@@ -557,8 +557,12 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                     <Text style={styles.statValue}>{athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m || "-"}</Text>
                   </View>
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>SWIM INDEX</Text>
-                    <Text style={styles.statValue}>{athlete.averages?.swim_index_score ? String(athlete.averages.swim_index_score) : (athlete.stats?.swim_index_score ? String(athlete.stats.swim_index_score) : "-")}</Text>
+                    <Text style={styles.statLabel}>MEET WINS</Text>
+                    <Text style={styles.statValue}>
+                      {athlete.averages?.wins !== undefined && athlete.averages?.wins !== null
+                        ? String(athlete.averages.wins)
+                        : (athlete.stats?.wins !== undefined && athlete.stats?.wins !== null ? String(athlete.stats.wins) : "-")}
+                    </Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>PODIUMS</Text>

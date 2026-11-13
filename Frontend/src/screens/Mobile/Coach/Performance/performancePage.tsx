@@ -325,15 +325,55 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                       </Text>
                     );
                   } else if (sc.includes("SWIM")) {
+                    const athAny: any = athlete;
+                    const avg = athAny.averages || {};
+                    const stats = athAny.stats || {};
+                    let bestPbStr = "";
+                    let bestEventName = "";
+                    const pbKeys = Object.keys({ ...stats, ...avg }).filter(
+                      (k) => k.startsWith("pb_") || k.startsWith("times_")
+                    );
+                    for (const k of pbKeys) {
+                      const val = avg[k] || stats[k];
+                      if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+                        bestPbStr = val;
+                        bestEventName = k.replace(/^pb_/, "").replace(/^times_/, "").replace(/_/g, " ").toUpperCase();
+                        break;
+                      }
+                    }
+                    const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
+                    const wins = Number(avg.wins ?? stats.wins ?? 0);
+                    const displayStat = bestPbStr ? `PB: ${bestPbStr}${bestEventName ? ` (${bestEventName})` : ''}` : "NO LOGGED MEETS";
+                    const displayPodiums = podiums > 0 ? `${podiums} PODIUMS` : `${wins} WINS`;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.averages.pb_50m_free ? `${athlete.averages.pb_50m_free} 50M` : "-"} • {athlete.averages.swim_index_score ? `${athlete.averages.swim_index_score} SWIM INDEX` : "-"}
+                        {displayStat} • {displayPodiums}
                       </Text>
                     );
-                  } else if (sc.includes("TRACK") || sc.includes("FIELD")) {
+                  } else if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) {
+                    const athAny: any = athlete;
+                    const avg = athAny.averages || {};
+                    const stats = athAny.stats || {};
+                    let bestMarkStr = "";
+                    let bestEventName = "";
+                    const pbKeys = Object.keys({ ...stats, ...avg }).filter(
+                      (k) => k.startsWith("pb_") || k.startsWith("times_") || k === "pole_vault" || k === "long_jump"
+                    );
+                    for (const k of pbKeys) {
+                      const val = avg[k] || stats[k];
+                      if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+                        bestMarkStr = val;
+                        bestEventName = k.replace(/^pb_/, "").replace(/^times_/, "").replace(/_/g, " ").toUpperCase();
+                        break;
+                      }
+                    }
+                    const wins = Number(avg.event_wins ?? avg.wins ?? stats.event_wins ?? stats.wins ?? 0);
+                    const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? 0);
+                    const displayStat = bestMarkStr ? `PB: ${bestMarkStr}${bestEventName ? ` (${bestEventName})` : ''}` : "NO LOGGED MEETS";
+                    const displayWins = wins > 0 ? `${wins} WINS` : `${podiums} PODIUMS`;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.averages.pb_100m ? `${athlete.averages.pb_100m} 100M` : "-"} • {athlete.averages.win_rate_pct !== undefined && athlete.averages.win_rate_pct !== null ? `${athlete.averages.win_rate_pct}% WIN` : "-"}
+                        {displayStat} • {displayWins}
                       </Text>
                     );
                   } else if (sc.includes("VOLLEY")) {
@@ -351,28 +391,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                         {athlete.averages.points_scored ?? 0} PTS • {athlete.averages.aces ?? 0} ACES • {athlete.averages.dinks ?? 0} DINKS
                       </Text>
                     );
-                  } else if (sc.includes("SWIM")) {
-                    const athAny: any = athlete;
-                    const pb = athAny.averages?.pb_50m_free || athAny.averages?.pb_100m_free || athAny.stats?.pb_50m_free || athAny.stats?.times_50m_free || "-";
-                    const podiums = athAny.averages?.podiums_count ?? athAny.averages?.podiums ?? athAny.stats?.podiums_count ?? 0;
-                    return (
-                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {pb !== "-" ? `PB: ${pb}` : "NO LOGGED MEETS"} • {podiums} PODIUMS
-                      </Text>
-                    );
-                  } else if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) {
-                    const athAny: any = athlete;
-                    const pb = athAny.averages?.pb_100m || athAny.averages?.pb_200m || athAny.stats?.pb_100m || athAny.stats?.times_100m || "-";
-                    const wins = athAny.averages?.event_wins ?? athAny.averages?.wins ?? athAny.stats?.event_wins ?? 0;
-                    return (
-                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {pb !== "-" ? `PB: ${pb}` : "NO LOGGED MEETS"} • {wins} WINS
-                      </Text>
-                    );
                   } else {
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.rating_score && athlete.rating_score > 0 ? `${athlete.rating_score} RATING` : "-"}
+                        {athlete.rating_score && athlete.rating_score > 0 ? `${athlete.rating_score} RATING` : "- UNRATED"}
                       </Text>
                     );
                   }

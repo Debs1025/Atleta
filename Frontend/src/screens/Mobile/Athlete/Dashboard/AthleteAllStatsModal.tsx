@@ -535,56 +535,7 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
                 </>
               );
             } else if (isSwim) {
-              const strokeEff = displayAverages?.stroke_efficiency_pct ?? layout?.efficiency1?.value;
-              const strokeRate = displayAverages?.stroke_rate_pm ?? displayAverages?.stroke_rate;
-              const swimIndex = displayAverages?.swim_index_score;
-
-              return (
-                <>
-                  <View style={styles.splitCardFull}>
-                    <View style={styles.splitHeaderRow}>
-                      <Text style={styles.avgLabel}>STROKE EFFICIENCY %</Text>
-                    </View>
-                    <Text style={styles.splitValueText}>{strokeEff !== undefined && strokeEff !== null ? `${strokeEff}%` : "-"}</Text>
-                    <View style={styles.progressBarTrack}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${strokeEff ? Math.min(100, Number(strokeEff)) : 0}%` },
-                        ]}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.splitCardHalfRow}>
-                    <View style={styles.splitCardHalf}>
-                      <Text style={styles.avgLabel}>STROKE RATE</Text>
-                      <Text style={styles.splitValueText}>{strokeRate !== undefined && strokeRate !== null ? `${strokeRate}/min` : "-"}</Text>
-                      <View style={styles.progressBarTrack}>
-                        <View
-                          style={[
-                            styles.progressBarFill,
-                            { width: `${strokeRate ? Math.min(100, (Number(strokeRate) / 60) * 100) : 0}%` },
-                          ]}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.splitCardHalf}>
-                      <Text style={styles.avgLabel}>SWIM INDEX</Text>
-                      <Text style={styles.splitValueText}>{swimIndex !== undefined && swimIndex !== null ? String(swimIndex) : "-"}</Text>
-                      <View style={styles.progressBarTrack}>
-                        <View
-                          style={[
-                            styles.progressBarFill,
-                            { width: `${swimIndex ? Math.min(100, (Number(swimIndex) / 1000) * 100) : 0}%` },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </>
-              );
+              return null;
             } else {
               // Dynamic efficiency metrics from layout
               const eff1 = layout?.efficiency1;
