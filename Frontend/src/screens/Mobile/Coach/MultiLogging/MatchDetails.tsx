@@ -50,18 +50,57 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     (session.sport_type || "").toUpperCase().includes("FIELD")
   );
 
+  // Helpers for timed sports placement
+  const parseRankFromResult = (val: any): number => {
+    if (typeof val === "number") return val;
+    if (!val) return 1;
+    const s = String(val).toLowerCase().trim();
+    if (s.includes("1st") || s === "win") return 1;
+    if (s.includes("2nd")) return 2;
+    if (s.includes("3rd")) return 3;
+    if (s.includes("4th")) return 4;
+    if (s.includes("5th")) return 5;
+    if (s.includes("6th")) return 6;
+    if (s.includes("7th")) return 7;
+    if (s.includes("8th")) return 8;
+    const match = s.match(/\d+/);
+    if (match) return parseInt(match[0], 10);
+    return 1;
+  };
+
+  const formatPlaceLabel = (rankVal: any): string => {
+    if (typeof rankVal === "string" && (rankVal.toLowerCase().includes("place") || rankVal.toLowerCase().includes("podium"))) {
+      return rankVal;
+    }
+    const n = typeof rankVal === "number" ? rankVal : parseInt(String(rankVal).replace(/[^\d]/g, ""), 10);
+    if (n === 1) return "1st Place";
+    if (n === 2) return "2nd Place";
+    if (n === 3) return "3rd Place";
+    if (n > 3) return `${n}th Place`;
+    return "1st Place";
+  };
+
   // Local form state pre-populated from session
   const [gameName, setGameName] = useState(
     session.game_name || session.match_name || ""
   );
   const [opponentName, setOpponentName] = useState(session.opponent_team_name || "");
   const [gameType, setGameType] = useState<string>(
-    session.game_type || (isTimedSport ? "Championship" : "Tournament")
+    session.game_type && session.game_type !== "Tournament"
+      ? session.game_type
+      : (isTimedSport ? "Championship" : (session.game_type || "Tournament"))
   );
   const [gameResult, setGameResult] = useState<string>(
-    session.game_result || (isTimedSport ? "1st Place" : "Win")
+    session.game_result && session.game_result !== "Win" && session.game_result !== "Lose"
+      ? session.game_result
+      : (isTimedSport ? "1st Place" : (session.game_result || "Win"))
   );
   const [notes, setNotes] = useState(session.notes || "");
+
+  // Per-player place selection state
+  const [playerPlaces, setPlayerPlaces] = useState<Record<string, number>>({});
+  const [showPlayerPlacePicker, setShowPlayerPlacePicker] = useState<boolean>(false);
+  const [selectedPlayerForPlace, setSelectedPlayerForPlace] = useState<string | null>(null);
 
   // Picker Modals state
   const [showTypePicker, setShowTypePicker] = useState(false);
@@ -73,15 +112,49 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     ? ["Championship", "Invitational", "Time Trials", "Qualifiers", "Practice"]
     : ["Tournament", "Practice", "Tune-Up"];
   const GAME_RESULTS: string[] = isTimedSport
-    ? ["1st Place", "2nd Place", "3rd Place", "Podium", "Completed"]
+    ? ["1st Place", "2nd Place", "3rd Place", "4th Place", "5th Place", "6th Place", "7th Place", "8th Place", "Podium", "Completed"]
     : ["Win", "Lose"];
 
   // Combine active and bench rosters for statistics table
   const allPlayers = session.active_roster.concat(session.bench_roster);
 
+  useEffect(() => {
+    if (isTimedSport && (gameResult === "Win" || gameResult === "Lose" || !gameResult)) {
+      setGameResult("1st Place");
+    }
+  }, [isTimedSport]);
+
+  const handleSelectGameResult = (result: string) => {
+    setGameResult(result);
+    setShowResultPicker(false);
+    if (isTimedSport) {
+      const rNum = parseRankFromResult(result);
+      const updated: Record<string, number> = {};
+      allPlayers.forEach((p) => {
+        updated[p.athlete_id] = rNum;
+      });
+      setPlayerPlaces((prev) => ({ ...updated, ...prev, ...(allPlayers.length === 1 ? { [allPlayers[0].athlete_id]: rNum } : {}) }));
+    }
+  };
+
+  const handleSelectPlayerPlace = (rankNum: number) => {
+    if (!selectedPlayerForPlace) return;
+    setPlayerPlaces((prev) => ({
+      ...prev,
+      [selectedPlayerForPlace]: rankNum,
+    }));
+    if (allPlayers.length === 1 || allPlayers[0]?.athlete_id === selectedPlayerForPlace) {
+      setGameResult(formatPlaceLabel(rankNum));
+    }
+    setShowPlayerPlacePicker(false);
+    setSelectedPlayerForPlace(null);
+  };
+
   const handleSaveMatch = async () => {
     const normalizedSport = (session.sport_type || "BASKETBALL").toUpperCase();
-    const normalizedGameResult = (gameResult || "Win").toUpperCase();
+    const normalizedGameResult = isTimedSport
+      ? formatPlaceLabel(parseRankFromResult(gameResult))
+      : (gameResult || "Win").toUpperCase();
 
     // Map all active and bench players to comprehensive player_stats & playerStats
     const playerStatsArray = allPlayers.map((p) => {
@@ -97,7 +170,10 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       const splitVal = tStats.split_times && tStats.split_times.length > 0 ? tStats.split_times.join(", ") : ((p as any).split || (p as any).split_time || "");
       const seedVal = (p as any).seed_time || (tStats as any).seed_time || "";
       const qtsVal = (p as any).qts || (tStats as any).qts || "";
-      const rankVal = (p as any).rank || (normalizedGameResult === "WIN" ? 1 : 2);
+
+      const rawRank = playerPlaces[p.athlete_id] ?? (p as any).rank ?? (p as any).place ?? (tStats as any).rank ?? parseRankFromResult(gameResult);
+      const rankVal = typeof rawRank === "number" ? rawRank : parseRankFromResult(rawRank);
+      const placeText = formatPlaceLabel(rankVal);
 
       const points = Number(bStats.pts ?? cStats.points ?? cStats.pts ?? cStats.kills ?? cStats.goals ?? 0);
       const rebounds = Number(bStats.reb ?? cStats.rebounds ?? cStats.reb ?? cStats.digs ?? 0);
@@ -133,6 +209,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         event_key: eventKey,
         rank: rankVal,
         place: rankVal,
+        placement_rank: rankVal,
+        placement: placeText,
         split: splitVal,
         split_time: splitVal,
         split_times: tStats.split_times || [],
@@ -162,6 +240,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         qts: qtsVal,
         rank: rankVal,
         place: rankVal,
+        placement_rank: rankVal,
+        placement: placeText,
         team_name: session.team_name || "ATLETA VARSITY",
         ...statLine,
         stats: statLine,
@@ -181,6 +261,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       : (normalizedGameResult === "WIN" ? Math.max(0, (homeScore || 78) - 8) : (homeScore || 65) + 8);
 
     const firstStat = playerStatsArray[0];
+    const topRank = firstStat?.rank || parseRankFromResult(gameResult);
+    const topPlacementText = formatPlaceLabel(topRank);
     const defaultEvent = firstStat?.event || firstStat?.event_name || (normalizedSport.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet");
     const defaultMatchTitle = isTimedSport
       ? (gameName.trim() || `${session.team_name || "ATLETA"} ${defaultEvent}`)
@@ -201,6 +283,13 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       location: session.location || "Metro Sports Center",
       sport_type: normalizedSport,
       game_result: normalizedGameResult,
+      rank: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),
+      place: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),
+      placement_rank: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),
+      placement: isTimedSport ? topPlacementText : normalizedGameResult,
+      result_badge_text: isTimedSport
+        ? (topRank === 1 ? "1ST PLACE" : topRank === 2 ? "2ND PLACE" : topRank === 3 ? "3RD PLACE" : `RANK #${topRank}`)
+        : (normalizedGameResult === "WIN" ? "WIN" : "LOSS"),
       home_score: homeScore,
       away_score: awayScore,
       notes: notes || "",
@@ -372,6 +461,57 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                       {player.full_name}
                     </Text>
                     {schema.tableHeaders.map((header, idx) => {
+                      if (isTimedSport && (header.key === 'rank' || header.key === 'place')) {
+                        const currentRank = playerPlaces[player.athlete_id] ?? (player as any).rank ?? (player as any).place ?? (tStats as any).rank ?? parseRankFromResult(gameResult);
+                        const rankNum = typeof currentRank === 'number' ? currentRank : parseRankFromResult(currentRank);
+                        const isPodium = rankNum <= 3;
+                        const badgeColor = rankNum === 1 ? '#F59E0B' : rankNum === 2 ? '#E2E8F0' : rankNum === 3 ? '#F97316' : '#00C8FF';
+                        const badgeBg = rankNum === 1 ? 'rgba(245, 158, 11, 0.15)' : rankNum === 2 ? 'rgba(226, 232, 240, 0.12)' : rankNum === 3 ? 'rgba(249, 115, 22, 0.15)' : 'rgba(0, 200, 255, 0.12)';
+                        const badgeBorder = rankNum === 1 ? '#F59E0B' : rankNum === 2 ? '#94A3B8' : rankNum === 3 ? '#F97316' : '#0084FF';
+
+                        return (
+                          <View
+                            key={header.key || idx}
+                            style={{
+                              width: header.width || 95,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              paddingHorizontal: 2,
+                            }}
+                          >
+                            <TouchableOpacity
+                              activeOpacity={0.7}
+                              onPress={() => {
+                                setSelectedPlayerForPlace(player.athlete_id);
+                                setShowPlayerPlacePicker(true);
+                              }}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: badgeBg,
+                                borderColor: badgeBorder,
+                                borderWidth: 1,
+                                borderRadius: 8,
+                                paddingHorizontal: 6,
+                                paddingVertical: 4,
+                                gap: 2,
+                              }}
+                            >
+                              <Ionicons
+                                name={isPodium ? (rankNum === 1 ? "trophy" : "ribbon") : "flag-outline"}
+                                size={11}
+                                color={badgeColor}
+                              />
+                              <Text style={{ color: badgeColor, fontSize: 11, fontWeight: '800' }}>
+                                {formatPlaceLabel(rankNum)}
+                              </Text>
+                              <Ionicons name="chevron-down" size={10} color={badgeColor} />
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      }
+
                       const val = (() => {
                         if (header.key === 'team_name' || header.key === 'team' || header.key === 'school') {
                           return (player as any).team_name || (player as any).team || session.team_name || "-";
@@ -557,15 +697,80 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                   styles.pickerOption,
                   gameResult === result && styles.pickerOptionSelected,
                 ]}
-                onPress={() => {
-                  setGameResult(result);
-                  setShowResultPicker(false);
-                }}
+                onPress={() => handleSelectGameResult(result)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.pickerOptionText}>{result}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Individual Athlete Placement Picker Modal */}
+      <Modal
+        visible={showPlayerPlacePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowPlayerPlacePicker(false);
+          setSelectedPlayerForPlace(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>
+                {`Select Place: ${allPlayers.find((p) => p.athlete_id === selectedPlayerForPlace)?.full_name || "Athlete"}`}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPlayerPlacePicker(false);
+                  setSelectedPlayerForPlace(null);
+                }}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }}>
+              {[
+                { rank: 1, label: "1st Place (Gold)", color: "#F59E0B", icon: "trophy" },
+                { rank: 2, label: "2nd Place (Silver)", color: "#E2E8F0", icon: "ribbon" },
+                { rank: 3, label: "3rd Place (Bronze)", color: "#F97316", icon: "ribbon" },
+                { rank: 4, label: "4th Place", color: "#00C8FF", icon: "flag-outline" },
+                { rank: 5, label: "5th Place", color: "#00C8FF", icon: "flag-outline" },
+                { rank: 6, label: "6th Place", color: "#00C8FF", icon: "flag-outline" },
+                { rank: 7, label: "7th Place", color: "#00C8FF", icon: "flag-outline" },
+                { rank: 8, label: "8th Place", color: "#00C8FF", icon: "flag-outline" },
+              ].map((opt) => {
+                const currentVal = selectedPlayerForPlace
+                  ? (playerPlaces[selectedPlayerForPlace] ?? parseRankFromResult(gameResult))
+                  : 1;
+                const isSelected = currentVal === opt.rank;
+
+                return (
+                  <TouchableOpacity
+                    key={opt.rank}
+                    style={[
+                      styles.pickerOption,
+                      isSelected && styles.pickerOptionSelected,
+                      { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }
+                    ]}
+                    onPress={() => handleSelectPlayerPlace(opt.rank)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <Ionicons name={opt.icon as any} size={18} color={opt.color} />
+                      <Text style={[styles.pickerOptionText, isSelected && { color: "#FFFFFF", fontWeight: "900" }]}>
+                        {opt.label}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00D2FF" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
       </Modal>

@@ -371,7 +371,7 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
                 numeric_value: numVal,
                 unit,
                 is_lower_better: isLowerBetter,
-                rank: m.rank || 1,
+                rank: m.rank || m.place || m.placement_rank || 1,
                 qts: m.qts || undefined,
                 is_official: m.is_official !== false,
                 notes: m.notes || undefined,
@@ -415,7 +415,7 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
                   numeric_value: numVal,
                   unit,
                   is_lower_better: isLowerBetter,
-                  rank: p.rank || p.place || 1,
+                  rank: p.rank || p.place || p.placement_rank || m.rank || m.place || 1,
                   qts: p.qts || undefined,
                   is_official: m.is_official !== false,
                   notes: p.notes || undefined,
@@ -932,7 +932,15 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
       {data?.records && data.records.length > 0 ? (
         data.records.map((item, idx) => {
           const isPB = item.is_personal_best;
-          const isFirstPlace = String(item.rank) === "1" || item.rank === 1;
+          const rankNum = typeof item.rank === "number" ? item.rank : parseInt(String(item.rank).replace(/[^\d]/g, ""), 10);
+          const isFirstPlace = rankNum === 1 || String(item.rank).toLowerCase().includes("1st");
+          const isSecondPlace = rankNum === 2 || String(item.rank).toLowerCase().includes("2nd");
+          const isThirdPlace = rankNum === 3 || String(item.rank).toLowerCase().includes("3rd");
+          const isPodium = isFirstPlace || isSecondPlace || isThirdPlace;
+          const badgeText = isFirstPlace ? "1st Place" : isSecondPlace ? "2nd Place" : isThirdPlace ? "3rd Place" : (rankNum ? `Rank #${rankNum}` : String(item.rank));
+          const badgeColor = isFirstPlace ? "#FFD700" : isSecondPlace ? "#CBD5E1" : isThirdPlace ? "#F97316" : "#38BDF8";
+          const badgeBg = isFirstPlace ? "rgba(245, 158, 11, 0.15)" : isSecondPlace ? "rgba(226, 232, 240, 0.12)" : isThirdPlace ? "rgba(249, 115, 22, 0.15)" : "rgba(56, 189, 248, 0.12)";
+          const badgeBorder = isFirstPlace ? "rgba(245, 158, 11, 0.3)" : isSecondPlace ? "rgba(203, 213, 225, 0.3)" : isThirdPlace ? "rgba(249, 115, 22, 0.3)" : "rgba(56, 189, 248, 0.25)";
 
           return (
             <View
@@ -954,21 +962,21 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
                   <View
                     style={[
                       styles.rankBadge,
-                      isFirstPlace && styles.rankBadgeFirst,
+                      { backgroundColor: badgeBg, borderColor: badgeBorder, borderWidth: 1 }
                     ]}
                   >
                     <Ionicons
-                      name={isFirstPlace ? "trophy" : "ribbon"}
+                      name={isPodium ? (isFirstPlace ? "trophy" : "ribbon") : "flag-outline"}
                       size={11}
-                      color={isFirstPlace ? "#FFD700" : "#94A3B8"}
+                      color={badgeColor}
                     />
                     <Text
                       style={[
                         styles.rankBadgeText,
-                        isFirstPlace && styles.rankBadgeTextFirst,
+                        { color: badgeColor, fontWeight: "900" },
                       ]}
                     >
-                      {isFirstPlace ? "1st Place" : `Rank #${item.rank}`}
+                      {badgeText}
                     </Text>
                   </View>
                 ) : null}

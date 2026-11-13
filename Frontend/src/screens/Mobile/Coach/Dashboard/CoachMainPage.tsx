@@ -924,15 +924,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
               let badgeText = m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS");
               if (isTimed) {
-                const rankNum = firstStat?.rank || firstStat?.place;
-                if (rankNum === 1 || String(m.game_result).toUpperCase().includes("WIN")) {
+                const rawRank = firstStat?.rank || firstStat?.place || firstStat?.placement_rank || (m as any).rank || (m as any).place || (m as any).placement_rank || (m.game_result && String(m.game_result).match(/\d+/) ? parseInt(String(m.game_result).match(/\d+/)![0], 10) : 0);
+                const rankNum = typeof rawRank === "number" ? rawRank : (parseInt(String(rawRank).replace(/[^\d]/g, ""), 10) || 0);
+                if (rankNum === 1 || String(m.game_result).includes("1st")) {
                   badgeText = "1ST PLACE";
-                } else if (rankNum === 2) {
+                } else if (rankNum === 2 || String(m.game_result).includes("2nd")) {
                   badgeText = "2ND PLACE";
-                } else if (rankNum === 3) {
+                } else if (rankNum === 3 || String(m.game_result).includes("3rd")) {
                   badgeText = "3RD PLACE";
-                } else if (rankNum && rankNum > 3) {
+                } else if (rankNum > 3) {
                   badgeText = `RANK #${rankNum}`;
+                } else if (String(m.game_result).toUpperCase().includes("WIN")) {
+                  badgeText = "1ST PLACE";
                 } else {
                   badgeText = "COMPLETED";
                 }
@@ -2214,15 +2217,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         : (myEvent || (sportUpper.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet"));
 
       const myRank = myStat.rank || myStat.place;
+      const parsedRank = typeof myRank === "number" ? myRank : parseInt(String(myRank).replace(/[^\d]/g, ""), 10);
       let personalizedBadge = m.result_badge_text;
-      if (myRank === 1 || String(m.result_badge_text).includes("WIN")) {
+      if (parsedRank === 1) {
         personalizedBadge = "1ST PLACE";
-      } else if (myRank === 2) {
+      } else if (parsedRank === 2) {
         personalizedBadge = "2ND PLACE";
-      } else if (myRank === 3) {
+      } else if (parsedRank === 3) {
         personalizedBadge = "3RD PLACE";
-      } else if (myRank && myRank > 3) {
-        personalizedBadge = `RANK #${myRank}`;
+      } else if (parsedRank > 3) {
+        personalizedBadge = `RANK #${parsedRank}`;
+      } else if (String(m.result_badge_text).includes("WIN") || String(m.result_badge_text).includes("1st")) {
+        personalizedBadge = "1ST PLACE";
       }
 
       return {
@@ -2337,8 +2343,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           ? (ev && !cleanMeet.includes(ev) ? `${cleanMeet} • ${ev}` : cleanMeet)
           : (ev || (isSwim ? "Swimming Meet" : "Track & Field Meet"));
 
-        const rNum = firstStat?.rank || firstStat?.place || 1;
-        if (rNum === 1 || String(savedPayload.game_result).toUpperCase().includes("WIN") || String(savedPayload.game_result).includes("1st")) {
+        const rawPlace = firstStat?.rank || firstStat?.place || firstStat?.placement_rank || savedPayload.rank || savedPayload.place || (savedPayload.game_result && String(savedPayload.game_result).match(/\d+/) ? parseInt(String(savedPayload.game_result).match(/\d+/)![0], 10) : 1);
+        const rNum = typeof rawPlace === "number" ? rawPlace : (parseInt(String(rawPlace).replace(/[^\d]/g, ""), 10) || 1);
+        if (rNum === 1 || String(savedPayload.game_result).includes("1st")) {
           finalResultBadge = "1ST PLACE";
         } else if (rNum === 2 || String(savedPayload.game_result).includes("2nd")) {
           finalResultBadge = "2ND PLACE";
@@ -2346,6 +2353,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           finalResultBadge = "3RD PLACE";
         } else if (rNum > 3) {
           finalResultBadge = `RANK #${rNum}`;
+        } else if (String(savedPayload.game_result).toUpperCase().includes("WIN")) {
+          finalResultBadge = "1ST PLACE";
         } else {
           finalResultBadge = "COMPLETED";
         }
@@ -2367,7 +2376,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         event_name: p.event_name || p.event || p.position || "",
         event_key: p.event_key || "",
         position: p.position || p.event || "",
-        rank: p.rank || 1,
+        rank: p.rank || p.place || p.placement_rank || 1,
+        place: p.place || p.rank || p.placement_rank || 1,
+        placement_rank: p.placement_rank || p.rank || p.place || 1,
+        placement: p.placement || (p.rank === 1 ? "1st Place" : p.rank === 2 ? "2nd Place" : p.rank === 3 ? "3rd Place" : `${p.rank || 1}th Place`),
         stats: p.stats || {},
       }));
 
@@ -2376,7 +2388,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         match_date: savedPayload.match_date || new Date().toISOString(),
         date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-        date_group: "CURRENT LOGS",
+        date_group: "MATCH LOGS",
         event_or_opponent: eventTitleDisplay,
         game_name: savedPayload.game_name || savedPayload.match_name,
         match_name: savedPayload.match_name || savedPayload.game_name,
@@ -2399,7 +2411,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             scoreText = p.mark || p.finish_time || p.time || "Finished";
           }
           return {
-            rank: idx + 1,
+            rank: p.rank || p.place || (idx + 1),
             name: p.player_name || p.name,
             detail: p.event || p.event_name || p.team || savedPayload.home_team_name || "ATLETA",
             time_or_score: scoreText,
@@ -2443,8 +2455,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 const pb100 = (evKey.includes("100") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_100m_free, timeStr) : ath.averages?.pb_100m_free;
                 const pb200 = (evKey.includes("200") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_200m_free, timeStr) : ath.averages?.pb_200m_free;
 
-                const athletePodiums = (Number(ath.averages?.podiums) || 0) + (savedPayload.game_result === "WIN" || (ps.rank && ps.rank <= 3) ? 1 : 0);
-                const athleteWins = (Number(ath.averages?.wins) || 0) + (savedPayload.game_result === "WIN" ? 1 : 0);
+                const isPodium = (ps.rank && ps.rank <= 3) || (ps.place && ps.place <= 3) || String(savedPayload.game_result).toUpperCase().includes("WIN") || String(savedPayload.game_result).includes("1st") || String(savedPayload.game_result).includes("2nd") || String(savedPayload.game_result).includes("3rd");
+                const isWin = ps.rank === 1 || ps.place === 1 || String(savedPayload.game_result).toUpperCase().includes("WIN") || String(savedPayload.game_result).includes("1st");
+                const athletePodiums = (Number(ath.averages?.podiums) || 0) + (isPodium ? 1 : 0);
+                const athleteWins = (Number(ath.averages?.wins) || 0) + (isWin ? 1 : 0);
 
                 const updatedAthlete: AthletePerformanceProfile = {
                   ...ath,
@@ -2480,8 +2494,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   ? (markStr ? pickBetterDistance(existingPb, markStr) : existingPb)
                   : (timeStr && timeStr !== "00:00.00" ? pickBetterTime(existingPb, timeStr) : existingPb);
 
-                const athletePodiums = (Number(ath.averages?.podiums) || 0) + (savedPayload.game_result === "WIN" || (ps.rank && ps.rank <= 3) ? 1 : 0);
-                const athleteWins = (Number(ath.averages?.wins) || 0) + (savedPayload.game_result === "WIN" ? 1 : 0);
+                const isPodium = (ps.rank && ps.rank <= 3) || (ps.place && ps.place <= 3) || String(savedPayload.game_result).toUpperCase().includes("WIN") || String(savedPayload.game_result).includes("1st") || String(savedPayload.game_result).includes("2nd") || String(savedPayload.game_result).includes("3rd");
+                const isWin = ps.rank === 1 || ps.place === 1 || String(savedPayload.game_result).toUpperCase().includes("WIN") || String(savedPayload.game_result).includes("1st");
+                const athletePodiums = (Number(ath.averages?.podiums) || 0) + (isPodium ? 1 : 0);
+                const athleteWins = (Number(ath.averages?.wins) || 0) + (isWin ? 1 : 0);
 
                 const updatedAthlete: AthletePerformanceProfile = {
                   ...ath,
@@ -2854,7 +2870,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               match_id: `match_ocr_${Date.now()}`,
               date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
               full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-              date_group: "CURRENT LOGS",
+              date_group: "MATCH LOGS",
               event_or_opponent: ocrTitle,
               score_or_time_summary: ocrSummary,
               sport_category: ocrSport,
@@ -3169,15 +3185,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
                   let badgeText = m.game_result ? `RESULT ${m.game_result}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : "RESULT LOSS");
                   if (isTimed) {
-                    const rankNum = firstStat?.rank || firstStat?.place;
-                    if (rankNum === 1 || String(m.game_result).toUpperCase().includes("WIN")) {
+                    const rawRank = firstStat?.rank || firstStat?.place || firstStat?.placement_rank || (m as any).rank || (m as any).place || (m as any).placement_rank || (m.game_result && String(m.game_result).match(/\d+/) ? parseInt(String(m.game_result).match(/\d+/)![0], 10) : 0);
+                    const rankNum = typeof rawRank === "number" ? rawRank : (parseInt(String(rawRank).replace(/[^\d]/g, ""), 10) || 0);
+                    if (rankNum === 1 || String(m.game_result).includes("1st")) {
                       badgeText = "1ST PLACE";
-                    } else if (rankNum === 2) {
+                    } else if (rankNum === 2 || String(m.game_result).includes("2nd")) {
                       badgeText = "2ND PLACE";
-                    } else if (rankNum === 3) {
+                    } else if (rankNum === 3 || String(m.game_result).includes("3rd")) {
                       badgeText = "3RD PLACE";
-                    } else if (rankNum && rankNum > 3) {
+                    } else if (rankNum > 3) {
                       badgeText = `RANK #${rankNum}`;
+                    } else if (String(m.game_result).toUpperCase().includes("WIN")) {
+                      badgeText = "1ST PLACE";
                     } else {
                       badgeText = "COMPLETED";
                     }

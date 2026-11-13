@@ -113,16 +113,23 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
               let badgeSubtext = isTimed ? "PLACE" : "RESULT";
               let badgeMainText = item.result_badge_text.replace(/^RESULT\s*/i, "").trim();
               if (isTimed) {
-                const rawRank = firstStat?.rank || firstStat?.place;
-                if (rawRank === 1 || badgeMainText === "WIN" || badgeMainText === "1ST" || badgeMainText === "1ST PLACE") {
+                const rawRank = firstStat?.rank || firstStat?.place || firstStat?.placement_rank || (item as any).rank || (item as any).place || (item as any).placement_rank;
+                const parsedRank = typeof rawRank === "number" ? rawRank : parseInt(String(rawRank).replace(/[^\d]/g, ""), 10);
+                if (parsedRank === 1 || badgeMainText === "WIN" || badgeMainText === "1ST" || badgeMainText === "1ST PLACE") {
                   badgeMainText = "1ST";
-                } else if (rawRank === 2 || badgeMainText === "2ND" || badgeMainText === "2ND PLACE") {
+                  badgeSubtext = "PLACE";
+                } else if (parsedRank === 2 || badgeMainText === "2ND" || badgeMainText === "2ND PLACE") {
                   badgeMainText = "2ND";
-                } else if (rawRank === 3 || badgeMainText === "3RD" || badgeMainText === "3RD PLACE") {
+                  badgeSubtext = "PLACE";
+                } else if (parsedRank === 3 || badgeMainText === "3RD" || badgeMainText === "3RD PLACE") {
                   badgeMainText = "3RD";
-                } else if (rawRank && rawRank > 3) {
+                  badgeSubtext = "PLACE";
+                } else if (parsedRank && parsedRank > 3) {
                   badgeSubtext = "RANK";
-                  badgeMainText = `#${rawRank}`;
+                  badgeMainText = `#${parsedRank}`;
+                } else if (badgeMainText.includes("4TH") || badgeMainText.includes("#4")) {
+                  badgeSubtext = "RANK";
+                  badgeMainText = "#4";
                 } else if (badgeMainText === "LOSS") {
                   badgeSubtext = "RESULT";
                   badgeMainText = "DONE";
