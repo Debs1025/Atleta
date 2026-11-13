@@ -28,6 +28,10 @@ export interface TimingStats {
   distance_meters: number;
   split_times: string[];
   is_foul_dq: boolean;
+  mark?: string;
+  event?: string;
+  event_name?: string;
+  event_key?: string;
 }
 
 export interface MatchInjury {

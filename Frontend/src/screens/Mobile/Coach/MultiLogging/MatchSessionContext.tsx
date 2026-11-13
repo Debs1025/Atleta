@@ -17,6 +17,12 @@ interface MatchSessionContextType {
     athleteId: string,
     stats: Partial<NonNullable<AthleteRosterItem["timing_stats"]>>
   ) => void;
+  updateAthleteEvent: (
+    athleteId: string,
+    eventName: string,
+    eventKey?: string,
+    distanceMeters?: number
+  ) => void;
   addInjury: (injury: Omit<MatchInjury, 'id'> & { id?: string }) => void;
   removeInjury: (injuryId: string) => void;
   markAthleteInjured: (
@@ -183,6 +189,47 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
             timing_stats: {
               ...currentStats,
               ...stats,
+            },
+          };
+        });
+
+      return {
+        ...prev,
+        active_roster: updateList(prev.active_roster),
+        bench_roster: updateList(prev.bench_roster),
+      };
+    });
+  };
+
+  const updateAthleteEvent = (
+    athleteId: string,
+    eventName: string,
+    eventKey?: string,
+    distanceMeters?: number
+  ) => {
+    setSession((prev) => {
+      const updateList = (list: AthleteRosterItem[]) =>
+        list.map((item) => {
+          if (item.athlete_id !== athleteId) return item;
+          const currentTiming = item.timing_stats || {
+            timer_seconds: 0,
+            formatted_time: "00:00.00",
+            distance_meters: 50,
+            split_times: [],
+            is_foul_dq: false,
+          };
+          const dist = distanceMeters !== undefined ? distanceMeters : currentTiming.distance_meters;
+          return {
+            ...item,
+            position_or_event: eventName,
+            event: eventName,
+            event_name: eventName,
+            event_key: eventKey,
+            timing_stats: {
+              ...currentTiming,
+              distance_meters: dist,
+              event: eventName,
+              event_key: eventKey,
             },
           };
         });
@@ -388,6 +435,7 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
         toggleAthleteActiveStatus,
         updateBasketballStats,
         updateTimingStats,
+        updateAthleteEvent,
         addInjury,
         removeInjury,
         markAthleteInjured,

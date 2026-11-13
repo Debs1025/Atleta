@@ -87,6 +87,12 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       const tStats: any = p.timing_stats || { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false };
       const cStats: any = p.custom_stats || {};
 
+      const eventName = (p as any).event_name || (p as any).event || p.position_or_event || "";
+      const eventKey = (p as any).event_key || (tStats as any).event_key || "";
+      const markVal = (p as any).mark || (tStats as any).mark || (p as any).distance || "";
+      const timeVal = tStats.formatted_time || (p as any).time || (tStats as any).formatted_time || "00:00.00";
+      const distMeters = Number(tStats.distance_meters || (p as any).distance_meters || 0);
+
       const points = Number(bStats.pts ?? cStats.points ?? cStats.pts ?? cStats.kills ?? cStats.goals ?? 0);
       const rebounds = Number(bStats.reb ?? cStats.rebounds ?? cStats.reb ?? cStats.digs ?? 0);
       const assists = Number(bStats.ast ?? cStats.assists ?? cStats.ast ?? 0);
@@ -111,9 +117,14 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         turnovers,
         to: turnovers,
         timer_seconds: Number(tStats.timer_seconds || 0),
-        finish_time: tStats.formatted_time || "00:00.00",
-        time: tStats.formatted_time || "00:00.00",
-        distance_meters: Number(tStats.distance_meters || 0),
+        finish_time: timeVal,
+        time: timeVal,
+        distance_meters: distMeters,
+        mark: markVal,
+        event: eventName,
+        event_name: eventName,
+        event_key: eventKey,
+        rank: (p as any).rank || (normalizedGameResult === "WIN" ? 1 : 2),
         split_times: tStats.split_times || [],
         is_foul_dq: Boolean(tStats.is_foul_dq),
         ...cStats,
@@ -124,7 +135,14 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         player_name: p.full_name,
         name: p.full_name,
         jersey_number: p.jersey_number,
-        position: p.position_or_event,
+        position: eventName || p.position_or_event,
+        event: eventName,
+        event_name: eventName,
+        event_key: eventKey,
+        time: timeVal,
+        finish_time: timeVal,
+        mark: markVal,
+        distance_meters: distMeters,
         team_name: session.team_name || "ATLETA VARSITY",
         ...statLine,
         stats: statLine,
@@ -322,9 +340,9 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                   {/* Timing Sports (Swimming / Track & Field) Table Header */}
                   <View style={styles.tableHeaderRow}>
                     <Text style={styles.tableColPlayerHeader}>PLAYER</Text>
-                    <Text style={[styles.tableColHeader, { width: 85 }]}>DISTANCE</Text>
+                    <Text style={[styles.tableColHeader, { width: 105 }]}>EVENT / DIST</Text>
                     <Text style={[styles.tableColHeader, { width: 95 }]}>TIME / MARK</Text>
-                    <Text style={[styles.tableColHeader, { width: 130 }]}>SPLIT TIME</Text>
+                    <Text style={[styles.tableColHeader, { width: 110 }]}>SPLIT TIME</Text>
                     <Text style={[styles.tableColHeader, { width: 80 }]}>STATUS</Text>
                   </View>
 
@@ -337,9 +355,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                       split_times: [],
                       is_foul_dq: false,
                     };
-                    const displayDistance = timing.distance_meters
-                      ? `${timing.distance_meters}M`
-                      : player.position_or_event || "50M";
+                    const displayEvent = (player as any).event_name || (player as any).event || player.position_or_event || (timing.distance_meters ? `${timing.distance_meters}M` : "50M");
+                    const markDisplay = (player as any).mark || (timing as any).mark || (timing.formatted_time && timing.formatted_time !== "00:00.00" ? timing.formatted_time : "-");
 
                     const splitDisplay =
                       timing.split_times && timing.split_times.length > 0
@@ -351,13 +368,13 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                         <Text style={styles.tableColPlayer} numberOfLines={1}>
                           {player.full_name}
                         </Text>
-                        <Text style={[styles.tableColText, { width: 85 }]} numberOfLines={1}>
-                          {displayDistance}
+                        <Text style={[styles.tableColText, { width: 105 }]} numberOfLines={1}>
+                          {displayEvent}
                         </Text>
                         <Text style={[styles.tableColText, { width: 95 }]}>
-                          {timing.formatted_time || "00:00.00"}
+                          {markDisplay}
                         </Text>
-                        <Text style={[styles.tableColText, { width: 130 }]} numberOfLines={1}>
+                        <Text style={[styles.tableColText, { width: 110 }]} numberOfLines={1}>
                           {splitDisplay}
                         </Text>
                         <Text

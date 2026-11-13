@@ -50,6 +50,7 @@ import { SwimmingMatchScreen } from "../MultiLogging/swimmingMatch";
 import { TrackFieldMatchScreen } from "../MultiLogging/TrackFieldMatch";
 import { MatchDetailsScreen } from "../MultiLogging/MatchDetails";
 import { MatchSessionProvider } from "../MultiLogging/MatchSessionContext";
+import { pickBetterTime, pickBetterDistance } from "../MultiLogging/sportEvents";
 import { OfficialMatchesPage } from "../ScoresheetRequest/officialMatchPage";
 import { DiscoveryMain } from "../Discovery/discoveryMain";
 import { DiscoveryProvider } from "../Discovery/DiscoveryContext";
@@ -2156,6 +2157,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       const awayPts = Number(savedPayload.away_score || 0);
       const gameResult = savedPayload.game_result === "WIN" ? "RESULT WIN" : "RESULT LOSS";
       const sport = (savedPayload.sport_type || "BASKETBALL").toUpperCase() as any;
+      const isSwim = String(sport).includes("SWIM");
+      const isTrack = String(sport).includes("TRACK") || String(sport).includes("FIELD");
+
+      let summaryDisplay = `${homePts} - ${awayPts}`;
+      if (isSwim || isTrack) {
+        const firstStat = (savedPayload.player_stats || [])[0];
+        if (firstStat) {
+          const markOrTime = firstStat.mark || firstStat.finish_time || firstStat.time;
+          const ev = firstStat.event || firstStat.event_name || "";
+          summaryDisplay = markOrTime ? `${ev ? `${ev}: ` : ''}${markOrTime}` : (savedPayload.game_result === "WIN" ? "1st Place" : "Completed");
+        }
+      }
 
       const newMatchItem: MatchHistoryItem = {
         match_id: matchId,
@@ -2163,7 +2176,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
         date_group: "CURRENT LOGS",
         event_or_opponent: `${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"}`,
-        score_or_time_summary: `${homePts} - ${awayPts}`,
+        score_or_time_summary: summaryDisplay,
         sport_category: sport,
         result_badge_text: gameResult,
         is_official: false,
@@ -2178,14 +2191,23 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           pts: Number(p.pts ?? p.stats?.points ?? 0),
           ast: Number(p.ast ?? p.stats?.assists ?? 0),
           reb: Number(p.reb ?? p.stats?.rebounds ?? 0),
+          time: p.finish_time || p.time || "",
+          mark: p.mark || p.distance || "",
+          event: p.event || p.event_name || "",
         })),
-        leaderboard_entries: (savedPayload.player_stats || []).map((p: any, idx: number) => ({
-          rank: idx + 1,
-          name: p.player_name,
-          detail: p.team_name || savedPayload.home_team_name || "ATLETA",
-          time_or_score: `${p.pts ?? p.stats?.points ?? 0} pts`,
-        })),
-        coach_notes: [savedPayload.notes || `Match: ${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"} (${homePts} - ${awayPts})`],
+        leaderboard_entries: (savedPayload.player_stats || []).map((p: any, idx: number) => {
+          let scoreText = `${p.pts ?? p.stats?.points ?? 0} pts`;
+          if (isSwim || isTrack) {
+            scoreText = p.mark || p.finish_time || p.time || (p.distance_meters ? `${p.distance_meters}m` : "Finished");
+          }
+          return {
+            rank: idx + 1,
+            name: p.player_name,
+            detail: p.event || p.event_name || p.team_name || savedPayload.home_team_name || "ATLETA",
+            time_or_score: scoreText,
+          };
+        }),
+        coach_notes: [savedPayload.notes || `Match: ${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"} (${summaryDisplay})`],
       };
 
       setMatchHistoryList((prev) => [newMatchItem, ...prev.filter((m) => m.match_id !== matchId)]);
@@ -2211,103 +2233,201 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               if (!isMatch) return ath;
               matchedAny = true;
 
-              const prevGp = Number(ath.averages?.games_played || ((ath.averages?.ppg ?? 0) > 0 ? 1 : 0));
-              const prevPpg = Number(ath.averages?.ppg || 0);
-              const prevRpg = Number(ath.averages?.rpg || 0);
-              const prevApg = Number(ath.averages?.apg || 0);
+              if (isSwim) {
+                const evName = ps.event || ps.event_name || ps.position || ps.position_or_event || "";
+                const evKey = (ps.event_key || evName.toLowerCase().replace(/[^a-z0-9]/g, '_')).replace(/^pb_/, '');
+                const timeStr = ps.finish_time || ps.time || "";
+                const pbKey = `pb_${evKey}`;
+                const existingPb = (ath.averages as any)?.[pbKey];
+                const updatedPb = timeStr && timeStr !== "00:00.00" ? pickBetterTime(existingPb, timeStr) : (existingPb || timeStr);
 
-              const newGp = prevGp + 1;
-              const newPpg = Math.round(((prevPpg * prevGp + matchPts) / newGp) * 10) / 10;
-              const newRpg = Math.round(((prevRpg * prevGp + matchReb) / newGp) * 10) / 10;
-              const newApg = Math.round(((prevApg * prevGp + matchAst) / newGp) * 10) / 10;
-              const newPer = Math.round(newPpg * 1.2 + newRpg * 1.0 + newApg * 1.5);
-              const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPpg * 3.5)));
-              const newTrends = [...(ath.scoring_trends_last_10 || (prevPpg > 0 ? [prevPpg] : [])), matchPts].slice(-10);
+                const pb50 = (evKey.includes("50") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_50m_free, timeStr) : ath.averages?.pb_50m_free;
+                const pb100 = (evKey.includes("100") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_100m_free, timeStr) : ath.averages?.pb_100m_free;
+                const pb200 = (evKey.includes("200") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_200m_free, timeStr) : ath.averages?.pb_200m_free;
 
-              const updatedAthlete: AthletePerformanceProfile = {
-                ...ath,
-                rating_score: newRating,
-                averages: {
-                  ...ath.averages,
-                  ppg: newPpg,
-                  rpg: newRpg,
-                  apg: newApg,
-                  games_played: newGp,
-                  per_score: newPer,
-                  wins: savedPayload.game_result === "WIN" ? (ath.averages?.wins || 0) + 1 : (ath.averages?.wins || 0),
-                },
-                scoring_trends_last_10: newTrends,
-                workload_analytics: {
-                  ...(ath.workload_analytics || {}),
-                  target_7day_effort_pts: 450,
-                  current_7day_acute_load: Math.min(600, (ath.workload_analytics?.current_7day_acute_load || 300) + matchPts * 8),
-                  current_28day_chronic_load: Math.min(550, (ath.workload_analytics?.current_28day_chronic_load || 280) + matchPts * 3),
-                  calculated_acwr: 1.15,
-                  workout_score: newRating,
-                  fatigue_meter: 35,
-                  routine_score: Math.max(50, newRating - 5),
-                  body_stress_pts: 30,
-                },
-              };
+                const athletePodiums = (Number(ath.averages?.podiums) || 0) + (savedPayload.game_result === "WIN" || (ps.rank && ps.rank <= 3) ? 1 : 0);
+                const athleteWins = (Number(ath.averages?.wins) || 0) + (savedPayload.game_result === "WIN" ? 1 : 0);
 
-              setSelectedPerfAthlete((curr) => {
-                if (curr && (curr.athlete_id === ath.athlete_id || curr.full_name.toLowerCase().trim() === playerName)) {
-                  return updatedAthlete;
-                }
-                return curr;
-              });
+                const updatedAthlete: AthletePerformanceProfile = {
+                  ...ath,
+                  rating_score: ath.rating_score || 0,
+                  averages: {
+                    ...ath.averages,
+                    ...(pbKey ? { [pbKey]: updatedPb } : {}),
+                    ...(pb50 ? { pb_50m_free: pb50 } : {}),
+                    ...(pb100 ? { pb_100m_free: pb100 } : {}),
+                    ...(pb200 ? { pb_200m_free: pb200 } : {}),
+                    podiums: athletePodiums,
+                    podiums_count: athletePodiums,
+                    wins: athleteWins,
+                    meets_count: (Number(ath.averages?.meets_count) || 0) + 1,
+                  },
+                };
+                setSelectedPerfAthlete((curr) => {
+                  if (curr && (curr.athlete_id === ath.athlete_id || curr.full_name.toLowerCase().trim() === playerName)) {
+                    return updatedAthlete;
+                  }
+                  return curr;
+                });
+                return updatedAthlete;
+              } else if (isTrack) {
+                const evName = ps.event || ps.event_name || ps.position || ps.position_or_event || "";
+                const evKey = (ps.event_key || evName.toLowerCase().replace(/[^a-z0-9]/g, '_')).replace(/^pb_/, '');
+                const timeStr = ps.finish_time || ps.time || "";
+                const markStr = ps.mark || ps.distance || "";
+                const isDistance = Boolean(markStr || evKey.includes("vault") || evKey.includes("jump") || evKey.includes("put") || evKey.includes("throw") || evKey.includes("discus") || evKey.includes("javelin"));
+                const pbKey = `pb_${evKey}`;
+                const existingPb = (ath.averages as any)?.[pbKey];
+                const updatedPb = isDistance
+                  ? (markStr ? pickBetterDistance(existingPb, markStr) : existingPb)
+                  : (timeStr && timeStr !== "00:00.00" ? pickBetterTime(existingPb, timeStr) : existingPb);
 
-              return updatedAthlete;
+                const athletePodiums = (Number(ath.averages?.podiums) || 0) + (savedPayload.game_result === "WIN" || (ps.rank && ps.rank <= 3) ? 1 : 0);
+                const athleteWins = (Number(ath.averages?.wins) || 0) + (savedPayload.game_result === "WIN" ? 1 : 0);
+
+                const updatedAthlete: AthletePerformanceProfile = {
+                  ...ath,
+                  rating_score: ath.rating_score || 0,
+                  averages: {
+                    ...ath.averages,
+                    ...(pbKey ? { [pbKey]: updatedPb } : {}),
+                    podiums: athletePodiums,
+                    wins: athleteWins,
+                    event_wins: athleteWins,
+                    meets_count: (Number(ath.averages?.meets_count) || 0) + 1,
+                  },
+                };
+                setSelectedPerfAthlete((curr) => {
+                  if (curr && (curr.athlete_id === ath.athlete_id || curr.full_name.toLowerCase().trim() === playerName)) {
+                    return updatedAthlete;
+                  }
+                  return curr;
+                });
+                return updatedAthlete;
+              } else {
+                const prevGp = Number(ath.averages?.games_played || ((ath.averages?.ppg ?? 0) > 0 ? 1 : 0));
+                const prevPpg = Number(ath.averages?.ppg || 0);
+                const prevRpg = Number(ath.averages?.rpg || 0);
+                const prevApg = Number(ath.averages?.apg || 0);
+
+                const newGp = prevGp + 1;
+                const newPpg = Math.round(((prevPpg * prevGp + matchPts) / newGp) * 10) / 10;
+                const newRpg = Math.round(((prevRpg * prevGp + matchReb) / newGp) * 10) / 10;
+                const newApg = Math.round(((prevApg * prevGp + matchAst) / newGp) * 10) / 10;
+                const newPer = Math.round(newPpg * 1.2 + newRpg * 1.0 + newApg * 1.5);
+                const newTrends = [...(ath.scoring_trends_last_10 || (prevPpg > 0 ? [prevPpg] : [])), matchPts].slice(-10);
+
+                const updatedAthlete: AthletePerformanceProfile = {
+                  ...ath,
+                  rating_score: ath.rating_score || 0,
+                  averages: {
+                    ...ath.averages,
+                    ppg: newPpg,
+                    rpg: newRpg,
+                    apg: newApg,
+                    games_played: newGp,
+                    per_score: newPer,
+                    wins: savedPayload.game_result === "WIN" ? (ath.averages?.wins || 0) + 1 : (ath.averages?.wins || 0),
+                  },
+                  scoring_trends_last_10: newTrends,
+                };
+
+                setSelectedPerfAthlete((curr) => {
+                  if (curr && (curr.athlete_id === ath.athlete_id || curr.full_name.toLowerCase().trim() === playerName)) {
+                    return updatedAthlete;
+                  }
+                  return curr;
+                });
+
+                return updatedAthlete;
+              }
             });
 
             if (!matchedAny && playerName) {
-              const newPer = Math.round(matchPts * 1.2 + matchReb * 1.0 + matchAst * 1.5);
-              const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || matchPts * 3.5)));
-              const newAth: AthletePerformanceProfile = {
-                athlete_id: pAthleteId || `ath_${Date.now()}`,
-                user_id: pAthleteId || "",
-                full_name: ps.player_name || ps.name || "Athlete",
-                birthdate: "2004-10-05",
-                position_or_event: ps.position || "Guard",
-                location_province: "Camarines Sur",
-                team_name: savedPayload.home_team_name || "Bicol Rivers",
-                rating_score: newRating,
-                sport_category: sport,
-                biometrics: {
-                  height_ft: "6'0\"",
-                  weight_lbs: "165 lbs",
-                  wingspan_ft: "6'7\"",
-                  vertical_jump_in: "-",
-                },
-                averages: {
-                  ppg: matchPts,
-                  rpg: matchReb,
-                  apg: matchAst,
-                  games_played: 1,
-                  per_score: newPer,
-                  wins: savedPayload.game_result === "WIN" ? 1 : 0,
-                  fg_percentage: 50,
-                  three_pt_percentage: 40,
-                  ft_percentage: 80,
-                },
-                radar_competencies: { speed: 80, power: 75, agility: 78, iq: 85, tech: 80 },
-                workload_analytics: {
-                  target_7day_effort_pts: 450,
-                  current_7day_acute_load: 350,
-                  current_28day_chronic_load: 320,
-                  calculated_acwr: 1.09,
-                  workout_score: newRating,
-                  fatigue_meter: 25,
-                  routine_score: Math.max(50, newRating - 5),
-                  body_stress_pts: 20,
-                },
-                scoring_trends_last_10: [matchPts],
-                eligibility_documents: {
-                  psa_verified: true,
-                  residency_verified: true,
-                },
-              };
-              nextList.push(newAth);
+              if (isSwim) {
+                const evName = ps.event || ps.event_name || ps.position || ps.position_or_event || "";
+                const evKey = (ps.event_key || evName.toLowerCase().replace(/[^a-z0-9]/g, '_')).replace(/^pb_/, '');
+                const timeStr = ps.finish_time || ps.time || "";
+                const pbKey = `pb_${evKey}`;
+                const newAth = {
+                  athlete_id: pAthleteId || `ath_${Date.now()}`,
+                  user_id: pAthleteId || "",
+                  full_name: ps.player_name || ps.name || "Athlete",
+                  birthdate: "-",
+                  position_or_event: ps.position || evName || "Freestyle",
+                  location_province: "Camarines Sur",
+                  team_name: savedPayload.home_team_name || "Ateneo Blue Fast",
+                  rating_score: 0,
+                  sport_category: sport,
+                  biometrics: { height_ft: "-", weight_lbs: "-", wingspan_ft: "-", vertical_jump_in: "-" },
+                  radar_competencies: { speed: 0, power: 0, agility: 0, iq: 0, tech: 0 },
+                  averages: {
+                    ...(pbKey ? { [pbKey]: timeStr } : {}),
+                    podiums: savedPayload.game_result === "WIN" || (ps.rank && ps.rank <= 3) ? 1 : 0,
+                    wins: savedPayload.game_result === "WIN" ? 1 : 0,
+                    meets_count: 1,
+                  },
+                } as unknown as AthletePerformanceProfile;
+                return [newAth, ...nextList];
+              } else if (isTrack) {
+                const evName = ps.event || ps.event_name || ps.position || ps.position_or_event || "";
+                const evKey = (ps.event_key || evName.toLowerCase().replace(/[^a-z0-9]/g, '_')).replace(/^pb_/, '');
+                const markOrTime = ps.mark || ps.distance || ps.finish_time || ps.time || "";
+                const pbKey = `pb_${evKey}`;
+                const newAth = {
+                  athlete_id: pAthleteId || `ath_${Date.now()}`,
+                  user_id: pAthleteId || "",
+                  full_name: ps.player_name || ps.name || "Athlete",
+                  birthdate: "-",
+                  position_or_event: ps.position || evName || "100m",
+                  location_province: "Camarines Sur",
+                  team_name: savedPayload.home_team_name || "Track Team",
+                  rating_score: 0,
+                  sport_category: sport,
+                  biometrics: { height_ft: "-", weight_lbs: "-", wingspan_ft: "-", vertical_jump_in: "-" },
+                  radar_competencies: { speed: 0, power: 0, agility: 0, iq: 0, tech: 0 },
+                  averages: {
+                    ...(pbKey ? { [pbKey]: markOrTime } : {}),
+                    podiums: savedPayload.game_result === "WIN" || (ps.rank && ps.rank <= 3) ? 1 : 0,
+                    wins: savedPayload.game_result === "WIN" ? 1 : 0,
+                    event_wins: savedPayload.game_result === "WIN" ? 1 : 0,
+                    meets_count: 1,
+                  },
+                } as unknown as AthletePerformanceProfile;
+                return [newAth, ...nextList];
+              } else {
+                const newPer = Math.round(matchPts * 1.2 + matchReb * 1.0 + matchAst * 1.5);
+                const newAth: AthletePerformanceProfile = {
+                  athlete_id: pAthleteId || `ath_${Date.now()}`,
+                  user_id: pAthleteId || "",
+                  full_name: ps.player_name || ps.name || "Athlete",
+                  birthdate: "2004-10-05",
+                  position_or_event: ps.position || "Guard",
+                  location_province: "Camarines Sur",
+                  team_name: savedPayload.home_team_name || "Bicol Rivers",
+                  rating_score: 0,
+                  sport_category: sport,
+                  biometrics: {
+                    height_ft: "6'0\"",
+                    weight_lbs: "165 lbs",
+                    wingspan_ft: "6'7\"",
+                    vertical_jump_in: "-",
+                  },
+                  averages: {
+                    ppg: matchPts,
+                    rpg: matchReb,
+                    apg: matchAst,
+                    games_played: 1,
+                    per_score: newPer,
+                    wins: savedPayload.game_result === "WIN" ? 1 : 0,
+                    fg_percentage: 50,
+                    three_pt_percentage: 40,
+                    ft_percentage: 80,
+                  },
+                  radar_competencies: { speed: 80, power: 75, agility: 78, iq: 85, tech: 80 },
+                } as AthletePerformanceProfile;
+                return [newAth, ...nextList];
+              }
             }
 
             return nextList;

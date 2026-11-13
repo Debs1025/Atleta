@@ -139,6 +139,42 @@ const OFFLINE_ATHLETES_CACHE_KEY = "atleta_offline_athletes_cache";
 const OFFLINE_SPORTS_CACHE_KEY = "atleta_offline_sports_cache";
 const OFFLINE_TEAMS_CACHE_KEY = "atleta_offline_teams_cache";
 
+function parseSecondsOrMeters(raw: any): number {
+  if (typeof raw === "number") return raw;
+  if (!raw) return 0;
+  const str = String(raw).trim().toLowerCase().replace(/s$/, "").replace(/m$/, "");
+  if (str.includes(":")) {
+    const parts = str.split(":");
+    if (parts.length === 2) {
+      const min = parseFloat(parts[0]) || 0;
+      const sec = parseFloat(parts[1]) || 0;
+      return +(min * 60 + sec).toFixed(2);
+    }
+  }
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function pickBetterTime(existing: string | undefined | null, candidate: string): string {
+  if (!existing || existing === "-" || existing === "N/A") return candidate;
+  if (!candidate || candidate === "-" || candidate === "N/A") return existing;
+  const nExisting = parseSecondsOrMeters(existing);
+  const nCandidate = parseSecondsOrMeters(candidate);
+  if (nExisting <= 0) return candidate;
+  if (nCandidate <= 0) return existing;
+  return nCandidate < nExisting ? candidate : existing;
+}
+
+function pickBetterDistance(existing: string | undefined | null, candidate: string): string {
+  if (!existing || existing === "-" || existing === "N/A") return candidate;
+  if (!candidate || candidate === "-" || candidate === "N/A") return existing;
+  const nExisting = parseSecondsOrMeters(existing);
+  const nCandidate = parseSecondsOrMeters(candidate);
+  if (nExisting <= 0) return candidate;
+  if (nCandidate <= 0) return existing;
+  return nCandidate > nExisting ? candidate : existing;
+}
+
 /**
  * Save a match log with Firestore offline data persistence.
  * Writes to Firestore local cache first so it succeeds even when WiFi is off.
@@ -197,6 +233,11 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     const existingAthletesRaw = await AsyncStorage.getItem(OFFLINE_ATHLETES_CACHE_KEY);
     let athletesList: any[] = existingAthletesRaw ? JSON.parse(existingAthletesRaw) : [];
 
+    const sportUpper = String(cleanPayload.sport_type || "").toUpperCase();
+    const isSwim = sportUpper.includes("SWIM");
+    const isTrack = sportUpper.includes("TRACK") || sportUpper.includes("FIELD");
+    const isWin = cleanPayload.game_result === "WIN";
+
     const pStats = Array.isArray(cleanPayload.playerStats) ? cleanPayload.playerStats : [];
     if (pStats.length > 0) {
       for (const ps of pStats) {
@@ -211,6 +252,11 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
         const newPf = Number(ps.pf ?? ps.stats?.fouls ?? ps.stats?.pf ?? ps.fouls ?? 0);
         const newTo = Number(ps.to ?? ps.stats?.turnovers ?? ps.stats?.to ?? ps.turnovers ?? 0);
 
+        const evName = ps.event || ps.event_name || ps.position || ps.position_or_event || "";
+        const evKey = (ps.event_key || evName.toLowerCase().replace(/[^a-z0-9]/g, '_')).replace(/^pb_/, '');
+        const timeStr = ps.finish_time || ps.time || ps.stats?.finish_time || ps.stats?.time || "";
+        const markStr = ps.mark || ps.distance || ps.stats?.mark || ps.stats?.distance || "";
+
         const idx = athletesList.findIndex(
           (a) =>
             (athId && (a.athlete_id === athId || a.user_id === athId || a.id === athId || a.athlete_id === canonicalAthId || a.user_id === cleanAthId)) ||
@@ -221,81 +267,188 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
 
         if (idx >= 0) {
           const ath = athletesList[idx];
-          const prevGp = Number(ath.averages?.games_played ?? ath.stats?.games_played ?? (Number(ath.averages?.ppg || ath.pts || 0) > 0 ? 1 : 0));
-          const prevPpg = Number(ath.averages?.ppg ?? ath.stats?.ppg ?? ath.pts ?? 0);
-          const prevRpg = Number(ath.averages?.rpg ?? ath.stats?.rpg ?? ath.reb ?? 0);
-          const prevApg = Number(ath.averages?.apg ?? ath.stats?.apg ?? ath.ast ?? 0);
 
-          const newGp = prevGp + 1;
-          const newPpg = Math.round(((prevPpg * prevGp + newPts) / newGp) * 10) / 10;
-          const newRpg = Math.round(((prevRpg * prevGp + newReb) / newGp) * 10) / 10;
-          const newApg = Math.round(((prevApg * prevGp + newAst) / newGp) * 10) / 10;
-          const newPer = Math.round(newPpg * 1.2 + newRpg * 1.0 + newApg * 1.5);
-          const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPpg * 3.5)));
+          if (isSwim) {
+            const pbKey = `pb_${evKey}`;
+            const existingPb = ath.averages?.[pbKey] || ath.stats?.[pbKey];
+            const updatedPb = timeStr && timeStr !== "00:00.00" ? pickBetterTime(existingPb, timeStr) : (existingPb || timeStr);
 
-          const prevTrends = Array.isArray(ath.scoring_trends_last_10) ? ath.scoring_trends_last_10 : (prevPpg > 0 ? [prevPpg] : []);
-          const newTrends = [...prevTrends, newPts].slice(-10);
+            const pb50 = (evKey.includes("50") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_50m_free, timeStr) : ath.averages?.pb_50m_free;
+            const pb100 = (evKey.includes("100") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_100m_free, timeStr) : ath.averages?.pb_100m_free;
+            const pb200 = (evKey.includes("200") && evKey.includes("free")) ? pickBetterTime(ath.averages?.pb_200m_free, timeStr) : ath.averages?.pb_200m_free;
 
-          athletesList[idx] = {
-            ...ath,
-            averages: {
-              ...(ath.averages || {}),
-              ppg: newPpg,
-              rpg: newRpg,
-              apg: newApg,
-              games_played: newGp,
-              per_score: newPer,
-              wins: payload.game_result === "WIN" ? (ath.averages?.wins || 0) + 1 : (ath.averages?.wins || 0),
-            },
-            stats: {
-              ...(ath.stats || {}),
-              ppg: newPpg,
-              rpg: newRpg,
-              apg: newApg,
-              games_played: newGp,
-              per: newPer,
-              points: (ath.stats?.points || 0) + newPts,
-              rebounds: (ath.stats?.rebounds || 0) + newReb,
-              assists: (ath.stats?.assists || 0) + newAst,
-            },
-            pts: newPpg,
-            reb: newRpg,
-            ast: newApg,
-            rating_score: newRating,
-            scoring_trends_last_10: newTrends,
-          };
-          updatedAthProfile = athletesList[idx];
+            const athletePodiums = (Number(ath.averages?.podiums) || Number(ath.stats?.podiums) || 0) + (isWin || (ps.rank && ps.rank <= 3) ? 1 : 0);
+            const athleteWins = (Number(ath.averages?.wins) || 0) + (isWin ? 1 : 0);
+
+            athletesList[idx] = {
+              ...ath,
+              averages: {
+                ...(ath.averages || {}),
+                ...(pbKey ? { [pbKey]: updatedPb } : {}),
+                ...(pb50 ? { pb_50m_free: pb50 } : {}),
+                ...(pb100 ? { pb_100m_free: pb100 } : {}),
+                ...(pb200 ? { pb_200m_free: pb200 } : {}),
+                podiums: athletePodiums,
+                podiums_count: athletePodiums,
+                wins: athleteWins,
+                meets_count: (Number(ath.averages?.meets_count) || 0) + 1,
+              },
+              stats: {
+                ...(ath.stats || {}),
+                ...(pbKey ? { [pbKey]: updatedPb } : {}),
+                ...(pb50 ? { pb_50m_free: pb50 } : {}),
+                ...(pb100 ? { pb_100m_free: pb100 } : {}),
+                ...(pb200 ? { pb_200m_free: pb200 } : {}),
+                podiums: athletePodiums,
+              },
+              rating_score: ath.rating_score || 0,
+            };
+            updatedAthProfile = athletesList[idx];
+          } else if (isTrack) {
+            const pbKey = `pb_${evKey}`;
+            const isDistance = Boolean(markStr || evKey.includes("vault") || evKey.includes("jump") || evKey.includes("put") || evKey.includes("throw") || evKey.includes("discus") || evKey.includes("javelin"));
+            const existingPb = ath.averages?.[pbKey] || ath.stats?.[pbKey];
+            const updatedPb = isDistance
+              ? (markStr ? pickBetterDistance(existingPb, markStr) : existingPb)
+              : (timeStr && timeStr !== "00:00.00" ? pickBetterTime(existingPb, timeStr) : existingPb);
+
+            const athletePodiums = (Number(ath.averages?.podiums) || Number(ath.stats?.podiums) || 0) + (isWin || (ps.rank && ps.rank <= 3) ? 1 : 0);
+            const athleteWins = (Number(ath.averages?.wins) || 0) + (isWin ? 1 : 0);
+
+            athletesList[idx] = {
+              ...ath,
+              averages: {
+                ...(ath.averages || {}),
+                ...(pbKey ? { [pbKey]: updatedPb } : {}),
+                podiums: athletePodiums,
+                wins: athleteWins,
+                event_wins: athleteWins,
+                meets_count: (Number(ath.averages?.meets_count) || 0) + 1,
+              },
+              stats: {
+                ...(ath.stats || {}),
+                ...(pbKey ? { [pbKey]: updatedPb } : {}),
+                podiums: athletePodiums,
+              },
+              rating_score: ath.rating_score || 0,
+            };
+            updatedAthProfile = athletesList[idx];
+          } else {
+            // Basketball & Ball Games
+            const prevGp = Number(ath.averages?.games_played ?? ath.stats?.games_played ?? (Number(ath.averages?.ppg || ath.pts || 0) > 0 ? 1 : 0));
+            const prevPpg = Number(ath.averages?.ppg ?? ath.stats?.ppg ?? ath.pts ?? 0);
+            const prevRpg = Number(ath.averages?.rpg ?? ath.stats?.rpg ?? ath.reb ?? 0);
+            const prevApg = Number(ath.averages?.apg ?? ath.stats?.apg ?? ath.ast ?? 0);
+
+            const newGp = prevGp + 1;
+            const newPpg = Math.round(((prevPpg * prevGp + newPts) / newGp) * 10) / 10;
+            const newRpg = Math.round(((prevRpg * prevGp + newReb) / newGp) * 10) / 10;
+            const newApg = Math.round(((prevApg * prevGp + newAst) / newGp) * 10) / 10;
+            const newPer = Math.round(newPpg * 1.2 + newRpg * 1.0 + newApg * 1.5);
+
+            const prevTrends = Array.isArray(ath.scoring_trends_last_10) ? ath.scoring_trends_last_10 : (prevPpg > 0 ? [prevPpg] : []);
+            const newTrends = [...prevTrends, newPts].slice(-10);
+
+            athletesList[idx] = {
+              ...ath,
+              averages: {
+                ...(ath.averages || {}),
+                ppg: newPpg,
+                rpg: newRpg,
+                apg: newApg,
+                games_played: newGp,
+                per_score: newPer,
+                wins: isWin ? (ath.averages?.wins || 0) + 1 : (ath.averages?.wins || 0),
+              },
+              stats: {
+                ...(ath.stats || {}),
+                ppg: newPpg,
+                rpg: newRpg,
+                apg: newApg,
+                games_played: newGp,
+                per: newPer,
+                points: (ath.stats?.points || 0) + newPts,
+                rebounds: (ath.stats?.rebounds || 0) + newReb,
+                assists: (ath.stats?.assists || 0) + newAst,
+              },
+              pts: newPpg,
+              reb: newRpg,
+              ast: newApg,
+              rating_score: ath.rating_score || 0,
+              scoring_trends_last_10: newTrends,
+            };
+            updatedAthProfile = athletesList[idx];
+          }
         } else if (athId) {
-          const newPer = Math.round(newPts * 1.2 + newReb * 1.0 + newAst * 1.5);
-          const newRating = Math.min(99, Math.max(60, Math.round(newPer * 2.8 || newPts * 3.5)));
-          updatedAthProfile = {
-            athlete_id: athId,
-            full_name: ps.player_name || ps.name || "Athlete",
-            averages: {
-              ppg: newPts,
-              rpg: newReb,
-              apg: newAst,
-              games_played: 1,
-              per_score: newPer,
-              wins: payload.game_result === "WIN" ? 1 : 0,
-            },
-            stats: {
-              ppg: newPts,
-              rpg: newReb,
-              apg: newAst,
-              games_played: 1,
-              per: newPer,
-              points: newPts,
-              rebounds: newReb,
-              assists: newAst,
-            },
-            pts: newPts,
-            reb: newReb,
-            ast: newAst,
-            rating_score: newRating,
-            scoring_trends_last_10: [newPts],
-          };
-          athletesList.push(updatedAthProfile);
+          if (isSwim) {
+            const pbKey = `pb_${evKey}`;
+            updatedAthProfile = {
+              athlete_id: athId,
+              full_name: ps.player_name || ps.name || "Athlete",
+              averages: {
+                ...(pbKey ? { [pbKey]: timeStr } : {}),
+                podiums: isWin || (ps.rank && ps.rank <= 3) ? 1 : 0,
+                wins: isWin ? 1 : 0,
+                meets_count: 1,
+              },
+              stats: {
+                ...(pbKey ? { [pbKey]: timeStr } : {}),
+                podiums: isWin || (ps.rank && ps.rank <= 3) ? 1 : 0,
+              },
+              rating_score: 0,
+            };
+            athletesList.push(updatedAthProfile);
+          } else if (isTrack) {
+            const pbKey = `pb_${evKey}`;
+            const markOrTime = markStr || timeStr;
+            updatedAthProfile = {
+              athlete_id: athId,
+              full_name: ps.player_name || ps.name || "Athlete",
+              averages: {
+                ...(pbKey ? { [pbKey]: markOrTime } : {}),
+                podiums: isWin || (ps.rank && ps.rank <= 3) ? 1 : 0,
+                wins: isWin ? 1 : 0,
+                event_wins: isWin ? 1 : 0,
+                meets_count: 1,
+              },
+              stats: {
+                ...(pbKey ? { [pbKey]: markOrTime } : {}),
+                podiums: isWin || (ps.rank && ps.rank <= 3) ? 1 : 0,
+              },
+              rating_score: 0,
+            };
+            athletesList.push(updatedAthProfile);
+          } else {
+            const newPer = Math.round(newPts * 1.2 + newReb * 1.0 + newAst * 1.5);
+            updatedAthProfile = {
+              athlete_id: athId,
+              full_name: ps.player_name || ps.name || "Athlete",
+              averages: {
+                ppg: newPts,
+                rpg: newReb,
+                apg: newAst,
+                games_played: 1,
+                per_score: newPer,
+                wins: isWin ? 1 : 0,
+              },
+              stats: {
+                ppg: newPts,
+                rpg: newReb,
+                apg: newAst,
+                games_played: 1,
+                per: newPer,
+                points: newPts,
+                rebounds: newReb,
+                assists: newAst,
+              },
+              pts: newPts,
+              reb: newReb,
+              ast: newAst,
+              rating_score: 0,
+              scoring_trends_last_10: [newPts],
+            };
+            athletesList.push(updatedAthProfile);
+          }
         }
 
         // Commit player career totals to Firestore Athlete_Profiles
@@ -320,6 +473,20 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
               player_name: ps.player_name || ps.name || "Athlete",
               team_name: cleanPayload.home_team_name,
               sport_category: cleanPayload.sport_type,
+              event: ps.event || ps.event_name || ps.position || ps.position_or_event || "",
+              event_name: ps.event_name || ps.event || ps.position || ps.position_or_event || "",
+              event_key: ps.event_key || evKey || "",
+              finish_time: ps.finish_time || ps.time || timeStr || "",
+              time: ps.finish_time || ps.time || timeStr || "",
+              mark: ps.mark || ps.distance || markStr || "",
+              timer_seconds: Number(ps.timer_seconds || rawStats.timer_seconds || 0),
+              distance_meters: Number(ps.distance_meters || rawStats.distance_meters || 0),
+              rank: ps.rank || (isWin ? 1 : 2),
+              is_foul_dq: Boolean(ps.is_foul_dq || rawStats.is_foul_dq),
+              split_times: ps.split_times || rawStats.split_times || [],
+              match_date: cleanPayload.match_date || cleanPayload.created_at || new Date().toISOString(),
+              meet_name: cleanPayload.match_name || cleanPayload.game_name || "Match Session",
+              location: cleanPayload.location || "",
               points: newPts,
               pts: newPts,
               rebounds: newReb,

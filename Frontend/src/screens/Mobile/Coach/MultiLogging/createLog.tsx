@@ -20,6 +20,7 @@ import { SportCategory, AthleteRosterItem, MatchLogSessionState, SportConfigurat
 import { useMatchSession } from "./MatchSessionContext";
 import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
 import { getAthletesOfflineFirst, getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { getEventsForSport, SportEventOption } from "./sportEvents";
 
 declare const process: any;
 
@@ -258,6 +259,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
     setSessionDetails,
     addAthleteToRoster,
     removeAthleteFromRoster,
+    updateAthleteEvent,
     markAthleteInjured,
     removeInjury,
     addInjury,
@@ -273,6 +275,7 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
   // Injury Section State
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [injuryTargetAthlete, setInjuryTargetAthlete] = useState<AthleteRosterItem | null>(null);
+  const [eventPickerAthlete, setEventPickerAthlete] = useState<AthleteRosterItem | null>(null);
   const [selectedInjuryType, setSelectedInjuryType] = useState("Ankle Sprain");
   const [customInjuryType, setCustomInjuryType] = useState("");
   const [selectedInjuryStatus, setSelectedInjuryStatus] = useState("Out / Sidelined");
@@ -534,22 +537,26 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
             const fullName = a.full_name || `${fName} ${lName}`.trim() || "Athlete";
             const teamName = a.team_name || a.team || a.current_affiliation?.team_name || "";
             const teamId = a.team_id || a.current_affiliation?.team_id || "";
+            const isSwim = sport === "SWIMMING";
+            const isTrack = sport === "TRACK AND FIELD";
+            const defaultEvent = isSwim ? "50m Freestyle" : isTrack ? "100m Dash" : (a.position || a.position_or_event || (sport === "BASKETBALL" ? "Guard" : "Player"));
+            const defaultDist = isSwim ? 50 : 100;
+
             return {
               athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}_${Math.random()}`,
               jersey_number: String(a.jersey_number ?? "00"),
               last_name: lName || fullName.split(" ").slice(-1)[0] || "",
               full_name: fullName.toUpperCase(),
-              position_or_event:
-                a.position ||
-                a.position_or_event ||
-                (sport === "BASKETBALL" ? "Guard" : sport === "SWIMMING" ? "Freestyle" : sport === "TRACK AND FIELD" ? "100m" : "Player"),
+              position_or_event: defaultEvent,
+              event: defaultEvent,
+              event_name: defaultEvent,
               is_active_on_field: false,
               avatar_url: a.avatar_url,
               sport_type: a.sport_type || sport,
               team_name: teamName,
               team_id: teamId,
               basketball_stats: { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0 },
-              timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 100, split_times: [], is_foul_dq: false },
+              timing_stats: { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: defaultDist, split_times: [], is_foul_dq: false },
             };
           });
 
@@ -1010,6 +1017,35 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                     {athlete.position_or_event} • #{athlete.jersey_number}
                     {athlete.team_name && athlete.team_name !== "Unassigned" && athlete.team_name !== "Unassigned / No Team" ? ` • Team: ${athlete.team_name}` : ""}
                   </Text>
+                  {(session.sport_type?.toUpperCase().includes("SWIM") || session.sport_type?.toUpperCase().includes("TRACK") || session.sport_type?.toUpperCase().includes("FIELD")) && (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                        backgroundColor: "rgba(0, 200, 255, 0.15)",
+                        borderColor: "rgba(0, 200, 255, 0.4)",
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        marginTop: 4,
+                        alignSelf: "flex-start",
+                      }}
+                      onPress={() => setEventPickerAthlete(athlete)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={session.sport_type?.toUpperCase().includes("SWIM") ? "water-outline" : "speedometer-outline"}
+                        size={12}
+                        color="#00C8FF"
+                      />
+                      <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "800" }}>
+                        Event: {athlete.position_or_event || (athlete as any).event || "Select"}
+                      </Text>
+                      <Ionicons name="chevron-down" size={12} color="#00C8FF" />
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -1957,6 +1993,76 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                   CONFIRM & ADD TO INJURIES
                 </Text>
               </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Event Picker Modal for Individual Sports */}
+      <Modal
+        visible={eventPickerAthlete !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEventPickerAthlete(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pickerModalSheet, { maxHeight: "80%" }]}>
+            <View style={styles.pickerModalHeader}>
+              <View style={styles.pickerModalTitleBox}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="medal" size={20} color="#00C8FF" />
+                  <Text style={styles.pickerModalTitle}>CHOOSE EVENT</Text>
+                </View>
+                <Text style={styles.pickerModalSubtitle}>
+                  For {eventPickerAthlete?.full_name}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setEventPickerAthlete(null)} activeOpacity={0.7}>
+                <Ionicons name="close" size={24} color="#8E9BAE" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24, gap: 8 }}>
+              {getEventsForSport(session.sport_type).map((ev) => {
+                const currentEv = eventPickerAthlete?.position_or_event || (eventPickerAthlete as any)?.event;
+                const isSelected =
+                  currentEv?.toLowerCase() === ev.label.toLowerCase() ||
+                  currentEv?.toLowerCase() === ev.key.toLowerCase() ||
+                  currentEv?.toLowerCase() === ev.shortLabel.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={ev.key}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      backgroundColor: isSelected ? "rgba(0, 200, 255, 0.15)" : "#0E172A",
+                      borderColor: isSelected ? "#00C8FF" : "#1E293B",
+                      borderWidth: 1.5,
+                      borderRadius: 10,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                    }}
+                    onPress={() => {
+                      if (eventPickerAthlete) {
+                        updateAthleteEvent(eventPickerAthlete.athlete_id, ev.label, ev.key, ev.distance_meters);
+                      }
+                      setEventPickerAthlete(null);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View>
+                      <Text style={{ color: isSelected ? "#00C8FF" : "#FFFFFF", fontSize: 14, fontWeight: "800" }}>
+                        {ev.label}
+                      </Text>
+                      <Text style={{ color: "#8E9BAE", fontSize: 11, marginTop: 2 }}>
+                        {ev.distance_meters > 0 ? `${ev.distance_meters} Meters` : ev.isDistanceEvent ? "Field Event" : "Timing Split"}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>

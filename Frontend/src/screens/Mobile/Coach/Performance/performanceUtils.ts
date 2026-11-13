@@ -18,9 +18,10 @@ export function calculatePlayerRating(athlete: any): number {
   const storedPer = Number(averages.per_score ?? stats.per_score ?? stats.per ?? athlete.per ?? 0);
 
   const sportCategory = String(athlete.sport_category || athlete.sport_type || "BASKETBALL").toUpperCase();
+  const isBasketball = sportCategory.includes("BASKET");
 
   // If player has games or scoring recorded
-  if (ppg > 0 || rpg > 0 || apg > 0 || gamesPlayed > 0 || storedPer > 0) {
+  if (isBasketball && (ppg > 0 || rpg > 0 || apg > 0 || gamesPlayed > 0 || storedPer > 0)) {
     let per = storedPer;
     if (per <= 0) {
       // Calculate dynamic PER
@@ -49,45 +50,19 @@ export function calculatePlayerRating(athlete: any): number {
   const blocks = Number(averages.blocks_per_set ?? stats.blocks_per_set ?? stats.blocks ?? 0);
   const aces = Number(averages.aces_per_set ?? stats.aces_per_set ?? stats.aces ?? 0);
   const digs = Number(averages.digs_per_set ?? stats.digs_per_set ?? stats.digs ?? 0);
-  if (kills > 0 || blocks > 0 || aces > 0 || digs > 0) {
+  const vGames = Number(averages.games_played ?? stats.games_played ?? 0);
+  if (vGames > 0 && (kills > 0 || blocks > 0 || aces > 0 || digs > 0)) {
     const vEff = (kills * 1.5) + (blocks * 2.0) + (aces * 1.8) + (digs * 0.9);
     return Math.min(99, Math.max(50, Math.round(60 + vEff * 1.8)));
   }
 
-  // 3. Track and field / Swimming stats
-  const finishTime = Number(averages.finish_time_ms ?? stats.finish_time_ms ?? athlete.finish_time_ms ?? 0);
-  if (finishTime > 0) {
-    if (sportCategory.includes("TRACK") || sportCategory.includes("FIELD")) {
-      const seconds = finishTime / 1000;
-      const tRating = Math.round(99 - Math.max(0, (seconds - 10.5) * 6));
-      return Math.min(99, Math.max(50, tRating));
-    } else if (sportCategory.includes("SWIM")) {
-      const seconds = finishTime / 1000;
-      const sRating = Math.round(99 - Math.max(0, (seconds - 22.0) * 3));
-      return Math.min(99, Math.max(50, sRating));
-    }
-  }
-
-  // 4. Competencies / Radar attributes fallback (if physical testing conducted)
-  const radar = athlete.radar_competencies || athlete.physical_profile || {};
-  const speed = Number(radar.speed ?? 0);
-  const power = Number(radar.power ?? 0);
-  const agility = Number(radar.agility ?? 0);
-  const iq = Number(radar.iq ?? 0);
-  const tech = Number(radar.tech ?? 0);
-  const radarVals = [speed, power, agility, iq, tech].filter((v) => v > 0);
-  if (radarVals.length >= 3) {
-    const avgRadar = Math.round(radarVals.reduce((a, b) => a + b, 0) / radarVals.length);
-    return Math.min(99, Math.max(50, avgRadar));
-  }
-
-  // 5. If athlete has an explicitly verified custom rating in their profile (not equal to legacy dummy 85/75 fallback)
+  // 3. Explicit verified rating score if evaluated by coach / official
   const explicitRating = Number(athlete.rating_score || athlete.rating || 0);
-  if (explicitRating > 0 && explicitRating !== 85 && explicitRating !== 75) {
+  if (explicitRating > 0 && explicitRating !== 85 && explicitRating !== 75 && explicitRating !== 99 && explicitRating !== 60) {
     return Math.min(99, Math.max(50, Math.round(explicitRating)));
   }
 
-  // Unrated (0 represents unrated; UI will display '-' cleanly)
+  // Unrated (0 represents unrated; UI displays '-' cleanly)
   return 0;
 }
 

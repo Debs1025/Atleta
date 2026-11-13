@@ -57,6 +57,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
         const mapped: AthletePerformanceProfile[] = list.map((a: any) => {
           const stats = a.stats || a.averages || {};
           const avg = a.averages || a.stats || {};
+          const sType = String(a.sport_type || a.sport_category || "BASKETBALL").toUpperCase();
+          const isSwim = sType.includes("SWIM");
+          const isTrack = sType.includes("TRACK") || sType.includes("FIELD");
+
           const ppg = Number(avg.ppg ?? stats.ppg ?? a.ppg ?? a.pts ?? 0);
           const rpg = Number(avg.rpg ?? stats.rpg ?? a.rpg ?? a.reb ?? 0);
           const apg = Number(avg.apg ?? stats.apg ?? a.ast ?? a.apg ?? 0);
@@ -64,12 +68,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           
           const rating = calculatePlayerRating({
             ...a,
+            sport_category: sType,
             averages: {
               ...avg,
-              ppg,
-              rpg,
-              apg,
-              per_score: per,
+              ...(!isSwim && !isTrack ? { ppg, rpg, apg, per_score: per } : {}),
               fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
               games_played: Number(avg.games_played ?? stats.games_played ?? 0),
               wins: Number(avg.wins ?? stats.wins ?? 0),
@@ -90,7 +92,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             location_province: a.province || a.location || "Camarines Sur",
             team_name: a.team_name || "Free Agent",
             rating_score: rating,
-            sport_category: (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() as any,
+            sport_category: sType as any,
             biometrics: a.biometrics || {
               height_ft: heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : "-",
               weight_lbs: weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : "-",
@@ -100,9 +102,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             averages: {
               ...(stats || {}),
               ...(avg || {}),
-              ppg,
-              rpg,
-              apg,
+              ...(!isSwim && !isTrack ? { ppg, rpg, apg, per_score: per } : {}),
               games_played: Number(avg.games_played ?? stats.games_played ?? 0),
               wins: Number(avg.wins ?? stats.wins ?? 0),
               per_score: per,
@@ -351,10 +351,28 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                         {athlete.averages.points_scored ?? 0} PTS • {athlete.averages.aces ?? 0} ACES • {athlete.averages.dinks ?? 0} DINKS
                       </Text>
                     );
+                  } else if (sc.includes("SWIM")) {
+                    const athAny: any = athlete;
+                    const pb = athAny.averages?.pb_50m_free || athAny.averages?.pb_100m_free || athAny.stats?.pb_50m_free || athAny.stats?.times_50m_free || "-";
+                    const podiums = athAny.averages?.podiums_count ?? athAny.averages?.podiums ?? athAny.stats?.podiums_count ?? 0;
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {pb !== "-" ? `PB: ${pb}` : "NO LOGGED MEETS"} • {podiums} PODIUMS
+                      </Text>
+                    );
+                  } else if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) {
+                    const athAny: any = athlete;
+                    const pb = athAny.averages?.pb_100m || athAny.averages?.pb_200m || athAny.stats?.pb_100m || athAny.stats?.times_100m || "-";
+                    const wins = athAny.averages?.event_wins ?? athAny.averages?.wins ?? athAny.stats?.event_wins ?? 0;
+                    return (
+                      <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                        {pb !== "-" ? `PB: ${pb}` : "NO LOGGED MEETS"} • {wins} WINS
+                      </Text>
+                    );
                   } else {
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.rating_score ? `${athlete.rating_score} RATING` : "-"}
+                        {athlete.rating_score && athlete.rating_score > 0 ? `${athlete.rating_score} RATING` : "-"}
                       </Text>
                     );
                   }
@@ -370,8 +388,8 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
               </View>
 
               <View style={styles.cardRight}>
-                <Text style={styles.ratingValue}>{athlete.rating_score || "-"}</Text>
-                <Text style={styles.ratingLabel}>RATING</Text>
+                <Text style={styles.ratingValue}>{athlete.rating_score && athlete.rating_score > 0 ? athlete.rating_score : "-"}</Text>
+                <Text style={styles.ratingLabel}>{athlete.rating_score && athlete.rating_score > 0 ? "RATING" : "UNRATED"}</Text>
               </View>
             </TouchableOpacity>
           ))

@@ -325,10 +325,10 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
               );
             } else {
               // Generic Sport averages
-              const gp = displayAverages?.games_played ?? displayStats?.games_played ?? activePastTeam?.stats_summary?.matches_played ?? 8;
-              const wins = displayAverages?.wins ?? displayStats?.wins ?? activePastTeam?.stats_summary?.wins ?? 6;
-              const rating = profile?.rating_score || rawP.rating_score || "88";
-              const eff = displayAverages?.efficiency_pct || displayStats?.efficiency_rating || "85%";
+              const gp = displayAverages?.games_played ?? displayStats?.games_played ?? activePastTeam?.stats_summary?.matches_played ?? 0;
+              const wins = displayAverages?.wins ?? displayStats?.wins ?? activePastTeam?.stats_summary?.wins ?? 0;
+              const rating = profile?.rating_score || rawP.rating_score || "-";
+              const eff = displayAverages?.efficiency_pct || displayStats?.efficiency_rating || "-";
               const status = profile?.player_status || profile?.playerStatus || "Active";
 
               return (
