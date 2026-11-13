@@ -191,7 +191,7 @@ const PlayerRowItem = React.memo(
           onPress={() => onViewStats(player)}
           activeOpacity={0.7}
         >
-          <Text style={styles.viewStatsText}>View Stats</Text>
+          <Text style={styles.viewStatsText}>View Profile</Text>
         </TouchableOpacity>
       </View>
     );
@@ -2274,6 +2274,38 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     setActiveView("athlete_portfolio");
   }, [perfAthletes, activeView, matchHistoryList]);
 
+  const handleSelectRecentMatch = useCallback((matchItem: MatchHistoryItem) => {
+    setSelectedMatchItem(matchItem);
+    setPreviousPortfolioView("dashboard");
+    const matchSport = String(matchItem.sport_category || "").toUpperCase();
+    if (matchSport.includes("BASKET") || matchSport.includes("VOLLEY")) {
+      setActiveView("perf_basketball_result");
+    } else if (matchSport.includes("SWIM")) {
+      setActiveView("perf_swimming_result");
+    } else {
+      setActiveView("perf_trackfield_result");
+    }
+  }, []);
+
+  const dashboardRecentMatches = useMemo(() => {
+    const list = matchHistoryList && matchHistoryList.length > 0 ? matchHistoryList : coachMatches;
+    if (!list || list.length === 0) return [];
+
+    let filtered = list;
+    if (activeSportFilter !== "ALL") {
+      const filt = activeSportFilter.toUpperCase().trim();
+      filtered = list.filter((m) => {
+        const sc = String(m.sport_category || "").toUpperCase().trim();
+        if (filt.includes("TRACK") || filt.includes("FIELD")) {
+          return sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
+        }
+        return sc.includes(filt);
+      });
+    }
+
+    return filtered.slice(0, 4);
+  }, [matchHistoryList, coachMatches, activeSportFilter]);
+
   const handleDeleteTeam = useCallback(async (teamId: string) => {
     const deletedTeam = teams.find((t) => t.team_id === teamId);
     const deletedTeamNameLower = (deletedTeam?.team_name || "").toLowerCase().trim();
@@ -3320,7 +3352,101 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               </ScrollView>
             </View>
 
-            {/* PLAYERS Section */}
+            {/* RECENT MATCHES & MEETS Section */}
+            <View style={styles.recentMatchesSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>RECENT MATCHES & MEETS</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setActiveTab("Performance");
+                    setActiveView("performance");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
+
+              {dashboardRecentMatches.length === 0 ? (
+                <View style={styles.emptyRecentMatchCard}>
+                  <Ionicons name="trophy-outline" size={28} color="#64748B" />
+                  <Text style={styles.emptyRecentMatchTitle}>
+                    {activeSportFilter !== "ALL"
+                      ? `No ${activeSportFilter} Matches Logged`
+                      : "No Matches Logged Yet"}
+                  </Text>
+                  <Text style={styles.emptyRecentMatchSub}>
+                    Use the '+' button below to log matches or scan official scorecards.
+                  </Text>
+                </View>
+              ) : (
+                dashboardRecentMatches.map((matchItem) => {
+                  const sc = String(matchItem.sport_category || "").toUpperCase();
+                  const isWin =
+                    String(matchItem.result_badge_text || "").toUpperCase().includes("WIN") ||
+                    String(matchItem.result_badge_text || "").includes("1ST");
+                  let sportIcon: any = "trophy-outline";
+                  if (sc.includes("SWIM")) sportIcon = "water-outline";
+                  else if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) sportIcon = "stopwatch-outline";
+                  else if (sc.includes("BASKET")) sportIcon = "basketball-outline";
+                  else if (sc.includes("VOLLEY")) sportIcon = "tennisball-outline";
+
+                  const athCount = Array.isArray(matchItem.player_stats)
+                    ? matchItem.player_stats.length
+                    : Array.isArray(matchItem.athlete_ids)
+                      ? matchItem.athlete_ids.length
+                      : 0;
+
+                  return (
+                    <TouchableOpacity
+                      key={matchItem.match_id}
+                      style={styles.recentMatchCard}
+                      activeOpacity={0.8}
+                      onPress={() => handleSelectRecentMatch(matchItem)}
+                    >
+                      <View style={styles.recentMatchHeader}>
+                        <View style={styles.recentMatchSportTag}>
+                          <Ionicons name={sportIcon} size={11} color="#00C8FF" />
+                          <Text style={styles.recentMatchSportText}>
+                            {matchItem.sport_category?.toUpperCase() || "MATCH"}
+                          </Text>
+                        </View>
+                        <Text style={styles.recentMatchDate}>
+                          {matchItem.date_formatted || matchItem.full_date || "RECENT"}
+                        </Text>
+                      </View>
+
+                      <View style={styles.recentMatchTitleRow}>
+                        <Text style={styles.recentMatchTitle} numberOfLines={1}>
+                          {matchItem.event_or_opponent || matchItem.match_name || matchItem.game_name || "Official Match"}
+                        </Text>
+                        <View style={[styles.recentMatchBadge, isWin ? styles.recentMatchBadgeWin : styles.recentMatchBadgeOther]}>
+                          <Text style={isWin ? styles.recentMatchBadgeTextWin : styles.recentMatchBadgeTextOther}>
+                            {matchItem.result_badge_text || (isWin ? "WIN" : "COMPLETED")}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.recentMatchFooter}>
+                        <Text style={styles.recentMatchSummaryText}>
+                          {matchItem.score_or_time_summary || "Match Recorded"}
+                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          {athCount > 0 && (
+                            <Text style={styles.recentMatchAthletesCount}>
+                              {athCount} {athCount === 1 ? "Athlete" : "Athletes"} Logged
+                            </Text>
+                          )}
+                          <Ionicons name="chevron-forward" size={14} color="#64748B" />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+
+            {/* PLAYERS Section (Moved Down) */}
             <View style={styles.playersSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>PLAYERS</Text>
