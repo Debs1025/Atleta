@@ -989,6 +989,9 @@ export function OCRoutput({
                                             if (header.key === 'team_name' || header.key === 'team' || header.key === 'school') {
                                                 return item.team_name || item.team || item.school || item.stats?.team_name || item.stats?.school;
                                             }
+                                            if (header.key === 'event' || header.key === 'event_name' || header.key === 'discipline') {
+                                                return item.event || item.event_name || item.discipline || item.stats?.event || item.stats?.event_name || item.position || item.position_or_event;
+                                            }
                                             if (header.key === 'time_or_distance') {
                                                 return item.time_or_distance || item.time || item.distance || item.finish_time || item.mark || item.stats?.time_or_distance || item.stats?.time || item.stats?.distance;
                                             }
@@ -1000,6 +1003,9 @@ export function OCRoutput({
                                             }
                                             if (header.key === 'seed_time') {
                                                 return item.seed_time || item.seed || item.entry_time || item.stats?.seed_time || item.stats?.seed || item.custom_stats?.seed_time;
+                                            }
+                                            if (header.key === 'split' || header.key === 'split_time') {
+                                                return item.split || item.split_time || (Array.isArray(item.split_times) ? item.split_times.join(', ') : (item.stats?.split || item.stats?.split_time));
                                             }
                                             if (header.key === 'rank' || header.key === 'place') {
                                                 return item.rank !== undefined ? item.rank : (item.place !== undefined ? item.place : item.stats?.rank ?? item.stats?.place ?? item.custom_stats?.rank ?? item.custom_stats?.place);
@@ -1016,6 +1022,7 @@ export function OCRoutput({
                                             'time_or_distance', 'distance',
                                             'finish_time', 'seed_time', 'time',
                                             'qts', 'seed', 'qualifying_time',
+                                            'split', 'split_time', 'event', 'event_name', 'discipline',
                                             'rank', 'place'
                                         ].includes(header.key);
                                         const isNumeric = !isTimeOrRankField && (typeof val === "number" || (!isNaN(Number(val)) && val !== "" && val !== undefined));
@@ -1055,7 +1062,7 @@ export function OCRoutput({
                                         'time_or_distance', 'distance',
                                         'finish_time', 'seed_time', 'time',
                                         'qts', 'seed', 'qualifying_time', 'split', 'split_time',
-                                        'rank', 'place', 'lane', 'heat', 'event', 'jersey_number'
+                                        'rank', 'place', 'lane', 'heat', 'event', 'event_name', 'discipline', 'jersey_number'
                                     ].includes(header.key);
 
                                     if (isNonSummableHeader) {

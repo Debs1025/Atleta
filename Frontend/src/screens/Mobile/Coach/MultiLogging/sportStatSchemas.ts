@@ -435,10 +435,12 @@ const SWIMMING_SCHEMA: SportStatSchema = {
     },
   ],
   tableHeaders: [
-    { label: 'FINISH TIME', shortLabel: 'FINISH TIME', key: 'finish_time', width: 115 },
-    { label: 'SEED TIME', shortLabel: 'SEED TIME', key: 'seed_time', width: 105 },
-    { label: 'POINTS', shortLabel: 'POINTS', key: 'pts', width: 80 },
-    { label: 'PLACE', shortLabel: 'PLACE', key: 'rank', width: 70 },
+    { label: 'EVENT', shortLabel: 'EVENT', key: 'event', width: 125 },
+    { label: 'FINISH TIME', shortLabel: 'TIME', key: 'finish_time', width: 105 },
+    { label: 'SPLIT TIME', shortLabel: 'SPLIT', key: 'split', width: 95 },
+    { label: 'SEED TIME', shortLabel: 'SEED', key: 'seed_time', width: 85 },
+    { label: 'POINTS', shortLabel: 'PTS', key: 'pts', width: 65 },
+    { label: 'PLACE', shortLabel: 'PLACE', key: 'rank', width: 65 },
   ],
 };
 
@@ -484,10 +486,11 @@ const TRACK_FIELD_SCHEMA: SportStatSchema = {
     },
   ],
   tableHeaders: [
-    { label: 'TEAM', shortLabel: 'TEAM', key: 'team_name', width: 135 },
-    { label: 'TIME / DISTANCE', shortLabel: 'TIME / DIST', key: 'time_or_distance', width: 125 },
-    { label: 'QTS', shortLabel: 'QTS', key: 'qts', width: 90 },
-    { label: 'PLACE', shortLabel: 'PLACE', key: 'rank', width: 75 },
+    { label: 'EVENT', shortLabel: 'EVENT', key: 'event', width: 125 },
+    { label: 'TIME / DISTANCE', shortLabel: 'TIME / DIST', key: 'time_or_distance', width: 120 },
+    { label: 'QTS', shortLabel: 'QTS', key: 'qts', width: 85 },
+    { label: 'POINTS', shortLabel: 'PTS', key: 'pts', width: 65 },
+    { label: 'PLACE', shortLabel: 'PLACE', key: 'rank', width: 65 },
   ],
 };
 

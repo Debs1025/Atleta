@@ -90,8 +90,12 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       const eventName = (p as any).event_name || (p as any).event || p.position_or_event || "";
       const eventKey = (p as any).event_key || (tStats as any).event_key || "";
       const markVal = (p as any).mark || (tStats as any).mark || (p as any).distance || "";
-      const timeVal = tStats.formatted_time || (p as any).time || (tStats as any).formatted_time || "00:00.00";
+      const timeVal = (tStats.formatted_time && tStats.formatted_time !== "00:00.00") ? tStats.formatted_time : ((p as any).finish_time || (p as any).time || "00:00.00");
       const distMeters = Number(tStats.distance_meters || (p as any).distance_meters || 0);
+      const splitVal = tStats.split_times && tStats.split_times.length > 0 ? tStats.split_times.join(", ") : ((p as any).split || (p as any).split_time || "");
+      const seedVal = (p as any).seed_time || (tStats as any).seed_time || "";
+      const qtsVal = (p as any).qts || (tStats as any).qts || "";
+      const rankVal = (p as any).rank || (normalizedGameResult === "WIN" ? 1 : 2);
 
       const points = Number(bStats.pts ?? cStats.points ?? cStats.pts ?? cStats.kills ?? cStats.goals ?? 0);
       const rebounds = Number(bStats.reb ?? cStats.rebounds ?? cStats.reb ?? cStats.digs ?? 0);
@@ -121,11 +125,17 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         time: timeVal,
         distance_meters: distMeters,
         mark: markVal,
+        time_or_distance: markVal || timeVal,
         event: eventName,
         event_name: eventName,
         event_key: eventKey,
-        rank: (p as any).rank || (normalizedGameResult === "WIN" ? 1 : 2),
+        rank: rankVal,
+        place: rankVal,
+        split: splitVal,
+        split_time: splitVal,
         split_times: tStats.split_times || [],
+        seed_time: seedVal,
+        qts: qtsVal,
         is_foul_dq: Boolean(tStats.is_foul_dq),
         ...cStats,
       };
@@ -142,7 +152,14 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         time: timeVal,
         finish_time: timeVal,
         mark: markVal,
+        time_or_distance: markVal || timeVal,
         distance_meters: distMeters,
+        split: splitVal,
+        split_time: splitVal,
+        seed_time: seedVal,
+        qts: qtsVal,
+        rank: rankVal,
+        place: rankVal,
         team_name: session.team_name || "ATLETA VARSITY",
         ...statLine,
         stats: statLine,
@@ -305,91 +322,99 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-            <View>
-              {!isTimedSport ? (
-                <>
-                  {/* Dynamic Ball Games Table Header (Basketball, Volleyball, Pickleball) */}
-                  <View style={styles.tableHeaderRow}>
-                    <Text style={styles.tableColPlayerHeader}>PLAYER</Text>
-                    {schema.tableHeaders.map((header, idx) => (
-                      <Text key={idx} style={styles.tableColHeader}>{header.label}</Text>
-                    ))}
-                  </View>
+            <View style={{ minWidth: Math.max(520, 140 + (schema?.tableHeaders?.reduce((acc, h) => acc + (h.width || 65), 0) || 500)) }}>
+              {/* Table Header Row (Consistent across all sports and OCR logging) */}
+              <View style={styles.tableHeaderRow}>
+                <Text style={styles.tableColPlayerHeader}>
+                  {(session.sport_type || "").toUpperCase().includes("SWIM")
+                    ? "SWIMMER"
+                    : (session.sport_type || "").toUpperCase().includes("TRACK") || (session.sport_type || "").toUpperCase().includes("FIELD")
+                    ? "ATHLETE"
+                    : "PLAYER"}
+                </Text>
+                {schema.tableHeaders.map((header, idx) => (
+                  <Text
+                    key={header.key || idx}
+                    style={[
+                      styles.tableColHeader,
+                      header.width ? { width: header.width } : null,
+                    ]}
+                  >
+                    {header.shortLabel || header.label}
+                  </Text>
+                ))}
+              </View>
 
-                  {/* Dynamic Ball Games Table Rows */}
-                  {allPlayers.map((player) => {
-                    const stats: any = {
-                      ...(player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 }),
-                      ...(player.custom_stats || {}),
-                      ...(player.stats || {}),
-                    };
-                    return (
-                      <View key={player.athlete_id} style={styles.tableDataRow}>
-                        <Text style={styles.tableColPlayer} numberOfLines={1}>
-                          {player.full_name}
-                        </Text>
-                        {schema.tableHeaders.map((header, idx) => (
-                          <Text key={idx} style={styles.tableColText}>{formatNumber(stats[header.key])}</Text>
-                        ))}
-                      </View>
-                    );
-                  })}
-                </>
-              ) : (
-                <>
-                  {/* Timing Sports (Swimming / Track & Field) Table Header */}
-                  <View style={styles.tableHeaderRow}>
-                    <Text style={styles.tableColPlayerHeader}>PLAYER</Text>
-                    <Text style={[styles.tableColHeader, { width: 105 }]}>EVENT / DIST</Text>
-                    <Text style={[styles.tableColHeader, { width: 95 }]}>TIME / MARK</Text>
-                    <Text style={[styles.tableColHeader, { width: 110 }]}>SPLIT TIME</Text>
-                    <Text style={[styles.tableColHeader, { width: 80 }]}>STATUS</Text>
-                  </View>
+              {/* Table Data Rows */}
+              {allPlayers.map((player) => {
+                const bStats: any = player.basketball_stats || { pts: 0, ast: 0, reb: 0, pf: 0, stl: 0, to: 0, blk: 0 };
+                const tStats: any = player.timing_stats || { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false };
+                const cStats: any = player.custom_stats || {};
+                const pStats: any = player.stats || {};
 
-                  {/* Timing Sports Table Rows */}
-                  {allPlayers.map((player) => {
-                    const timing = player.timing_stats || {
-                      timer_seconds: 0,
-                      formatted_time: "00:00.00",
-                      distance_meters: 50,
-                      split_times: [],
-                      is_foul_dq: false,
-                    };
-                    const displayEvent = (player as any).event_name || (player as any).event || player.position_or_event || (timing.distance_meters ? `${timing.distance_meters}M` : "50M");
-                    const markDisplay = (player as any).mark || (timing as any).mark || (timing.formatted_time && timing.formatted_time !== "00:00.00" ? timing.formatted_time : "-");
+                return (
+                  <View key={player.athlete_id} style={styles.tableDataRow}>
+                    <Text style={styles.tableColPlayer} numberOfLines={1}>
+                      {player.full_name}
+                    </Text>
+                    {schema.tableHeaders.map((header, idx) => {
+                      const val = (() => {
+                        if (header.key === 'team_name' || header.key === 'team' || header.key === 'school') {
+                          return (player as any).team_name || (player as any).team || session.team_name || "-";
+                        }
+                        if (header.key === 'event' || header.key === 'event_name' || header.key === 'discipline') {
+                          return (player as any).event_name || (player as any).event || player.position_or_event || (tStats.distance_meters ? `${tStats.distance_meters}M` : "-");
+                        }
+                        if (header.key === 'finish_time' || header.key === 'time') {
+                          return (tStats.formatted_time && tStats.formatted_time !== "00:00.00")
+                            ? tStats.formatted_time
+                            : ((player as any).finish_time || (player as any).time || "-");
+                        }
+                        if (header.key === 'time_or_distance') {
+                          return (player as any).mark || (tStats as any).mark || ((tStats.formatted_time && tStats.formatted_time !== "00:00.00") ? tStats.formatted_time : ((player as any).time || "-"));
+                        }
+                        if (header.key === 'split' || header.key === 'split_time') {
+                          return tStats.split_times && tStats.split_times.length > 0
+                            ? tStats.split_times.join(", ")
+                            : ((player as any).split || (player as any).split_time || "-");
+                        }
+                        if (header.key === 'seed_time') {
+                          return (player as any).seed_time || (tStats as any).seed_time || "-";
+                        }
+                        if (header.key === 'qts') {
+                          return (player as any).qts || (tStats as any).qts || "-";
+                        }
+                        if (header.key === 'rank' || header.key === 'place') {
+                          return (player as any).rank !== undefined
+                            ? (player as any).rank
+                            : ((player as any).place !== undefined ? (player as any).place : (tStats.rank ?? (gameResult === "Win" ? 1 : 2)));
+                        }
+                        if (header.key === 'pts' || header.key === 'points') {
+                          const ptsVal = (player as any).pts !== undefined
+                            ? (player as any).pts
+                            : ((player as any).points !== undefined ? (player as any).points : (bStats.pts ?? cStats.pts ?? cStats.points ?? 0));
+                          return ptsVal;
+                        }
+                        const raw = bStats[header.key] ?? cStats[header.key] ?? pStats[header.key];
+                        return raw !== undefined ? formatNumber(raw) : "-";
+                      })();
 
-                    const splitDisplay =
-                      timing.split_times && timing.split_times.length > 0
-                        ? timing.split_times.join(", ")
-                        : "N/A";
-
-                    return (
-                      <View key={player.athlete_id} style={styles.tableDataRow}>
-                        <Text style={styles.tableColPlayer} numberOfLines={1}>
-                          {player.full_name}
-                        </Text>
-                        <Text style={[styles.tableColText, { width: 105 }]} numberOfLines={1}>
-                          {displayEvent}
-                        </Text>
-                        <Text style={[styles.tableColText, { width: 95 }]}>
-                          {markDisplay}
-                        </Text>
-                        <Text style={[styles.tableColText, { width: 110 }]} numberOfLines={1}>
-                          {splitDisplay}
-                        </Text>
+                      return (
                         <Text
+                          key={header.key || idx}
                           style={[
                             styles.tableColText,
-                            { width: 80, color: timing.is_foul_dq ? "#EF4444" : "#10B981" },
+                            header.width ? { width: header.width } : null,
                           ]}
+                          numberOfLines={1}
                         >
-                          {timing.is_foul_dq ? "FOUL/DQ" : "CLEAN"}
+                          {val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-"}
                         </Text>
-                      </View>
-                    );
-                  })}
-                </>
-              )}
+                      );
+                    })}
+                  </View>
+                );
+              })}
             </View>
           </ScrollView>
         </View>
