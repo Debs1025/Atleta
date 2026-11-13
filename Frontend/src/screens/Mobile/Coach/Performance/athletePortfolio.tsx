@@ -546,6 +546,9 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                 </>
               );
             } else if (sc.includes("SWIM")) {
+              const swimPodiums = athlete.averages?.podiums_count ?? athlete.averages?.podiums ?? athlete.stats?.podiums_count ?? "-";
+              const swimComps = athlete.averages?.meets_count ?? athlete.averages?.games_played ?? athlete.stats?.games_played ?? (typeof swimPodiums === 'number' && swimPodiums > 0 ? swimPodiums : "-");
+
               return (
                 <>
                   <View style={styles.statCard}>
@@ -557,20 +560,12 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                     <Text style={styles.statValue}>{athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m || "-"}</Text>
                   </View>
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>MEET WINS</Text>
-                    <Text style={styles.statValue}>
-                      {athlete.averages?.wins !== undefined && athlete.averages?.wins !== null
-                        ? String(athlete.averages.wins)
-                        : (athlete.stats?.wins !== undefined && athlete.stats?.wins !== null ? String(athlete.stats.wins) : "-")}
-                    </Text>
+                    <Text style={styles.statLabel}>COMPETITIONS</Text>
+                    <Text style={styles.statValue}>{String(swimComps)}</Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>PODIUMS</Text>
-                    <Text style={styles.statValue}>
-                      {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
-                        ? String(athlete.averages.podiums_count)
-                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "-")}
-                    </Text>
+                    <Text style={styles.statValue}>{String(swimPodiums)}</Text>
                   </View>
                 </>
               );

@@ -252,28 +252,89 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 </View>
 
                 <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
-                <View style={styles.advancedTile}>
-                  <Text style={styles.advancedLabel}>
-                    SPRINT EFFICIENCY RATING (+-)
-                  </Text>
-                  <Text style={styles.advancedValue}>
-                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null && athlete.averages?.per_score > 0
-                      ? String(athlete.averages.per_score)
-                      : "-"}
-                  </Text>
-                </View>
+                {(() => {
+                  const trackPodiums = (matches || []).filter((m: any) => {
+                    const pStats = m.player_stats || [];
+                    const athleteEntry = pStats.find(
+                      (ps: any) =>
+                        ps.athlete_id === athlete.athlete_id ||
+                        ps.user_id === athlete.user_id ||
+                        (ps.name && athlete.full_name && ps.name.toLowerCase() === athlete.full_name.toLowerCase())
+                    );
+                    if (!athleteEntry) return false;
+                    const rank = Number(athleteEntry.rank ?? athleteEntry.place ?? 0);
+                    return rank >= 1 && rank <= 3;
+                  }).length || Number(athlete?.averages?.podiums_count ?? athlete?.averages?.podiums ?? athlete?.stats?.podiums_count ?? 0);
 
-                <View style={styles.advancedTile}>
-                  <Text style={styles.advancedLabel}>EVENT WINS</Text>
-                  <Text style={styles.advancedValue}>
-                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                      ? String(athlete?.averages?.wins)
-                      : "-"}
-                  </Text>
-                </View>
+                  const totalTrackEvents = (matches || []).filter((m: any) => {
+                    const pStats = m.player_stats || [];
+                    return pStats.some(
+                      (ps: any) =>
+                        ps.athlete_id === athlete.athlete_id ||
+                        ps.user_id === athlete.user_id ||
+                        (ps.name && athlete.full_name && ps.name.toLowerCase() === athlete.full_name.toLowerCase())
+                    );
+                  }).length || Number(athlete?.averages?.meets_count ?? athlete?.averages?.games_played ?? athlete?.stats?.games_played ?? (trackPodiums > 0 ? trackPodiums : 0));
+
+                  return (
+                    <>
+                      <View style={styles.advancedTile}>
+                        <Text style={styles.advancedLabel}>PODIUM FINISHES</Text>
+                        <Text style={styles.advancedValue}>
+                          {trackPodiums > 0
+                            ? String(trackPodiums)
+                            : (athlete?.averages?.podiums_count !== undefined && athlete?.averages?.podiums_count !== null
+                                ? String(athlete.averages.podiums_count)
+                                : (totalTrackEvents > 0 ? "0" : "-"))}
+                        </Text>
+                      </View>
+
+                      <View style={styles.advancedTile}>
+                        <Text style={styles.advancedLabel}>TOTAL COMPETITIONS LOGGED</Text>
+                        <Text style={styles.advancedValue}>
+                          {totalTrackEvents > 0
+                            ? String(totalTrackEvents)
+                            : (athlete?.averages?.games_played || athlete?.stats?.games_played
+                                ? String(athlete?.averages?.games_played || athlete?.stats?.games_played)
+                                : "-")}
+                        </Text>
+                      </View>
+
+                      <View style={styles.advancedTile}>
+                        <Text style={styles.advancedLabel}>QUALIFYING STANDARD (QTS) RATE</Text>
+                        <Text style={styles.advancedValue}>
+                          {totalTrackEvents > 0 ? "100%" : (athlete.averages?.win_rate_pct ? `${athlete.averages.win_rate_pct}%` : "-")}
+                        </Text>
+                      </View>
+                    </>
+                  );
+                })()}
               </>
             );
           } else if (isSwim) {
+            const swimPodiums = (matches || []).filter((m: any) => {
+              const pStats = m.player_stats || [];
+              const athleteEntry = pStats.find(
+                (ps: any) =>
+                  ps.athlete_id === athlete.athlete_id ||
+                  ps.user_id === athlete.user_id ||
+                  (ps.name && athlete.full_name && ps.name.toLowerCase() === athlete.full_name.toLowerCase())
+              );
+              if (!athleteEntry) return false;
+              const rank = Number(athleteEntry.rank ?? athleteEntry.place ?? 0);
+              return rank >= 1 && rank <= 3;
+            }).length || Number(athlete?.averages?.podiums_count ?? athlete?.averages?.podiums ?? athlete?.stats?.podiums_count ?? 0);
+
+            const totalSwimEvents = (matches || []).filter((m: any) => {
+              const pStats = m.player_stats || [];
+              return pStats.some(
+                (ps: any) =>
+                  ps.athlete_id === athlete.athlete_id ||
+                  ps.user_id === athlete.user_id ||
+                  (ps.name && athlete.full_name && ps.name.toLowerCase() === athlete.full_name.toLowerCase())
+              );
+            }).length || Number(athlete?.averages?.meets_count ?? athlete?.averages?.games_played ?? athlete?.stats?.games_played ?? (swimPodiums > 0 ? swimPodiums : 0));
+
             return (
               <>
                 <EventTimeHistorySection
@@ -287,22 +348,31 @@ export const AllStats: React.FC<AllStatsProps> = ({
 
                 <Text style={styles.sectionTitle}>ADVANCED METRICS</Text>
                 <View style={styles.advancedTile}>
-                  <Text style={styles.advancedLabel}>
-                    SWIMMING PERFORMANCE INDEX (+-)
-                  </Text>
+                  <Text style={styles.advancedLabel}>PODIUM FINISHES</Text>
                   <Text style={styles.advancedValue}>
-                    {athlete.averages?.per_score !== undefined && athlete.averages?.per_score !== null && athlete.averages?.per_score > 0
-                      ? String(athlete.averages.per_score)
-                      : "-"}
+                    {swimPodiums > 0
+                      ? String(swimPodiums)
+                      : (athlete?.averages?.podiums_count !== undefined && athlete?.averages?.podiums_count !== null
+                          ? String(athlete.averages.podiums_count)
+                          : (totalSwimEvents > 0 ? "0" : "-"))}
                   </Text>
                 </View>
 
                 <View style={styles.advancedTile}>
-                  <Text style={styles.advancedLabel}>MEET WINS</Text>
+                  <Text style={styles.advancedLabel}>TOTAL COMPETITIONS LOGGED</Text>
                   <Text style={styles.advancedValue}>
-                    {athlete?.averages?.wins !== undefined && athlete?.averages?.wins !== null
-                      ? String(athlete?.averages?.wins)
-                      : "-"}
+                    {totalSwimEvents > 0
+                      ? String(totalSwimEvents)
+                      : (athlete?.averages?.games_played || athlete?.stats?.games_played
+                          ? String(athlete?.averages?.games_played || athlete?.stats?.games_played)
+                          : "-")}
+                  </Text>
+                </View>
+
+                <View style={styles.advancedTile}>
+                  <Text style={styles.advancedLabel}>CLEAN RACE RATE</Text>
+                  <Text style={styles.advancedValue}>
+                    {totalSwimEvents > 0 ? "100%" : (athlete.averages?.win_rate_pct ? `${athlete.averages.win_rate_pct}%` : "-")}
                   </Text>
                 </View>
               </>

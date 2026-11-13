@@ -342,12 +342,11 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                       }
                     }
                     const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
-                    const wins = Number(avg.wins ?? stats.wins ?? 0);
                     const displayStat = bestPbStr ? `PB: ${bestPbStr}${bestEventName ? ` (${bestEventName})` : ''}` : "NO LOGGED MEETS";
-                    const displayPodiums = podiums > 0 ? `${podiums} PODIUMS` : `${wins} WINS`;
+                    const displayMetric = `${podiums} PODIUMS`;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {displayStat} • {displayPodiums}
+                        {displayStat} • {displayMetric}
                       </Text>
                     );
                   } else if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) {
@@ -367,13 +366,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                         break;
                       }
                     }
-                    const wins = Number(avg.event_wins ?? avg.wins ?? stats.event_wins ?? stats.wins ?? 0);
                     const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? 0);
                     const displayStat = bestMarkStr ? `PB: ${bestMarkStr}${bestEventName ? ` (${bestEventName})` : ''}` : "NO LOGGED MEETS";
-                    const displayWins = wins > 0 ? `${wins} WINS` : `${podiums} PODIUMS`;
+                    const displayMetric = `${podiums} PODIUMS`;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {displayStat} • {displayWins}
+                        {displayStat} • {displayMetric}
                       </Text>
                     );
                   } else if (sc.includes("VOLLEY")) {
