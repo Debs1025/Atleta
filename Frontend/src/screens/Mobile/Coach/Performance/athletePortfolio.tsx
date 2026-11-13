@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
-  Pressable,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -31,14 +30,6 @@ import {
   extractVerticalLeapInches,
 } from "../Discovery/playerBadgeEngine";
 import { calculateDynamicRadarCompetencies } from "./performanceUtils";
-import {
-  findEventOption,
-  matchesEvent,
-  SWIMMING_EVENTS,
-  TRACK_FIELD_EVENTS,
-  SportEventOption,
-  parseSecondsOrMeters,
-} from "../MultiLogging/sportEvents";
 
 interface AthletePortfolioProps {
   athlete: AthletePerformanceProfile;
@@ -73,25 +64,6 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
     athleteSportUpper.includes("TRACK") ||
     athleteSportUpper.includes("FIELD") ||
     athleteSportUpper.includes("RUN");
-
-  const availableEvents: SportEventOption[] = useMemo(() => {
-    if (athleteSportUpper.includes("SWIM")) return SWIMMING_EVENTS;
-    if (athleteSportUpper.includes("TRACK") || athleteSportUpper.includes("FIELD") || athleteSportUpper.includes("RUN")) return TRACK_FIELD_EVENTS;
-    return [];
-  }, [athleteSportUpper]);
-
-  const defaultEventName = useMemo(() => {
-    if (!isAthleteTimed || availableEvents.length === 0) return "";
-    const pos = String(athlete.position_or_event || athlete.position || athlete.event || "").trim();
-    if (pos) {
-      const match = availableEvents.find((e) => matchesEvent(pos, e.label) || matchesEvent(pos, e.key));
-      if (match) return match.label;
-    }
-    return availableEvents[0]?.label || "";
-  }, [isAthleteTimed, availableEvents, athlete]);
-
-  const [selectedEventType, setSelectedEventType] = useState<string>(defaultEventName);
-  const [isEventModalOpen, setIsEventModalOpen] = useState<boolean>(false);
 
   const STATUS_OPTIONS = [
     { label: 'Active', value: 'Active', color: '#10B981', icon: 'checkmark-circle' },
@@ -552,244 +524,76 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Event Type Filter for Swimming and Track Athletes */}
-        {isAthleteTimed && availableEvents.length > 0 && (
-          <View style={{ marginBottom: 12 }}>
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#0B1528",
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                borderWidth: 1.5,
-                borderColor: "#00C8FF",
-              }}
-              onPress={() => setIsEventModalOpen(true)}
-              activeOpacity={0.8}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Ionicons
-                  name={athleteSportUpper.includes("SWIM") ? "water-outline" : "stopwatch-outline"}
-                  size={18}
-                  color="#00C8FF"
-                />
-                <View>
-                  <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>
-                    ACTIVE EVENT DISCIPLINE
-                  </Text>
-                  <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "900", marginTop: 2 }}>
-                    {selectedEventType || availableEvents[0]?.label}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0, 200, 255, 0.1)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.25)" }}>
-                <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "900" }}>CHOOSE</Text>
-                <Ionicons name="chevron-down" size={14} color="#00C8FF" />
-              </View>
-            </TouchableOpacity>
-
-            {/* Quick Filter Horizontal Scroll */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: 8 }}
-              contentContainerStyle={{ gap: 8 }}
-            >
-              {availableEvents.slice(0, 8).map((evt) => {
-                const isSelected = matchesEvent(evt.label, selectedEventType) || evt.key === selectedEventType;
-                return (
-                  <TouchableOpacity
-                    key={evt.key}
-                    onPress={() => setSelectedEventType(evt.label)}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 20,
-                      backgroundColor: isSelected ? "#00C8FF" : "#0B1528",
-                      borderWidth: 1,
-                      borderColor: isSelected ? "#00C8FF" : "#1E293B",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: isSelected ? "#060B14" : "#94A3B8",
-                        fontSize: 11,
-                        fontWeight: isSelected ? "800" : "600",
-                      }}
-                    >
-                      {evt.shortLabel}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {/* Modal Event Picker */}
-            <Modal
-              visible={isEventModalOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setIsEventModalOpen(false)}
-            >
-              <Pressable
-                style={{ flex: 1, backgroundColor: "rgba(3, 7, 18, 0.8)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20 }}
-                onPress={() => setIsEventModalOpen(false)}
-              >
-                <Pressable
-                  style={{ width: "100%", maxWidth: 360, backgroundColor: "#0B1528", borderRadius: 18, padding: 18, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.3)" }}
-                  onPress={(e) => e.stopPropagation()}
-                >
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255, 255, 255, 0.08)", marginBottom: 10 }}>
-                    <View>
-                      <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }}>Select Event Type</Text>
-                      <Text style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
-                        View specialized marks for {athlete.full_name}
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setIsEventModalOpen(false)} style={{ padding: 4 }}>
-                      <Ionicons name="close" size={20} color="#94A3B8" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-                    {availableEvents.map((evt) => {
-                      const isSelected = matchesEvent(evt.label, selectedEventType) || evt.key === selectedEventType;
-                      return (
-                        <TouchableOpacity
-                          key={evt.key}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            paddingVertical: 12,
-                            paddingHorizontal: 12,
-                            borderRadius: 10,
-                            marginBottom: 6,
-                            backgroundColor: isSelected ? "rgba(0, 200, 255, 0.12)" : "#0F1E36",
-                            borderWidth: 1,
-                            borderColor: isSelected ? "#00C8FF" : "transparent",
-                          }}
-                          onPress={() => {
-                            setSelectedEventType(evt.label);
-                            setIsEventModalOpen(false);
-                          }}
-                        >
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                            <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: isSelected ? "rgba(0, 200, 255, 0.2)" : "rgba(255, 255, 255, 0.05)", alignItems: "center", justifyContent: "center" }}>
-                              <Ionicons name={evt.isDistanceEvent ? "trending-up-outline" : "timer-outline"} size={16} color={isSelected ? "#00C8FF" : "#64748B"} />
-                            </View>
-                            <View>
-                              <Text style={{ fontSize: 13, fontWeight: "800", color: isSelected ? "#FFFFFF" : "#CBD5E1" }}>
-                                {evt.label}
-                              </Text>
-                              <Text style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>
-                                {evt.shortLabel} {evt.isDistanceEvent ? "• Field Event" : "• Timed Event"}
-                              </Text>
-                            </View>
-                          </View>
-                          {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </Pressable>
-              </Pressable>
-            </Modal>
-          </View>
-        )}
-
         <View style={styles.statsGrid}>
           {(() => {
             const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
-            if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN") || sc.includes("SWIM")) {
-              const activeOption = availableEvents.find((e) => e.label === selectedEventType || matchesEvent(e.label, selectedEventType)) || availableEvents[0];
-              const key = activeOption?.key || (selectedEventType ? selectedEventType.toLowerCase().replace(/[^a-z0-9]/g, "_") : "");
-              const isDist = !!activeOption?.isDistanceEvent;
-              const unit = activeOption?.unit || (isDist ? "m" : "s");
+            if (sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN")) {
+              const primaryEvent = String(athlete.position_or_event || athlete.position || athlete.event || "").trim();
+              const isPoleVault = primaryEvent.toLowerCase().includes("pole");
+              const isJump = primaryEvent.toLowerCase().includes("jump");
 
-              // Match-derived marks for this event
-              const eventMatches = matches.filter((m: any) => {
-                const mStatsArr = Array.isArray(m.player_stats) ? m.player_stats : (Array.isArray(m.playerStats) ? m.playerStats : []);
-                const athStat = mStatsArr.find((p: any) =>
-                  (athlete.athlete_id && (p.athlete_id === athlete.athlete_id || p.athlete_id === athlete.athlete_id?.replace("ath_", ""))) ||
-                  (athlete.full_name && (p.player_name || p.name || "").toLowerCase() === athlete.full_name.toLowerCase())
-                );
-                const rowEv = athStat?.eventType || athStat?.event_type || athStat?.event || athStat?.event_name || m.eventType || m.event_type || m.event_name || "";
-                return matchesEvent(rowEv, activeOption?.label || selectedEventType);
-              });
+              let card1Label = "100M PB";
+              let card1Val = athlete.averages?.pb_100m || athlete.stats?.pb_100m || athlete.stats?.times_100m || "-";
+              let card2Label = "200M PB";
+              let card2Val = athlete.averages?.pb_200m || athlete.stats?.pb_200m || athlete.stats?.times_200m || "-";
 
-              // Best PB
-              let eventPB = "-";
-              if (eventMatches.length > 0) {
-                let bestN: number | null = null;
-                eventMatches.forEach((m: any) => {
-                  const mStatsArr = Array.isArray(m.player_stats) ? m.player_stats : (Array.isArray(m.playerStats) ? m.playerStats : []);
-                  const athStat = mStatsArr.find((p: any) =>
-                    (athlete.athlete_id && (p.athlete_id === athlete.athlete_id || p.athlete_id === athlete.athlete_id?.replace("ath_", ""))) ||
-                    (athlete.full_name && (p.player_name || p.name || "").toLowerCase() === athlete.full_name.toLowerCase())
-                  );
-                  const rawVal = athStat?.time || athStat?.finish_time || athStat?.time_or_distance || athStat?.mark || athStat?.distance;
-                  const num = parseSecondsOrMeters(rawVal);
-                  if (num > 0) {
-                    if (bestN === null) {
-                      bestN = num;
-                      eventPB = String(rawVal).endsWith(unit) ? String(rawVal) : `${rawVal}${unit}`;
-                    } else if (isDist ? num > bestN : num < bestN) {
-                      bestN = num;
-                      eventPB = String(rawVal).endsWith(unit) ? String(rawVal) : `${rawVal}${unit}`;
-                    }
-                  }
-                });
-              }
-              if (eventPB === "-") {
-                const pbKeys = [`pb_${key}`, key, `times_${key}`, `pb_${key.replace(/_/g, "")}`];
-                for (const pk of pbKeys) {
-                  const val = athlete.averages?.[pk] || athlete.stats?.[pk];
-                  if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
-                    eventPB = String(val).endsWith(unit) ? String(val) : `${val}${unit}`;
-                    break;
-                  }
-                }
+              if (isPoleVault) {
+                card1Label = "POLE VAULT";
+                card1Val = athlete.averages?.pb_pole_vault || athlete.stats?.pb_pole_vault || athlete.stats?.pole_vault || "6.00m";
+                card2Label = "MARK";
+                card2Val = athlete.averages?.latest_mark || athlete.stats?.latest_mark || card1Val;
+              } else if (isJump) {
+                card1Label = "JUMP PB";
+                card1Val = athlete.averages?.pb_jump || athlete.stats?.pb_jump || athlete.stats?.jump || "-";
               }
 
-              // Latest mark
-              let latestMark = "-";
-              if (eventMatches.length > 0) {
-                const m = eventMatches[0];
-                const mStatsArr = Array.isArray(m.player_stats) ? m.player_stats : (Array.isArray(m.playerStats) ? m.playerStats : []);
-                const athStat = mStatsArr.find((p: any) =>
-                  (athlete.athlete_id && (p.athlete_id === athlete.athlete_id || p.athlete_id === athlete.athlete_id?.replace("ath_", ""))) ||
-                  (athlete.full_name && (p.player_name || p.name || "").toLowerCase() === athlete.full_name.toLowerCase())
-                );
-                const rawVal = athStat?.time || athStat?.finish_time || athStat?.time_or_distance || athStat?.mark || athStat?.distance;
-                if (rawVal) {
-                  latestMark = String(rawVal).endsWith(unit) ? String(rawVal) : `${rawVal}${unit}`;
-                }
-              }
-
-              const competitionsCount = eventMatches.length > 0 ? eventMatches.length : (athlete.averages?.meets_count ?? athlete.averages?.games_played ?? athlete.stats?.games_played ?? "-");
-              const podiumsCount = athlete.averages?.podiums_count ?? athlete.averages?.podiums ?? athlete.stats?.podiums_count ?? (eventMatches.length > 0 ? eventMatches.length : "-");
+              const podiums = athlete.averages?.podiums_count ?? athlete.averages?.podiums ?? athlete.stats?.podiums_count ?? athlete.stats?.podiums ?? "-";
+              const meets = athlete.averages?.meets_count ?? athlete.averages?.games_played ?? athlete.stats?.games_played ?? "-";
+              const reaction = athlete.averages?.reaction_time_s || athlete.stats?.reaction_time_s || "-";
 
               return (
                 <>
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>PB ({activeOption?.shortLabel || "BEST"})</Text>
-                    <Text style={styles.statValue}>{eventPB}</Text>
+                    <Text style={styles.statLabel}>{card1Label}</Text>
+                    <Text style={styles.statValue}>{card1Val}</Text>
                   </View>
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>LATEST MARK</Text>
-                    <Text style={styles.statValue}>{latestMark}</Text>
+                    <Text style={styles.statLabel}>{card2Label}</Text>
+                    <Text style={styles.statValue}>{card2Val}</Text>
                   </View>
                   <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>COMPETITIONS</Text>
-                    <Text style={styles.statValue}>{String(competitionsCount)}</Text>
+                    <Text style={styles.statLabel}>{isPoleVault || isJump ? "MEETS" : "REACTION"}</Text>
+                    <Text style={styles.statValue}>{isPoleVault || isJump ? (meets !== "-" ? String(meets) : "-") : reaction}</Text>
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statLabel}>PODIUMS</Text>
-                    <Text style={styles.statValue}>{String(podiumsCount)}</Text>
+                    <Text style={styles.statValue}>{String(podiums)}</Text>
+                  </View>
+                </>
+              );
+            } else if (sc.includes("SWIM")) {
+              const swimPodiums = athlete.averages?.podiums_count ?? athlete.averages?.podiums ?? athlete.stats?.podiums_count ?? athlete.stats?.podiums ?? "-";
+              const swimComps = athlete.averages?.meets_count ?? athlete.averages?.games_played ?? athlete.stats?.games_played ?? (typeof swimPodiums === 'number' && swimPodiums > 0 ? swimPodiums : "-");
+              const pb50 = athlete.averages?.pb_50m_free || athlete.stats?.pb_50m_free || athlete.stats?.times_50m_free || athlete.stats?.["50m_free"] || athlete.stats?.personal_best || "-";
+              const pb100 = athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m_free || athlete.stats?.["100m_free"] || "-";
+
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>50M FREE</Text>
+                    <Text style={styles.statValue}>{pb50}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>100M FREE</Text>
+                    <Text style={styles.statValue}>{pb100}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>MEETS</Text>
+                    <Text style={styles.statValue}>{String(swimComps)}</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statLabel}>PODIUMS</Text>
+                    <Text style={styles.statValue}>{String(swimPodiums)}</Text>
                   </View>
                 </>
               );
