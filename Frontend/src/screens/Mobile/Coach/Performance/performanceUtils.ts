@@ -1,6 +1,6 @@
 // Utility functions for Coach Performance Tab analytics and rating calculation
 
-function parseTimeToSeconds(val: any): number {
+export function parseTimeToSeconds(val: any): number {
   if (typeof val === "number") return val;
   if (!val || typeof val !== "string") return 0;
   const clean = val.replace(/[^\d:.]/g, "").trim();
@@ -23,25 +23,17 @@ export function calculatePlayerRating(athlete: any): number {
   const averages = athlete.averages || athlete.stats || {};
   const stats = athlete.stats || athlete.averages || {};
   const sportCategory = String(athlete.sport_category || athlete.sport_type || "BASKETBALL").toUpperCase();
-  const name = String(athlete.full_name || `${athlete.first_name || ""} ${athlete.last_name || ""}`).trim().toLowerCase();
 
   // 1. Explicit verified rating score if evaluated by coach / official or verified in profile
   const explicitRating = Number(athlete.rating_score || athlete.rating || athlete.overall_rating || 0);
-  if (explicitRating > 0 && explicitRating !== 85 && explicitRating !== 75) {
-    return Math.min(99, Math.max(50, Math.round(explicitRating)));
+  if (explicitRating > 0 && explicitRating !== 85 && explicitRating !== 75 && explicitRating !== 99 && explicitRating !== 96 && explicitRating !== 94 && explicitRating !== 93) {
+    const hasStatsOrMeets = (athlete.competitions_count || athlete.games_played || athlete.total_matches_logged || 0) > 0 ||
+                            Number(averages.ppg || stats.ppg || 0) > 0 ||
+                            Boolean(averages.pb_50m_free || stats.pb_50m_free || averages.pb_100m_free || stats.pb_100m_free || averages.pb_100m || stats.pb_100m);
+    if (hasStatsOrMeets) {
+      return Math.min(99, Math.max(50, Math.round(explicitRating)));
+    }
   }
-
-  // Known premier/national athletes
-  if (name.includes("kayla sanchez")) return 99;
-  if (name.includes("luke gebbie")) return 94;
-  if (name.includes("ej obiena") || name.includes("ernest obiena")) return 99;
-  if (name.includes("eric cray")) return 96;
-  if (name.includes("kristina knott")) return 96;
-  if (name.includes("jasmine alkhaldi")) return 95;
-  if (name.includes("jarod hatch")) return 94;
-  if (name.includes("janry ubas")) return 93;
-  if (name.includes("xiandi chua")) return 93;
-  if (name.includes("william morrison")) return 92;
 
   // 2. Basketball / Ball-game stats
   const isBasketball = sportCategory.includes("BASKET");
@@ -91,6 +83,7 @@ export function calculatePlayerRating(athlete: any): number {
     const finishTimeMs = Number(averages.finish_time_ms ?? stats.finish_time_ms ?? athlete.finish_time_ms ?? 0);
     const swimIndex = Number(averages.swim_index_score ?? stats.swim_index_score ?? 0);
     const podiums = Number(averages.podiums_count ?? averages.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
+    const gamesPlayed = Number(averages.games_played ?? stats.games_played ?? athlete.games_played ?? 0);
 
     if (pb50 > 0) {
       if (pb50 <= 25.5) return 99;
@@ -119,7 +112,21 @@ export function calculatePlayerRating(athlete: any): number {
     if (podiums > 0) {
       return Math.min(99, Math.max(75, 84 + podiums * 2));
     }
-    return 88;
+    // Check if any other swim event has recorded times
+    let hasAnySwimTime = false;
+    for (const k of Object.keys({ ...stats, ...averages })) {
+      if (k.startsWith("pb_") || k.startsWith("times_")) {
+        const val = averages[k] || stats[k];
+        if (val && val !== "-" && val !== "00:00.00") {
+          hasAnySwimTime = true;
+          break;
+        }
+      }
+    }
+    if (hasAnySwimTime || gamesPlayed > 0) {
+      return 85;
+    }
+    return 0;
   }
 
   // 5. Track & Field stats
@@ -127,6 +134,7 @@ export function calculatePlayerRating(athlete: any): number {
     const pb100 = parseTimeToSeconds(averages.pb_100m || stats.pb_100m || athlete.pb_100m);
     const finishTimeMs = Number(averages.finish_time_ms ?? stats.finish_time_ms ?? athlete.finish_time_ms ?? 0);
     const podiums = Number(averages.podiums_count ?? averages.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
+    const gamesPlayed = Number(averages.games_played ?? stats.games_played ?? athlete.games_played ?? 0);
 
     if (pb100 > 0) {
       if (pb100 <= 10.3) return 99;
@@ -143,7 +151,21 @@ export function calculatePlayerRating(athlete: any): number {
     if (podiums > 0) {
       return Math.min(99, Math.max(75, 84 + podiums * 2));
     }
-    return 88;
+    // Check if any other track event has recorded marks
+    let hasAnyTrackMark = false;
+    for (const k of Object.keys({ ...stats, ...averages })) {
+      if (k.startsWith("pb_") || k.startsWith("times_") || k === "pole_vault" || k === "long_jump") {
+        const val = averages[k] || stats[k];
+        if (val && val !== "-" && val !== "00:00.00") {
+          hasAnyTrackMark = true;
+          break;
+        }
+      }
+    }
+    if (hasAnyTrackMark || gamesPlayed > 0) {
+      return 85;
+    }
+    return 0;
   }
 
   // 6. Competencies / Radar attributes fallback (if physical testing conducted)
@@ -157,11 +179,6 @@ export function calculatePlayerRating(athlete: any): number {
   if (radarVals.length >= 3) {
     const avgRadar = Math.round(radarVals.reduce((a, b) => a + b, 0) / radarVals.length);
     return Math.min(99, Math.max(50, avgRadar));
-  }
-
-  // 7. Team Roster baseline rating
-  if (athlete.team_name || athlete.team_id) {
-    return 85;
   }
 
   return 0;

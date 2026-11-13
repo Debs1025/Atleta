@@ -175,21 +175,19 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             (la.athlete_id && ath.athlete_id && (la.athlete_id === ath.athlete_id || la.user_id === ath.user_id)) ||
             (la.full_name && ath.full_name && la.full_name.toLowerCase() === ath.full_name.toLowerCase())
         );
-        const resolvedRating = calculatePlayerRating(ath) || (matchingLive ? calculatePlayerRating(matchingLive) : 0);
-        if (matchingLive) {
-          return {
-            ...ath,
-            rating_score: resolvedRating,
-            averages: { ...(matchingLive.averages || {}), ...(ath.averages || {}) },
-            biometrics: matchingLive.biometrics || ath.biometrics,
-            scoring_trends_last_10: (matchingLive.scoring_trends_last_10 && matchingLive.scoring_trends_last_10.length > 0)
-              ? matchingLive.scoring_trends_last_10
-              : ath.scoring_trends_last_10,
-          };
-        }
+        const mergedAverages = { ...(matchingLive?.averages || {}), ...(ath.averages || {}) };
+        const mergedStats = { ...((matchingLive as any)?.stats || {}), ...((ath as any)?.stats || {}) };
+        const combined = { ...ath, ...(matchingLive || {}), averages: mergedAverages, stats: mergedStats };
+        const resolvedRating = calculatePlayerRating(combined);
+
         return {
           ...ath,
-          rating_score: resolvedRating || ath.rating_score || 0,
+          rating_score: resolvedRating,
+          averages: mergedAverages,
+          biometrics: matchingLive?.biometrics || ath.biometrics,
+          scoring_trends_last_10: (matchingLive?.scoring_trends_last_10 && matchingLive.scoring_trends_last_10.length > 0)
+            ? matchingLive.scoring_trends_last_10
+            : ath.scoring_trends_last_10,
         };
       });
     }

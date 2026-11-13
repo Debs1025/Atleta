@@ -74,7 +74,7 @@ import {
   clearFirebaseClientCaches,
 } from "../../../../services/firebaseClient";
 import { useAccount } from "../../../../context/AccountContext";
-import { calculatePlayerRating, calculateDynamicRadarCompetencies } from "../Performance/performanceUtils";
+import { calculatePlayerRating, calculateDynamicRadarCompetencies, parseTimeToSeconds } from "../Performance/performanceUtils";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -402,6 +402,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     let matchFga = 0;
     let matchCount = matchingMatches.length;
     let matchTrends: number[] = [];
+    let matchWins = 0;
+    let matchPodiums = 0;
+    let best50mFree = "";
+    let best100mFree = "";
+    let best200mFree = "";
+    let best100mTrack = "";
+    let best200mTrack = "";
+    let matchKills = 0;
+    let matchBlocks = 0;
+    let matchAces = 0;
+    let matchDigs = 0;
 
     matchingMatches.forEach((m) => {
       const ps = m.player_stats?.find(isMatchingPlayerStat);
@@ -416,7 +427,50 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         matchTo += Number(rawPs.to || rawPs.stats?.turnovers || rawPs.stats?.to || 0);
         matchFgm += Number(rawPs.fgm || rawPs.stats?.field_goals_made || rawPs.stats?.fgm || 0);
         matchFga += Number(rawPs.fga || rawPs.stats?.field_goals_attempted || rawPs.stats?.fga || 0);
-        matchTrends.push(pts);
+        if (pts > 0) matchTrends.push(pts);
+
+        // Rank / Placement / Podiums
+        const rank = Number(rawPs.placement_rank || rawPs.rank || rawPs.place || rawPs.stats?.placement_rank || rawPs.stats?.rank || 0);
+        if (rank === 1) {
+          matchWins += 1;
+          matchPodiums += 1;
+        } else if (rank === 2 || rank === 3) {
+          matchPodiums += 1;
+        }
+
+        // Times and events (Swimming & Track & Field)
+        const rawTime = String(rawPs.finish_time || rawPs.time || rawPs.mark || rawPs.stats?.finish_time || rawPs.stats?.time || rawPs.stats?.mark || "").trim();
+        const rawEvent = String(rawPs.event || rawPs.event_name || rawPs.event_key || rawPs.stats?.event || rawPs.stats?.event_name || rawPs.stats?.event_key || "").toLowerCase();
+
+        if (rawTime && rawTime !== "-" && rawTime !== "00:00.00") {
+          const timeSec = parseTimeToSeconds(rawTime);
+          if (timeSec > 0) {
+            if (rawEvent.includes("50m") && (rawEvent.includes("free") || (!rawEvent.includes("back") && !rawEvent.includes("breast") && !rawEvent.includes("fly")))) {
+              if (!best50mFree || timeSec < parseTimeToSeconds(best50mFree)) best50mFree = rawTime;
+            } else if (rawEvent.includes("100m") && (rawEvent.includes("free") || (!rawEvent.includes("back") && !rawEvent.includes("breast") && !rawEvent.includes("fly")))) {
+              if (!best100mFree || timeSec < parseTimeToSeconds(best100mFree)) best100mFree = rawTime;
+            } else if (rawEvent.includes("200m") && rawEvent.includes("free")) {
+              if (!best200mFree || timeSec < parseTimeToSeconds(best200mFree)) best200mFree = rawTime;
+            } else if (rawEvent.includes("100m")) {
+              if (!best100mTrack || timeSec < parseTimeToSeconds(best100mTrack)) best100mTrack = rawTime;
+            } else if (rawEvent.includes("200m")) {
+              if (!best200mTrack || timeSec < parseTimeToSeconds(best200mTrack)) best200mTrack = rawTime;
+            } else {
+              const dist = Number(rawPs.distance_meters || rawPs.distance_m || 0);
+              if (dist === 50 && (!best50mFree || timeSec < parseTimeToSeconds(best50mFree))) {
+                best50mFree = rawTime;
+              } else if (dist === 100 && (!best100mFree || timeSec < parseTimeToSeconds(best100mFree))) {
+                best100mFree = rawTime;
+              }
+            }
+          }
+        }
+
+        // Volleyball
+        matchKills += Number(rawPs.kills || rawPs.stats?.kills || 0);
+        matchBlocks += Number(rawPs.blocks || rawPs.stats?.blocks || 0);
+        matchAces += Number(rawPs.service_aces || rawPs.aces || rawPs.stats?.service_aces || 0);
+        matchDigs += Number(rawPs.digs || rawPs.stats?.digs || 0);
       }
     });
 
@@ -430,7 +484,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const storedFgPct = Number(a.averages?.fg_percentage ?? a.stats?.fg_percentage ?? a.stats?.fg_pct ?? (a.fg_pct ? Number(a.fg_pct) : 0));
     const storedPer = Number(a.averages?.per_score ?? a.stats?.per ?? a.per ?? 0);
 
-    let gp = storedGp;
+    let gp = matchCount > 0 ? (storedGp > 0 ? storedGp + matchCount : matchCount) : storedGp;
     let ppg = storedPpg;
     let rpg = storedRpg;
     let apg = storedApg;
@@ -440,11 +494,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     let fgPct = storedFgPct;
     let per = storedPer;
 
-    const isBasketball = (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() === "BASKETBALL";
+    const wins = Math.max(Number(a.averages?.wins ?? a.stats?.wins ?? 0), matchWins);
+    const podiums = Math.max(Number(a.averages?.podiums_count ?? a.stats?.podiums_count ?? 0), matchPodiums);
+    const pb50mFree = best50mFree || a.averages?.pb_50m_free || a.stats?.pb_50m_free;
+    const pb100mFree = best100mFree || a.averages?.pb_100m_free || a.stats?.pb_100m_free;
+    const pb200mFree = best200mFree || a.averages?.pb_200m_free || a.stats?.pb_200m_free;
+    const pb100mTrack = best100mTrack || a.averages?.pb_100m || a.stats?.pb_100m;
+    const pb200mTrack = best200mTrack || a.averages?.pb_200m || a.stats?.pb_200m;
 
     if (matchCount > 0 && (matchPts > 0 || matchReb > 0 || matchAst > 0 || matchStl > 0)) {
       if (storedGp > 0) {
-        gp = storedGp + matchCount;
         ppg = Math.round(((storedPpg * storedGp + matchPts) / gp) * 10) / 10;
         rpg = Math.round(((storedRpg * storedGp + matchReb) / gp) * 10) / 10;
         apg = Math.round(((storedApg * storedGp + matchAst) / gp) * 10) / 10;
@@ -452,7 +511,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         bpg = Math.round(((storedBpg * storedGp + matchBlk) / gp) * 10) / 10;
         tpg = Math.round(((storedTpg * storedGp + matchTo) / gp) * 10) / 10;
       } else {
-        gp = matchCount;
         ppg = Math.round((matchPts / matchCount) * 10) / 10;
         rpg = Math.round((matchReb / matchCount) * 10) / 10;
         apg = Math.round((matchAst / matchCount) * 10) / 10;
@@ -463,37 +521,52 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       if (matchFga > 0) {
         fgPct = Math.round((matchFgm / matchFga) * 100);
       }
-    } else if (storedGp > 0 || storedPpg > 0) {
-      gp = storedGp;
-      ppg = storedPpg;
-      rpg = storedRpg;
-      apg = storedApg;
-      spg = storedSpg;
-      bpg = storedBpg;
-      tpg = storedTpg;
     }
 
-    const wins = Number(a.averages?.wins ?? a.stats?.wins ?? 0);
     if (!per && ppg > 0) {
       per = Math.round((ppg * 1.2 + rpg * 1.0 + apg * 1.5) * 10) / 10;
     }
 
+    const mergedAverages = {
+      ...a.averages,
+      ppg, rpg, apg, spg, bpg, tpg, fg_percentage: fgPct, games_played: gp, wins, podiums_count: podiums,
+      pb_50m_free: pb50mFree,
+      pb_100m_free: pb100mFree,
+      pb_200m_free: pb200mFree,
+      pb_100m: pb100mTrack,
+      pb_200m: pb200mTrack,
+      per_score: per,
+    };
+    const mergedStats = {
+      ...a.stats,
+      ppg, rpg, apg, spg, bpg, tpg, fg_pct: fgPct, fg_percentage: fgPct, games_played: gp, wins, podiums_count: podiums,
+      pb_50m_free: pb50mFree,
+      pb_100m_free: pb100mFree,
+      pb_200m_free: pb200mFree,
+      pb_100m: pb100mTrack,
+      pb_200m: pb200mTrack,
+      per_score: per,
+    };
+
     // Dynamic competencies strictly derived from verified match stats
     const dynamicCompetencies = calculateDynamicRadarCompetencies({
       ...a,
-      averages: { ...a.averages, ppg, rpg, apg, spg, bpg, tpg, fg_percentage: fgPct, games_played: gp, wins, per_score: per },
-      stats: { ...a.stats, ppg, rpg, apg, spg, bpg, tpg, fg_pct: fgPct, fg_percentage: fgPct, games_played: gp, wins, per_score: per },
+      averages: mergedAverages,
+      stats: mergedStats,
     });
 
     // Calculate dynamic rating score accurately derived from player stats
     const dynamicRating = calculatePlayerRating({
       ...a,
-      averages: { ...a.averages, ppg, rpg, apg, games_played: gp, wins, per_score: per },
-      stats: { ...a.stats, ppg, rpg, apg, games_played: gp, wins, per_score: per },
+      averages: mergedAverages,
+      stats: mergedStats,
     });
-    let rating = dynamicRating || Number(a.rating_score || a.rating || 0);
-    if (rating === 85 || rating === 75) {
-      rating = dynamicRating || 0;
+    let rating = dynamicRating;
+    if (rating <= 0 && a.rating_score && a.rating_score !== 85 && a.rating_score !== 75 && a.rating_score !== 99 && a.rating_score !== 96 && a.rating_score !== 94 && a.rating_score !== 93) {
+      const hasRealStats = gp > 0 || ppg > 0 || Boolean(pb50mFree || pb100mFree || pb100mTrack || podiums > 0);
+      if (hasRealStats) {
+        rating = Number(a.rating_score);
+      }
     }
 
     const phys = a.physical_profile || a.physical_attributes || {};
@@ -547,25 +620,26 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         games_played: gp,
         wins: wins,
         // Volleyball stats
-        kills: a.averages?.kills ?? a.averages?.spike_kills ?? a.stats?.kills ?? a.stats?.spike_kills ?? 0,
-        spike_kills: a.averages?.spike_kills ?? a.averages?.kills ?? a.stats?.spike_kills ?? a.stats?.kills ?? 0,
-        blocks: a.averages?.blocks ?? a.averages?.block_points ?? a.stats?.blocks ?? a.stats?.block_points ?? 0,
-        block_points: a.averages?.block_points ?? a.averages?.blocks ?? a.stats?.block_points ?? a.stats?.blocks ?? 0,
-        aces: a.averages?.aces ?? a.averages?.service_aces ?? a.stats?.aces ?? a.stats?.service_aces ?? 0,
-        service_aces: a.averages?.service_aces ?? a.averages?.aces ?? a.stats?.service_aces ?? a.stats?.aces ?? 0,
-        digs: a.averages?.digs ?? a.stats?.digs ?? 0,
+        kills: matchKills || (a.averages?.kills ?? a.averages?.spike_kills ?? a.stats?.kills ?? a.stats?.spike_kills ?? 0),
+        spike_kills: matchKills || (a.averages?.spike_kills ?? a.averages?.kills ?? a.stats?.spike_kills ?? a.stats?.kills ?? 0),
+        blocks: matchBlocks || (a.averages?.blocks ?? a.averages?.block_points ?? a.stats?.blocks ?? a.stats?.block_points ?? 0),
+        block_points: matchBlocks || (a.averages?.block_points ?? a.averages?.blocks ?? a.stats?.block_points ?? a.stats?.blocks ?? 0),
+        aces: matchAces || (a.averages?.aces ?? a.averages?.service_aces ?? a.stats?.aces ?? a.stats?.service_aces ?? 0),
+        service_aces: matchAces || (a.averages?.service_aces ?? a.averages?.aces ?? a.stats?.service_aces ?? a.stats?.aces ?? 0),
+        digs: matchDigs || (a.averages?.digs ?? a.stats?.digs ?? 0),
         assists: a.averages?.assists ?? a.stats?.assists ?? 0,
         spike_accuracy: a.averages?.spike_accuracy ?? a.stats?.spike_accuracy ?? 0,
         service_errors: a.averages?.service_errors ?? a.stats?.service_errors ?? 0,
         // Track & Swimming stats
-        pb_100m: a.averages?.pb_100m || a.stats?.pb_100m,
-        pb_200m: a.averages?.pb_200m || a.stats?.pb_200m,
+        pb_100m: pb100mTrack,
+        pb_200m: pb200mTrack,
         reaction_time_s: a.averages?.reaction_time_s || a.stats?.reaction_time_s,
         win_rate_pct: a.averages?.win_rate_pct ?? a.stats?.win_rate_pct,
-        pb_50m_free: a.averages?.pb_50m_free || a.stats?.pb_50m_free,
-        pb_100m_free: a.averages?.pb_100m_free || a.stats?.pb_100m_free,
+        pb_50m_free: pb50mFree,
+        pb_100m_free: pb100mFree,
+        pb_200m_free: pb200mFree,
         swim_index_score: a.averages?.swim_index_score ?? a.stats?.swim_index_score,
-        podiums_count: a.averages?.podiums_count ?? a.stats?.podiums_count,
+        podiums_count: podiums,
         fg_percentage: Number(a.averages?.fg_percentage ?? a.stats?.fg_pct ?? 0),
         three_pt_percentage: Number(a.averages?.three_pt_percentage ?? a.stats?.three_pct ?? 0),
         ft_percentage: Number(a.averages?.ft_percentage ?? a.stats?.ft_pct ?? 0),

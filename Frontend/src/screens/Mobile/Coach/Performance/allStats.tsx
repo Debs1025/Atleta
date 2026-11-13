@@ -716,7 +716,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                 <View style={styles.advancedTile}>
                   <Text style={styles.advancedLabel}>OVERALL PERFORMANCE SCORE</Text>
                   <Text style={styles.advancedValue}>
-                    {athlete?.rating_score || "75"}
+                    {athlete?.rating_score && athlete.rating_score > 0 ? athlete.rating_score : "-"}
                   </Text>
                 </View>
               </>
