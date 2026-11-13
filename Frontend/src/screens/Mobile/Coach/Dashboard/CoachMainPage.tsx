@@ -3095,6 +3095,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "all_stats" && (
         <AllStats
           athlete={selectedPerfAthlete}
+          matches={athleteFilteredMatches}
           onClose={() => setActiveView("athlete_portfolio")}
           onUpdateWorkload={(updatedWorkload) => {
             setSelectedPerfAthlete((prev) => ({

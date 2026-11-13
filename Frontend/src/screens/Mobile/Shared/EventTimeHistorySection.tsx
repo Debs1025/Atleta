@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import Svg, {
   Line,
   G,
 } from "react-native-svg";
+import { collection, getDocs, limit, query } from "firebase/firestore";
+import { db } from "../../../services/firebaseClient";
 import { requestAuthenticatedJson } from "../Authentication/authShared";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -100,7 +102,108 @@ const TRACK_EVENTS: EventFilterOption[] = [
   { key: "reaction", label: "Reaction Time", shortLabel: "REACTION", iconName: "flash-outline" },
 ];
 
-export function buildFallbackProgression(
+export function parseToNumeric(raw: any): number {
+  if (typeof raw === "number") return raw;
+  if (!raw) return 0;
+  const str = String(raw).trim().toLowerCase().replace(/s$/, "").replace(/m$/, "");
+  if (str.includes(":")) {
+    const parts = str.split(":");
+    if (parts.length === 2) {
+      const min = parseFloat(parts[0]) || 0;
+      const sec = parseFloat(parts[1]) || 0;
+      return +(min * 60 + sec).toFixed(2);
+    }
+  }
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+export function isTargetEvent(eventStr: string, key: string): boolean {
+  if (!eventStr) return false;
+  const e = eventStr.toUpperCase();
+  const k = key.toLowerCase();
+
+  if (k === "50m_free") return e.includes("50") && (e.includes("FREE") || e.includes("SWIM"));
+  if (k === "100m_free") return e.includes("100") && (e.includes("FREE") || e.includes("SWIM"));
+  if (k === "200m_free") return e.includes("200") && (e.includes("FREE") || e.includes("SWIM"));
+  if (k === "100m_back") return e.includes("BACK");
+  if (k === "100m_fly") return e.includes("FLY") || e.includes("BUTTERFLY");
+  if (k === "100m_breast") return e.includes("BREAST");
+  if (k === "200m_im") return e.includes("IM") || e.includes("MEDLEY");
+  if (k === "flip_turn") return e.includes("FLIP") || e.includes("TURN");
+
+  if (k === "100m") return e.includes("100") && (e.includes("DASH") || e.includes("MD") || e.includes("RUN") || e.includes("SPRINT") || (!e.includes("FREE") && !e.includes("SWIM")));
+  if (k === "200m") return e.includes("200") && (e.includes("DASH") || e.includes("MD") || e.includes("RUN") || e.includes("SPRINT") || (!e.includes("FREE") && !e.includes("SWIM")));
+  if (k === "400m") return e.includes("400") && (e.includes("DASH") || e.includes("MD") || e.includes("RUN"));
+  if (k === "800m") return e.includes("800");
+  if (k === "1500m") return e.includes("1500");
+  if (k === "long_jump") return e.includes("LONG") && e.includes("JUMP");
+  if (k === "shot_put") return e.includes("SHOT") && e.includes("PUT");
+  if (k === "discus") return e.includes("DISCUS");
+  if (k === "javelin") return e.includes("JAVELIN");
+  if (k === "reaction") return e.includes("REACTION") || e.includes("START");
+
+  return false;
+}
+
+export function matchesAthlete(p: any, targetId: string, targetName: string): boolean {
+  if (!p) return false;
+  const pId = String(p.athlete_id || p.user_id || p.id || "").toLowerCase().trim();
+  const cleanPId = pId.replace(/^ath_/, "");
+  const tId = String(targetId || "").toLowerCase().trim();
+  const cleanTId = tId.replace(/^ath_/, "");
+
+  if (cleanTId && cleanPId && (cleanTId === cleanPId || tId === pId)) {
+    return true;
+  }
+
+  const pName = (p.player_name || p.name || "").toLowerCase().trim();
+  const tName = (targetName || "").toLowerCase().trim();
+  if (pName && tName) {
+    if (pName === tName) return true;
+    const pParts = pName.split(/\s+/).filter(Boolean);
+    const tParts = tName.split(/\s+/).filter(Boolean);
+    const pLast = pParts[pParts.length - 1];
+    const tLast = tParts[tParts.length - 1];
+    if (pLast && tLast && pLast.length > 2 && pLast === tLast) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function resolveBaselinePersonalBest(
+  eventKey: string,
+  sport: string,
+  avg: any = {},
+  stats: any = {}
+): string {
+  const isSwim = sport.toUpperCase().includes("SWIM");
+  if (isSwim) {
+    if (eventKey === "50m_free") return avg.pb_50m_free || stats.pb_50m_free || stats.times_50m_free || "N/A";
+    if (eventKey === "100m_free") return avg.pb_100m_free || avg.avg_100m_free || stats.times_100m || "N/A";
+    if (eventKey === "200m_free") return avg.avg_200m_free || avg.pb_200m || stats.times_200m || "N/A";
+    if (eventKey === "100m_back") return avg.pb_100m_back || stats.times_100m_back || "N/A";
+    if (eventKey === "100m_fly") return avg.pb_100m_fly || stats.times_100m_fly || "N/A";
+    if (eventKey === "100m_breast") return avg.pb_100m_breast || stats.times_100m_breast || "N/A";
+    if (eventKey === "200m_im") return avg.pb_200m_im || stats.times_200m_im || "N/A";
+    if (eventKey === "flip_turn") return avg.flip_turn_s || "N/A";
+  } else {
+    if (eventKey === "100m") return avg.pb_100m || avg.avg_100m || stats.times_100m || "N/A";
+    if (eventKey === "200m") return avg.pb_200m || avg.avg_200m || stats.times_200m || "N/A";
+    if (eventKey === "400m") return avg.pb_400m || stats.times_400m || "N/A";
+    if (eventKey === "800m") return avg.pb_800m || stats.times_800m || "N/A";
+    if (eventKey === "1500m") return avg.pb_1500m || stats.times_1500m || "N/A";
+    if (eventKey === "long_jump") return avg.pb_long_jump || stats.long_jump || "N/A";
+    if (eventKey === "shot_put") return avg.pb_shot_put || stats.shot_put || "N/A";
+    if (eventKey === "discus") return avg.pb_discus || stats.discus || "N/A";
+    if (eventKey === "javelin") return avg.pb_javelin || stats.javelin || "N/A";
+    if (eventKey === "reaction") return avg.reaction_time_s || stats.reaction_time || "N/A";
+  }
+  return "N/A";
+}
+
+export function buildEmptyProgression(
   eventOpt: EventFilterOption,
   athId: string,
   athName: string,
@@ -110,179 +213,7 @@ export function buildFallbackProgression(
 ): EventProgressionData {
   const isDistance = !!eventOpt.isDistance;
   const isLowerBetter = !isDistance;
-  const unit = isDistance ? "m" : "s";
-  const isSwim = sport.toUpperCase().includes("SWIM");
-
-  let baseVal = 0;
-
-  if (isSwim) {
-    if (eventOpt.key === "50m_free") {
-      baseVal = parseFloat(avg.pb_50m_free || stats.pb_50m_free || stats.times_50m_free || "24.82");
-    } else if (eventOpt.key === "200m_free") {
-      const raw = avg.avg_200m_free || avg.pb_200m || stats.times_200m || "1:58.20";
-      if (raw.includes(":")) {
-        const [m, s] = raw.split(":");
-        baseVal = parseFloat(m) * 60 + parseFloat(s);
-      } else {
-        baseVal = parseFloat(raw);
-      }
-    } else if (eventOpt.key === "100m_back") {
-      baseVal = 61.2;
-    } else if (eventOpt.key === "100m_fly") {
-      baseVal = 58.4;
-    } else if (eventOpt.key === "100m_breast") {
-      baseVal = 69.15;
-    } else if (eventOpt.key === "200m_im") {
-      baseVal = 132.8;
-    } else if (eventOpt.key === "flip_turn") {
-      baseVal = parseFloat(avg.flip_turn_s || "0.48");
-    } else {
-      baseVal = parseFloat(avg.pb_100m_free || avg.avg_100m_free || stats.times_100m || "53.64");
-    }
-  } else {
-    if (eventOpt.key === "200m") {
-      baseVal = parseFloat(avg.pb_200m || avg.avg_200m || stats.times_200m || "20.90");
-    } else if (eventOpt.key === "400m") {
-      baseVal = parseFloat(avg.pb_400m || stats.times_400m || "47.50");
-    } else if (eventOpt.key === "800m") {
-      baseVal = 112.3;
-    } else if (eventOpt.key === "1500m") {
-      baseVal = 234.1;
-    } else if (eventOpt.key === "reaction") {
-      baseVal = parseFloat(avg.reaction_time_s || stats.reaction_time || "0.138");
-    } else if (eventOpt.key === "long_jump") {
-      baseVal = parseFloat(avg.pb_long_jump || stats.long_jump || "3.28");
-    } else if (eventOpt.key === "shot_put") {
-      baseVal = parseFloat(avg.pb_shot_put || stats.shot_put || "5.56");
-    } else if (eventOpt.key === "discus") {
-      baseVal = parseFloat(avg.pb_discus || stats.discus || "13.45");
-    } else if (eventOpt.key === "javelin") {
-      baseVal = parseFloat(avg.pb_javelin || stats.javelin || "22.53");
-    } else {
-      baseVal = parseFloat(avg.pb_100m || avg.avg_100m || stats.times_100m || "10.28");
-    }
-  }
-
-  if (!baseVal || isNaN(baseVal) || baseVal <= 0) {
-    baseVal = isDistance ? 5.5 : 10.28;
-  }
-
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  // 4 realistic chronological competition meets
-  const milestones = isLowerBetter
-    ? [
-        { delta: 0, daysAgo: 2, meet: "2026 Inter-School Championship", loc: "Metro Naga Sports Complex", rank: 1, qts: isSwim ? "25.00s" : "10.40s" },
-        { delta: 0.35, daysAgo: 16, meet: "UAAP Regional Qualifiers", loc: "PhilSports Complex", rank: 2, qts: isSwim ? "25.20s" : "10.60s" },
-        { delta: 0.72, daysAgo: 38, meet: "National Open Invitationals", loc: "Rizal Memorial Stadium", rank: 2, qts: isSwim ? "25.50s" : "10.80s" },
-        { delta: 1.15, daysAgo: 65, meet: "Pre-Season Time Trials", loc: "University Athletics Oval", rank: 3, qts: isSwim ? "26.00s" : "11.00s" },
-      ]
-    : [
-        { delta: 0, daysAgo: 2, meet: "2026 Inter-School Championship", loc: "Metro Naga Sports Complex", rank: 1, qts: "3.20m" },
-        { delta: -0.15, daysAgo: 16, meet: "UAAP Regional Qualifiers", loc: "PhilSports Complex", rank: 2, qts: "3.10m" },
-        { delta: -0.32, daysAgo: 38, meet: "National Open Invitationals", loc: "Rizal Memorial Stadium", rank: 3, qts: "3.00m" },
-        { delta: -0.55, daysAgo: 65, meet: "Pre-Season Time Trials", loc: "University Athletics Oval", rank: 4, qts: "2.80m" },
-      ];
-
-  const chrono: EventProgressionRecord[] = [];
-  milestones.forEach((m, idx) => {
-    const calculatedVal = Math.max(0.01, +(baseVal + m.delta).toFixed(2));
-    const recDate = new Date(now - m.daysAgo * dayMs);
-    const displayDate = recDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
-    let valFormatted = `${calculatedVal.toFixed(2)}${unit}`;
-    if (
-      (eventOpt.key === "200m_free" || eventOpt.key === "800m" || eventOpt.key === "1500m" || eventOpt.key === "200m_im") &&
-      calculatedVal > 60
-    ) {
-      const mins = Math.floor(calculatedVal / 60);
-      const secs = (calculatedVal % 60).toFixed(2);
-      valFormatted = `${mins}:${secs.padStart(5, "0")}`;
-    }
-
-    chrono.push({
-      id: `seed_hist_${idx}_${eventOpt.key}`,
-      meet_name: m.meet,
-      location: m.loc,
-      date: recDate.toISOString(),
-      display_date: displayDate,
-      formatted_value: valFormatted,
-      numeric_value: calculatedVal,
-      unit,
-      is_lower_better: isLowerBetter,
-      rank: m.rank,
-      qts: m.qts,
-      is_official: true,
-    });
-  });
-
-  // Sort chronological: oldest to newest
-  chrono.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  // Determine PB
-  let bestNum = chrono[0].numeric_value;
-  chrono.forEach((r) => {
-    if (isLowerBetter) {
-      if (r.numeric_value <= bestNum) bestNum = r.numeric_value;
-    } else {
-      if (r.numeric_value >= bestNum) bestNum = r.numeric_value;
-    }
-  });
-
-  // Calculate deltas
-  const calculated: EventProgressionRecord[] = [];
-  for (let i = 0; i < chrono.length; i++) {
-    const cur = chrono[i];
-    const prev = i > 0 ? chrono[i - 1] : null;
-
-    let delta = 0;
-    let isImprovement = false;
-    let deltaDisplay = "Baseline";
-
-    if (prev) {
-      delta = +(cur.numeric_value - prev.numeric_value).toFixed(2);
-      if (isLowerBetter) {
-        if (delta < 0) {
-          isImprovement = true;
-          deltaDisplay = `↓ ${Math.abs(delta).toFixed(2)}${unit} Faster`;
-        } else if (delta > 0) {
-          isImprovement = false;
-          deltaDisplay = `+${delta.toFixed(2)}${unit}`;
-        } else {
-          deltaDisplay = `0.00${unit}`;
-        }
-      } else {
-        if (delta > 0) {
-          isImprovement = true;
-          deltaDisplay = `↑ +${delta.toFixed(2)}${unit} Farther`;
-        } else if (delta < 0) {
-          isImprovement = false;
-          deltaDisplay = `${delta.toFixed(2)}${unit}`;
-        } else {
-          deltaDisplay = `0.00${unit}`;
-        }
-      }
-    }
-
-    const isPB = cur.numeric_value === bestNum;
-    calculated.push({
-      ...cur,
-      delta_from_previous: prev ? delta : undefined,
-      delta_display: deltaDisplay,
-      is_improvement: isImprovement,
-      is_personal_best: isPB,
-    });
-  }
-
-  const sparklinePoints = calculated.map((r, idx) => ({
-    x: idx,
-    y: r.numeric_value,
-    label: r.display_date,
-    value: r.numeric_value,
-  }));
-
-  const displayRecords = [...calculated].reverse();
+  const pb = resolveBaselinePersonalBest(eventOpt.key, sport, avg, stats);
 
   return {
     athlete_id: athId,
@@ -290,12 +221,12 @@ export function buildFallbackProgression(
     sport,
     metric_key: eventOpt.key,
     event_title: eventOpt.label,
-    current_mark: displayRecords[0]?.formatted_value || `${baseVal.toFixed(2)}${unit}`,
-    personal_best: displayRecords.find((r) => r.is_personal_best)?.formatted_value || `${baseVal.toFixed(2)}${unit}`,
+    current_mark: pb,
+    personal_best: pb,
     is_lower_better: isLowerBetter,
-    total_records: displayRecords.length,
-    records: displayRecords,
-    sparkline_points: sparklinePoints,
+    total_records: 0,
+    records: [],
+    sparkline_points: [],
   };
 }
 
@@ -305,6 +236,7 @@ export interface EventTimeHistorySectionProps {
   sportCategory: string;
   profileAverages?: any;
   profileStats?: any;
+  matches?: any[];
 }
 
 export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = ({
@@ -313,6 +245,7 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
   sportCategory = "SWIMMING",
   profileAverages = {},
   profileStats = {},
+  matches = [],
 }) => {
   const normSport = (sportCategory || "").toUpperCase();
   const isSwim = normSport.includes("SWIM");
@@ -321,7 +254,6 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
     return isSwim ? SWIMMING_EVENTS : TRACK_EVENTS;
   }, [isSwim]);
 
-  // Selected event state
   const [selectedEventKey, setSelectedEventKey] = useState<string>(
     availableEvents[0]?.key || "100m"
   );
@@ -330,9 +262,8 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
     return availableEvents.find((e) => e.key === selectedEventKey) || availableEvents[0];
   }, [availableEvents, selectedEventKey]);
 
-  // Initial instantaneous data state
   const [data, setData] = useState<EventProgressionData>(() =>
-    buildFallbackProgression(
+    buildEmptyProgression(
       availableEvents[0],
       athleteId,
       athleteName,
@@ -343,59 +274,254 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
   );
 
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Background fetch to refresh if server has new match records
-  const isFetchingRef = useRef<boolean>(false);
-
+  // Strictly Real Data Fetching from Firestore Match_Logs & matches prop
   useEffect(() => {
-    // 1. Immediately update UI state with local baseline so there is ZERO delay
-    const initialFallback = buildFallbackProgression(
-      selectedEventOption,
-      athleteId,
-      athleteName,
-      normSport,
-      profileAverages,
-      profileStats
-    );
-    setData(initialFallback);
-    setSelectedPointIndex(null);
+    let isCancelled = false;
+    setIsLoading(true);
 
-    // 2. Fetch live match logs in background (with timeout to prevent hanging)
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
+    const isDistance = !!selectedEventOption.isDistance;
+    const isLowerBetter = !isDistance;
+    const unit = isDistance ? "m" : "s";
 
-    const rawAthId = athleteId || "";
-    const cleanId = rawAthId.startsWith("ath_") ? rawAthId.replace("ath_", "") : rawAthId;
-    const url = `/athlete/${cleanId}/progression-history?metric=${encodeURIComponent(
-      selectedEventKey
-    )}&sport=${encodeURIComponent(normSport)}`;
+    const fetchRealData = async () => {
+      const extracted: EventProgressionRecord[] = [];
+      const seenMatchIds = new Set<string>();
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+      // 1. Process matches passed via props
+      if (Array.isArray(matches) && matches.length > 0) {
+        matches.forEach((m: any) => {
+          const mId = m.match_id || m.id;
+          if (mId && seenMatchIds.has(mId)) return;
+          if (mId) seenMatchIds.add(mId);
 
-    requestAuthenticatedJson(url, "GET")
-      .then((res: any) => {
-        clearTimeout(timer);
-        if (res && Array.isArray(res.records) && res.records.length > 0) {
-          setData(res);
+          const playerStats = Array.isArray(m.player_stats) ? m.player_stats : [];
+          playerStats.forEach((p: any) => {
+            if (matchesAthlete(p, athleteId, athleteName)) {
+              const rowEvent = p.event || p.event_name || m.event_or_opponent || m.event_name || "";
+              if (isTargetEvent(rowEvent, selectedEventKey)) {
+                const rawVal = p.time || p.finish_time || p.time_or_distance || p.distance || "";
+                const numVal = parseToNumeric(rawVal);
+                if (numVal > 0) {
+                  const mDate = m.match_date || m.date || m.timestamp || m.full_date || new Date().toISOString();
+                  const d = new Date(mDate);
+                  const displayDate = !isNaN(d.getTime())
+                    ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : "Official Meet";
+
+                  extracted.push({
+                    id: `${mId}_${p.athlete_id || p.index || Math.random().toString(36).substring(2, 6)}`,
+                    meet_name: m.custom_game_title || m.game_name || m.match_name || m.event_or_opponent || "Official Match",
+                    location: m.location || "Official Sports Complex",
+                    date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
+                    display_date: displayDate,
+                    formatted_value: String(rawVal).trim().endsWith(unit) ? String(rawVal).trim() : `${rawVal}${unit}`,
+                    numeric_value: numVal,
+                    unit,
+                    is_lower_better: isLowerBetter,
+                    rank: p.rank || p.place || 1,
+                    qts: p.qts || undefined,
+                    is_official: m.is_official !== false,
+                    notes: p.notes || undefined,
+                  });
+                }
+              }
+            }
+          });
+        });
+      }
+
+      // 2. Query Firestore Match_Logs collection directly
+      try {
+        const snap = await getDocs(query(collection(db, "Match_Logs"), limit(60)));
+        if (snap && !snap.empty) {
+          snap.forEach((doc) => {
+            const m = doc.data();
+            const mId = doc.id;
+            if (seenMatchIds.has(mId)) return;
+            seenMatchIds.add(mId);
+
+            const playerStats = Array.isArray(m.player_stats) ? m.player_stats : [];
+            playerStats.forEach((p: any) => {
+              if (matchesAthlete(p, athleteId, athleteName)) {
+                const rowEvent = p.event || p.event_name || m.event_name || m.custom_game_title || "";
+                if (isTargetEvent(rowEvent, selectedEventKey)) {
+                  const rawVal = p.time || p.finish_time || p.time_or_distance || p.distance || "";
+                  const numVal = parseToNumeric(rawVal);
+                  if (numVal > 0) {
+                    const mDate = m.match_date || m.timestamp || new Date().toISOString();
+                    const d = new Date(mDate);
+                    const displayDate = !isNaN(d.getTime())
+                      ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                      : "Official Meet";
+
+                    extracted.push({
+                      id: `${mId}_${p.athlete_id || p.index || Math.random().toString(36).substring(2, 6)}`,
+                      meet_name: m.custom_game_title || m.game_name || m.match_name || "Official Meet",
+                      location: m.location || "Official Sports Complex",
+                      date: !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
+                      display_date: displayDate,
+                      formatted_value: String(rawVal).trim().endsWith(unit) ? String(rawVal).trim() : `${rawVal}${unit}`,
+                      numeric_value: numVal,
+                      unit,
+                      is_lower_better: isLowerBetter,
+                      rank: p.rank || p.place || 1,
+                      qts: p.qts || undefined,
+                      is_official: m.is_official !== false,
+                      notes: p.notes || undefined,
+                    });
+                  }
+                }
+              }
+            });
+          });
         }
-      })
-      .catch(() => {
-        // Fallback already rendered
-      })
-      .finally(() => {
-        clearTimeout(timer);
-        isFetchingRef.current = false;
-      });
-  }, [selectedEventKey, athleteId, normSport]); // Stable dependencies!
+      } catch (err) {
+        // Continue if offline or permission fails
+      }
 
-  // Sparkline Chart Calculation
+      // 3. Fallback to authenticated backend endpoint if Firestore client was blocked
+      if (extracted.length === 0) {
+        try {
+          const rawAthId = athleteId || "";
+          const cleanId = rawAthId.startsWith("ath_") ? rawAthId.replace("ath_", "") : rawAthId;
+          const url = `/athlete/${cleanId}/progression-history?metric=${encodeURIComponent(
+            selectedEventKey
+          )}&sport=${encodeURIComponent(normSport)}`;
+          const res: any = await requestAuthenticatedJson(url, "GET");
+          if (res && Array.isArray(res.records) && res.records.length > 0) {
+            if (!isCancelled) {
+              setData(res);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (apiErr) {
+          // No backend records
+        }
+      }
+
+      if (isCancelled) return;
+
+      // STRICTLY REAL DATA: If no real matches exist in Firestore, return clean empty state
+      if (extracted.length === 0) {
+        setData(
+          buildEmptyProgression(
+            selectedEventOption,
+            athleteId,
+            athleteName,
+            normSport,
+            profileAverages,
+            profileStats
+          )
+        );
+        setSelectedPointIndex(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Sort chronological: oldest to newest
+      extracted.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Determine genuine Personal Best across recorded meets
+      let bestNum = extracted[0].numeric_value;
+      extracted.forEach((r) => {
+        if (isLowerBetter) {
+          if (r.numeric_value <= bestNum) bestNum = r.numeric_value;
+        } else {
+          if (r.numeric_value >= bestNum) bestNum = r.numeric_value;
+        }
+      });
+
+      // Calculate deltas between consecutive real meets
+      const calculated: EventProgressionRecord[] = [];
+      for (let i = 0; i < extracted.length; i++) {
+        const cur = extracted[i];
+        const prev = i > 0 ? extracted[i - 1] : null;
+
+        let delta = 0;
+        let isImprovement = false;
+        let deltaDisplay = "Baseline";
+
+        if (prev) {
+          delta = +(cur.numeric_value - prev.numeric_value).toFixed(2);
+          if (isLowerBetter) {
+            if (delta < 0) {
+              isImprovement = true;
+              deltaDisplay = `↓ ${Math.abs(delta).toFixed(2)}${unit} Faster`;
+            } else if (delta > 0) {
+              isImprovement = false;
+              deltaDisplay = `+${delta.toFixed(2)}${unit}`;
+            } else {
+              deltaDisplay = `0.00${unit}`;
+            }
+          } else {
+            if (delta > 0) {
+              isImprovement = true;
+              deltaDisplay = `↑ +${delta.toFixed(2)}${unit} Farther`;
+            } else if (delta < 0) {
+              isImprovement = false;
+              deltaDisplay = `${delta.toFixed(2)}${unit}`;
+            } else {
+              deltaDisplay = `0.00${unit}`;
+            }
+          }
+        }
+
+        const isPB = cur.numeric_value === bestNum;
+        calculated.push({
+          ...cur,
+          delta_from_previous: prev ? delta : undefined,
+          delta_display: deltaDisplay,
+          is_improvement: isImprovement,
+          is_personal_best: isPB,
+        });
+      }
+
+      const sparklinePoints = calculated.map((r, idx) => ({
+        x: idx,
+        y: r.numeric_value,
+        label: r.display_date,
+        value: r.numeric_value,
+      }));
+
+      // Display newest meets at the top
+      const displayRecords = [...calculated].reverse();
+
+      const profilePB = resolveBaselinePersonalBest(selectedEventKey, normSport, profileAverages, profileStats);
+      const genuinePB = displayRecords.find((r) => r.is_personal_best)?.formatted_value || (profilePB !== "N/A" ? profilePB : displayRecords[0]?.formatted_value);
+
+      setData({
+        athlete_id: athleteId,
+        athlete_name: athleteName,
+        sport: normSport,
+        metric_key: selectedEventOption.key,
+        event_title: selectedEventOption.label,
+        current_mark: displayRecords[0]?.formatted_value || "N/A",
+        personal_best: genuinePB,
+        is_lower_better: isLowerBetter,
+        total_records: displayRecords.length,
+        records: displayRecords,
+        sparkline_points: sparklinePoints,
+      });
+
+      setSelectedPointIndex(null);
+      setIsLoading(false);
+    };
+
+    fetchRealData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEventKey, athleteId, normSport, matches]);
+
+  // Sparkline Chart Calculation for 2+ Real Meets
   const sparklineChart = useMemo(() => {
-    if (!data || !data.records || data.records.length === 0) return null;
+    if (!data || !data.records || data.records.length < 2) return null;
 
     const chrono = [...data.records].reverse();
-    if (chrono.length < 2) return null;
-
     const chartWidth = SCREEN_WIDTH - 64;
     const chartHeight = 100;
     const padX = 24;
@@ -460,12 +586,12 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
         </View>
         <View style={styles.officialBadge}>
           <Ionicons name="ribbon-outline" size={11} color="#00C8FF" />
-          <Text style={styles.officialBadgeText}>ALL LOGGED MARKS</Text>
+          <Text style={styles.officialBadgeText}>VERIFIED MATCH DATA</Text>
         </View>
       </View>
 
       <Text style={styles.sectionSubtitle}>
-        Select an event to view all competition times, personal bests, and career progression trends.
+        Select an event to view all recorded competition marks from official scoresheets.
       </Text>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -506,25 +632,35 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
       </ScrollView>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. EVENT KPI SUMMARY CARDS (PB, LATEST, TOTAL RACES)
+          3. KPI SUMMARY TILES
       ───────────────────────────────────────────────────────────── */}
       <View style={styles.kpiRow}>
         <View style={styles.kpiCard}>
           <View style={styles.kpiHeaderRow}>
             <Text style={styles.kpiLabel}>PERSONAL BEST</Text>
-            <Ionicons name="trophy" size={12} color="#F59E0B" />
+            <Ionicons name="trophy-outline" size={12} color="#FFD700" />
           </View>
-          <Text style={styles.kpiValueGold}>{data?.personal_best || "-"}</Text>
-          <Text style={styles.kpiSub}>Official Record</Text>
+          <Text style={styles.kpiValueGold} numberOfLines={1}>
+            {data?.personal_best || "N/A"}
+          </Text>
+          <Text style={styles.kpiSub}>
+            {data?.total_records > 0 ? "Official Record" : "Profile Baseline"}
+          </Text>
         </View>
 
         <View style={styles.kpiCard}>
           <View style={styles.kpiHeaderRow}>
             <Text style={styles.kpiLabel}>LATEST MARK</Text>
-            <Ionicons name="stopwatch" size={12} color="#00C8FF" />
+            <Ionicons name="timer-outline" size={12} color="#00C8FF" />
           </View>
-          <Text style={styles.kpiValueCyan}>{data?.current_mark || "-"}</Text>
-          <Text style={styles.kpiSub}>Most Recent Meet</Text>
+          <Text style={styles.kpiValueCyan} numberOfLines={1}>
+            {data?.records && data.records.length > 0
+              ? data.records[0].formatted_value
+              : "N/A"}
+          </Text>
+          <Text style={styles.kpiSub}>
+            {data?.records && data.records.length > 0 ? "Most Recent Meet" : "No Meets Yet"}
+          </Text>
         </View>
 
         <View style={styles.kpiCard}>
@@ -532,36 +668,41 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
             <Text style={styles.kpiLabel}>TIMES LOGGED</Text>
             <Ionicons name="calendar-outline" size={12} color="#94A3B8" />
           </View>
-          <Text style={styles.kpiValueWhite}>{data?.total_records || 0}</Text>
+          <Text style={styles.kpiValueWhite} numberOfLines={1}>
+            {data?.total_records || 0}
+          </Text>
           <Text style={styles.kpiSub}>Recorded Meets</Text>
         </View>
       </View>
 
       {/* ─────────────────────────────────────────────────────────────
-          4. PERFORMANCE TREND (SVG SPARKLINE CHART)
+          4. PERFORMANCE TREND (SVG) - SHOWN FOR 2+ MEETS
       ───────────────────────────────────────────────────────────── */}
-      {sparklineChart && (
+      {sparklineChart && sparklineChart.points.length >= 2 ? (
         <View style={styles.chartCard}>
           <View style={styles.chartHeaderRow}>
             <View>
               <Text style={styles.chartTitle}>
-                {selectedEventOption.label.toUpperCase()} TREND
+                {selectedEventOption.shortLabel} TREND
               </Text>
               <Text style={styles.chartSubtitle}>
-                {data?.is_lower_better ? "Higher curve = Faster time" : "Higher curve = Greater distance"}
+                {data.is_lower_better
+                  ? "Higher curve = Faster time"
+                  : "Higher curve = Farther distance"}
               </Text>
             </View>
+
             <View style={styles.liveIndicatorBadge}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>PROGRESSION</Text>
             </View>
           </View>
 
-          {/* Interactive Tooltip Card when point tapped */}
+          {/* Interactive Selected Point Tooltip */}
           {selectedPointIndex !== null && sparklineChart.points[selectedPointIndex] && (
             <View style={styles.tooltipCard}>
               <View style={styles.tooltipRow}>
-                <Text style={styles.tooltipMeet}>
+                <Text style={styles.tooltipMeet} numberOfLines={1}>
                   {sparklineChart.points[selectedPointIndex].record.meet_name}
                 </Text>
                 <Text style={styles.tooltipDate}>
@@ -570,33 +711,31 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
               </View>
               <Text style={styles.tooltipValue}>
                 {sparklineChart.points[selectedPointIndex].record.formatted_value}
-                {sparklineChart.points[selectedPointIndex].record.rank
-                  ? ` • Rank #${sparklineChart.points[selectedPointIndex].record.rank}`
-                  : ""}
+                {sparklineChart.points[selectedPointIndex].record.is_personal_best ? " (PB 🏆)" : ""}
               </Text>
             </View>
           )}
 
-          {/* SVG Chart Line */}
+          {/* Clean Vector Sparkline Chart */}
           <Svg
             width={sparklineChart.chartWidth}
             height={sparklineChart.chartHeight}
-            style={{ marginTop: 8 }}
+            style={{ marginTop: 12 }}
           >
             <Defs>
               <LinearGradient id="eventChartGradient" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor="#00C8FF" stopOpacity="0.35" />
+                <Stop offset="0%" stopColor="#00C8FF" stopOpacity="0.32" />
                 <Stop offset="100%" stopColor="#00C8FF" stopOpacity="0.0" />
               </LinearGradient>
             </Defs>
 
-            {/* Horizontal guide lines */}
+            {/* Subtle horizontal baseline markers */}
             <Line
               x1="24"
-              y1="24"
+              y1={sparklineChart.chartHeight / 2}
               x2={sparklineChart.chartWidth - 24}
-              y2="24"
-              stroke="rgba(255, 255, 255, 0.06)"
+              y2={sparklineChart.chartHeight / 2}
+              stroke="rgba(255, 255, 255, 0.04)"
               strokeDasharray="4 4"
             />
             <Line
@@ -673,16 +812,25 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
             ))}
           </View>
         </View>
-      )}
+      ) : data?.records && data.records.length === 1 ? (
+        <View style={styles.singleMeetNoticeCard}>
+          <Ionicons name="information-circle-outline" size={16} color="#00C8FF" />
+          <Text style={styles.singleMeetNoticeText}>
+            1 official match logged ({data.records[0].formatted_value}). Log 2 or more matches to render performance trend curve.
+          </Text>
+        </View>
+      ) : null}
 
       {/* ─────────────────────────────────────────────────────────────
-          5. ALL RECORDED TIMES (NOT JUST BEST TIME)
+          5. ALL RECORDED TIMES (STRICTLY REAL MATCH LOGS)
       ───────────────────────────────────────────────────────────── */}
       <View style={styles.allRecordsHeader}>
         <Text style={styles.allRecordsTitle}>
           ALL RECORDED TIMES ({data?.records?.length || 0})
         </Text>
-        <Text style={styles.allRecordsNotice}>Newest to Oldest</Text>
+        {data?.records && data.records.length > 0 && (
+          <Text style={styles.allRecordsNotice}>Newest to Oldest</Text>
+        )}
       </View>
 
       {data?.records && data.records.length > 0 ? (
@@ -747,7 +895,7 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
                     </View>
                   )}
 
-                  {item.delta_display ? (
+                  {item.delta_display && item.delta_display !== "Baseline" ? (
                     <View
                       style={[
                         styles.deltaBadge,
@@ -771,9 +919,13 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
         })
       ) : (
         <View style={styles.emptyCard}>
-          <Ionicons name="speedometer-outline" size={32} color="#475569" />
+          <Ionicons name="timer-outline" size={32} color="#475569" />
+          <Text style={styles.emptyTitle}>NO MATCH RECORDS</Text>
           <Text style={styles.emptyText}>
-            No official recorded times yet for {selectedEventOption.label}.
+            No official match records found for {selectedEventOption.label}.
+          </Text>
+          <Text style={styles.emptySubtext}>
+            Competition times will appear here as soon as match scorecards are logged or verified.
           </Text>
         </View>
       )}
@@ -1011,6 +1163,25 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  /* SINGLE MEET CARD */
+  singleMeetNoticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(0, 200, 255, 0.08)",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 200, 255, 0.2)",
+    marginBottom: 16,
+  },
+  singleMeetNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#94A3B8",
+    lineHeight: 16,
+  },
+
   /* ALL RECORDS LIST */
   allRecordsHeader: {
     flexDirection: "row",
@@ -1099,12 +1270,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#00C8FF",
     fontFamily: fontBoldPlatform,
-    letterSpacing: -0.3,
   },
   qtsText: {
-    fontSize: 10,
-    color: "#64748B",
+    fontSize: 11,
     fontWeight: "700",
+    color: "#64748B",
   },
   badgesGroup: {
     flexDirection: "row",
@@ -1114,25 +1284,25 @@ const styles = StyleSheet.create({
   pbBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 4,
     backgroundColor: "rgba(245, 158, 11, 0.15)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.35)",
+    borderColor: "rgba(245, 158, 11, 0.3)",
   },
   pbBadgeText: {
     fontSize: 9,
     fontWeight: "900",
-    color: "#F59E0B",
+    color: "#FFD700",
     letterSpacing: 0.5,
   },
   deltaBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.05)",
     paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 5,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   deltaBadgeImproved: {
     backgroundColor: "rgba(16, 185, 129, 0.15)",
@@ -1140,26 +1310,48 @@ const styles = StyleSheet.create({
     borderColor: "rgba(16, 185, 129, 0.3)",
   },
   deltaText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    color: "#64748B",
+    color: "#94A3B8",
   },
   deltaTextImproved: {
     color: "#10B981",
-    fontWeight: "900",
   },
+
+  /* EMPTY STATE */
   emptyCard: {
     backgroundColor: "#0D192E",
     borderRadius: 14,
     padding: 24,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderStyle: "dashed",
+    marginTop: 4,
+  },
+  emptyTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#94A3B8",
+    letterSpacing: 1,
+    marginTop: 10,
+    marginBottom: 4,
   },
   emptyText: {
     fontSize: 12,
     color: "#64748B",
     textAlign: "center",
+    lineHeight: 18,
+    maxWidth: 280,
+  },
+  emptySubtext: {
+    fontSize: 11,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 16,
+    marginTop: 4,
+    maxWidth: 280,
   },
 });
 

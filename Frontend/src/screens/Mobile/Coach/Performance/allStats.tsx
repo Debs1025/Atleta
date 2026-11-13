@@ -20,12 +20,14 @@ import { EventTimeHistorySection } from "../../Shared/EventTimeHistorySection";
 
 interface AllStatsProps {
   athlete: AthletePerformanceProfile;
+  matches?: any[];
   onClose: () => void;
   onUpdateWorkload?: (updatedWorkload: WorkloadTargetState) => void;
 }
 
 export const AllStats: React.FC<AllStatsProps> = ({
   athlete: rawAthlete,
+  matches = [],
   onClose,
   onUpdateWorkload,
 }) => {
@@ -179,6 +181,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                   sportCategory="TRACK AND FIELD"
                   profileAverages={athlete?.averages}
                   profileStats={athlete?.stats}
+                  matches={matches}
                 />
 
                 <Text style={styles.sectionTitle}>PERFORMANCE & SPEED SPLITS</Text>
@@ -279,6 +282,7 @@ export const AllStats: React.FC<AllStatsProps> = ({
                   sportCategory="SWIMMING"
                   profileAverages={athlete?.averages}
                   profileStats={athlete?.stats}
+                  matches={matches}
                 />
 
                 <Text style={styles.sectionTitle}>STROKE & EFFICIENCY SPLITS</Text>
