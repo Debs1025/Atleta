@@ -715,50 +715,104 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
         </View>
 
         {/* View Matches Section */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>VIEW MATCHES</Text>
-          <TouchableOpacity onPress={onViewMatchHistory} activeOpacity={0.7}>
-            <Text style={styles.viewAllLink}>SEE ALL →</Text>
-          </TouchableOpacity>
-        </View>
+        {(() => {
+          const athleteSportUpper = (athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+          const isAthleteTimed = athleteSportUpper.includes("SWIM") || athleteSportUpper.includes("TRACK") || athleteSportUpper.includes("FIELD") || athleteSportUpper.includes("RUN");
 
-        <View style={styles.recentMatchesList}>
-          {(!matches || matches.length === 0) ? (
-            <View style={{ paddingVertical: 16, alignItems: "center" }}>
-              <Text style={{ color: "#94A3B8", fontSize: 13 }}>
-                No match logs recorded yet for this athlete.
-              </Text>
-            </View>
-          ) : (
-            matches.slice(0, 3).map((m) => {
-              const isWin =
-                (m.result_badge_text || "").toUpperCase().includes("WIN") ||
-                (m.home_score !== undefined && m.away_score !== undefined && m.home_score >= m.away_score);
-              const opponent = m.away_team || m.event_or_opponent || "Opponent";
-              const oppText = opponent.toLowerCase().startsWith("vs") ? opponent : `vs. ${opponent}`;
-              return (
-                <TouchableOpacity
-                  key={m.match_id}
-                  style={styles.matchRowCard}
-                  onPress={onViewMatchHistory}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.matchOpponentText} numberOfLines={1}>
-                    {oppText}
-                  </Text>
-                  <View style={styles.matchBadgeRow}>
-                    <Text style={isWin ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
-                      {isWin ? "WIN" : "LOSE"}
-                    </Text>
-                    <Text style={styles.matchDateText}>
-                      {m.date_formatted || "RECENT"}
+          return (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>
+                  {isAthleteTimed ? "RECORDED MEETS" : "VIEW MATCHES"}
+                </Text>
+                <TouchableOpacity onPress={onViewMatchHistory} activeOpacity={0.7}>
+                  <Text style={styles.viewAllLink}>SEE ALL →</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.recentMatchesList}>
+                {(!matches || matches.length === 0) ? (
+                  <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                    <Text style={{ color: "#94A3B8", fontSize: 13 }}>
+                      {isAthleteTimed ? "No meet records logged yet for this athlete." : "No match logs recorded yet for this athlete."}
                     </Text>
                   </View>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
+                ) : (
+                  matches.slice(0, 3).map((m) => {
+                    const mSport = (m.sport_category || athleteSportUpper).toUpperCase();
+                    const isMatchTimed = mSport.includes("SWIM") || mSport.includes("TRACK") || mSport.includes("FIELD");
+                    const mStatsArr = Array.isArray(m.player_stats) ? m.player_stats : (Array.isArray(m.playerStats) ? m.playerStats : []);
+                    const athStat = mStatsArr.find((p: any) =>
+                      (athlete.athlete_id && (p.athlete_id === athlete.athlete_id || p.athlete_id === athlete.athlete_id?.replace("ath_", ""))) ||
+                      (athlete.full_name && (p.player_name || p.name || "").toLowerCase() === athlete.full_name.toLowerCase())
+                    ) || mStatsArr[0];
+
+                    if (isMatchTimed) {
+                      const statEvent = athStat?.event || athStat?.event_name || "";
+                      const cleanMeet = (m.game_name || m.match_name || "").replace(/\s*vs\s*OPPONENT.*$/i, "").trim();
+                      const meetTitle = (cleanMeet && !cleanMeet.toLowerCase().includes("vs"))
+                        ? (statEvent && !cleanMeet.includes(statEvent) ? `${cleanMeet} • ${statEvent}` : cleanMeet)
+                        : (statEvent || (m.event_or_opponent && !m.event_or_opponent.toLowerCase().includes("vs") ? m.event_or_opponent : `${mSport.includes("SWIM") ? "Swimming" : "Track"} Meet`));
+
+                      const statTime = athStat?.finish_time || athStat?.time || athStat?.mark || athStat?.time_or_distance;
+                      const timeStr = statTime || m.date_formatted || "RECENT";
+                      const rankNum = athStat?.rank || athStat?.place;
+                      const isPodium = rankNum === 1 || rankNum === 2 || rankNum === 3 || (m.result_badge_text || "").includes("WIN");
+                      const badgeText = rankNum === 1 ? "1ST" : (rankNum === 2 ? "2ND" : (rankNum === 3 ? "3RD" : (rankNum ? `#${rankNum}` : (isPodium ? "1ST" : "DONE"))));
+
+                      return (
+                        <TouchableOpacity
+                          key={m.match_id}
+                          style={styles.matchRowCard}
+                          onPress={onViewMatchHistory}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.matchOpponentText} numberOfLines={1}>
+                            {meetTitle}
+                          </Text>
+                          <View style={styles.matchBadgeRow}>
+                            <Text style={isPodium ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
+                              {badgeText}
+                            </Text>
+                            <Text style={styles.matchDateText}>
+                              {timeStr}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    }
+
+                    const isWin =
+                      (m.result_badge_text || "").toUpperCase().includes("WIN") ||
+                      (m.home_score !== undefined && m.away_score !== undefined && m.home_score >= m.away_score);
+                    const opponent = m.away_team || m.event_or_opponent || "Opponent";
+                    const oppText = opponent.toLowerCase().startsWith("vs") ? opponent : `vs. ${opponent}`;
+                    return (
+                      <TouchableOpacity
+                        key={m.match_id}
+                        style={styles.matchRowCard}
+                        onPress={onViewMatchHistory}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.matchOpponentText} numberOfLines={1}>
+                          {oppText}
+                        </Text>
+                        <View style={styles.matchBadgeRow}>
+                          <Text style={isWin ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
+                            {isWin ? "WIN" : "LOSE"}
+                          </Text>
+                          <Text style={styles.matchDateText}>
+                            {m.date_formatted || "RECENT"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
+            </>
+          );
+        })()}
 
         {/* Visual Analytics Section */}
         <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>

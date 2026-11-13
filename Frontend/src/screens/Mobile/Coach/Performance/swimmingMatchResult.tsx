@@ -30,8 +30,14 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
   const [leaderboardData, setLeaderboardData] = useState<any[]>(matchItem?.leaderboard_entries || []);
   const [loading, setLoading] = useState(false);
 
-  const eventTitle = matchItem?.event_or_opponent || "Swimming Event";
-  const gameType = matchItem?.game_type || "MATCH LOG";
+  const rawTitle = matchItem?.match_name || matchItem?.game_name || matchItem?.event_or_opponent || "";
+  const firstStat = (matchItem?.player_stats && matchItem.player_stats.length > 0) ? matchItem.player_stats[0] : null;
+  const statEvent = firstStat?.event || firstStat?.event_name || "";
+  const cleanTitle = rawTitle.replace(/\s*vs\s*OPPONENT.*$/i, "").trim();
+  const eventTitle = (cleanTitle && !cleanTitle.toLowerCase().includes("vs"))
+    ? (statEvent && !cleanTitle.includes(statEvent) ? `${cleanTitle} • ${statEvent}` : cleanTitle)
+    : (statEvent || "Swimming Event");
+  const gameType = matchItem?.game_type || "MEET LOG";
   const dateFormatted = matchItem?.full_date || matchItem?.date_formatted || "RECENT";
   const entriesCount = matchItem?.entries_count || leaderboardData.length;
 
@@ -117,7 +123,7 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.pageTitle}>MATCH RESULT</Text>
+        <Text style={styles.pageTitle}>MEET RESULT</Text>
 
         {/* Game Sub-card */}
         <View style={styles.eventCard}>

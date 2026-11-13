@@ -51,13 +51,15 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   );
 
   // Local form state pre-populated from session
-  const [gameName, setGameName] = useState(session.game_name || "ADNU vs. UNC - Intramurals 2026");
-  const [opponentName, setOpponentName] = useState(session.opponent_team_name || "");
-  const [gameType, setGameType] = useState<'Tournament' | 'Practice' | 'Tune-Up'>(
-    (session.game_type as 'Tournament' | 'Practice' | 'Tune-Up') || "Tournament"
+  const [gameName, setGameName] = useState(
+    session.game_name || session.match_name || ""
   );
-  const [gameResult, setGameResult] = useState<'Win' | 'Lose'>(
-    (session.game_result as 'Win' | 'Lose') || "Win"
+  const [opponentName, setOpponentName] = useState(session.opponent_team_name || "");
+  const [gameType, setGameType] = useState<string>(
+    session.game_type || (isTimedSport ? "Championship" : "Tournament")
+  );
+  const [gameResult, setGameResult] = useState<string>(
+    session.game_result || (isTimedSport ? "1st Place" : "Win")
   );
   const [notes, setNotes] = useState(session.notes || "");
 
@@ -67,12 +69,12 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
 
-  const GAME_TYPES: ('Tournament' | 'Practice' | 'Tune-Up')[] = [
-    "Tournament",
-    "Practice",
-    "Tune-Up",
-  ];
-  const GAME_RESULTS: ('Win' | 'Lose')[] = ["Win", "Lose"];
+  const GAME_TYPES: string[] = isTimedSport
+    ? ["Championship", "Invitational", "Time Trials", "Qualifiers", "Practice"]
+    : ["Tournament", "Practice", "Tune-Up"];
+  const GAME_RESULTS: string[] = isTimedSport
+    ? ["1st Place", "2nd Place", "3rd Place", "Podium", "Completed"]
+    : ["Win", "Lose"];
 
   // Combine active and bench rosters for statistics table
   const allPlayers = session.active_roster.concat(session.bench_roster);
@@ -171,20 +173,30 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     const scoresheetUrl = (session as any).scoresheetUrl || (session as any).scoresheet_url || "";
 
     const totalCalculatedHomeScore = playerStatsArray.reduce((sum, p: any) => sum + (p.pts || 0), 0);
-    const homeScore = totalCalculatedHomeScore > 0 ? totalCalculatedHomeScore : (normalizedGameResult === "WIN" ? 78 : 65);
-    const awayScore = normalizedGameResult === "WIN" ? Math.max(0, homeScore - 8) : homeScore + 8;
+    const homeScore = isTimedSport
+      ? undefined
+      : (totalCalculatedHomeScore > 0 ? totalCalculatedHomeScore : (normalizedGameResult === "WIN" ? 78 : 65));
+    const awayScore = isTimedSport
+      ? undefined
+      : (normalizedGameResult === "WIN" ? Math.max(0, (homeScore || 78) - 8) : (homeScore || 65) + 8);
+
+    const firstStat = playerStatsArray[0];
+    const defaultEvent = firstStat?.event || firstStat?.event_name || (normalizedSport.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet");
+    const defaultMatchTitle = isTimedSport
+      ? (gameName.trim() || `${session.team_name || "ATLETA"} ${defaultEvent}`)
+      : (gameName.trim() || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`);
 
     // Construct backend-ready match payload with restored Firestore schema attributes
     const payload = {
       match_id: session.match_id || `match_${Date.now()}`,
       team_id: session.team_name || "team_varsity",
       home_team_name: session.team_name || "ATLETA VARSITY",
-      opponent_team_name: opponentName || "OPPONENT TEAM",
-      away_team_name: opponentName || "OPPONENT TEAM",
-      match_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
-      game_name: gameName || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`,
-      match_type: gameType || "Practice",
-      game_type: gameType || "Practice",
+      opponent_team_name: isTimedSport ? (opponentName || "") : (opponentName || "OPPONENT TEAM"),
+      away_team_name: isTimedSport ? (opponentName || "") : (opponentName || "OPPONENT TEAM"),
+      match_name: defaultMatchTitle,
+      game_name: defaultMatchTitle,
+      match_type: gameType || (isTimedSport ? "Championship" : "Practice"),
+      game_type: gameType || (isTimedSport ? "Championship" : "Practice"),
       match_date: session.date_time || new Date().toISOString(),
       location: session.location || "Metro Sports Center",
       sport_type: normalizedSport,
@@ -248,11 +260,11 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         >
           {/* Game Name */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Game Name</Text>
+          <Text style={styles.fieldLabel}>{isTimedSport ? "Meet / Event Name" : "Game Name"}</Text>
           <View style={styles.inputBox}>
             <TextInput
               style={styles.inputText}
-              placeholder="ADNU vs. UNC - Intramurals 2026"
+              placeholder={isTimedSport ? "2026 Inter-School Championship" : "ADNU vs. UNC - Intramurals 2026"}
               placeholderTextColor="#5C6B82"
               value={gameName}
               onChangeText={setGameName}
@@ -260,23 +272,25 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
           </View>
         </View>
 
-        {/* Opponent Team Name */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Opponent Team Name</Text>
-          <View style={styles.inputBox}>
-            <TextInput
-              style={styles.inputText}
-              placeholder="Enter opponent name"
-              placeholderTextColor="#5C6B82"
-              value={opponentName}
-              onChangeText={setOpponentName}
-            />
+        {/* Opponent Team Name - only for ball games */}
+        {!isTimedSport && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Opponent Team Name</Text>
+            <View style={styles.inputBox}>
+              <TextInput
+                style={styles.inputText}
+                placeholder="Enter opponent name"
+                placeholderTextColor="#5C6B82"
+                value={opponentName}
+                onChangeText={setOpponentName}
+              />
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Game Type Dropdown Picker */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Game Type</Text>
+          <Text style={styles.fieldLabel}>{isTimedSport ? "Meet Type" : "Game Type"}</Text>
           <TouchableOpacity
             style={styles.dropdownBox}
             onPress={() => setShowTypePicker(true)}
@@ -289,7 +303,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
 
         {/* Game Result Dropdown Picker */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Game Result</Text>
+          <Text style={styles.fieldLabel}>{isTimedSport ? "Meet Result / Place" : "Game Result"}</Text>
           <TouchableOpacity
             style={styles.dropdownBox}
             onPress={() => setShowResultPicker(true)}
@@ -494,7 +508,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         <View style={styles.modalOverlay}>
           <View style={styles.pickerContainer}>
             <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select Game Type</Text>
+              <Text style={styles.pickerTitle}>{isTimedSport ? "Select Meet Type" : "Select Game Type"}</Text>
               <TouchableOpacity onPress={() => setShowTypePicker(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
@@ -530,7 +544,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         <View style={styles.modalOverlay}>
           <View style={styles.pickerContainer}>
             <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select Game Result</Text>
+              <Text style={styles.pickerTitle}>{isTimedSport ? "Select Result / Placement" : "Select Game Result"}</Text>
               <TouchableOpacity onPress={() => setShowResultPicker(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
