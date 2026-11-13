@@ -131,6 +131,19 @@ export const styles = StyleSheet.create({
     color: "#64748B",
     letterSpacing: 1,
   },
+  interactiveHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  tapToDrillText: {
+    fontSize: 9,
+    color: "#00C8FF",
+    fontWeight: "800",
+    marginTop: 4,
+    letterSpacing: 0.3,
+  },
   avgValueLarge: {
     fontSize: 28,
     fontWeight: "900",

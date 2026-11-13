@@ -15,6 +15,8 @@ import {
   WorkloadTargetState,
 } from "../DataTypes";
 import { styles } from "./styles/allStats";
+import { MetricProgressionModal } from "../../Shared/MetricProgressionModal";
+import { EventTimeHistorySection } from "../../Shared/EventTimeHistorySection";
 
 interface AllStatsProps {
   athlete: AthletePerformanceProfile;
@@ -30,6 +32,28 @@ export const AllStats: React.FC<AllStatsProps> = ({
   const athlete: any = rawAthlete;
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
+
+  // Historical Metric Progression Modal State
+  const [progressionModal, setProgressionModal] = useState<{
+    visible: boolean;
+    metricKey: string;
+    eventTitle: string;
+    initialMark: string;
+  }>({
+    visible: false,
+    metricKey: "100m",
+    eventTitle: "100m Dash",
+    initialMark: "-",
+  });
+
+  const openMetricHistory = (metricKey: string, eventTitle: string, initialMark: string = "-") => {
+    setProgressionModal({
+      visible: true,
+      metricKey,
+      eventTitle,
+      initialMark: String(initialMark || "-"),
+    });
+  };
 
   const calculateDynamicPER = (avg: any): string => {
     if (typeof avg?.per_score === "number" && avg.per_score > 0) {
@@ -149,44 +173,13 @@ export const AllStats: React.FC<AllStatsProps> = ({
           if (isTrack) {
             return (
               <>
-                <Text style={styles.sectionTitle}>AVERAGES</Text>
-                <View style={styles.averagesTopRow}>
-                  <View style={styles.averagesTopCard}>
-                    <Text style={styles.avgLabel}>100M AVG</Text>
-                    <Text style={styles.avgValueLarge}>
-                      {athlete.averages?.avg_100m || athlete.averages?.pb_100m || athlete.stats?.pb_100m || athlete.stats?.times_100m || "-"}
-                    </Text>
-                  </View>
-                  <View style={styles.averagesTopCard}>
-                    <Text style={styles.avgLabel}>200M AVG</Text>
-                    <Text style={styles.avgValueLarge}>
-                      {athlete.averages?.avg_200m || athlete.averages?.pb_200m || athlete.stats?.pb_200m || athlete.stats?.times_200m || "-"}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.averagesBottomRow}>
-                  <View style={styles.averagesSmallCard}>
-                    <Text style={styles.avgLabel}>REACTION</Text>
-                    <Text style={styles.avgValueSmall}>
-                      {athlete.averages?.reaction_time_s || athlete.stats?.reaction_time_s || "-"}
-                    </Text>
-                  </View>
-                  <View style={styles.averagesSmallCard}>
-                    <Text style={styles.avgLabel}>START RATING</Text>
-                    <Text style={styles.avgValueSmall}>
-                      {athlete.averages?.start_rating_pct ? `${athlete.averages.start_rating_pct}%` : "-"}
-                    </Text>
-                  </View>
-                  <View style={styles.averagesSmallCard}>
-                    <Text style={styles.avgLabel}>PODIUMS</Text>
-                    <Text style={styles.avgValueSmall}>
-                      {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
-                        ? String(athlete.averages.podiums_count)
-                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "0")}
-                    </Text>
-                  </View>
-                </View>
+                <EventTimeHistorySection
+                  athleteId={athlete?.athlete_id || athlete?.user_id || athlete?.id || ""}
+                  athleteName={athlete?.full_name || `${athlete?.first_name || ""} ${athlete?.last_name || ""}`.trim() || "Athlete"}
+                  sportCategory="TRACK AND FIELD"
+                  profileAverages={athlete?.averages}
+                  profileStats={athlete?.stats}
+                />
 
                 <Text style={styles.sectionTitle}>PERFORMANCE & SPEED SPLITS</Text>
                 <View style={styles.splitCardFull}>
@@ -280,44 +273,13 @@ export const AllStats: React.FC<AllStatsProps> = ({
           } else if (isSwim) {
             return (
               <>
-                <Text style={styles.sectionTitle}>AVERAGES</Text>
-                <View style={styles.averagesTopRow}>
-                  <View style={styles.averagesTopCard}>
-                    <Text style={styles.avgLabel}>100M FREE</Text>
-                    <Text style={styles.avgValueLarge}>
-                      {athlete.averages?.avg_100m_free || athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m || "-"}
-                    </Text>
-                  </View>
-                  <View style={styles.averagesTopCard}>
-                    <Text style={styles.avgLabel}>200M FREE</Text>
-                    <Text style={styles.avgValueLarge}>
-                      {athlete.averages?.avg_200m_free || athlete.averages?.pb_200m || athlete.stats?.times_200m || "-"}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.averagesBottomRow}>
-                  <View style={styles.averagesSmallCard}>
-                    <Text style={styles.avgLabel}>50M FREE</Text>
-                    <Text style={styles.avgValueSmall}>
-                      {athlete.averages?.pb_50m_free || athlete.stats?.pb_50m_free || athlete.stats?.times_50m_free || "-"}
-                    </Text>
-                  </View>
-                  <View style={styles.averagesSmallCard}>
-                    <Text style={styles.avgLabel}>FLIP TURN</Text>
-                    <Text style={styles.avgValueSmall}>
-                      {athlete.averages?.flip_turn_s || "-"}
-                    </Text>
-                  </View>
-                  <View style={styles.averagesSmallCard}>
-                    <Text style={styles.avgLabel}>PODIUMS</Text>
-                    <Text style={styles.avgValueSmall}>
-                      {athlete.averages?.podiums_count !== undefined && athlete.averages?.podiums_count !== null
-                        ? String(athlete.averages.podiums_count)
-                        : (athlete.stats?.podiums_count !== undefined && athlete.stats?.podiums_count !== null ? String(athlete.stats.podiums_count) : "0")}
-                    </Text>
-                  </View>
-                </View>
+                <EventTimeHistorySection
+                  athleteId={athlete?.athlete_id || athlete?.user_id || athlete?.id || ""}
+                  athleteName={athlete?.full_name || `${athlete?.first_name || ""} ${athlete?.last_name || ""}`.trim() || "Athlete"}
+                  sportCategory="SWIMMING"
+                  profileAverages={athlete?.averages}
+                  profileStats={athlete?.stats}
+                />
 
                 <Text style={styles.sectionTitle}>STROKE & EFFICIENCY SPLITS</Text>
                 <View style={styles.splitCardFull}>
@@ -911,6 +873,18 @@ export const AllStats: React.FC<AllStatsProps> = ({
           </View>
         </View>
       </ScrollView>
+
+      {/* Historical Metric Progression Bottom Sheet / Modal */}
+      <MetricProgressionModal
+        visible={progressionModal.visible}
+        onClose={() => setProgressionModal((prev) => ({ ...prev, visible: false }))}
+        athleteId={athlete?.athlete_id || athlete?.user_id || athlete?.id || ""}
+        athleteName={athlete?.full_name || `${athlete?.first_name || ""} ${athlete?.last_name || ""}`.trim() || "Athlete"}
+        sportCategory={athlete?.sport_category || athlete?.sport_type || athlete?.sport || "SWIMMING"}
+        metricKey={progressionModal.metricKey}
+        eventTitle={progressionModal.eventTitle}
+        initialMark={progressionModal.initialMark}
+      />
     </View>
   );
 };

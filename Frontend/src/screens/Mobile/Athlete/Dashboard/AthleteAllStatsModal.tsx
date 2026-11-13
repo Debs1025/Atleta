@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Modal,
   View,
@@ -15,6 +15,8 @@ import {
   AdvancedCoachStats,
   PastTeamAffiliation,
 } from "./HomeAnalyticsPage";
+import { MetricProgressionModal } from "../../Shared/MetricProgressionModal";
+import { EventTimeHistorySection } from "../../Shared/EventTimeHistorySection";
 
 interface AthleteAllStatsModalProps {
   visible: boolean;
@@ -64,6 +66,28 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
     profile?.current_affiliation?.team_name ||
     rawP?.team_name ||
     "";
+
+  // Historical Metric Progression Modal State
+  const [progressionModal, setProgressionModal] = useState<{
+    visible: boolean;
+    metricKey: string;
+    eventTitle: string;
+    initialMark: string;
+  }>({
+    visible: false,
+    metricKey: "100m",
+    eventTitle: "100m Dash",
+    initialMark: "-",
+  });
+
+  const openMetricHistory = (metricKey: string, eventTitle: string, initialMark: string = "-") => {
+    setProgressionModal({
+      visible: true,
+      metricKey,
+      eventTitle,
+      initialMark: String(initialMark || "-"),
+    });
+  };
 
   // Calculate dynamic Player Efficiency Rating (PER)
   const calculateDynamicPER = (avg: any): string => {
@@ -149,20 +173,6 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* ─────────────────────────────────────────────────────────────
-              1. SPORT-SPECIFIC AVERAGES
-          ───────────────────────────────────────────────────────────── */}
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.sectionTitleLeft}>
-              <View style={styles.cyanAccentBar} />
-              <Text style={styles.sectionTitle}>CAREER & SEASON AVERAGES</Text>
-            </View>
-            <View style={styles.coachVerifiedPill}>
-              <Ionicons name="shield-checkmark" size={10} color="#00C8FF" />
-              <Text style={styles.coachVerifiedPillText}>VERIFIED</Text>
-            </View>
-          </View>
-
           {(() => {
             const isTrack = upperSport.includes("TRACK") || upperSport.includes("FIELD") || upperSport.includes("RUN");
             const isSwim = upperSport.includes("SWIM");
@@ -171,76 +181,41 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
             const isBasket = upperSport.includes("BASKET") || upperSport.includes("HOOPS");
 
             if (isTrack) {
-              const avg100 = displayAverages?.avg_100m || displayAverages?.pb_100m || displayStats?.pb_100m || displayStats?.times_100m || layout?.metric1?.value || "-";
-              const avg200 = displayAverages?.avg_200m || displayAverages?.pb_200m || displayStats?.pb_200m || displayStats?.times_200m || layout?.metric2?.value || "-";
-              const react = displayAverages?.reaction_time_s || displayStats?.reaction_time_s || "0.14s";
-              const startRating = displayAverages?.start_rating_pct ? `${displayAverages.start_rating_pct}%` : "92%";
-              const podiums = displayAverages?.podiums_count !== undefined ? String(displayAverages.podiums_count) : (displayStats?.podiums_count !== undefined ? String(displayStats.podiums_count) : "4");
-
               return (
-                <>
-                  <View style={styles.averagesTopRow}>
-                    <View style={styles.averagesTopCard}>
-                      <Text style={styles.avgLabel}>100M AVG / PB</Text>
-                      <Text style={styles.avgValueLarge}>{avg100}</Text>
-                    </View>
-                    <View style={styles.averagesTopCard}>
-                      <Text style={styles.avgLabel}>200M AVG / PB</Text>
-                      <Text style={styles.avgValueLarge}>{avg200}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.averagesBottomRow}>
-                    <View style={styles.averagesSmallCard}>
-                      <Text style={styles.avgLabel}>REACTION</Text>
-                      <Text style={styles.avgValueSmall}>{react}</Text>
-                    </View>
-                    <View style={styles.averagesSmallCard}>
-                      <Text style={styles.avgLabel}>START RATING</Text>
-                      <Text style={styles.avgValueSmall}>{startRating}</Text>
-                    </View>
-                    <View style={styles.averagesSmallCard}>
-                      <Text style={styles.avgLabel}>PODIUMS</Text>
-                      <Text style={styles.avgValueSmall}>{podiums}</Text>
-                    </View>
-                  </View>
-                </>
+                <EventTimeHistorySection
+                  athleteId={profile?.athlete_id || (profile as any)?.user_id || (profile as any)?.id || ""}
+                  athleteName={fullName}
+                  sportCategory="TRACK AND FIELD"
+                  profileAverages={displayAverages}
+                  profileStats={displayStats}
+                />
               );
             } else if (isSwim) {
-              const free100 = displayAverages?.avg_100m_free || displayAverages?.pb_100m_free || displayStats?.pb_100m_free || layout?.metric1?.value || "52.4s";
-              const free200 = displayAverages?.avg_200m_free || displayAverages?.pb_200m || displayStats?.times_200m || layout?.metric2?.value || "1:56.2";
-              const free50 = displayAverages?.pb_50m_free || displayStats?.pb_50m_free || "23.8s";
-              const flipTurn = displayAverages?.flip_turn_s || "0.82s";
-              const podiums = displayAverages?.podiums_count !== undefined ? String(displayAverages.podiums_count) : (displayStats?.podiums_count !== undefined ? String(displayStats.podiums_count) : "6");
-
               return (
-                <>
-                  <View style={styles.averagesTopRow}>
-                    <View style={styles.averagesTopCard}>
-                      <Text style={styles.avgLabel}>100M FREE</Text>
-                      <Text style={styles.avgValueLarge}>{free100}</Text>
-                    </View>
-                    <View style={styles.averagesTopCard}>
-                      <Text style={styles.avgLabel}>200M FREE</Text>
-                      <Text style={styles.avgValueLarge}>{free200}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.averagesBottomRow}>
-                    <View style={styles.averagesSmallCard}>
-                      <Text style={styles.avgLabel}>50M FREE</Text>
-                      <Text style={styles.avgValueSmall}>{free50}</Text>
-                    </View>
-                    <View style={styles.averagesSmallCard}>
-                      <Text style={styles.avgLabel}>FLIP TURN</Text>
-                      <Text style={styles.avgValueSmall}>{flipTurn}</Text>
-                    </View>
-                    <View style={styles.averagesSmallCard}>
-                      <Text style={styles.avgLabel}>PODIUMS</Text>
-                      <Text style={styles.avgValueSmall}>{podiums}</Text>
-                    </View>
-                  </View>
-                </>
+                <EventTimeHistorySection
+                  athleteId={profile?.athlete_id || (profile as any)?.user_id || (profile as any)?.id || ""}
+                  athleteName={fullName}
+                  sportCategory="SWIMMING"
+                  profileAverages={displayAverages}
+                  profileStats={displayStats}
+                />
               );
-            } else if (isVolley) {
+            }
+
+            const renderAveragesHeader = () => (
+              <View style={styles.sectionTitleRow}>
+                <View style={styles.sectionTitleLeft}>
+                  <View style={styles.cyanAccentBar} />
+                  <Text style={styles.sectionTitle}>CAREER & SEASON AVERAGES</Text>
+                </View>
+                <View style={styles.coachVerifiedPill}>
+                  <Ionicons name="shield-checkmark" size={10} color="#00C8FF" />
+                  <Text style={styles.coachVerifiedPillText}>VERIFIED</Text>
+                </View>
+              </View>
+            );
+
+            if (isVolley) {
               const kills = displayAverages?.kills ?? displayAverages?.spike_kills ?? displayStats?.kills ?? displayStats?.spike_kills ?? layout?.metric1?.value ?? 14;
               const blocks = displayAverages?.blocks ?? displayAverages?.block_points ?? displayStats?.blocks ?? displayStats?.block_points ?? layout?.metric2?.value ?? 5;
               const assists = displayAverages?.assists ?? displayStats?.assists ?? 3;
@@ -249,6 +224,7 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 
               return (
                 <>
+                  {renderAveragesHeader()}
                   <View style={styles.averagesTopRow}>
                     <View style={styles.averagesTopCard}>
                       <Text style={styles.avgLabel}>KILL SPIKES</Text>
@@ -284,6 +260,7 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 
               return (
                 <>
+                  {renderAveragesHeader()}
                   <View style={styles.averagesTopRow}>
                     <View style={styles.averagesTopCard}>
                       <Text style={styles.avgLabel}>POINTS / MATCH</Text>
@@ -319,6 +296,7 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 
               return (
                 <>
+                  {renderAveragesHeader()}
                   <View style={styles.averagesTopRow}>
                     <View style={styles.averagesTopCard}>
                       <Text style={styles.avgLabel}>POINTS / GAME (PPG)</Text>
@@ -355,6 +333,7 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
 
               return (
                 <>
+                  {renderAveragesHeader()}
                   <View style={styles.averagesTopRow}>
                     <View style={styles.averagesTopCard}>
                       <Text style={styles.avgLabel}>GAMES PLAYED</Text>
@@ -1017,6 +996,18 @@ export const AthleteAllStatsModal: React.FC<AthleteAllStatsModalProps> = ({
             </View>
           )}
         </ScrollView>
+
+        {/* Historical Metric Progression Bottom Sheet / Modal */}
+        <MetricProgressionModal
+          visible={progressionModal.visible}
+          onClose={() => setProgressionModal((prev) => ({ ...prev, visible: false }))}
+          athleteId={profile?.athlete_id || (profile as any)?.user_id || (profile as any)?.id || ""}
+          athleteName={fullName}
+          sportCategory={upperSport}
+          metricKey={progressionModal.metricKey}
+          eventTitle={progressionModal.eventTitle}
+          initialMark={progressionModal.initialMark}
+        />
       </View>
     </Modal>
   );
