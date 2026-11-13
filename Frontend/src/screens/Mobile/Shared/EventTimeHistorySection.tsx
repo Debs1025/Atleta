@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, {
@@ -322,6 +324,7 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
 
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isDropdownModalOpen, setIsDropdownModalOpen] = useState<boolean>(false);
 
   // Strictly Real Data Fetching from Firestore Match_Logs & matches prop
   useEffect(() => {
@@ -691,8 +694,109 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
       </Text>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. HORIZONTAL EVENT FILTER PILL TABS
+          2. EVENT TYPE DROPDOWN TRIGGER & QUICK PILLS
       ───────────────────────────────────────────────────────────── */}
+      <View style={{ marginBottom: 12 }}>
+        <TouchableOpacity
+          style={styles.dropdownTrigger}
+          onPress={() => setIsDropdownModalOpen(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Ionicons name="filter" size={16} color="#00C8FF" />
+            <View>
+              <Text style={styles.dropdownTriggerSub}>EVENT TYPE</Text>
+              <Text style={styles.dropdownTriggerTitle}>{selectedEventOption.label}</Text>
+            </View>
+          </View>
+          <View style={styles.dropdownTriggerBadge}>
+            <Text style={styles.dropdownTriggerBadgeText}>CHOOSE</Text>
+            <Ionicons name="chevron-down" size={14} color="#00C8FF" />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Modal Dropdown Picker */}
+      <Modal
+        visible={isDropdownModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDropdownModalOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsDropdownModalOpen(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Select Event Type</Text>
+                <Text style={styles.modalSubtitle}>
+                  Filter stats for {sportCategory}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsDropdownModalOpen(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              {availableEvents.map((evt) => {
+                const isSelected = selectedEventKey === evt.key;
+                return (
+                  <TouchableOpacity
+                    key={evt.key}
+                    style={[
+                      styles.modalOptionItem,
+                      isSelected && styles.modalOptionItemSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedEventKey(evt.key);
+                      setIsDropdownModalOpen(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <View
+                        style={[
+                          styles.modalOptionIconBox,
+                          isSelected && styles.modalOptionIconBoxSelected,
+                        ]}
+                      >
+                        <Ionicons
+                          name={evt.iconName || "trophy-outline"}
+                          size={16}
+                          color={isSelected ? "#00C8FF" : "#64748B"}
+                        />
+                      </View>
+                      <View>
+                        <Text
+                          style={[
+                            styles.modalOptionLabel,
+                            isSelected && styles.modalOptionLabelSelected,
+                          ]}
+                        >
+                          {evt.label}
+                        </Text>
+                        <Text style={styles.modalOptionSub}>
+                          {evt.shortLabel} {evt.isDistance ? "• Distance Event" : "• Timed Event"}
+                        </Text>
+                      </View>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -1456,6 +1560,133 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 4,
     maxWidth: 280,
+  },
+
+  /* DROPDOWN & MODAL STYLES */
+  dropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#0B1528",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "#00C8FF",
+  },
+  dropdownTriggerSub: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  dropdownTriggerTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    marginTop: 2,
+  },
+  dropdownTriggerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0, 200, 255, 0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(0, 200, 255, 0.25)",
+  },
+  dropdownTriggerBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#00C8FF",
+    letterSpacing: 0.5,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(3, 7, 18, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#0B1528",
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "rgba(0, 200, 255, 0.3)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalOptionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 6,
+    backgroundColor: "#0F1E36",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  modalOptionItemSelected: {
+    backgroundColor: "rgba(0, 200, 255, 0.12)",
+    borderColor: "#00C8FF",
+  },
+  modalOptionIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalOptionIconBoxSelected: {
+    backgroundColor: "rgba(0, 200, 255, 0.2)",
+  },
+  modalOptionLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#CBD5E1",
+  },
+  modalOptionLabelSelected: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+  },
+  modalOptionSub: {
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 1,
   },
 });
 

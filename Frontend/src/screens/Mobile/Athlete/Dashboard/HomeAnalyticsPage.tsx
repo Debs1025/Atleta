@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Image,
   Pressable,
@@ -8,6 +8,7 @@ import {
   View,
   LayoutChangeEvent,
   TouchableOpacity,
+  Modal,
 } from "react-native";
 import { AthleteAllStatsModal } from "./AthleteAllStatsModal";
 import Svg, {
@@ -24,6 +25,15 @@ import { Ionicons } from "@expo/vector-icons";
 import styles from "./styles/HomeAnalyticsPage";
 import { Coach } from "../Teams/Teams";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import {
+  getEventsForSport,
+  matchesEvent,
+  findEventOption,
+  SWIMMING_EVENTS,
+  TRACK_FIELD_EVENTS,
+  SportEventOption,
+  parseSecondsOrMeters,
+} from "../../Coach/MultiLogging/sportEvents";
 
 
 export interface PastTeamStatsSummary {
@@ -214,6 +224,8 @@ export function HomeAnalyticsPage({
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [chartCanvasWidth, setChartCanvasWidth] = useState<number>(330);
   const [showAllStatsModal, setShowAllStatsModal] = useState<boolean>(false);
+  const [selectedEventType, setSelectedEventType] = useState<string>("");
+  const [isEventModalVisible, setIsEventModalVisible] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -328,8 +340,135 @@ export function HomeAnalyticsPage({
   const matchProgList: any[] = Array.isArray(profile?.match_progression) ? profile.match_progression : [];
   const workloadLogsList: any[] = Array.isArray(profile?.workload_analytics?.weekly_logs) ? profile.workload_analytics.weekly_logs : [];
 
+  const isTimedSport = upperSport.includes("SWIM") || upperSport.includes("TRACK") || upperSport.includes("FIELD") || upperSport.includes("RUN") || upperSport.includes("ATHLETIC");
+
+  const availableSportEvents: SportEventOption[] = useMemo(() => {
+    if (upperSport.includes("SWIM")) return SWIMMING_EVENTS;
+    if (upperSport.includes("TRACK") || upperSport.includes("FIELD") || upperSport.includes("RUN") || upperSport.includes("ATHLETIC")) return TRACK_FIELD_EVENTS;
+    return [];
+  }, [upperSport]);
+
+  const activeEventType = useMemo(() => {
+    if (!isTimedSport || availableSportEvents.length === 0) return "";
+    if (selectedEventType) return selectedEventType;
+    for (const m of matchProgList) {
+      const ev = m.eventType || m.event_type || m.event || m.event_name;
+      if (ev) {
+        const match = availableSportEvents.find((e) => matchesEvent(ev, e.label) || matchesEvent(ev, e.key));
+        if (match) return match.label;
+      }
+    }
+    const pos = String(rawP.position_or_event || rawP.position || rawP.event || "").trim();
+    if (pos) {
+      const match = availableSportEvents.find((e) => matchesEvent(pos, e.label) || matchesEvent(pos, e.key));
+      if (match) return match.label;
+    }
+    return availableSportEvents[0]?.label || "";
+  }, [isTimedSport, availableSportEvents, selectedEventType, matchProgList, rawP]);
+
+  const activeEventOption = useMemo(() => {
+    return availableSportEvents.find((e) => e.label === activeEventType || matchesEvent(e.label, activeEventType)) || availableSportEvents[0];
+  }, [availableSportEvents, activeEventType]);
+
+  const eventMatchProgList = useMemo(() => {
+    if (!isTimedSport || !activeEventType) return matchProgList;
+    return matchProgList.filter((m: any) => {
+      const ev = m.eventType || m.event_type || m.event || m.event_name || "";
+      return matchesEvent(ev, activeEventType);
+    });
+  }, [isTimedSport, activeEventType, matchProgList]);
+
+  const timedEventMetrics = useMemo(() => {
+    if (!isTimedSport || !activeEventOption) return null;
+
+    const isDist = !!activeEventOption.isDistanceEvent;
+    const unit = activeEventOption.unit || (isDist ? "m" : "s");
+
+    let bestValNum: number | null = null;
+    let bestValStr = "";
+
+    eventMatchProgList.forEach((m: any) => {
+      const num = Number(m.numeric_value || parseSecondsOrMeters(m.raw_value) || parseSecondsOrMeters(m.score));
+      if (num > 0) {
+        if (bestValNum === null) {
+          bestValNum = num;
+          bestValStr = m.raw_value || `${num.toFixed(2)}${unit}`;
+        } else if (isDist ? num > bestValNum : num < bestValNum) {
+          bestValNum = num;
+          bestValStr = m.raw_value || `${num.toFixed(2)}${unit}`;
+        }
+      }
+    });
+
+    if (!bestValStr) {
+      const key = activeEventOption.key;
+      const avg = displayAverages || {};
+      const stats = displayStats || {};
+      const pbKeys = [`pb_${key}`, key, `times_${key}`, `pb_${key.replace(/_/g, "")}`];
+      for (const pk of pbKeys) {
+        const val = avg[pk] || stats[pk];
+        if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+          bestValStr = String(val).endsWith(unit) ? String(val) : `${val}${unit}`;
+          bestValNum = parseSecondsOrMeters(val);
+          break;
+        }
+      }
+    }
+
+    const latestEntry = eventMatchProgList.length > 0 ? eventMatchProgList[eventMatchProgList.length - 1] : null;
+    const latestMarkStr = latestEntry
+      ? (latestEntry.raw_value || (latestEntry.numeric_value ? `${latestEntry.numeric_value.toFixed(2)}${unit}` : "-"))
+      : "-";
+
+    const totalMeetsForEvent = eventMatchProgList.length;
+
+    return {
+      metric1: {
+        label: `PB (${activeEventOption.shortLabel})`,
+        value: bestValStr || "-",
+        subLabel: "Personal Record",
+        isLarge: false,
+      },
+      metric2: {
+        label: "LATEST MARK",
+        value: latestMarkStr,
+        subLabel: latestEntry ? "Most Recent Meet" : "No Logged Meets",
+        isLarge: false,
+      },
+      secondaryMetric: {
+        label: "COMPETITIONS & PODIUMS",
+        value: `${totalMeetsForEvent} Meets`,
+        subtext: `In ${activeEventOption.label}`,
+        level: totalMeetsForEvent > 0 ? Math.min(4, Math.ceil(totalMeetsForEvent / 2)) : 1,
+      },
+      chartTitle: `${activeEventOption.shortLabel} PROGRESSION`,
+      unit,
+      isDist,
+    };
+  }, [isTimedSport, activeEventOption, eventMatchProgList, displayAverages, displayStats]);
+
+  const effectiveMetric1 = timedEventMetrics?.metric1 || layout.metric1;
+  const effectiveMetric2 = timedEventMetrics?.metric2 || layout.metric2;
+  const effectiveSecondaryMetric = timedEventMetrics?.secondaryMetric || layout.secondaryMetric;
+
   const chartDataPoints: { id: string; label: string; date: string; value: number; opponent: string }[] = (() => {
     if (chartMode === "PERFORMANCE") {
+      if (isTimedSport) {
+        if (eventMatchProgList.length > 0) {
+          return eventMatchProgList.slice(-7).map((item, idx) => {
+            const val = Number(item.numeric_value || parseSecondsOrMeters(item.raw_value) || parseSecondsOrMeters(item.score) || 0);
+            return {
+              id: item.id || `mp_${idx}`,
+              label: item.label || item.date || `M${idx + 1}`,
+              date: item.date || `Meet ${idx + 1}`,
+              value: val,
+              opponent: item.opponent || `${activeEventType} Meet`,
+            };
+          });
+        }
+        return [];
+      }
+
       if (matchProgList.length > 0) {
         return matchProgList.slice(-7).map((item, idx) => ({
           id: item.id || `mp_${idx}`,
@@ -387,7 +526,10 @@ export function HomeAnalyticsPage({
 
   const chartValues = chartDataPoints.map((p) => p.value);
   const chartCount = chartDataPoints.length;
-  const chartUnit = chartMode === "PERFORMANCE" ? (layout.isTimed ? "SEC" : "PTS") : "sRPE";
+  const chartUnit =
+    chartMode === "PERFORMANCE"
+      ? (timedEventMetrics?.unit ? timedEventMetrics.unit.toUpperCase() : layout.isTimed ? "SEC" : "PTS")
+      : "sRPE";
 
   const chartAvg = chartCount > 0 ? Number((chartValues.reduce((a, b) => a + b, 0) / chartCount).toFixed(1)) : 0;
   const chartMax = chartCount > 0 ? Math.max(...chartValues) : 0;
@@ -679,32 +821,189 @@ export function HomeAnalyticsPage({
         </View>
       )}
 
+      {/* --- EVENT TYPE SELECTOR & DROPDOWN FILTER (SWIMMING & TRACK) --- */}
+      {isTimedSport && (
+        <View style={styles.eventTypeContainer}>
+          <View style={styles.eventTypeHeaderRow}>
+            <Text style={styles.eventTypeHeaderTitle}>
+              FILTER BY EVENT TYPE
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowAllStatsModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.eventTypeViewAllLink}>VIEW ALL STATS →</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Dropdown Selector Button */}
+          <TouchableOpacity
+            style={styles.eventTypeTrigger}
+            onPress={() => setIsEventModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons
+                name={upperSport.includes("SWIM") ? "water-outline" : "stopwatch-outline"}
+                size={18}
+                color="#00C8FF"
+              />
+              <View>
+                <Text style={styles.eventTypeTriggerSub}>
+                  ACTIVE DISCIPLINE
+                </Text>
+                <Text style={styles.eventTypeTriggerValue}>
+                  {activeEventOption?.label || selectedEventType || "Select Event"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.eventTypeTriggerBadge}>
+              <Text style={styles.eventTypeTriggerBadgeText}>CHOOSE</Text>
+              <Ionicons name="chevron-down" size={14} color="#00C8FF" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Quick Filter Horizontal Scroll */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginTop: 10 }}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {availableSportEvents.slice(0, 8).map((evt) => {
+              const isSelected = matchesEvent(evt.label, activeEventType) || evt.key === activeEventType;
+              return (
+                <TouchableOpacity
+                  key={evt.key}
+                  onPress={() => setSelectedEventType(evt.label)}
+                  style={[
+                    styles.eventQuickPill,
+                    isSelected && styles.eventQuickPillActive,
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.eventQuickPillText,
+                      isSelected && styles.eventQuickPillTextActive,
+                    ]}
+                  >
+                    {evt.shortLabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Modal Event Picker */}
+          <Modal
+            visible={isEventModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setIsEventModalVisible(false)}
+          >
+            <Pressable
+              style={styles.modalBackdrop}
+              onPress={() => setIsEventModalVisible(false)}
+            >
+              <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={styles.modalTitle}>Select Event Type</Text>
+                    <Text style={styles.modalSubtitle}>
+                      Filter progression for {upperSport.includes("SWIM") ? "Swimming" : "Track & Field"}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setIsEventModalVisible(false)}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={20} color="#94A3B8" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                  {availableSportEvents.map((evt) => {
+                    const isSelected = matchesEvent(evt.label, activeEventType) || evt.key === activeEventType;
+                    return (
+                      <TouchableOpacity
+                        key={evt.key}
+                        style={[
+                          styles.modalOptionItem,
+                          isSelected && styles.modalOptionItemSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedEventType(evt.label);
+                          setIsEventModalVisible(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                          <View
+                            style={[
+                              styles.modalOptionIconBox,
+                              isSelected && styles.modalOptionIconBoxSelected,
+                            ]}
+                          >
+                            <Ionicons
+                              name={evt.isDistanceEvent ? "trending-up-outline" : "timer-outline"}
+                              size={16}
+                              color={isSelected ? "#00C8FF" : "#64748B"}
+                            />
+                          </View>
+                          <View>
+                            <Text
+                              style={[
+                                styles.modalOptionLabel,
+                                isSelected && styles.modalOptionLabelSelected,
+                              ]}
+                            >
+                              {evt.label}
+                            </Text>
+                            <Text style={styles.modalOptionSub}>
+                              {evt.shortLabel} {evt.isDistanceEvent ? "• Field Event" : "• Timed Event"}
+                            </Text>
+                          </View>
+                        </View>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </Pressable>
+            </Pressable>
+          </Modal>
+        </View>
+      )}
+
       {/* --- SPORT-SPECIFIC PRIMARY METRICS GRID --- */}
       <View style={styles.metricsGridRow}>
         <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>{layout.metric1.label}</Text>
-          <Text style={layout.metric1.isLarge ? styles.metricValueLarge : styles.metricValueMedium}>
-            {layout.metric1.value}
+          <Text style={styles.metricLabel}>{effectiveMetric1.label}</Text>
+          <Text style={effectiveMetric1.isLarge ? styles.metricValueLarge : styles.metricValueMedium}>
+            {effectiveMetric1.value}
           </Text>
-          <Text style={styles.metricSubLabel}>{layout.metric1.subLabel}</Text>
+          <Text style={styles.metricSubLabel}>{effectiveMetric1.subLabel}</Text>
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>{layout.metric2.label}</Text>
-          <Text style={layout.metric2.isLarge ? styles.metricValueLarge : styles.metricValueMedium}>
-            {layout.metric2.value}
+          <Text style={styles.metricLabel}>{effectiveMetric2.label}</Text>
+          <Text style={effectiveMetric2.isLarge ? styles.metricValueLarge : styles.metricValueMedium}>
+            {effectiveMetric2.value}
           </Text>
-          <Text style={styles.metricSubLabel}>{layout.metric2.subLabel}</Text>
+          <Text style={styles.metricSubLabel}>{effectiveMetric2.subLabel}</Text>
         </View>
       </View>
 
       {/* --- SPORT-SPECIFIC SECONDARY METRIC CARD --- */}
       <View style={styles.secondaryMetricCard}>
         <View style={styles.secondaryMetricLeft}>
-          <Text style={styles.metricLabel}>{layout.secondaryMetric.label}</Text>
+          <Text style={styles.metricLabel}>{effectiveSecondaryMetric.label}</Text>
           <View style={styles.reboundsRow}>
-            <Text style={styles.reboundsValue}>{layout.secondaryMetric.value}</Text>
-            <Text style={styles.reboundsSubtext}>{layout.secondaryMetric.subtext}</Text>
+            <Text style={styles.reboundsValue}>{effectiveSecondaryMetric.value}</Text>
+            <Text style={styles.reboundsSubtext}>{effectiveSecondaryMetric.subtext}</Text>
           </View>
         </View>
       </View>
@@ -725,7 +1024,7 @@ export function HomeAnalyticsPage({
             <View style={styles.chartTitleCyanBar} />
             <Text style={styles.chartMainTitle}>
               {chartMode === "PERFORMANCE"
-                ? layout.chartTitle || "PERFORMANCE PROGRESSION"
+                ? (timedEventMetrics?.chartTitle || layout.chartTitle || "PERFORMANCE PROGRESSION")
                 : "WORKLOAD INTENSITY"}
             </Text>
           </View>
@@ -784,9 +1083,13 @@ export function HomeAnalyticsPage({
             <View style={styles.chartEmptyStateIconBox}>
               <Ionicons name="trending-up-outline" size={24} color="#38BDF8" />
             </View>
-            <Text style={styles.chartEmptyStateTitle}>No match records logged yet.</Text>
+            <Text style={styles.chartEmptyStateTitle}>
+              {isTimedSport ? `No marks logged for ${activeEventType || "this event"} yet.` : "No match records logged yet."}
+            </Text>
             <Text style={styles.chartEmptyStateSubtext}>
-              Play or log matches with your coach to visualize your performance curve and workload progression over time.
+              {isTimedSport
+                ? `Participate in ${activeEventType || "competition"} meets with your coach to track your time and mark progression.`
+                : "Play or log matches with your coach to visualize your performance curve and workload progression over time."}
             </Text>
           </View>
         ) : (

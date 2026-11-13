@@ -162,7 +162,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       const tStats: any = p.timing_stats || { timer_seconds: 0, formatted_time: "00:00.00", distance_meters: 50, split_times: [], is_foul_dq: false };
       const cStats: any = p.custom_stats || {};
 
-      const eventName = (p as any).event_name || (p as any).event || p.position_or_event || "";
+      const eventName = (p as any).eventType || (p as any).event_type || (p as any).event_name || (p as any).event || p.position_or_event || "";
       const eventKey = (p as any).event_key || (tStats as any).event_key || "";
       const markVal = (p as any).mark || (tStats as any).mark || (p as any).distance || "";
       const timeVal = (tStats.formatted_time && tStats.formatted_time !== "00:00.00") ? tStats.formatted_time : ((p as any).finish_time || (p as any).time || "00:00.00");
@@ -204,6 +204,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         distance_meters: distMeters,
         mark: markVal,
         time_or_distance: markVal || timeVal,
+        eventType: eventName,
+        event_type: eventName,
         event: eventName,
         event_name: eventName,
         event_key: eventKey,
@@ -226,6 +228,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         name: p.full_name,
         jersey_number: p.jersey_number,
         position: eventName || p.position_or_event,
+        eventType: eventName,
+        event_type: eventName,
         event: eventName,
         event_name: eventName,
         event_key: eventKey,
@@ -282,6 +286,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       match_date: session.date_time || new Date().toISOString(),
       location: session.location || "Metro Sports Center",
       sport_type: normalizedSport,
+      eventType: isTimedSport ? defaultEvent : undefined,
+      event_type: isTimedSport ? defaultEvent : undefined,
       game_result: normalizedGameResult,
       rank: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),
       place: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),
@@ -516,8 +522,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                         if (header.key === 'team_name' || header.key === 'team' || header.key === 'school') {
                           return (player as any).team_name || (player as any).team || session.team_name || "-";
                         }
-                        if (header.key === 'event' || header.key === 'event_name' || header.key === 'discipline') {
-                          return (player as any).event_name || (player as any).event || player.position_or_event || (tStats.distance_meters ? `${tStats.distance_meters}M` : "-");
+                        if (header.key === 'eventType' || header.key === 'event' || header.key === 'event_name' || header.key === 'discipline') {
+                          return (player as any).eventType || (player as any).event_type || (player as any).event_name || (player as any).event || player.position_or_event || (tStats.distance_meters ? `${tStats.distance_meters}M` : "-");
                         }
                         if (header.key === 'finish_time' || header.key === 'time') {
                           return (tStats.formatted_time && tStats.formatted_time !== "00:00.00")

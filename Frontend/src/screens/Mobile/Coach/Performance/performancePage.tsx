@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   RefreshControl,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,6 +16,14 @@ import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
 import { getSportsOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 import { calculatePlayerRating } from "./performanceUtils";
+import {
+  SWIMMING_EVENTS,
+  TRACK_FIELD_EVENTS,
+  SportEventOption,
+  findEventOption,
+  matchesEvent,
+  parseSecondsOrMeters,
+} from "../MultiLogging/sportEvents";
 
 interface PerformancePageProps {
   onSelectAthlete: (athlete: AthletePerformanceProfile) => void;
@@ -45,9 +55,28 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
+  const [selectedEventType, setSelectedEventType] = useState<string>("ALL");
+  const [isEventModalOpen, setIsEventModalOpen] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(5);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [liveAthletes, setLiveAthletes] = useState<AthletePerformanceProfile[]>([]);
+
+  const isTimedTab =
+    activeTab === "SWIMMING" ||
+    activeTab === "TRACK AND FIELD" ||
+    activeTab.includes("SWIM") ||
+    activeTab.includes("TRACK") ||
+    activeTab.includes("FIELD");
+
+  const availableEvents: SportEventOption[] = useMemo(() => {
+    if (activeTab === "SWIMMING" || activeTab.includes("SWIM")) return SWIMMING_EVENTS;
+    if (activeTab === "TRACK AND FIELD" || activeTab.includes("TRACK") || activeTab.includes("FIELD")) return TRACK_FIELD_EVENTS;
+    return [];
+  }, [activeTab]);
+
+  useEffect(() => {
+    setSelectedEventType("ALL");
+  }, [activeTab]);
 
   useEffect(() => {
     let isMounted = true;
@@ -195,7 +224,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   }, [athletes, liveAthletes]);
 
   const filteredAthletes = useMemo(() => {
-    return displayAthletes.filter((ath) => {
+    let list = displayAthletes.filter((ath) => {
       const matchesTab =
         activeTab === "ALL" || (ath.sport_category || "").toUpperCase() === activeTab.toUpperCase();
       const matchesSearch =
@@ -204,7 +233,35 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
         (ath.position_or_event || "").toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
-  }, [displayAthletes, activeTab, searchQuery]);
+
+    if (isTimedTab && selectedEventType !== "ALL") {
+      const opt = findEventOption(activeTab, selectedEventType);
+      const key = opt?.key || selectedEventType.toLowerCase().replace(/[^a-z0-9]/g, "_");
+      const isDist = !!opt?.isDistanceEvent;
+
+      list = [...list].sort((a, b) => {
+        const avgA = (a as any).averages || {};
+        const statsA = (a as any).stats || {};
+        const avgB = (b as any).averages || {};
+        const statsB = (b as any).stats || {};
+
+        const valA = avgA[`pb_${key}`] || statsA[`pb_${key}`] || avgA[key] || statsA[key] || avgA[`times_${key}`] || statsA[`times_${key}`];
+        const valB = avgB[`pb_${key}`] || statsB[`pb_${key}`] || avgB[key] || statsB[key] || avgB[`times_${key}`] || statsB[`times_${key}`];
+
+        const numA = parseSecondsOrMeters(valA);
+        const numB = parseSecondsOrMeters(valB);
+
+        if (numA > 0 && numB > 0) {
+          return isDist ? numB - numA : numA - numB;
+        }
+        if (numA > 0) return -1;
+        if (numB > 0) return 1;
+        return 0;
+      });
+    }
+
+    return list;
+  }, [displayAthletes, activeTab, searchQuery, isTimedTab, selectedEventType]);
 
   return (
     <View style={styles.container}>
@@ -283,6 +340,217 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           })}
         </ScrollView>
 
+        {/* Event Type Filter for Swimming and Track & Field */}
+        {isTimedTab && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase" }}>
+                FILTER BY EVENT TYPE
+              </Text>
+              {selectedEventType !== "ALL" && (
+                <TouchableOpacity onPress={() => setSelectedEventType("ALL")}>
+                  <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "700" }}>RESET TO ALL</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Dropdown Selector Button */}
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#0B1528",
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                borderWidth: 1.5,
+                borderColor: selectedEventType !== "ALL" ? "#00C8FF" : "#1E293B",
+              }}
+              onPress={() => setIsEventModalOpen(true)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Ionicons
+                  name={activeTab.includes("SWIM") ? "water-outline" : "stopwatch-outline"}
+                  size={18}
+                  color="#00C8FF"
+                />
+                <View>
+                  <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>
+                    DISCIPLINE / EVENT
+                  </Text>
+                  <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "900", marginTop: 2 }}>
+                    {selectedEventType === "ALL" ? "All Events" : selectedEventType}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0, 200, 255, 0.1)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.25)" }}>
+                <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "900" }}>CHOOSE</Text>
+                <Ionicons name="chevron-down" size={14} color="#00C8FF" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Horizontal Quick Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: 10 }}
+              contentContainerStyle={{ gap: 8 }}
+            >
+              <TouchableOpacity
+                onPress={() => setSelectedEventType("ALL")}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 20,
+                  backgroundColor: selectedEventType === "ALL" ? "#00C8FF" : "#0B1528",
+                  borderWidth: 1,
+                  borderColor: selectedEventType === "ALL" ? "#00C8FF" : "#1E293B",
+                }}
+              >
+                <Text
+                  style={{
+                    color: selectedEventType === "ALL" ? "#060B14" : "#94A3B8",
+                    fontSize: 11,
+                    fontWeight: selectedEventType === "ALL" ? "800" : "600",
+                  }}
+                >
+                  ALL
+                </Text>
+              </TouchableOpacity>
+              {availableEvents.slice(0, 8).map((evt) => {
+                const isSelected = selectedEventType === evt.label || selectedEventType === evt.key;
+                return (
+                  <TouchableOpacity
+                    key={evt.key}
+                    onPress={() => setSelectedEventType(evt.label)}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 20,
+                      backgroundColor: isSelected ? "#00C8FF" : "#0B1528",
+                      borderWidth: 1,
+                      borderColor: isSelected ? "#00C8FF" : "#1E293B",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isSelected ? "#060B14" : "#94A3B8",
+                        fontSize: 11,
+                        fontWeight: isSelected ? "800" : "600",
+                      }}
+                    >
+                      {evt.shortLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Modal Event Picker */}
+            <Modal
+              visible={isEventModalOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setIsEventModalOpen(false)}
+            >
+              <Pressable
+                style={{ flex: 1, backgroundColor: "rgba(3, 7, 18, 0.8)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20 }}
+                onPress={() => setIsEventModalOpen(false)}
+              >
+                <Pressable
+                  style={{ width: "100%", maxWidth: 360, backgroundColor: "#0B1528", borderRadius: 18, padding: 18, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.3)" }}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255, 255, 255, 0.08)", marginBottom: 10 }}>
+                    <View>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }}>Select Event Type</Text>
+                      <Text style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
+                        Filter athletes by {activeTab} event
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setIsEventModalOpen(false)} style={{ padding: 4 }}>
+                      <Ionicons name="close" size={20} color="#94A3B8" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        borderRadius: 10,
+                        marginBottom: 6,
+                        backgroundColor: selectedEventType === "ALL" ? "rgba(0, 200, 255, 0.12)" : "#0F1E36",
+                        borderWidth: 1,
+                        borderColor: selectedEventType === "ALL" ? "#00C8FF" : "transparent",
+                      }}
+                      onPress={() => {
+                        setSelectedEventType("ALL");
+                        setIsEventModalOpen(false);
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: selectedEventType === "ALL" ? "rgba(0, 200, 255, 0.2)" : "rgba(255, 255, 255, 0.05)", alignItems: "center", justifyContent: "center" }}>
+                          <Ionicons name="layers-outline" size={16} color={selectedEventType === "ALL" ? "#00C8FF" : "#64748B"} />
+                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: "800", color: selectedEventType === "ALL" ? "#FFFFFF" : "#CBD5E1" }}>
+                          All Events
+                        </Text>
+                      </View>
+                      {selectedEventType === "ALL" && <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />}
+                    </TouchableOpacity>
+
+                    {availableEvents.map((evt) => {
+                      const isSelected = selectedEventType === evt.label || selectedEventType === evt.key;
+                      return (
+                        <TouchableOpacity
+                          key={evt.key}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            borderRadius: 10,
+                            marginBottom: 6,
+                            backgroundColor: isSelected ? "rgba(0, 200, 255, 0.12)" : "#0F1E36",
+                            borderWidth: 1,
+                            borderColor: isSelected ? "#00C8FF" : "transparent",
+                          }}
+                          onPress={() => {
+                            setSelectedEventType(evt.label);
+                            setIsEventModalOpen(false);
+                          }}
+                        >
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                            <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: isSelected ? "rgba(0, 200, 255, 0.2)" : "rgba(255, 255, 255, 0.05)", alignItems: "center", justifyContent: "center" }}>
+                              <Ionicons name={evt.isDistanceEvent ? "trending-up-outline" : "timer-outline"} size={16} color={isSelected ? "#00C8FF" : "#64748B"} />
+                            </View>
+                            <View>
+                              <Text style={{ fontSize: 13, fontWeight: "800", color: isSelected ? "#FFFFFF" : "#CBD5E1" }}>
+                                {evt.label}
+                              </Text>
+                              <Text style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>
+                                {evt.shortLabel} {evt.isDistanceEvent ? "• Field Event" : "• Timed Event"}
+                              </Text>
+                            </View>
+                          </View>
+                          {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </Pressable>
+              </Pressable>
+            </Modal>
+          </View>
+        )}
+
         {/* Ranked Athlete List / Empty State */}
         {filteredAthletes.length === 0 ? (
           <View style={{ paddingVertical: 48, alignItems: "center", justifyContent: "center" }}>
@@ -328,19 +596,39 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                     const stats = athAny.stats || {};
                     let bestPbStr = "";
                     let bestEventName = "";
-                    const pbKeys = Object.keys({ ...stats, ...avg }).filter(
-                      (k) => k.startsWith("pb_") || k.startsWith("times_")
-                    );
-                    for (const k of pbKeys) {
-                      const val = avg[k] || stats[k];
-                      if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
-                        bestPbStr = val;
-                        bestEventName = k.replace(/^pb_/, "").replace(/^times_/, "").replace(/_/g, " ").toUpperCase();
-                        break;
+
+                    if (selectedEventType !== "ALL") {
+                      const opt = findEventOption("SWIMMING", selectedEventType);
+                      const key = opt?.key || selectedEventType.toLowerCase().replace(/[^a-z0-9]/g, "_");
+                      const pbKeys = [`pb_${key}`, key, `times_${key}`, `pb_${key.replace(/_/g, "")}`];
+                      for (const pk of pbKeys) {
+                        const val = avg[pk] || stats[pk];
+                        if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+                          bestPbStr = val;
+                          bestEventName = opt?.shortLabel || selectedEventType.toUpperCase();
+                          break;
+                        }
+                      }
+                    } else {
+                      const pbKeys = Object.keys({ ...stats, ...avg }).filter(
+                        (k) => k.startsWith("pb_") || k.startsWith("times_")
+                      );
+                      for (const k of pbKeys) {
+                        const val = avg[k] || stats[k];
+                        if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+                          bestPbStr = val;
+                          bestEventName = k.replace(/^pb_/, "").replace(/^times_/, "").replace(/_/g, " ").toUpperCase();
+                          break;
+                        }
                       }
                     }
                     const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
-                    const displayStat = bestPbStr ? `PB: ${bestPbStr}${bestEventName ? ` (${bestEventName})` : ''}` : "NO LOGGED MEETS";
+                    const opt = selectedEventType !== "ALL" ? findEventOption("SWIMMING", selectedEventType) : null;
+                    const displayStat = bestPbStr
+                      ? `PB: ${bestPbStr}${bestEventName ? ` (${bestEventName})` : ""}`
+                      : selectedEventType !== "ALL"
+                      ? `NO LOGGED MARKS IN ${(opt?.shortLabel || selectedEventType).toUpperCase()}`
+                      : "NO LOGGED MEETS";
                     const displayMetric = `${podiums} PODIUMS`;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
@@ -353,19 +641,39 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                     const stats = athAny.stats || {};
                     let bestMarkStr = "";
                     let bestEventName = "";
-                    const pbKeys = Object.keys({ ...stats, ...avg }).filter(
-                      (k) => k.startsWith("pb_") || k.startsWith("times_") || k === "pole_vault" || k === "long_jump"
-                    );
-                    for (const k of pbKeys) {
-                      const val = avg[k] || stats[k];
-                      if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
-                        bestMarkStr = val;
-                        bestEventName = k.replace(/^pb_/, "").replace(/^times_/, "").replace(/_/g, " ").toUpperCase();
-                        break;
+
+                    if (selectedEventType !== "ALL") {
+                      const opt = findEventOption("TRACK AND FIELD", selectedEventType);
+                      const key = opt?.key || selectedEventType.toLowerCase().replace(/[^a-z0-9]/g, "_");
+                      const pbKeys = [`pb_${key}`, key, `times_${key}`, `pb_${key.replace(/_/g, "")}`];
+                      for (const pk of pbKeys) {
+                        const val = avg[pk] || stats[pk];
+                        if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+                          bestMarkStr = val;
+                          bestEventName = opt?.shortLabel || selectedEventType.toUpperCase();
+                          break;
+                        }
+                      }
+                    } else {
+                      const pbKeys = Object.keys({ ...stats, ...avg }).filter(
+                        (k) => k.startsWith("pb_") || k.startsWith("times_") || k === "pole_vault" || k === "long_jump"
+                      );
+                      for (const k of pbKeys) {
+                        const val = avg[k] || stats[k];
+                        if (val && val !== "-" && val !== "N/A" && val !== "00:00.00") {
+                          bestMarkStr = val;
+                          bestEventName = k.replace(/^pb_/, "").replace(/^times_/, "").replace(/_/g, " ").toUpperCase();
+                          break;
+                        }
                       }
                     }
                     const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? 0);
-                    const displayStat = bestMarkStr ? `PB: ${bestMarkStr}${bestEventName ? ` (${bestEventName})` : ''}` : "NO LOGGED MEETS";
+                    const opt = selectedEventType !== "ALL" ? findEventOption("TRACK AND FIELD", selectedEventType) : null;
+                    const displayStat = bestMarkStr
+                      ? `PB: ${bestMarkStr}${bestEventName ? ` (${bestEventName})` : ""}`
+                      : selectedEventType !== "ALL"
+                      ? `NO LOGGED MARKS IN ${(opt?.shortLabel || selectedEventType).toUpperCase()}`
+                      : "NO LOGGED MEETS";
                     const displayMetric = `${podiums} PODIUMS`;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>

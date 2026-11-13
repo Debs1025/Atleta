@@ -2,6 +2,7 @@ export interface SportEventOption {
   key: string;
   label: string;
   shortLabel: string;
+  eventType?: string; // Explicit eventType
   category: 'SWIMMING' | 'TRACK AND FIELD';
   distance_meters: number;
   isDistanceEvent?: boolean; // true for field events (Pole Vault, Long Jump, Shot Put) where mark is distance in meters
@@ -10,43 +11,43 @@ export interface SportEventOption {
 }
 
 export const SWIMMING_EVENTS: SportEventOption[] = [
-  { key: "50m_free", label: "50m Freestyle", shortLabel: "50M FREE", category: "SWIMMING", distance_meters: 50, unit: "s" },
-  { key: "100m_free", label: "100m Freestyle", shortLabel: "100M FREE", category: "SWIMMING", distance_meters: 100, unit: "s" },
-  { key: "200m_free", label: "200m Freestyle", shortLabel: "200M FREE", category: "SWIMMING", distance_meters: 200, unit: "s" },
-  { key: "400m_free", label: "400m Freestyle", shortLabel: "400M FREE", category: "SWIMMING", distance_meters: 400, unit: "s" },
-  { key: "800m_free", label: "800m Freestyle", shortLabel: "800M FREE", category: "SWIMMING", distance_meters: 800, unit: "s" },
-  { key: "1500m_free", label: "1500m Freestyle", shortLabel: "1500M FREE", category: "SWIMMING", distance_meters: 1500, unit: "s" },
-  { key: "50m_back", label: "50m Backstroke", shortLabel: "50M BACK", category: "SWIMMING", distance_meters: 50, unit: "s" },
-  { key: "100m_back", label: "100m Backstroke", shortLabel: "100M BACK", category: "SWIMMING", distance_meters: 100, unit: "s" },
-  { key: "200m_back", label: "200m Backstroke", shortLabel: "200M BACK", category: "SWIMMING", distance_meters: 200, unit: "s" },
-  { key: "50m_breast", label: "50m Breaststroke", shortLabel: "50M BREAST", category: "SWIMMING", distance_meters: 50, unit: "s" },
-  { key: "100m_breast", label: "100m Breaststroke", shortLabel: "100M BREAST", category: "SWIMMING", distance_meters: 100, unit: "s" },
-  { key: "200m_breast", label: "200m Breaststroke", shortLabel: "200M BREAST", category: "SWIMMING", distance_meters: 200, unit: "s" },
-  { key: "50m_fly", label: "50m Butterfly", shortLabel: "50M FLY", category: "SWIMMING", distance_meters: 50, unit: "s" },
-  { key: "100m_fly", label: "100m Butterfly", shortLabel: "100M FLY", category: "SWIMMING", distance_meters: 100, unit: "s" },
-  { key: "200m_fly", label: "200m Butterfly", shortLabel: "200M FLY", category: "SWIMMING", distance_meters: 200, unit: "s" },
-  { key: "200m_im", label: "200m Individual Medley", shortLabel: "200M IM", category: "SWIMMING", distance_meters: 200, unit: "s" },
-  { key: "400m_im", label: "400m Individual Medley", shortLabel: "400M IM", category: "SWIMMING", distance_meters: 400, unit: "s" },
-  { key: "flip_turn", label: "Flip Turn Split", shortLabel: "FLIP TURN", category: "SWIMMING", distance_meters: 0, unit: "s" },
+  { key: "50m_free", label: "50m Freestyle", shortLabel: "50M FREE", eventType: "50m Freestyle", category: "SWIMMING", distance_meters: 50, unit: "s" },
+  { key: "100m_free", label: "100m Freestyle", shortLabel: "100M FREE", eventType: "100m Freestyle", category: "SWIMMING", distance_meters: 100, unit: "s" },
+  { key: "200m_free", label: "200m Freestyle", shortLabel: "200M FREE", eventType: "200m Freestyle", category: "SWIMMING", distance_meters: 200, unit: "s" },
+  { key: "400m_free", label: "400m Freestyle", shortLabel: "400M FREE", eventType: "400m Freestyle", category: "SWIMMING", distance_meters: 400, unit: "s" },
+  { key: "800m_free", label: "800m Freestyle", shortLabel: "800M FREE", eventType: "800m Freestyle", category: "SWIMMING", distance_meters: 800, unit: "s" },
+  { key: "1500m_free", label: "1500m Freestyle", shortLabel: "1500M FREE", eventType: "1500m Freestyle", category: "SWIMMING", distance_meters: 1500, unit: "s" },
+  { key: "50m_back", label: "50m Backstroke", shortLabel: "50M BACK", eventType: "50m Backstroke", category: "SWIMMING", distance_meters: 50, unit: "s" },
+  { key: "100m_back", label: "100m Backstroke", shortLabel: "100M BACK", eventType: "100m Backstroke", category: "SWIMMING", distance_meters: 100, unit: "s" },
+  { key: "200m_back", label: "200m Backstroke", shortLabel: "200M BACK", eventType: "200m Backstroke", category: "SWIMMING", distance_meters: 200, unit: "s" },
+  { key: "50m_breast", label: "50m Breaststroke", shortLabel: "50M BREAST", eventType: "50m Breaststroke", category: "SWIMMING", distance_meters: 50, unit: "s" },
+  { key: "100m_breast", label: "100m Breaststroke", shortLabel: "100M BREAST", eventType: "100m Breaststroke", category: "SWIMMING", distance_meters: 100, unit: "s" },
+  { key: "200m_breast", label: "200m Breaststroke", shortLabel: "200M BREAST", eventType: "200m Breaststroke", category: "SWIMMING", distance_meters: 200, unit: "s" },
+  { key: "50m_fly", label: "50m Butterfly", shortLabel: "50M FLY", eventType: "50m Butterfly", category: "SWIMMING", distance_meters: 50, unit: "s" },
+  { key: "100m_fly", label: "100m Butterfly", shortLabel: "100M FLY", eventType: "100m Butterfly", category: "SWIMMING", distance_meters: 100, unit: "s" },
+  { key: "200m_fly", label: "200m Butterfly", shortLabel: "200M FLY", eventType: "200m Butterfly", category: "SWIMMING", distance_meters: 200, unit: "s" },
+  { key: "200m_im", label: "200m Individual Medley", shortLabel: "200M IM", eventType: "200m Individual Medley", category: "SWIMMING", distance_meters: 200, unit: "s" },
+  { key: "400m_im", label: "400m Individual Medley", shortLabel: "400M IM", eventType: "400m Individual Medley", category: "SWIMMING", distance_meters: 400, unit: "s" },
+  { key: "flip_turn", label: "Flip Turn Split", shortLabel: "FLIP TURN", eventType: "Flip Turn Split", category: "SWIMMING", distance_meters: 0, unit: "s" },
 ];
 
 export const TRACK_FIELD_EVENTS: SportEventOption[] = [
-  { key: "100m", label: "100m Dash", shortLabel: "100M DASH", category: "TRACK AND FIELD", distance_meters: 100, unit: "s" },
-  { key: "200m", label: "200m Dash", shortLabel: "200M DASH", category: "TRACK AND FIELD", distance_meters: 200, unit: "s" },
-  { key: "400m", label: "400m Dash", shortLabel: "400M DASH", category: "TRACK AND FIELD", distance_meters: 400, unit: "s" },
-  { key: "800m", label: "800m Run", shortLabel: "800M RUN", category: "TRACK AND FIELD", distance_meters: 800, unit: "s" },
-  { key: "1500m", label: "1500m Run", shortLabel: "1500M RUN", category: "TRACK AND FIELD", distance_meters: 1500, unit: "s" },
-  { key: "5000m", label: "5000m Run", shortLabel: "5000M RUN", category: "TRACK AND FIELD", distance_meters: 5000, unit: "s" },
-  { key: "110m_hurdles", label: "110m Hurdles", shortLabel: "110M HURDLES", category: "TRACK AND FIELD", distance_meters: 110, unit: "s" },
-  { key: "400m_hurdles", label: "400m Hurdles", shortLabel: "400M HURDLES", category: "TRACK AND FIELD", distance_meters: 400, unit: "s" },
-  { key: "pole_vault", label: "Pole Vault", shortLabel: "POLE VAULT", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "high_jump", label: "High Jump", shortLabel: "HIGH JUMP", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "long_jump", label: "Long Jump", shortLabel: "LONG JUMP", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "triple_jump", label: "Triple Jump", shortLabel: "TRIPLE JUMP", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "shot_put", label: "Shot Put", shortLabel: "SHOT PUT", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "discus", label: "Discus Throw", shortLabel: "DISCUS", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "javelin", label: "Javelin Throw", shortLabel: "JAVELIN", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
-  { key: "reaction", label: "Reaction Time", shortLabel: "REACTION", category: "TRACK AND FIELD", distance_meters: 0, unit: "s" },
+  { key: "100m", label: "100m Dash", shortLabel: "100M DASH", eventType: "100m Dash", category: "TRACK AND FIELD", distance_meters: 100, unit: "s" },
+  { key: "200m", label: "200m Dash", shortLabel: "200M DASH", eventType: "200m Dash", category: "TRACK AND FIELD", distance_meters: 200, unit: "s" },
+  { key: "400m", label: "400m Dash", shortLabel: "400M DASH", eventType: "400m Dash", category: "TRACK AND FIELD", distance_meters: 400, unit: "s" },
+  { key: "800m", label: "800m Run", shortLabel: "800M RUN", eventType: "800m Run", category: "TRACK AND FIELD", distance_meters: 800, unit: "s" },
+  { key: "1500m", label: "1500m Run", shortLabel: "1500M RUN", eventType: "1500m Run", category: "TRACK AND FIELD", distance_meters: 1500, unit: "s" },
+  { key: "5000m", label: "5000m Run", shortLabel: "5000M RUN", eventType: "5000m Run", category: "TRACK AND FIELD", distance_meters: 5000, unit: "s" },
+  { key: "110m_hurdles", label: "110m Hurdles", shortLabel: "110M HURDLES", eventType: "110m Hurdles", category: "TRACK AND FIELD", distance_meters: 110, unit: "s" },
+  { key: "400m_hurdles", label: "400m Hurdles", shortLabel: "400M HURDLES", eventType: "400m Hurdles", category: "TRACK AND FIELD", distance_meters: 400, unit: "s" },
+  { key: "pole_vault", label: "Pole Vault", shortLabel: "POLE VAULT", eventType: "Pole Vault", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "high_jump", label: "High Jump", shortLabel: "HIGH JUMP", eventType: "High Jump", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "long_jump", label: "Long Jump", shortLabel: "LONG JUMP", eventType: "Long Jump", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "triple_jump", label: "Triple Jump", shortLabel: "TRIPLE JUMP", eventType: "Triple Jump", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "shot_put", label: "Shot Put", shortLabel: "SHOT PUT", eventType: "Shot Put", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "discus", label: "Discus Throw", shortLabel: "DISCUS", eventType: "Discus Throw", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "javelin", label: "Javelin Throw", shortLabel: "JAVELIN", eventType: "Javelin Throw", category: "TRACK AND FIELD", distance_meters: 0, isDistanceEvent: true, unit: "m" },
+  { key: "reaction", label: "Reaction Time", shortLabel: "REACTION", eventType: "Reaction Time", category: "TRACK AND FIELD", distance_meters: 0, unit: "s" },
 ];
 
 export function getEventsForSport(sport?: string): SportEventOption[] {
@@ -101,4 +102,24 @@ export function pickBetterDistance(existing: string | undefined | null, candidat
   if (nCandidate <= 0) return existing;
   return nCandidate > nExisting ? candidate : existing;
 }
+
+export function matchesEvent(eventName?: string, targetEvent?: string): boolean {
+  if (!eventName || !targetEvent) return false;
+  const a = String(eventName).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const b = String(targetEvent).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+
+  // Specific aliases
+  if (b.includes("50mfree") && a.includes("50") && (a.includes("free") || a.includes("swim"))) return true;
+  if (b.includes("100mfree") && a.includes("100") && (a.includes("free") || a.includes("swim"))) return true;
+  if (b.includes("200mfree") && a.includes("200") && (a.includes("free") || a.includes("swim"))) return true;
+  if (b.includes("100mdash") && a.includes("100") && (a.includes("dash") || a.includes("sprint") || a.includes("run") || !a.includes("free"))) return true;
+  if (b.includes("200mdash") && a.includes("200") && (a.includes("dash") || a.includes("sprint") || a.includes("run") || !a.includes("free"))) return true;
+  if (b.includes("polevault") && (a.includes("pole") || a.includes("vault"))) return true;
+  if (b.includes("highjump") && a.includes("high") && a.includes("jump")) return true;
+  if (b.includes("longjump") && a.includes("long") && a.includes("jump")) return true;
+
+  return false;
+}
+
 
