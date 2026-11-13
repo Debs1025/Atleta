@@ -670,7 +670,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                         }
                       }
                     }
-                    const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? 0);
+                    const podiums = Number(avg.podiums_count ?? avg.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
                     const opt = selectedEventType !== "ALL" ? findEventOption("TRACK AND FIELD", selectedEventType) : null;
                     const displayStat = bestMarkStr
                       ? `PB: ${bestMarkStr}${bestEventName ? ` (${bestEventName})` : ""}`

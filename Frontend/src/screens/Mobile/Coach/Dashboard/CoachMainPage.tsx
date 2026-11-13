@@ -1792,12 +1792,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
       // 3. Persist to Backend API
       try {
+        const currentTeam = teams.find((t) => t.team_id === teamId);
+        const isSwim = currentTeam?.sport_type?.toUpperCase().includes("SWIM");
         await requestAuthenticatedJson(`/teams/${teamId}/roster`, "PATCH", {
           roster_list: updatedRoster.map((p) => ({
             athlete_id: p.athlete_id,
             position: p.position || "Unassigned",
-            jersey_number: Number(p.jersey_number) || 0,
-            event_distance: p.event_distance,
+            jersey_number: isSwim ? 0 : (Number(p.jersey_number) || 0),
+            event_type: p.event_type || p.event_distance || p.position,
+            event_distance: p.event_type || p.event_distance,
             stroke_style: p.stroke_style,
           })),
           override_unverified: true,
@@ -1892,7 +1895,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     async (
       teamId: string,
       athleteId: string,
-      details: { position?: string; jerseyNumber?: string; event_distance?: string; stroke_style?: string }
+      details: { position?: string; jerseyNumber?: string; event_type?: string; event_distance?: string; stroke_style?: string }
     ) => {
       let updatedRoster: RosterAthlete[] = [];
       setTeams((prev) =>
@@ -1902,13 +1905,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             ...t,
             roster_list: t.roster_list.map((p) => {
               if (p.athlete_id !== athleteId) return p;
+              const resolvedEvt = details.event_type !== undefined ? details.event_type : details.event_distance !== undefined ? details.event_distance : p.event_type || p.event_distance;
               return {
                 ...p,
                 position: details.position !== undefined ? details.position : p.position,
                 jersey_number:
                   details.jerseyNumber !== undefined ? details.jerseyNumber : p.jersey_number,
-                event_distance:
-                  details.event_distance !== undefined ? details.event_distance : p.event_distance,
+                event_type: resolvedEvt,
+                event_distance: resolvedEvt,
                 stroke_style:
                   details.stroke_style !== undefined ? details.stroke_style : p.stroke_style,
               };
@@ -1928,8 +1932,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 position: details.position !== undefined ? details.position : a.position,
                 jersey_number:
                   details.jerseyNumber !== undefined ? details.jerseyNumber : a.jersey_number,
+                event_type:
+                  details.event_type !== undefined ? details.event_type : details.event_distance !== undefined ? details.event_distance : a.event_type || a.event_distance,
                 event_distance:
-                  details.event_distance !== undefined ? details.event_distance : a.event_distance,
+                  details.event_distance !== undefined ? details.event_distance : details.event_type !== undefined ? details.event_type : a.event_distance || a.event_type,
                 stroke_style:
                   details.stroke_style !== undefined ? details.stroke_style : a.stroke_style,
                 team_id: teamId,
@@ -1945,7 +1951,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               athlete_id: p.athlete_id,
               position: p.position,
               jersey_number: Number(p.jersey_number) || 0,
-              event_distance: p.event_distance,
+              event_type: p.event_type || p.event_distance,
+              event_distance: p.event_distance || p.event_type,
               stroke_style: p.stroke_style,
             })),
             override_unverified: true,

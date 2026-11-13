@@ -93,6 +93,7 @@ export interface RosterAthlete {
   jersey_number: string;
   sport_type: string;
   is_eligibility_verified: boolean;
+  event_type?: string;
   event_distance?: string;
   stroke_style?: string;
   avatar_url?: string;
@@ -151,6 +152,7 @@ export interface AthleteItem {
   grad_class: string; // e.g. "Class of 2025"
   primary_position: string; // e.g. "Point Guard"
   jersey_number?: string;
+  event_type?: string;
   event_distance?: string;
   stroke_style?: string;
   is_verified: boolean;

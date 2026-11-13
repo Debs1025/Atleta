@@ -145,23 +145,18 @@ export function SetPlayer({
 
     return teamDetails.selected_roster.every((athlete) => {
       if (teamDetails.sport_type === "TRACK AND FIELD") {
-        const hasDistance = Boolean(
-          athlete.event_distance &&
-            athlete.event_distance.replace(/[^0-9]/g, "").trim().length > 0
+        const hasEvent = Boolean(
+          (athlete.event_type || athlete.event_distance || athlete.primary_position || "").trim().length > 0
         );
         const hasJersey = Boolean(
           athlete.jersey_number && athlete.jersey_number.trim().length > 0
         );
-        return hasDistance && hasJersey;
+        return hasEvent && hasJersey;
       } else if (teamDetails.sport_type === "SWIMMING") {
-        const hasDistance = Boolean(
-          athlete.event_distance &&
-            athlete.event_distance.replace(/[^0-9]/g, "").trim().length > 0
+        const hasEvent = Boolean(
+          (athlete.event_type || athlete.event_distance || athlete.stroke_style || athlete.primary_position || "").trim().length > 0
         );
-        const hasStroke = Boolean(
-          athlete.stroke_style && athlete.stroke_style.trim().length > 0
-        );
-        return hasDistance && hasStroke;
+        return hasEvent;
       } else {
         const pos = getResolvedPosition(athlete.primary_position, teamDetails.sport_type);
         const hasPos = Boolean(pos && pos.trim().length > 0);
@@ -259,26 +254,20 @@ export function SetPlayer({
                     {teamDetails.sport_type === "TRACK AND FIELD" ? (
                       <>
                         <View style={styles.fieldCol}>
-                          <Text style={styles.inputLabel}>DISTANCE *</Text>
-                          <View style={styles.distanceContainer}>
-                            <TextInput
-                              style={styles.distanceInput}
-                              value={(athlete.event_distance || "").replace(/[^0-9]/g, "")}
-                              onChangeText={(val) => {
-                                const digits = val.replace(/[^0-9]/g, "");
-                                const formatted = digits ? `${digits}m` : "";
-                                handleUpdateAthleteDetails(athlete.athlete_id, {
-                                  event_distance: formatted,
-                                  primary_position: formatted,
-                                });
-                              }}
-                              placeholder=""
-                              placeholderTextColor="#94A3B8"
-                              keyboardType="number-pad"
-                              maxLength={4}
-                            />
-                            <Text style={styles.meterBadgeText}>m</Text>
-                          </View>
+                          <Text style={styles.inputLabel}>EVENT TYPE *</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={athlete.event_type || athlete.event_distance || athlete.primary_position || ""}
+                            onChangeText={(val) => {
+                              handleUpdateAthleteDetails(athlete.athlete_id, {
+                                event_type: val,
+                                event_distance: val,
+                                primary_position: val,
+                              });
+                            }}
+                            placeholder="e.g. 100m Dash, Shot Put, 4x100m Relay"
+                            placeholderTextColor="#94A3B8"
+                          />
                         </View>
 
                         <View style={styles.fieldCol}>
@@ -300,29 +289,24 @@ export function SetPlayer({
                     ) : teamDetails.sport_type === "SWIMMING" ? (
                       <>
                         <View style={styles.fieldCol}>
-                          <Text style={styles.inputLabel}>DISTANCE *</Text>
-                          <View style={styles.distanceContainer}>
-                            <TextInput
-                              style={styles.distanceInput}
-                              value={(athlete.event_distance || "").replace(/[^0-9]/g, "")}
-                              onChangeText={(val) => {
-                                const digits = val.replace(/[^0-9]/g, "");
-                                const formatted = digits ? `${digits}m` : "";
-                                handleUpdateAthleteDetails(athlete.athlete_id, {
-                                  event_distance: formatted,
-                                });
-                              }}
-                              placeholder=""
-                              placeholderTextColor="#94A3B8"
-                              keyboardType="number-pad"
-                              maxLength={4}
-                            />
-                            <Text style={styles.meterBadgeText}>m</Text>
-                          </View>
+                          <Text style={styles.inputLabel}>EVENT TYPE *</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={athlete.event_type || athlete.event_distance || athlete.primary_position || ""}
+                            onChangeText={(val) => {
+                              handleUpdateAthleteDetails(athlete.athlete_id, {
+                                event_type: val,
+                                event_distance: val,
+                                primary_position: val,
+                              });
+                            }}
+                            placeholder="e.g. 100m Butterfly, 50m Free"
+                            placeholderTextColor="#94A3B8"
+                          />
                         </View>
 
                         <View style={styles.fieldCol}>
-                          <Text style={styles.inputLabel}>TYPE OF SWIMMING *</Text>
+                          <Text style={styles.inputLabel}>TYPE OF SWIMMING</Text>
                           <TouchableOpacity
                             style={styles.typePickerButton}
                             onPress={() => setStrokePickerAthlete(athlete)}

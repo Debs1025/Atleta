@@ -86,6 +86,48 @@ export const getPositionsForSport = (sport?: string) => {
 
 const BASKETBALL_POSITIONS = SPORT_POSITIONS_MAP.BASKETBALL;
 
+export const TRACK_FIELD_PRESET_EVENTS = [
+  "100m Dash",
+  "200m Dash",
+  "400m Dash",
+  "800m Run",
+  "1500m Run",
+  "5000m Run",
+  "110m Hurdles",
+  "400m Hurdles",
+  "4x100m Relay",
+  "4x400m Relay",
+  "Pole Vault",
+  "High Jump",
+  "Long Jump",
+  "Triple Jump",
+  "Shot Put",
+  "Discus Throw",
+  "Javelin Throw",
+];
+
+export const SWIMMING_PRESET_EVENTS = [
+  "50m Freestyle",
+  "100m Freestyle",
+  "200m Freestyle",
+  "400m Freestyle",
+  "800m Freestyle",
+  "1500m Freestyle",
+  "50m Backstroke",
+  "100m Backstroke",
+  "200m Backstroke",
+  "50m Breaststroke",
+  "100m Breaststroke",
+  "200m Breaststroke",
+  "50m Butterfly",
+  "100m Butterfly",
+  "200m Butterfly",
+  "200m Individual Medley",
+  "400m Individual Medley",
+  "4x100m Free Relay",
+  "4x100m Medley Relay",
+];
+
 const SWIMMING_TYPES = [
   "Freestyle",
   "Butterfly",
@@ -131,7 +173,7 @@ interface ManageTeamPageProps {
   onUpdateRosterPlayerDetails?: (
     teamId: string,
     athleteId: string,
-    details: { position?: string; jerseyNumber?: string; event_distance?: string; stroke_style?: string }
+    details: { position?: string; jerseyNumber?: string; event_type?: string; event_distance?: string; stroke_style?: string }
   ) => void;
   onRemovePlayer: (teamId: string, athleteId: string) => void;
   onAddPlayers: (teamId: string, newAthletes: RosterAthlete[]) => void;
@@ -212,6 +254,10 @@ export function ManageTeamPage({
 
   // Swimming Stroke Type Picker Modal State
   const [typePickerPlayer, setTypePickerPlayer] = useState<RosterAthlete | null>(null);
+
+  // Standardized Event Type Picker Modal State (Track & Field and Swimming)
+  const [eventTypePickerPlayer, setEventTypePickerPlayer] = useState<RosterAthlete | null>(null);
+  const [customEventInput, setCustomEventInput] = useState<string>("");
 
   useEffect(() => {
     setEditName(team.team_name);
@@ -460,27 +506,20 @@ export function ManageTeamPage({
                 {team.sport_type === "TRACK AND FIELD" && (
                   <>
                     <View style={{ marginRight: 8, alignItems: "center" }}>
-                      <Text style={styles.miniLabel}>DISTANCE</Text>
-                      <View style={styles.distanceInputContainer}>
-                        <TextInput
-                          style={styles.distanceNumericInput}
-                          value={cleanNumericDistance(player.event_distance || player.position)}
-                          keyboardType="number-pad"
-                          maxLength={4}
-                          onChangeText={(val) => {
-                            const digits = val.replace(/[^0-9]/g, "");
-                            setLocalRoster((prev) =>
-                              prev.map((p) =>
-                                p.athlete_id === player.athlete_id
-                                  ? { ...p, event_distance: digits ? `${digits}m` : "" }
-                                  : p
-                              )
-                            );
-                            setHasUnsavedChanges(true);
-                          }}
-                        />
-                        <Text style={styles.meterUnitText}>m</Text>
-                      </View>
+                      <Text style={styles.miniLabel}>EVENT TYPE</Text>
+                      <TouchableOpacity
+                        style={styles.eventTypeControlBox}
+                        onPress={() => {
+                          setEventTypePickerPlayer(player);
+                          setCustomEventInput(player.event_type || player.event_distance || player.position || "");
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.eventTypeText} numberOfLines={1}>
+                          {player.event_type || player.event_distance || player.position || "Select Event"}
+                        </Text>
+                        <Ionicons name="chevron-down" size={12} color="#00C8FF" />
+                      </TouchableOpacity>
                     </View>
 
                     <View style={{ marginRight: 8, alignItems: "center" }}>
@@ -506,40 +545,19 @@ export function ManageTeamPage({
                 {team.sport_type === "SWIMMING" && (
                   <>
                     <View style={{ marginRight: 8, alignItems: "center" }}>
-                      <Text style={styles.miniLabel}>DISTANCE</Text>
-                      <View style={styles.distanceInputContainer}>
-                        <TextInput
-                          style={styles.distanceNumericInput}
-                          value={cleanNumericDistance(player.event_distance || player.position)}
-                          keyboardType="number-pad"
-                          maxLength={4}
-                          onChangeText={(val) => {
-                            const digits = val.replace(/[^0-9]/g, "");
-                            setLocalRoster((prev) =>
-                              prev.map((p) =>
-                                p.athlete_id === player.athlete_id
-                                  ? { ...p, event_distance: digits ? `${digits}m` : "" }
-                                  : p
-                              )
-                            );
-                            setHasUnsavedChanges(true);
-                          }}
-                        />
-                        <Text style={styles.meterUnitText}>m</Text>
-                      </View>
-                    </View>
-
-                    <View style={{ marginRight: 8, alignItems: "center" }}>
-                      <Text style={styles.miniLabel}>TYPE</Text>
+                      <Text style={styles.miniLabel}>EVENT TYPE</Text>
                       <TouchableOpacity
-                        style={[styles.uniformControlBox, { width: 82, paddingHorizontal: 6 }]}
-                        onPress={() => setTypePickerPlayer(player)}
+                        style={[styles.eventTypeControlBox, { minWidth: 120, maxWidth: 155 }]}
+                        onPress={() => {
+                          setEventTypePickerPlayer(player);
+                          setCustomEventInput(player.event_type || player.event_distance || player.position || "");
+                        }}
                         activeOpacity={0.8}
                       >
-                        <Text style={[styles.posText, { fontSize: 11.5 }]} numberOfLines={1}>
-                          {player.stroke_style || player.position || ""}
+                        <Text style={styles.eventTypeText} numberOfLines={1}>
+                          {player.event_type || player.event_distance || player.position || "Select Event"}
                         </Text>
-                        <Ionicons name="chevron-down" size={11} color="#64748B" />
+                        <Ionicons name="chevron-down" size={12} color="#00C8FF" />
                       </TouchableOpacity>
                     </View>
                   </>
@@ -725,50 +743,133 @@ export function ManageTeamPage({
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL 3: SWIMMING STROKE TYPE PICKER */}
+      {/* MODAL 3: STANDARDIZED EVENT TYPE PICKER (TRACK & FIELD AND SWIMMING) */}
       <Modal
-        visible={typePickerPlayer !== null}
+        visible={eventTypePickerPlayer !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setTypePickerPlayer(null)}
+        onRequestClose={() => setEventTypePickerPlayer(null)}
       >
         <TouchableOpacity
           style={styles.confirmOverlayBackdrop}
           activeOpacity={1}
-          onPress={() => setTypePickerPlayer(null)}
+          onPress={() => setEventTypePickerPlayer(null)}
         >
-          <View style={[styles.confirmDialogCard, { paddingVertical: 20 }]}>
-            <Text style={[styles.confirmTitle, { marginBottom: 14 }]}>SELECT SWIMMING STROKE</Text>
-            <View style={{ width: "100%", gap: 8 }}>
-              {SWIMMING_TYPES.map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={styles.pickerOptionRow}
-                  onPress={() => {
-                    if (typePickerPlayer) {
-                      setLocalRoster((prev) =>
-                        prev.map((p) =>
-                          p.athlete_id === typePickerPlayer.athlete_id
-                            ? { ...p, stroke_style: type }
-                            : p
-                        )
-                      );
-                      setHasUnsavedChanges(true);
-                      if (!onSaveRoster && onUpdateRosterPlayerDetails) {
-                        onUpdateRosterPlayerDetails(team.team_id, typePickerPlayer.athlete_id, {
-                          stroke_style: type,
-                        });
-                      }
-                    }
-                    setTypePickerPlayer(null);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="water-outline" size={16} color="#00C8FF" style={{ marginRight: 10 }} />
-                  <Text style={styles.pickerOptionLabel}>{type}</Text>
-                </TouchableOpacity>
-              ))}
+          <View
+            style={[styles.confirmDialogCard, { maxHeight: "80%", paddingVertical: 18, paddingHorizontal: 18 }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={{ width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <Text style={styles.confirmTitle}>SELECT EVENT TYPE</Text>
+              <TouchableOpacity onPress={() => setEventTypePickerPlayer(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={22} color="#94A3B8" />
+              </TouchableOpacity>
             </View>
+            <Text style={{ color: "#00C8FF", fontSize: 12, fontWeight: "700", marginBottom: 14 }}>
+              {team.sport_type} • {eventTypePickerPlayer?.full_name || "Athlete"}
+            </Text>
+
+            {/* CUSTOM EVENT TEXT INPUT */}
+            <View style={{ width: "100%", flexDirection: "row", gap: 8, marginBottom: 16 }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  backgroundColor: "#070D19",
+                  borderWidth: 1,
+                  borderColor: "#1E293B",
+                  borderRadius: 8,
+                  color: "#FFFFFF",
+                  fontSize: 13,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                }}
+                value={customEventInput}
+                onChangeText={setCustomEventInput}
+                placeholder="Custom event (e.g. 4x100m Relay, Shot Put)"
+                placeholderTextColor="#64748B"
+              />
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#00C8FF",
+                  borderRadius: 8,
+                  paddingHorizontal: 14,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+                onPress={() => {
+                  if (customEventInput.trim() && eventTypePickerPlayer) {
+                    const val = customEventInput.trim();
+                    setLocalRoster((prev) =>
+                      prev.map((p) =>
+                        p.athlete_id === eventTypePickerPlayer.athlete_id
+                          ? { ...p, event_type: val, event_distance: val, position: val }
+                          : p
+                      )
+                    );
+                    setHasUnsavedChanges(true);
+                    if (!onSaveRoster && onUpdateRosterPlayerDetails) {
+                      onUpdateRosterPlayerDetails(team.team_id, eventTypePickerPlayer.athlete_id, {
+                        event_type: val,
+                        event_distance: val,
+                        position: val,
+                      });
+                    }
+                    setEventTypePickerPlayer(null);
+                    setCustomEventInput("");
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: "#070D19", fontWeight: "900", fontSize: 12 }}>APPLY</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.miniLabel, { textAlign: "left", width: "100%", marginBottom: 8 }]}>
+              OR CHOOSE PRESET EVENT:
+            </Text>
+
+            <ScrollView style={{ width: "100%" }} showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                {(team.sport_type === "SWIMMING" ? SWIMMING_PRESET_EVENTS : TRACK_FIELD_PRESET_EVENTS).map((evt) => {
+                  const currentSelected =
+                    eventTypePickerPlayer?.event_type === evt ||
+                    eventTypePickerPlayer?.event_distance === evt ||
+                    eventTypePickerPlayer?.position === evt;
+                  return (
+                    <TouchableOpacity
+                      key={evt}
+                      style={[styles.eventTypePresetChip, currentSelected && styles.eventTypePresetChipActive]}
+                      onPress={() => {
+                        if (eventTypePickerPlayer) {
+                          setLocalRoster((prev) =>
+                            prev.map((p) =>
+                              p.athlete_id === eventTypePickerPlayer.athlete_id
+                                ? { ...p, event_type: evt, event_distance: evt, position: evt }
+                                : p
+                            )
+                          );
+                          setHasUnsavedChanges(true);
+                          if (!onSaveRoster && onUpdateRosterPlayerDetails) {
+                            onUpdateRosterPlayerDetails(team.team_id, eventTypePickerPlayer.athlete_id, {
+                              event_type: evt,
+                              event_distance: evt,
+                              position: evt,
+                            });
+                          }
+                        }
+                        setEventTypePickerPlayer(null);
+                        setCustomEventInput("");
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.eventTypePresetText, currentSelected && styles.eventTypePresetTextActive]}>
+                        {evt}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
