@@ -485,7 +485,7 @@ export const EventTimeHistorySection: React.FC<EventTimeHistorySectionProps> = (
         try {
           const rawAthId = athleteId || "";
           const cleanId = rawAthId.startsWith("ath_") ? rawAthId.replace("ath_", "") : rawAthId;
-          const url = `/athlete/${cleanId}/progression-history?metric=${encodeURIComponent(
+          const url = `/athletes/${cleanId}/progression-history?metric=${encodeURIComponent(
             selectedEventKey
           )}&sport=${encodeURIComponent(normSport)}`;
           const res: any = await requestAuthenticatedJson(url, "GET");

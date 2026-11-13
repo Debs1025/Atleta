@@ -413,7 +413,12 @@ export const CoachesProvider: React.FC<{ children: React.ReactNode; athleteCateg
 
   // 4. Stale-While-Revalidate execution on mount
   useEffect(() => {
-    if (coachesMemoryCache && Date.now() - coachesMemoryCache.lastFetched < COACHES_CACHE_TTL_MS) {
+    if (
+      coachesMemoryCache &&
+      Array.isArray(coachesMemoryCache.teams) &&
+      coachesMemoryCache.teams.length > 0 &&
+      Date.now() - coachesMemoryCache.lastFetched < COACHES_CACHE_TTL_MS
+    ) {
       return;
     }
     loadCoachesData(false);

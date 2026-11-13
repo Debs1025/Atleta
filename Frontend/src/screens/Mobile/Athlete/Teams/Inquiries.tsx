@@ -84,14 +84,31 @@ export function InquiriesScreen({ inquiries: propInquiries, onBack }: InquiriesP
 
         // Quick indexed Firestore fallback with 2-second timeout guard
         const cleanId = currentUserId.replace(/^ath_/, "");
+        const idList = [currentUserId, `ath_${cleanId}`, cleanId];
         const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
-        const queryPromise = getDocs(
-          query(collection(db, "Scouting_Registry"), where("athlete_id", "in", [currentUserId, `ath_${cleanId}`, cleanId]))
-        ).catch(() => null);
+        const queryPromise = Promise.all([
+          getDocs(query(collection(db, "Scouting_Registry"), where("athlete_id", "in", idList))).catch(() => null),
+          getDocs(query(collection(db, "Scouting_Registry"), where("athleteId", "in", idList))).catch(() => null),
+        ]);
 
-        const snap: any = await Promise.race([queryPromise, timeoutPromise]);
-        if (snap && !snap.empty) {
-          const rawList = snap.docs.map((d: any) => d.data());
+        const snaps: any = await Promise.race([queryPromise, timeoutPromise]);
+        const snapDocs: any[] = [];
+        if (Array.isArray(snaps)) {
+          snaps.forEach((s) => {
+            if (s && !s.empty) {
+              s.docs.forEach((d: any) => snapDocs.push(d));
+            }
+          });
+        }
+        if (snapDocs.length > 0) {
+          const rawSeen = new Set<string>();
+          const rawList = snapDocs
+            .map((d: any) => ({ id: d.id, ...d.data() }))
+            .filter((d: any) => {
+              if (rawSeen.has(d.id)) return false;
+              rawSeen.add(d.id);
+              return true;
+            });
           const mapped: InquirySchema[] = rawList.map((inq: any, idx: number) => {
             const rawStatus = (inq.offer_status || inq.status || "PENDING").toUpperCase();
             const mappedStatus = rawStatus.includes("ACCEPT") ? "ACCEPTED" : rawStatus.includes("DECLIN") ? "DECLINED" : "PENDING";

@@ -33,6 +33,9 @@ export interface UploadedFileItem {
 }
 
 interface OCRloggingProps {
+    currentTeam?: any;
+    selectedTeamId?: string;
+    teams?: any[];
     onBack?: () => void;
     onUploadSuccess?: (ocrData: RawOCRDetectedData) => void;
 }
@@ -59,7 +62,7 @@ const optimizeScoresheetImage = async (uri: string): Promise<string> => {
     }
 };
 
-export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
+export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamId, teams }: OCRloggingProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
@@ -474,30 +477,41 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                 else if (hasRacketStats) detectedSport = "BADMINTON";
                 else if (hasBaseballStats) detectedSport = "BASEBALL";
 
-                // 2. Dynamic Team Names
+                // 2. Dynamic Team Names - Strictly lock home team context to Coach's selected team
                 const teamScoresArr = Array.isArray(dataObj.team_scores) ? dataObj.team_scores : [];
                 const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
                 const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
 
                 const isIndividualSport = detectedSport === "SWIMMING" || detectedSport === "TRACK AND FIELD";
 
-                const homeTeamName = String(
+                const coachActiveTeam = currentTeam || (teams && teams.find((t: any) => t.team_id === selectedTeamId)) || null;
+                const coachTeamName = (coachActiveTeam?.team_name || "").trim().toUpperCase();
+
+                const rawOcrHome = String(
                     dataObj.match_info?.home_team_name ||
                     dataObj.match_info?.home_team ||
                     homeScoreItem?.team ||
                     teamScoresArr[0]?.team ||
                     rawPlayers[0]?.team_name ||
-                    (isIndividualSport ? "HEAT / LANE 1" : "TEAM A")
+                    ""
                 ).trim().toUpperCase();
 
-                const oppTeamName = String(
+                const homeTeamName = coachTeamName || rawOcrHome || (isIndividualSport ? "HEAT / LANE 1" : "TEAM A");
+
+                const rawOcrOpp = String(
                     dataObj.match_info?.opponent_team_name ||
                     dataObj.match_info?.away_team ||
                     awayScoreItem?.team ||
                     teamScoresArr[1]?.team ||
                     rawPlayers.find((p: any) => p.team_name && String(p.team_name).toUpperCase() !== homeTeamName)?.team_name ||
-                    (isIndividualSport ? "HEAT / LANE 2" : "TEAM B")
+                    ""
                 ).trim().toUpperCase();
+
+                const oppTeamName = (rawOcrOpp && rawOcrOpp !== homeTeamName)
+                    ? rawOcrOpp
+                    : (rawOcrHome && rawOcrHome !== homeTeamName)
+                    ? rawOcrHome
+                    : (isIndividualSport ? "HEAT / LANE 2" : "OPPONENT");
 
                 const detectedTeamNames = Array.from(
                     new Set([
@@ -533,10 +547,20 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     return null;
                 };
 
+                const coachRosterList: any[] = Array.isArray(coachActiveTeam?.roster_list) ? coachActiveTeam.roster_list : [];
+
                 const athleteOverview: DetectedAthleteStat[] = rawPlayers.map((p: any, idx: number) => {
+                    const pName = String(p.player_name || p.name || "").trim().toLowerCase();
+                    const isCoachRosterPlayer = coachRosterList.some((r: any) => {
+                        const rName = String(r.full_name || `${r.first_name || ""} ${r.last_name || ""}`).trim().toLowerCase();
+                        return (pName && (rName === pName || rName.includes(pName) || pName.includes(rName)));
+                    });
+
                     let resolvedTeam = String(p.team_name || p.team || "").trim().toUpperCase();
-                    if (!resolvedTeam) {
-                        resolvedTeam = idx < halfCount ? oppTeamName : homeTeamName;
+                    if (isCoachRosterPlayer) {
+                        resolvedTeam = homeTeamName;
+                    } else if (!resolvedTeam || resolvedTeam === "UNKNOWN" || resolvedTeam === "TEAM A" || resolvedTeam === "HOME") {
+                        resolvedTeam = (coachTeamName ? oppTeamName : (idx < halfCount ? oppTeamName : homeTeamName));
                     }
 
                     const fgSplit = parseSplitStat(p.fg || p.field_goals || p.fgm_fga);
@@ -768,6 +792,7 @@ export function OCRlogging({ onBack, onUploadSuccess }: OCRloggingProps) {
                     : (Array.isArray(responseData?.injuries) ? responseData.injuries : []);
 
                 return {
+                    team_id: coachActiveTeam?.team_id || dataObj.team_id || "",
                     team_name: homeTeamName,
                     opponent_team_name: oppTeamName,
                     final_score: `${hScore} - ${aScore}`,

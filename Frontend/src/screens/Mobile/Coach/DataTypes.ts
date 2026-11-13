@@ -319,6 +319,9 @@ export interface AthletePerformanceProfile {
 
 export interface MatchHistoryItem {
   match_id: string;
+  team_id?: string;
+  coach_id?: string;
+  coaching_staff?: string[];
   sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | 'VOLLEYBALL' | 'PICKLEBALL' | string;
   event_or_opponent: string; // e.g. "vs. BLUE EAGLES", "100m Freestyle", "200M DASH (REGIONAL)"
   date_formatted: string; // e.g. "OCT 24", "SEPT 29"

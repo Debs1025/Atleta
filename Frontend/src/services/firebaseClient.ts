@@ -1827,6 +1827,10 @@ export function listenToCoachInquiries(
       where('coachId', 'in', possibleIds)
     );
     const q3 = query(
+      collection(db, 'Scouting_Registry'),
+      where('coach_id', 'in', possibleIds)
+    );
+    const q4 = query(
       collection(db, 'inquiries'),
       where('coachId', 'in', possibleIds)
     );
@@ -1857,10 +1861,18 @@ export function listenToCoachInquiries(
       emit();
     }, (err) => console.warn('[Inquiries] onSnapshot q3 notice:', err));
 
+    const unsub4 = onSnapshot(q4, (snapshot) => {
+      snapshot.forEach((d) => {
+        docMap.set(d.id, { id: d.id, scout_id: d.id, ...d.data() });
+      });
+      emit();
+    }, (err) => console.warn('[Inquiries] onSnapshot q4 notice:', err));
+
     return () => {
       unsub1();
       unsub2();
       unsub3();
+      unsub4();
     };
   } catch (err) {
     console.warn('[Inquiries] Setup listener failed:', err);

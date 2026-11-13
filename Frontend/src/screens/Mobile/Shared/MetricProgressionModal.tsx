@@ -160,7 +160,7 @@ export const MetricProgressionModal: React.FC<MetricProgressionModalProps> = ({
     try {
       const rawAthId = athleteId || "";
       const cleanId = rawAthId.startsWith("ath_") ? rawAthId.replace("ath_", "") : rawAthId;
-      const url = `/athlete/${cleanId}/progression-history?metric=${encodeURIComponent(
+      const url = `/athletes/${cleanId}/progression-history?metric=${encodeURIComponent(
         metricKey
       )}&sport=${encodeURIComponent(sportCategory || "")}`;
 

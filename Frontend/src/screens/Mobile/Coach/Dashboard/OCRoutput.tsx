@@ -6,6 +6,7 @@ import {
     ScrollView,
     TextInput,
     Modal,
+    Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -139,6 +140,7 @@ export interface ExpandedPerformanceMetrics {
 }
 
 export interface RawOCRDetectedData {
+    team_id?: string;
     team_name: string;
     opponent_team_name?: string;
     final_score?: string;
@@ -163,6 +165,9 @@ export interface RawOCRDetectedData {
 
 interface OCRoutputProps {
     rawOCRData?: RawOCRDetectedData;
+    currentTeam?: any;
+    selectedTeamId?: string;
+    teams?: any[];
     onBack?: () => void;
     onConfirmSave?: (finalData: RawOCRDetectedData) => void;
     onGoHome?: () => void;
@@ -198,12 +203,23 @@ const DEFAULT_RAW_BASKETBALL_OCR: RawOCRDetectedData = {
 // API Request: submit verified OCR match statistics to backend (POST /api/ocr/save-stats)
 export function OCRoutput({
     rawOCRData = DEFAULT_RAW_BASKETBALL_OCR,
+    currentTeam,
+    selectedTeamId,
+    teams,
     onBack,
     onConfirmSave,
     onGoHome,
 }: OCRoutputProps) {
     const insets = useSafeAreaInsets();
     const headerTopPadding = Math.max(insets.top, 16) + 10;
+
+    const coachLockedTeam = useMemo(() => {
+        return currentTeam || (teams && teams.find((t: any) => t.team_id === selectedTeamId)) || null;
+    }, [currentTeam, selectedTeamId, teams]);
+
+    const coachLockedTeamName = useMemo(() => {
+        return (coachLockedTeam?.team_name || "").trim().toUpperCase();
+    }, [coachLockedTeam]);
 
     // Batch Matches Support: Only separate if different distinct sports/matches were intentionally provided
     const matchesList: RawOCRDetectedData[] = useMemo(() => {
@@ -242,13 +258,29 @@ export function OCRoutput({
         return init;
     });
 
+    // Guard against rogue re-renders resetting user edits or flipping teams
+    const ocrPayloadKey = useMemo(() => {
+        return `${rawOCRData?.file_name || ""}_${rawOCRData?.scoresheet_url || rawOCRData?.scoresheetUrl || ""}_${rawOCRData?.athlete_overview?.length || 0}_${(rawOCRData?.batch_matches || []).length}`;
+    }, [rawOCRData?.file_name, rawOCRData?.scoresheet_url, rawOCRData?.scoresheetUrl, rawOCRData?.athlete_overview?.length, rawOCRData?.batch_matches?.length]);
+
+    const lastPayloadKeyRef = useRef<string>(ocrPayloadKey);
+
     useEffect(() => {
-        const updated: Record<number, DetectedAthleteStat[]> = {};
-        matchesList.forEach((m, idx) => {
-            updated[idx] = m.athlete_overview || [];
-        });
-        setAthleteStatsMap(updated);
-    }, [matchesList]);
+        if (lastPayloadKeyRef.current !== ocrPayloadKey) {
+            lastPayloadKeyRef.current = ocrPayloadKey;
+            const updated: Record<number, DetectedAthleteStat[]> = {};
+            matchesList.forEach((m, idx) => {
+                updated[idx] = m.athlete_overview || [];
+            });
+            setAthleteStatsMap(updated);
+
+            const updatedInj: Record<number, any[]> = {};
+            matchesList.forEach((m, idx) => {
+                updatedInj[idx] = Array.isArray(m.injuries) ? m.injuries : [];
+            });
+            setInjuriesMap(updatedInj);
+        }
+    }, [ocrPayloadKey, matchesList]);
 
     const athleteStats = athleteStatsMap[activeMatchIndex] || currentActiveMatch.athlete_overview || [];
 
@@ -364,9 +396,15 @@ export function OCRoutput({
     const isIndividualSport = isSwimming || isTrack;
     const isBasketball = !isVolleyball && !isSwimming && !isTrack && !isRacket && !isSoccer && !isBaseball;
 
+    const homeTeamDisplay = (coachLockedTeamName || currentActiveMatch.team_name || "HOME TEAM").toUpperCase();
+    const rawOpponentName = (currentActiveMatch.opponent_team_name || "").toUpperCase();
+    const awayTeamDisplay = (rawOpponentName && rawOpponentName !== homeTeamDisplay ? rawOpponentName : "OPPONENT").toUpperCase();
+
     // List of all detected unique teams
     const teamList = useMemo(() => {
         const set = new Set<string>();
+        if (homeTeamDisplay) set.add(homeTeamDisplay);
+        if (awayTeamDisplay) set.add(awayTeamDisplay);
         if (currentActiveMatch.teams && Array.isArray(currentActiveMatch.teams)) {
             currentActiveMatch.teams.forEach((t) => set.add(String(t).trim()));
         }
@@ -379,7 +417,7 @@ export function OCRoutput({
             if (a.team_name) set.add(String(a.team_name).trim());
         });
         return Array.from(set).filter((t) => t.length > 0);
-    }, [currentActiveMatch, athleteStats]);
+    }, [currentActiveMatch, athleteStats, homeTeamDisplay, awayTeamDisplay]);
 
     const sportDisplayName = isVolleyball
         ? "VOLLEYBALL"
@@ -396,9 +434,6 @@ export function OCRoutput({
         : isBasketball
         ? "BASKETBALL"
         : sportUpper;
-
-    const homeTeamDisplay = (currentActiveMatch.team_name || teamList[0] || "HOME TEAM").toUpperCase();
-    const awayTeamDisplay = (currentActiveMatch.opponent_team_name || teamList[1] || (teamList[0] && teamList[0].toUpperCase() !== homeTeamDisplay ? teamList[0] : "OPPONENT")).toUpperCase();
 
     const scoreboardTitleText = isVolleyball
         ? "VOLLEYBALL MATCH SCOREBOARD"
@@ -594,25 +629,35 @@ export function OCRoutput({
         []
     );
 
-    // Team Toggle Handler: Switch athlete between Home and Away team with 1 tap
+    // Team Toggle Handler: Switch athlete between Home and Away team with explicit user interaction
     const handleToggleTeam = useCallback(
         (targetAthleteId: string) => {
+            if (!isEditing) {
+                Alert.alert(
+                    "Reassign Athlete Team",
+                    "To prevent accidental changes while swiping through scores, tap 'EDIT RAW SCORESHEET' at the bottom to reassign players between teams.",
+                    [{ text: "OK" }]
+                );
+                return;
+            }
+
             setAthleteStats((prev) => {
                 const updated = [...prev];
                 const itemIdx = updated.findIndex((a) => a.athlete_id === targetAthleteId);
                 if (itemIdx === -1) return prev;
                 const current = (updated[itemIdx].team_name || "").toUpperCase();
-                const home = (currentActiveMatch.team_name || "HOME").toUpperCase();
-                const away = (currentActiveMatch.opponent_team_name || "AWAY").toUpperCase();
+                const home = homeTeamDisplay;
+                const away = awayTeamDisplay;
                 const nextTeam = current === home ? away : home;
                 updated[itemIdx] = {
                     ...updated[itemIdx],
                     team_name: nextTeam,
+                    team_id: nextTeam === home ? (coachLockedTeam?.team_id || "") : "",
                 };
                 return updated;
             });
         },
-        [currentActiveMatch]
+        [isEditing, homeTeamDisplay, awayTeamDisplay, coachLockedTeam]
     );
 
     const redirectTimerRef = useRef<any>(null);
@@ -642,7 +687,7 @@ export function OCRoutput({
     // Confirm & Save Action Handler
     const handleSave = useCallback(() => {
         if (onConfirmSave) {
-            const homeTeamUpper = (currentActiveMatch.team_name || "").toUpperCase();
+            const homeTeamUpper = homeTeamDisplay;
             const homeRoster = athleteStats
                 .filter((a) => (a.team_name || "").toUpperCase() === homeTeamUpper)
                 .map((a) => a.athlete_id);
@@ -680,6 +725,9 @@ export function OCRoutput({
 
             onConfirmSave({
                 ...currentActiveMatch,
+                team_id: coachLockedTeam?.team_id || (currentActiveMatch as any).team_id || "",
+                team_name: homeTeamDisplay,
+                opponent_team_name: awayTeamDisplay,
                 sport_type: detectedEffectiveSport,
                 athlete_overview: athleteStats,
                 playerStats: playerStatsList,
@@ -869,12 +917,12 @@ export function OCRoutput({
                     <View style={styles.twoColumnGrid}>
                         <View style={styles.identityCol}>
                             <Text style={styles.identityLabel}>
-                                {isIndividualSport ? "EVENT / DISCIPLINE:" : "HOME_TEAM:"}
+                                {isIndividualSport ? "EVENT / DISCIPLINE:" : "ASSIGNED TEAM (LOCKED):"}
                             </Text>
                             <Text style={styles.identityValue}>
                                 {isIndividualSport
                                     ? (athleteStats[0]?.event || athleteStats[0]?.event_name || currentActiveMatch.team_name || "TIMED EVENT")
-                                    : (currentActiveMatch.team_name || homeTeamDisplay)}
+                                    : homeTeamDisplay}
                             </Text>
                         </View>
                         <View style={styles.identityCol}>
@@ -884,7 +932,7 @@ export function OCRoutput({
                             <Text style={styles.identityValue}>
                                 {isIndividualSport
                                     ? `${athleteStats.length} REGISTERED ATHLETES`
-                                    : (currentActiveMatch.opponent_team_name || awayTeamDisplay || "N/A")}
+                                    : (awayTeamDisplay || "N/A")}
                             </Text>
                         </View>
                     </View>
@@ -962,24 +1010,25 @@ export function OCRoutput({
                                         </Text>
                                         <TouchableOpacity
                                             onPress={() => handleToggleTeam(item.athlete_id)}
-                                            activeOpacity={0.7}
+                                            activeOpacity={isEditing ? 0.7 : 0.9}
                                             style={[
                                                 styles.playerTeamBadge,
-                                                (item.team_name || "").toUpperCase() === (currentActiveMatch.team_name || "").toUpperCase()
+                                                (item.team_name || "").toUpperCase() === homeTeamDisplay
                                                     ? { borderColor: "#00C8FF", backgroundColor: "rgba(0, 200, 255, 0.12)" }
-                                                    : { borderColor: "#F59E0B", backgroundColor: "rgba(245, 158, 11, 0.12)" }
+                                                    : { borderColor: "#F59E0B", backgroundColor: "rgba(245, 158, 11, 0.12)" },
+                                                !isEditing ? { opacity: 0.85 } : null
                                             ]}
                                         >
                                             <Text
                                                 style={[
                                                     styles.playerTeamText,
-                                                    (item.team_name || "").toUpperCase() === (currentActiveMatch.team_name || "").toUpperCase()
+                                                    (item.team_name || "").toUpperCase() === homeTeamDisplay
                                                         ? { color: "#00C8FF" }
                                                         : { color: "#F59E0B" }
                                                 ]}
                                                 numberOfLines={1}
                                             >
-                                                {item.team_name || "ASSIGN"} ⇄
+                                                {item.team_name || "ASSIGN"}{isEditing ? " ⇄" : ""}
                                             </Text>
                                         </TouchableOpacity>
                                     </View>

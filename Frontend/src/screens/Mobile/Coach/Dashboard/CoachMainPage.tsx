@@ -64,6 +64,7 @@ import { BasketballMatchResult } from "../Performance/basketballMatchResult";
 import {
   getMatchesOfflineFirst,
   saveMatchOfflineFirst,
+  getTeamsOfflineFirst,
   getAthletesOfflineFirst,
   getSportsOfflineFirst,
   getCoachProfileOfflineFirst,
@@ -796,7 +797,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           offlineMatches,
           offlineAthletes,
           offlineProfileRes,
-        ]: [any, any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
+          offlineTeams,
+        ]: [any, any, any, any, any, any, any, any, any, any, any, any, any] = await Promise.all([
           withSyncTimeout(requestAuthenticatedJson("/coaches/profile", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/teams", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/sync/coach-snapshot", "GET", undefined, forceFresh).catch(() => null)),
@@ -809,6 +811,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 2000, []),
           withSyncTimeout(getAthletesOfflineFirst(undefined, forceFresh).catch(() => []), 1500, []),
           withSyncTimeout(getCoachProfileOfflineFirst().catch(() => null), 1500, null),
+          withSyncTimeout(getTeamsOfflineFirst(forceFresh).catch(() => []), 2000, []),
         ]);
 
         const allTeamsRes: any = null;
@@ -1032,12 +1035,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             ? syncRes.handled_athletes.filter(isOwnedByCoach)
             : (Array.isArray(offlineAthletes) ? offlineAthletes.filter(isOwnedByCoach) : []);
 
-          // Strictly scope teams to the coach's authenticated account (never fall back to global allTeamsRes)
-          const incomingCoachTeams: any[] = Array.isArray(teamsRes)
+          // Strictly scope teams to the coach's authenticated account (falling back to offlineTeams if network failed)
+          const incomingCoachTeams: any[] = (Array.isArray(teamsRes) && teamsRes.length > 0)
             ? teamsRes
-            : Array.isArray(teamsRes?.teams)
+            : (Array.isArray(teamsRes?.teams) && teamsRes.teams.length > 0)
             ? teamsRes.teams
-            : [];
+            : (Array.isArray(offlineTeams) ? offlineTeams : []);
 
           const managedTeamIdsList = new Set<string>([
             ...(Array.isArray(validProfileRes?.teams_managed) ? validProfileRes.teams_managed : []),
@@ -2807,6 +2810,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* OCR SCREEN 1: UPLOAD STATS & FILE PICKER */}
       {activeView === "ocr_logging" && (
         <OCRlogging
+          currentTeam={currentTeam}
+          selectedTeamId={selectedTeamId}
+          teams={teams}
           onBack={() => setActiveView("dashboard")}
           onUploadSuccess={(data) => {
             setOcrPayload(data);
@@ -2819,15 +2825,23 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "ocr_output" && (
         <OCRoutput
           rawOCRData={ocrPayload}
+          currentTeam={currentTeam}
+          selectedTeamId={selectedTeamId}
+          teams={teams}
           onBack={() => setActiveView("ocr_logging")}
           onGoHome={() => {
             setActiveTab("Home");
             setActiveView("dashboard");
           }}
           onConfirmSave={async (finalData) => {
+            // Strictly resolve and lock the active coach's team context
+            const targetCoachTeam = currentTeam || teams.find((t) => t.team_id === selectedTeamId) || teams[0];
+            const lockedTeamName = (targetCoachTeam?.team_name || finalData.team_name || "Team").trim();
+            const lockedTeamId = targetCoachTeam?.team_id || (finalData as any).team_id || "";
+
             // Accurately compute athlete points sum per team
             const homeAthleteSum = finalData.athlete_overview
-              .filter((a) => (a.team_name || "").toUpperCase() === finalData.team_name.toUpperCase())
+              .filter((a) => (a.team_name || "").toUpperCase() === lockedTeamName.toUpperCase())
               .reduce((acc, p) => acc + (p.pts || 0), 0);
             const oppAthleteSum = finalData.athlete_overview
               .filter((a) => (a.team_name || "").toUpperCase() === (finalData.opponent_team_name || "").toUpperCase())
@@ -2862,12 +2876,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const ocrEvent = (firstOcrStat as any)?.event || (firstOcrStat as any)?.event_name || (firstOcrStat as any)?.position || "";
             const ocrTitle = isOcrTimed
               ? (ocrEvent || (ocrSport.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet"))
-              : `${finalData.team_name} vs ${finalData.opponent_team_name || "OPPONENT"}`;
+              : `${lockedTeamName} vs ${finalData.opponent_team_name || "OPPONENT"}`;
             const ocrSummary = isOcrTimed ? (ocrTime ? `Time: ${ocrTime}` : "Completed") : `${homePts} - ${oppPts}`;
             const ocrBadge = isOcrTimed ? "1ST PLACE" : (homePts >= oppPts ? "RESULT WIN" : "RESULT LOSS");
 
             const newMatchItem: MatchHistoryItem = {
               match_id: `match_ocr_${Date.now()}`,
+              team_id: lockedTeamId,
               date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
               full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
               date_group: "MATCH LOGS",
@@ -2876,7 +2891,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               sport_category: ocrSport,
               result_badge_text: ocrBadge,
               is_official: false,
-              home_team: finalData.team_name,
+              home_team: lockedTeamName,
               away_team: isOcrTimed ? "" : (finalData.opponent_team_name || "OPPONENT"),
               home_score: isOcrTimed ? undefined : homePts,
               away_score: isOcrTimed ? undefined : oppPts,
@@ -2900,10 +2915,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               leaderboard_entries: finalData.athlete_overview.map((p, idx) => ({
                 rank: idx + 1,
                 name: p.player_name,
-                detail: p.team_name || finalData.team_name,
+                detail: p.team_name || lockedTeamName,
                 time_or_score: p.time || `${p.pts || 0} pts`,
               })),
-              coach_notes: [`OCR Scanned Match: ${finalData.team_name} vs ${finalData.opponent_team_name || "Opponent"} (${homePts} - ${oppPts})`],
+              coach_notes: [`OCR Scanned Match: ${lockedTeamName} vs ${finalData.opponent_team_name || "Opponent"} (${homePts} - ${oppPts})`],
             };
 
             setMatchHistoryList((prev) => [newMatchItem, ...prev]);
@@ -3008,7 +3023,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const token = await getStoredAuthToken();
               const idempotencyKey = `ocr_match_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
               
-              const resolvedTeamName = finalData.team_name || teams[0]?.team_name || "Team";
+              const resolvedTeamName = lockedTeamName;
               const resolvedOpponentName = finalData.opponent_team_name || "Opponent";
               const scoresheetUrlVal = finalData.scoresheetUrl || finalData.scoresheet_url || "";
 
@@ -3105,8 +3120,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
               const matchPayload = {
                 match_id: newMatchItem.match_id,
-                team_id: teams[0]?.team_id || (teams[0] as any)?.id || "",
-                home_team_name: resolvedTeamName,
+                team_id: lockedTeamId,
+                home_team_name: lockedTeamName,
                 away_team_name: resolvedOpponentName,
                 opponent_team_name: resolvedOpponentName,
                 home_score: homePts,
@@ -3123,7 +3138,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 match_date: new Date().toISOString(),
                 location: (finalData as any).location || "Arena",
                 game_result: homePts >= oppPts ? "WIN" : "LOSS",
-                notes: `OCR Logged: ${resolvedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
+                notes: `OCR Logged: ${lockedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,
                 playerStats: playerStatsPayload,
                 roster_athletes: homeRosterAthletes,

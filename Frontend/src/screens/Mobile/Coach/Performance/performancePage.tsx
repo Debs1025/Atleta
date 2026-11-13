@@ -197,25 +197,28 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   }, []);
 
   const displayAthletes = useMemo(() => {
-    if (Array.isArray(athletes) && athletes.length > 0) {
-      return athletes.map((ath) => {
+    const baseList = Array.isArray(athletes) && athletes.length > 0 ? athletes : liveAthletes;
+    if (Array.isArray(baseList) && baseList.length > 0) {
+      return baseList.map((ath) => {
         const matchingLive = liveAthletes.find(
           (la) =>
             (la.athlete_id && ath.athlete_id && (la.athlete_id === ath.athlete_id || la.user_id === ath.user_id)) ||
             (la.full_name && ath.full_name && la.full_name.toLowerCase() === ath.full_name.toLowerCase())
         );
-        const mergedAverages = { ...(matchingLive?.averages || {}), ...(ath.averages || {}) };
-        const mergedStats = { ...((matchingLive as any)?.stats || {}), ...((ath as any)?.stats || {}) };
-        const combined = { ...ath, ...(matchingLive || {}), averages: mergedAverages, stats: mergedStats };
+        const sourceAthlete = matchingLive || ath;
+        const mergedAverages = { ...(sourceAthlete?.averages || {}), ...(ath.averages || {}) };
+        const mergedStats = { ...((sourceAthlete as any)?.stats || {}), ...((ath as any)?.stats || {}) };
+        const combined = { ...sourceAthlete, ...ath, averages: mergedAverages, stats: mergedStats };
         const resolvedRating = calculatePlayerRating(combined);
 
         return {
           ...ath,
+          ...sourceAthlete,
           rating_score: resolvedRating,
           averages: mergedAverages,
-          biometrics: matchingLive?.biometrics || ath.biometrics,
-          scoring_trends_last_10: (matchingLive?.scoring_trends_last_10 && matchingLive.scoring_trends_last_10.length > 0)
-            ? matchingLive.scoring_trends_last_10
+          biometrics: sourceAthlete?.biometrics || ath.biometrics,
+          scoring_trends_last_10: (sourceAthlete?.scoring_trends_last_10 && sourceAthlete.scoring_trends_last_10.length > 0)
+            ? sourceAthlete.scoring_trends_last_10
             : ath.scoring_trends_last_10,
         };
       });
