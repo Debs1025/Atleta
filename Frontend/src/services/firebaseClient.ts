@@ -823,8 +823,24 @@ async function revalidateMatchesInBackground(): Promise<void> {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }, 2500);
 
-    const list = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
-    if (list.length > 0) {
+    const serverList = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
+    if (serverList.length > 0 || (matchesMemoryCache && matchesMemoryCache.length > 0)) {
+      const mergedMap = new Map<string, any>();
+      // 1. Add server matches
+      serverList.forEach((m: any) => {
+        const id = m.match_id || m.id;
+        if (id && !m.deleted && !m.is_deleted) mergedMap.set(id, m);
+      });
+      // 2. Preserve locally cached matches that haven't propagated to server yet
+      if (Array.isArray(matchesMemoryCache)) {
+        matchesMemoryCache.forEach((m: any) => {
+          const id = m.match_id || m.id;
+          if (id && !mergedMap.has(id) && !m.deleted && !m.is_deleted) {
+            mergedMap.set(id, m);
+          }
+        });
+      }
+      const list = Array.from(mergedMap.values());
       matchesMemoryCache = list;
       matchesLastFetched = Date.now();
       await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
@@ -1083,7 +1099,36 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
     }, 6000);
 
     if (data && (Array.isArray(data.matches) || Array.isArray(data))) {
-      const list = Array.isArray(data.matches) ? data.matches : data;
+      const serverList = Array.isArray(data.matches) ? data.matches : data;
+      // Intelligently merge server matches with locally persisted recent matches so newly saved matches never disappear
+      const mergedMap = new Map<string, any>();
+      serverList.forEach((m: any) => {
+        const id = m.match_id || m.id;
+        if (id && !m.deleted && !m.is_deleted) mergedMap.set(id, m);
+      });
+
+      // Preserve local/offline matches if not yet in server payload and not explicitly deleted
+      const localCandidates = [
+        ...(Array.isArray(matchesMemoryCache) ? matchesMemoryCache : []),
+      ];
+      try {
+        const cachedRaw = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((p) => localCandidates.push(p));
+          }
+        }
+      } catch (_) {}
+
+      localCandidates.forEach((m: any) => {
+        const id = m.match_id || m.id;
+        if (id && !mergedMap.has(id) && !m.deleted && !m.is_deleted) {
+          mergedMap.set(id, m);
+        }
+      });
+
+      const list = Array.from(mergedMap.values());
       matchesMemoryCache = list;
       matchesLastFetched = Date.now();
       AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);

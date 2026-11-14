@@ -877,28 +877,49 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
 
-          const hasServerMatchResponse = Boolean(matchesRes && Array.isArray(matchesRes.matches));
-          const rawMatchList = hasServerMatchResponse
-            ? matchesRes.matches
-            : (syncRes && Array.isArray(syncRes.scheduled_matches))
-            ? syncRes.scheduled_matches
-            : (Array.isArray(offlineMatches) ? offlineMatches : []);
-
           const isDeletedMatch = (m: any) => {
             if (!m) return true;
             if (m.deleted === true || m.is_deleted === true) return true;
             const s = String(m.status || m.audit_status || m.verification_status || "").toUpperCase();
             return s === "DELETED" || s === "REVOKED" || s === "CANCELLED";
           };
-          const rawCombined = [...(rawMatchList || [])].filter((m) => !isDeletedMatch(m));
-          if (!hasServerMatchResponse && Array.isArray(offlineMatches)) {
+
+          const matchDedupMap = new Map<string, any>();
+
+          // 1. Seed with server matches from /matches or /sync/coach-snapshot
+          const serverList = (matchesRes && Array.isArray(matchesRes.matches))
+            ? matchesRes.matches
+            : (syncRes && Array.isArray(syncRes.scheduled_matches))
+            ? syncRes.scheduled_matches
+            : [];
+          serverList.forEach((m: any) => {
+            const mId = m.match_id || m.id;
+            if (mId && !isDeletedMatch(m)) {
+              matchDedupMap.set(mId, m);
+            }
+          });
+
+          // 2. Merge local offlineMatches (contains newly logged matches saved via saveMatchOfflineFirst)
+          if (Array.isArray(offlineMatches)) {
             offlineMatches.forEach((om: any) => {
               const omId = om.match_id || om.id;
-              if (omId && !isDeletedMatch(om) && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {
-                rawCombined.unshift(om);
+              if (omId && !isDeletedMatch(om) && !matchDedupMap.has(omId)) {
+                matchDedupMap.set(omId, om);
               }
             });
           }
+
+          // 3. Preserve any match in the current React matchHistoryList (newly added in the session)
+          if (Array.isArray(matchHistoryList)) {
+            matchHistoryList.forEach((cur: any) => {
+              const curId = cur.match_id || cur.id;
+              if (curId && !isDeletedMatch(cur) && !matchDedupMap.has(curId)) {
+                matchDedupMap.set(curId, cur);
+              }
+            });
+          }
+
+          const rawCombined = Array.from(matchDedupMap.values());
 
           let liveMatches: MatchHistoryItem[] = [];
           if (rawCombined.length > 0) {
@@ -980,8 +1001,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               return {
                 match_id: m.match_id || m.id || `match_${Date.now()}`,
                 team_id: m.team_id,
-                coach_id: m.coach_id,
-                coaching_staff: Array.isArray(m.coaching_staff) ? m.coaching_staff : (m.coach_id ? [m.coach_id] : []),
+                coach_id: m.coach_id || m.logged_by_coach_id || m.created_by || (Array.isArray(m.assigned_coaches) ? m.assigned_coaches[0] : undefined),
+                logged_by_coach_id: m.logged_by_coach_id || m.coach_id || m.created_by || undefined,
+                coaching_staff: Array.isArray(m.coaching_staff) ? m.coaching_staff : (m.coach_id ? [m.coach_id] : (Array.isArray(m.assigned_coaches) ? m.assigned_coaches : [])),
                 match_date: rawD || (d && !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString()),
                 date_formatted: dateShort,
                 full_date: dateFull,
@@ -2209,6 +2231,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
     return matchHistoryList.filter((m: any) => {
       if (m.coach_id && (m.coach_id === coachId || m.coach_id === coach.user_id)) return true;
+      if (m.logged_by_coach_id && (m.logged_by_coach_id === coachId || m.logged_by_coach_id === coach.user_id)) return true;
+      if (m.created_by && (m.created_by === coachId || m.created_by === coach.user_id)) return true;
+      if (Array.isArray(m.assigned_coaches) && (m.assigned_coaches.includes(coachId) || m.assigned_coaches.includes(coach.user_id))) return true;
       if (Array.isArray(m.coaching_staff) && (m.coaching_staff.includes(coachId) || m.coaching_staff.includes(coach.user_id))) return true;
       if (m.team_id && coachTeamIds.has(m.team_id)) return true;
       const hName = (m.home_team || m.home_team_name || "").toLowerCase().trim();
@@ -2498,8 +2523,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         stats: p.stats || {},
       }));
 
+      const currentCoachId = coach.coach_id || coach.user_id || currentUser?.coachId || currentUser?.uid;
       const newMatchItem: MatchHistoryItem = {
         match_id: matchId,
+        team_id: savedPayload.team_id || (teams[0]?.team_id),
+        coach_id: currentCoachId,
+        logged_by_coach_id: currentCoachId,
+        coaching_staff: currentCoachId ? [currentCoachId] : [],
         match_date: savedPayload.match_date || new Date().toISOString(),
         date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
@@ -3012,9 +3042,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const ocrSummary = isOcrTimed ? (ocrTime ? `Time: ${ocrTime}` : "Official Meet Results") : `${homePts} - ${oppPts}`;
             const ocrBadge = isOcrTimed ? "1ST PLACE" : (homePts >= oppPts ? "RESULT WIN" : "RESULT LOSS");
 
+            const currentCoachId = coach.coach_id || coach.user_id || currentUser?.coachId || currentUser?.uid;
             const newMatchItem: MatchHistoryItem = {
               match_id: `match_ocr_${Date.now()}`,
               team_id: lockedTeamId,
+              coach_id: currentCoachId,
+              logged_by_coach_id: currentCoachId,
+              coaching_staff: currentCoachId ? [currentCoachId] : [],
               date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
               full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
               date_group: "MATCH LOGS",
@@ -3336,109 +3370,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 }
               }
 
-              // Immediately fetch latest snapshot from the database so the app is always 100% in sync with Firestore
-              const updatedSnapshot = await requestAuthenticatedJson("/sync/coach-snapshot").catch(() => null);
-              if (updatedSnapshot && Array.isArray(updatedSnapshot.scheduled_matches) && updatedSnapshot.scheduled_matches.length > 0) {
-                const refreshedMatches: MatchHistoryItem[] = updatedSnapshot.scheduled_matches.map((m: any) => {
-                  const homeScoreMatch = (m.notes || "").match(/\((\d+)\s*-\s*(\d+)\)/);
-                  const hScore = m.home_score !== undefined ? Number(m.home_score) : (homeScoreMatch ? parseInt(homeScoreMatch[1], 10) : undefined);
-                  const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
-                  const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "CELTICS";
-                  const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "HAWKS";
-
-                  const sportUpper = (m.sport_type || "BASKETBALL").toUpperCase();
-                  const isTimed = sportUpper.includes("SWIM") || sportUpper.includes("TRACK") || sportUpper.includes("FIELD");
-                  const pStats = Array.isArray(m.player_stats) && m.player_stats.length > 0
-                    ? m.player_stats
-                    : (Array.isArray(m.playerStats) ? m.playerStats : []);
-                  const cleanMeet = (m.game_name || m.match_name || "").replace(/\s*vs\s*OPPONENT.*$/i, "").trim();
-
-                  const firstStat = (pStats && pStats.length > 0) ? pStats[0] : null;
-                  const statEvent = firstStat?.event || firstStat?.event_name || m.event_name || m.discipline;
-                  const statTime = firstStat?.finish_time || firstStat?.time || firstStat?.mark || firstStat?.time_or_distance;
-
-                  // Team-level event title for Dashboard & Team Match History
-                  let eventTitle = "";
-                  if (isTimed) {
-                    const isMeetGenericOrVs = cleanMeet.toLowerCase().includes("vs") || cleanMeet.toLowerCase().includes("atleta varsity");
-                    if (cleanMeet && !isMeetGenericOrVs) {
-                      eventTitle = statEvent && !cleanMeet.toLowerCase().includes(statEvent.toLowerCase())
-                        ? `${cleanMeet} • ${statEvent}`
-                        : cleanMeet;
-                    } else if (statEvent) {
-                      eventTitle = statEvent;
-                    } else if (cleanMeet && !isMeetGenericOrVs) {
-                      eventTitle = cleanMeet;
-                    } else {
-                      eventTitle = sportUpper.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet";
-                    }
-                  } else if (cleanMeet && !cleanMeet.toLowerCase().includes("vs")) {
-                    if (homeName && oppName && oppName !== "OPPONENT" && oppName !== "OPPONENT TEAM") {
-                      eventTitle = `${cleanMeet} • ${homeName} vs ${oppName}`;
-                    } else if (homeName && homeName !== "ATLETA" && homeName !== "ATLETA VARSITY") {
-                      eventTitle = `${cleanMeet} • ${homeName}`;
-                    } else {
-                      eventTitle = cleanMeet;
-                    }
-                  } else if (homeName && oppName) {
-                    eventTitle = `${homeName} vs ${oppName}`;
-                  } else {
-                    eventTitle = cleanMeet || `${homeName || "Team"} Meet`;
-                  }
-
-                  let summaryScore = "";
-                  if (isTimed) {
-                    summaryScore = (statTime && statTime !== "-" && statTime !== "Finished") ? `Time: ${statTime}` : "Official Meet Results";
-                  } else {
-                    summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS"));
-                  }
-
-                  let badgeText = m.game_result ? `RESULT ${String(m.game_result).toUpperCase().replace(/^RESULT\s*/, "")}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : (hScore !== undefined && aScore !== undefined ? "RESULT LOSS" : "OFFICIAL"));
-                  if (isTimed) {
-                    if (m.game_result && (String(m.game_result).includes("1st") || String(m.game_result).toUpperCase().includes("WIN"))) {
-                      badgeText = "1ST PLACE";
-                    } else if (m.game_result && String(m.game_result).includes("2nd")) {
-                      badgeText = "2ND PLACE";
-                    } else if (m.game_result && String(m.game_result).includes("3rd")) {
-                      badgeText = "3RD PLACE";
-                    } else if (m.is_official) {
-                      badgeText = "1ST PLACE";
-                    } else {
-                      badgeText = "COMPLETED";
-                    }
-                  }
-
-                  return {
-                    match_id: m.match_id || `match_${Date.now()}`,
-                    date_formatted: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT",
-                    full_date: m.match_date ? new Date(m.match_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT",
-                    date_group: "MATCH LOGS",
-                    event_or_opponent: eventTitle,
-                    score_or_time_summary: summaryScore,
-                    sport_category: sportUpper,
-                    result_badge_text: badgeText,
-                    is_official: m.is_official !== false,
-                    home_team: homeName,
-                    away_team: oppName,
-                    home_score: isTimed ? undefined : hScore,
-                    away_score: isTimed ? undefined : aScore,
-                    player_stats: pStats,
-                    playerStats: pStats,
-                    leaderboard_entries: pStats.map((p: any, idx: number) => {
-                      const pTime = p.time || p.finish_time || p.formatted_time || p.mark || (p.stats && (p.stats.time || p.stats.finish_time)) || (p.sport_stats && (p.sport_stats.time || p.sport_stats.finish_time));
-                      return {
-                        rank: p.rank || p.place || p.placement_rank || (idx + 1),
-                        name: (p.player_name || p.name || p.athlete_name || `Athlete ${idx + 1}`).trim(),
-                        detail: [p.event || p.event_name, p.team_name || p.team || homeName].filter(Boolean).join(" • "),
-                        time_or_score: isTimed ? (pTime || "-") : `${p.pts ?? p.points ?? 0} pts`,
-                      };
-                    }),
-                    entries_count: pStats.length > 0 ? pStats.length : (m.entries_count || 0),
-                    coach_notes: m.notes ? [m.notes] : ["Match recorded."],
-                  };
-                });
-                setMatchHistoryList(refreshedMatches);
-              }
+              // Warm cache and background revalidate matches
+              await getMatchesOfflineFirst(true).catch(() => null);
             } catch (saveErr) {
               console.warn("Could not persist match to Firestore:", saveErr);
             }

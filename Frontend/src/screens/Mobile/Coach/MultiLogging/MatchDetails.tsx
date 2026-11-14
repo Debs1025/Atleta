@@ -275,7 +275,9 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     // Construct backend-ready match payload with restored Firestore schema attributes
     const payload = {
       match_id: session.match_id || `match_${Date.now()}`,
-      team_id: session.team_name || "team_varsity",
+      team_id: (session as any).team_id || session.team_name || "team_varsity",
+      coach_id: (session as any).coach_id || undefined,
+      logged_by_coach_id: (session as any).coach_id || undefined,
       home_team_name: session.team_name || "ATLETA VARSITY",
       opponent_team_name: isTimedSport ? (opponentName || "") : (opponentName || "OPPONENT TEAM"),
       away_team_name: isTimedSport ? (opponentName || "") : (opponentName || "OPPONENT TEAM"),
