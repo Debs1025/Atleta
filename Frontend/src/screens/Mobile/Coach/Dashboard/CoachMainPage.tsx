@@ -133,8 +133,10 @@ const PlayerRowItem = React.memo(
   }) => {
     const rawPos = player.position || "";
     const isUnassigned = !rawPos || rawPos.toLowerCase() === "unassigned";
-    const fallbackSport = (player as any).sport_type || (player as any).category || (player as any).sport || "Athlete";
-    const posUpper = rawPos.toUpperCase();
+    const rawSport = String(player.sport_type || (player as any).category || (player as any).sport || "Athlete").trim();
+    const eventType = (player as any).event_type || (player as any).eventType || (player as any).position_or_event || "";
+    const effectivePos = (!isUnassigned && rawPos) ? rawPos : (eventType || "");
+    const posUpper = effectivePos.toUpperCase();
     const formattedPos =
       posUpper === "PG"
         ? "POINT GUARD"
@@ -146,9 +148,7 @@ const PlayerRowItem = React.memo(
               ? "POWER FORWARD"
               : posUpper === "C"
                 ? "CENTER"
-                : isUnassigned
-                  ? fallbackSport.toUpperCase()
-                  : player.position;
+                : effectivePos;
 
     const rawTeamName = String((player as any).team_name || "");
     const parts = rawTeamName.split(" • ").map((s: string) => s.trim()).filter(Boolean);
@@ -156,34 +156,47 @@ const PlayerRowItem = React.memo(
     const dedupedParts: string[] = [];
     for (const p of parts) {
       const lower = p.toLowerCase();
-      if (!seenNames.has(lower) && lower !== "unassigned" && lower !== "unassigned / no team") {
+      if (
+        !seenNames.has(lower) &&
+        lower !== "unassigned" &&
+        lower !== "unassigned / no team" &&
+        !lower.includes("opponent") &&
+        !lower.includes("various schools")
+      ) {
         seenNames.add(lower);
         dedupedParts.push(p);
       }
     }
     const playerTeamName = dedupedParts.join(" • ");
 
+    // Sport • Team badge formatting (e.g., SWIMMING • ATENEO BLUE FAST)
+    const sportUpper = rawSport.toUpperCase();
+    const badgeText = playerTeamName
+      ? (sportUpper ? `${sportUpper} • ${playerTeamName.toUpperCase()}` : playerTeamName.toUpperCase())
+      : (sportUpper || "");
+
+    const hasJersey = Boolean(player.jersey_number && player.jersey_number !== "0" && player.jersey_number !== "null");
+    const isPosSameAsSport = formattedPos.toUpperCase() === sportUpper;
+    const subtitleText = (!formattedPos || isPosSameAsSport)
+      ? (hasJersey ? `#${player.jersey_number}` : "")
+      : `${formattedPos}${hasJersey ? ` • #${player.jersey_number}` : ""}`;
+
     return (
       <View style={[styles.playerRow, !isLast && styles.playerRowBorder]}>
         <View style={styles.playerTextContainer}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
             <Text style={styles.playerName}>{player.full_name}</Text>
-            {Boolean(playerTeamName) && (
+            {Boolean(badgeText) && (
               <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                 <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>
-                  {playerTeamName.toUpperCase()}
+                  {badgeText.toUpperCase()}
                 </Text>
               </View>
             )}
           </View>
-          {(() => {
-            const hasJersey = Boolean(player.jersey_number && player.jersey_number !== "0" && player.jersey_number !== "null");
-            return (
-              <Text style={styles.playerSubtitle}>
-                {formattedPos}{hasJersey ? ` • #${player.jersey_number}` : ""}
-              </Text>
-            );
-          })()}
+          {Boolean(subtitleText) && (
+            <Text style={styles.playerSubtitle}>{subtitleText}</Text>
+          )}
         </View>
 
         <TouchableOpacity
@@ -1050,6 +1063,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
           const rawTeamsList: any[] = incomingCoachTeams.filter((t: any) => {
             if (!cleanEffectiveCoachId) return false;
+            const tName = String(t.team_name || "").toLowerCase().trim();
+            if (tName.includes("opponent") || tName.includes("various schools")) return false;
             const teamIdStr = String(t.team_id || "").toLowerCase();
             if (teamIdStr && managedTeamIdsList.has(teamIdStr)) return true;
             const teamCoachId = String(t.coach_id || t.coach_scout_id || "").replace(/^coach_/, "").toLowerCase();
@@ -1305,7 +1320,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 const uniqueNameMap = new Map<string, string>();
                 rawTeamNames.forEach((n: string) => {
                   const lower = n.toLowerCase();
-                  if (lower !== "unassigned" && lower !== "unassigned / no team" && !uniqueNameMap.has(lower)) {
+                  if (lower !== "unassigned" && lower !== "unassigned / no team" && !lower.includes("opponent") && !lower.includes("various schools") && !uniqueNameMap.has(lower)) {
                     uniqueNameMap.set(lower, n);
                   }
                 });
@@ -1315,7 +1330,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   ...a,
                   team_ids: a.team_id ? [a.team_id] : (a.team_ids || []),
                   team_names: dedupedNames,
-                  team_name: dedupedNames.join(" • ") || (a.team_name && a.team_name !== "Unassigned" ? a.team_name : "Unassigned"),
+                  team_name: dedupedNames.join(" • ") || (a.team_name && a.team_name !== "Unassigned" && !a.team_name.toLowerCase().includes("opponent") ? a.team_name : "Unassigned"),
                   teams: a.team_id ? [{ team_id: a.team_id, team_name: a.team_name }] : (a.teams || []),
                 });
               } else {
@@ -1330,7 +1345,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 [...existingTeamNames, ...rawTeamNames, ...(newTeamName ? [newTeamName] : [])].forEach((n: string) => {
                   const clean = String(n || "").trim();
                   const lower = clean.toLowerCase();
-                  if (clean && lower !== "unassigned" && lower !== "unassigned / no team" && !uniqueNameMap.has(lower)) {
+                  if (clean && lower !== "unassigned" && lower !== "unassigned / no team" && !lower.includes("opponent") && !lower.includes("various schools") && !uniqueNameMap.has(lower)) {
                     uniqueNameMap.set(lower, clean);
                   }
                 });

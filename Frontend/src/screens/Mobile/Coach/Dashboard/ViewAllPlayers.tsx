@@ -238,19 +238,27 @@ export function ViewAllPlayers({
             </View>
           ) : (
             filteredPlayers.map((player, index) => {
-              const teamName = athleteTeamMap[player.athlete_id] || player.sport_type;
+              const rawTeam = athleteTeamMap[player.athlete_id] || (player as any).team_name || "";
+              const cleanTeam = (!rawTeam || rawTeam.toLowerCase().includes("opponent") || rawTeam.toLowerCase().includes("various schools")) ? "" : rawTeam;
+              const sportName = String(player.sport_type || "").trim();
+              const tagText = cleanTeam ? (sportName ? `${sportName} • ${cleanTeam}` : cleanTeam) : sportName;
+              const eventType = (player as any).event_type || (player as any).eventType || "";
+              const rawPos = player.position || "";
+              const isUnassigned = !rawPos || rawPos.toLowerCase() === "unassigned";
+              const effectivePos = (!isUnassigned && rawPos) ? rawPos : (eventType || "");
+              const posUpper = effectivePos.toUpperCase();
               const formattedPos =
-                player.position === "PG"
+                posUpper === "PG"
                   ? "POINT GUARD"
-                  : player.position === "SG"
+                  : posUpper === "SG"
                   ? "SHOOTING GUARD"
-                  : player.position === "SF"
+                  : posUpper === "SF"
                   ? "SMALL FORWARD"
-                  : player.position === "PF"
+                  : posUpper === "PF"
                   ? "POWER FORWARD"
-                  : player.position === "C"
+                  : posUpper === "C"
                   ? "CENTER"
-                  : player.position;
+                  : effectivePos;
 
               return (
                 <View
@@ -264,13 +272,13 @@ export function ViewAllPlayers({
                     <Text style={styles.playerName}>{player.full_name}</Text>
                     {(() => {
                       const hasJersey = Boolean(player.jersey_number && player.jersey_number !== "0" && player.jersey_number !== "null");
-                      return (
-                        <Text style={styles.playerMeta}>
-                          {formattedPos}{hasJersey ? ` • #${player.jersey_number}` : ""}
-                        </Text>
-                      );
+                      const isSameAsSport = formattedPos.toUpperCase() === sportName.toUpperCase();
+                      const metaText = (!formattedPos || isSameAsSport)
+                        ? (hasJersey ? `#${player.jersey_number}` : "")
+                        : `${formattedPos}${hasJersey ? ` • #${player.jersey_number}` : ""}`;
+                      return metaText ? <Text style={styles.playerMeta}>{metaText}</Text> : null;
                     })()}
-                    <Text style={styles.teamTag}>{teamName}</Text>
+                    <Text style={styles.teamTag}>{tagText}</Text>
                   </View>
 
                   <TouchableOpacity
