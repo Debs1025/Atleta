@@ -382,6 +382,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   const [perfAthletes, setPerfAthletes] = useState<AthletePerformanceProfile[]>([]);
   const [selectedPerfAthlete, setSelectedPerfAthlete] = useState<AthletePerformanceProfile>(DEFAULT_EMPTY_PERF_ATHLETE);
   const [matchHistoryList, setMatchHistoryList] = useState<MatchHistoryItem[]>([]);
+  const matchHistoryListRef = React.useRef<MatchHistoryItem[]>([]);
+  matchHistoryListRef.current = matchHistoryList;
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
   const [coachSettingsData, setCoachSettingsData] = useState<CoachSettingsData>(DEFAULT_COACH_SETTINGS);
@@ -818,7 +820,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           withSyncTimeout(requestAuthenticatedJson("/scouting/proposals/list", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/inquiries", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(getSportsOfflineFirst(forceFresh).catch(() => []), 6000, []),
-          withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 2000, []),
+          withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 6000, []),
           withSyncTimeout(getAthletesOfflineFirst(undefined, forceFresh).catch(() => []), 1500, []),
           withSyncTimeout(getCoachProfileOfflineFirst().catch(() => null), 1500, null),
           withSyncTimeout(getTeamsOfflineFirst(forceFresh).catch(() => []), 2000, []),
@@ -910,8 +912,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           }
 
           // 3. Preserve any match in the current React matchHistoryList (newly added in the session)
-          if (Array.isArray(matchHistoryList)) {
-            matchHistoryList.forEach((cur: any) => {
+          const inMem = matchHistoryListRef.current;
+          if (Array.isArray(inMem)) {
+            inMem.forEach((cur: any) => {
               const curId = cur.match_id || cur.id;
               if (curId && !isDeletedMatch(cur) && !matchDedupMap.has(curId)) {
                 matchDedupMap.set(curId, cur);
@@ -1065,7 +1068,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               };
             });
             setMatchHistoryList(liveMatches);
-          } else {
+          } else if (!matchHistoryListRef.current || matchHistoryListRef.current.length === 0) {
             setMatchHistoryList([]);
           }
 
@@ -2255,6 +2258,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const athleteIdsPool = new Set(
       athletesPool.map((a) => String(a.athlete_id || a.user_id || "").toLowerCase())
     );
+    const coachAthleteNames = new Set(
+      athletesPool.map((a) => (a.full_name || `${a.first_name || ""} ${a.last_name || ""}`).toLowerCase().trim()).filter(Boolean)
+    );
 
     return matchHistoryList.filter((m: any) => {
       if (m.coach_id && (m.coach_id === coachId || m.coach_id === coach.user_id)) return true;
@@ -2284,6 +2290,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       ) {
         return true;
       }
+
+      // Also match if any athlete name from coach's pool is in the match
+      const mPlayerNames = (m.player_stats || []).map((p: any) => (p.player_name || p.name || "").toLowerCase().trim()).filter(Boolean);
+      if (mPlayerNames.some((pName: string) => coachAthleteNames.has(pName))) return true;
 
       return false;
     });
@@ -2601,6 +2611,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       };
 
       setMatchHistoryList((prev) => [newMatchItem, ...prev.filter((m) => m.match_id !== matchId)]);
+      matchHistoryListRef.current = [newMatchItem, ...(matchHistoryListRef.current || []).filter((m) => m.match_id !== matchId)];
+      clearAuthMicroCache();
 
       if (Array.isArray(savedPayload.player_stats)) {
         savedPayload.player_stats.forEach((ps: any) => {
@@ -3138,6 +3150,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             };
 
             setMatchHistoryList((prev) => [newMatchItem, ...prev]);
+            matchHistoryListRef.current = [newMatchItem, ...(matchHistoryListRef.current || [])];
+            clearAuthMicroCache();
 
             // Update roster athletes state with the confirmed OCR performance stats (strictly for owned roster athletes)
             setAthletesPool((prev: RosterAthlete[]) => {
@@ -3353,7 +3367,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
               const matchPayload = {
                 match_id: newMatchItem.match_id,
-                team_id: lockedTeamId,
+                team_id: lockedTeamId || lockedTeamName,
+                coach_id: currentCoachId,
+                logged_by_coach_id: currentCoachId,
+                coaching_staff: currentCoachId ? [currentCoachId] : [],
+                assigned_coaches: currentCoachId ? [currentCoachId] : [],
                 home_team_name: lockedTeamName,
                 away_team_name: isOcrTimed ? "" : resolvedOpponentName,
                 opponent_team_name: isOcrTimed ? "" : resolvedOpponentName,
@@ -3420,6 +3438,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               }
 
               // Warm cache and background revalidate matches
+              clearAuthMicroCache();
               await getMatchesOfflineFirst(true).catch(() => null);
             } catch (saveErr) {
               console.warn("Could not persist match to Firestore:", saveErr);

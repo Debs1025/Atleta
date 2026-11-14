@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/MatchDetails";
 import { useMatchSession } from "./MatchSessionContext";
-import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { requestAuthenticatedJson, getStoredAuthToken } from "../../Authentication/authShared";
 import { saveMatchOfflineFirst } from "../../../../services/firebaseClient";
 import { getSportStatSchema, loadDynamicSportsSchemas } from "./sportStatSchemas";
 
@@ -268,17 +268,55 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
     const topRank = firstStat?.rank || parseRankFromResult(gameResult);
     const topPlacementText = formatPlaceLabel(topRank);
     const defaultEvent = firstStat?.event || firstStat?.event_name || (normalizedSport.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet");
+
+    // Resolve coach ID from session or auth token
+    let effectiveCoachId = (session as any).coach_id || (session as any).logged_by_coach_id;
+    if (!effectiveCoachId) {
+      try {
+        const token = await getStoredAuthToken();
+        if (token && token.includes(".")) {
+          const base64Url = token.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          let decoded = "";
+          if (typeof atob === "function") {
+            decoded = atob(base64);
+          } else {
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+            let str = base64.replace(/=+$/, "");
+            let output = "";
+            for (let bc = 0, bs = 0, buffer: any, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+              buffer = chars.indexOf(buffer);
+            }
+            decoded = output;
+          }
+          const payloadObj = JSON.parse(decoded);
+          effectiveCoachId = payloadObj.uid || payloadObj.coach_id || payloadObj.user_id;
+        }
+      } catch (_) {}
+    }
+
+    // Resolve team name and team ID from session or active roster
+    const firstHomeRosterAthlete = (session.active_roster || []).find(
+      (a) => a.team_name && a.team_name !== "Unassigned" && a.team_name !== "Unassigned / No Team"
+    );
+    const resolvedTeamName = (session.team_name && session.team_name !== "ATLETA VARSITY")
+      ? session.team_name
+      : (firstHomeRosterAthlete?.team_name || session.team_name || "ATLETA VARSITY");
+    const resolvedTeamId = (session as any).team_id || (firstHomeRosterAthlete as any)?.team_id || "";
+
     const defaultMatchTitle = isTimedSport
-      ? (gameName.trim() || `${session.team_name || "ATLETA"} ${defaultEvent}`)
-      : (gameName.trim() || `${session.team_name || "ATLETA"} vs ${opponentName || "OPPONENT"}`);
+      ? (gameName.trim() || `${resolvedTeamName} ${defaultEvent}`)
+      : (gameName.trim() || `${resolvedTeamName} vs ${opponentName || "OPPONENT"}`);
 
     // Construct backend-ready match payload with restored Firestore schema attributes
     const payload = {
       match_id: session.match_id || `match_${Date.now()}`,
-      team_id: (session as any).team_id || session.team_name || "team_varsity",
-      coach_id: (session as any).coach_id || undefined,
-      logged_by_coach_id: (session as any).coach_id || undefined,
-      home_team_name: session.team_name || "ATLETA VARSITY",
+      team_id: resolvedTeamId || resolvedTeamName,
+      coach_id: effectiveCoachId || undefined,
+      logged_by_coach_id: effectiveCoachId || undefined,
+      coaching_staff: effectiveCoachId ? [effectiveCoachId] : [],
+      assigned_coaches: effectiveCoachId ? [effectiveCoachId] : [],
+      home_team_name: resolvedTeamName,
       opponent_team_name: isTimedSport ? (opponentName || "") : (opponentName || "OPPONENT TEAM"),
       away_team_name: isTimedSport ? (opponentName || "") : (opponentName || "OPPONENT TEAM"),
       match_name: defaultMatchTitle,

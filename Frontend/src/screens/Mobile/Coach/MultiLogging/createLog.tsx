@@ -862,10 +862,6 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
     });
 
     setShowInjuryModal(false);
-    Alert.alert(
-      "Injury Logged",
-      `${injuryTargetAthlete.full_name || injuryTargetAthlete.last_name} has been marked as injured (${finalType}) and sidelined.`
-    );
   };
 
   const filteredPool = useMemo(() => {
@@ -1420,8 +1416,21 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
               onPress={() => {
                 setShowSuccessModal(false);
                 const allRosterIds = (session.active_roster || []).concat(session.bench_roster || []).map((a) => a.athlete_id);
+                const firstTeamAthlete = (session.active_roster || []).find(
+                  (a) => a.team_name && a.team_name !== "Unassigned" && a.team_name !== "Unassigned / No Team"
+                );
+                const detectedTeamName = session.team_name || firstTeamAthlete?.team_name || "ATLETA VARSITY";
+                const detectedTeamId = (session as any).team_id || (firstTeamAthlete as any)?.team_id || "";
+
+                setSessionDetails({
+                  team_name: detectedTeamName,
+                  team_id: detectedTeamId,
+                });
+
                 const updatedSession: MatchLogSessionState = {
                   ...session,
+                  team_name: detectedTeamName,
+                  team_id: detectedTeamId,
                   rosterAthletes: allRosterIds,
                   roster_athletes: allRosterIds,
                   awayRosterAthletes: session.awayRosterAthletes || [],

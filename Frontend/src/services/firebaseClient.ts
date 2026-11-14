@@ -24,7 +24,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE, CLOUD_PROD_API, getStoredAuthToken } from "../screens/Mobile/Authentication/authShared";
+import { API_BASE, CLOUD_PROD_API, getStoredAuthToken, clearAuthMicroCache } from "../screens/Mobile/Authentication/authShared";
 import { CacheManager } from "../utils/cacheManager";
 
 try {
@@ -544,6 +544,10 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     isOffline = true;
   }
 
+  try {
+    clearAuthMicroCache();
+  } catch (_) {}
+
   return {
     success: firestoreSuccess || true,
     match_id: matchId,
@@ -706,7 +710,6 @@ export function clearFirebaseClientCaches() {
   AsyncStorage.multiRemove([
     OFFLINE_SPORTS_CACHE_KEY,
     OFFLINE_ACTIVE_COACH_SPORTS_CACHE_KEY,
-    OFFLINE_MATCHES_CACHE_KEY,
     OFFLINE_ATHLETES_CACHE_KEY,
     OFFLINE_TEAMS_CACHE_KEY,
     OFFLINE_ATHLETE_PROFILE_CACHE_KEY,
@@ -1068,24 +1071,28 @@ export async function getActiveCoachSportsOfflineFirst(forceRefresh: boolean = f
  * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
 export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Promise<any[]> {
+  // Pre-load local cached matches
+  let localBackup: any[] = [];
+  try {
+    const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        localBackup = parsed;
+      }
+    }
+  } catch (_) {}
+
   // 1. Instant Memory Cache (0ms)
   if (!forceRefresh && matchesMemoryCache && matchesMemoryCache.length > 0 && Date.now() - matchesLastFetched < MEMORY_CACHE_TTL_MS) {
     return matchesMemoryCache;
   }
 
   // 2. Fast Local AsyncStorage Cache (<10ms)
-  if (!forceRefresh) {
-    try {
-      const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          matchesMemoryCache = parsed;
-          matchesLastFetched = Date.now();
-          return parsed;
-        }
-      }
-    } catch (_) {}
+  if (!forceRefresh && localBackup.length > 0) {
+    matchesMemoryCache = localBackup;
+    matchesLastFetched = Date.now();
+    return localBackup;
   }
 
   // 3. Fast Network Fetch (6.0s timeout)
@@ -1110,16 +1117,8 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
       // Preserve local/offline matches if not yet in server payload and not explicitly deleted
       const localCandidates = [
         ...(Array.isArray(matchesMemoryCache) ? matchesMemoryCache : []),
+        ...localBackup,
       ];
-      try {
-        const cachedRaw = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
-        if (cachedRaw) {
-          const parsed = JSON.parse(cachedRaw);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((p) => localCandidates.push(p));
-          }
-        }
-      } catch (_) {}
 
       localCandidates.forEach((m: any) => {
         const id = m.match_id || m.id;
@@ -1136,14 +1135,26 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
     }
   } catch (_) {}
 
-  // Fallback 1: Firestore persistent local cache
+  // Fallback 1: Local backup from AsyncStorage or memory
+  if (localBackup.length > 0) {
+    matchesMemoryCache = localBackup;
+    matchesLastFetched = Date.now();
+    return localBackup;
+  }
+  if (matchesMemoryCache && matchesMemoryCache.length > 0) {
+    return matchesMemoryCache;
+  }
+
+  // Fallback 2: Firestore persistent local cache
   try {
     const snap = await getDocs(collection(db, "Match_Logs"));
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    matchesMemoryCache = list;
-    matchesLastFetched = Date.now();
-    AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
-    return list;
+    if (list.length > 0) {
+      matchesMemoryCache = list;
+      matchesLastFetched = Date.now();
+      AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+      return list;
+    }
   } catch (_) {
     // Client-side direct Firestore access is restricted by security rules (REST API is primary)
   }
