@@ -17,28 +17,70 @@ interface TrackfieldMatchResultProps {
   matchItem?: MatchHistoryItem | null;
   onBack: () => void;
   onEditResults?: () => void;
+  coachTeams?: any[];
+  coachAthletes?: any[];
+  activeTeam?: any;
 }
 
 export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
   matchItem,
   onBack,
   onEditResults,
+  coachTeams,
+  coachAthletes,
+  activeTeam,
 }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const homeTeamFilter = String((matchItem as any)?.home_team_name || (matchItem as any)?.team_name || (matchItem as any)?.home_team || '').trim().toUpperCase();
 
-  const isAthleteFromCoachTeam = (teamVal?: string) => {
+  const coachAthleteIds = new Set<string>();
+  const coachRosterNames = new Set<string>();
+
+  (coachAthletes || []).forEach((a: any) => {
+    if (a.athlete_id) {
+      coachAthleteIds.add(String(a.athlete_id).toLowerCase());
+      coachAthleteIds.add(String(a.athlete_id).replace(/^ath_/, '').toLowerCase());
+    }
+    if (a.user_id) {
+      coachAthleteIds.add(String(a.user_id).toLowerCase());
+    }
+    const fn = (a.full_name || `${a.first_name || ''} ${a.last_name || ''}`).trim().toLowerCase();
+    if (fn) coachRosterNames.add(fn);
+    if (a.last_name) coachRosterNames.add(String(a.last_name).trim().toLowerCase());
+  });
+
+  const isAthleteFromCoachTeam = (item: any) => {
+    if (!item) return false;
+    const aId = String(item.athlete_id || item.user_id || '').toLowerCase();
+    const rawId = aId.replace(/^ath_/, '');
+    if (aId && (coachAthleteIds.has(aId) || coachAthleteIds.has(rawId))) {
+      return true;
+    }
+    const name = String(item.name || item.player_name || item.athlete_name || item.full_name || '').trim().toLowerCase();
+    if (name) {
+      if (coachRosterNames.has(name)) return true;
+      for (const rn of coachRosterNames) {
+        if (rn && (name.includes(rn) || rn.includes(name))) return true;
+      }
+    }
+
+    // If coach athletes roster is populated, only coach's rostered athletes are allowed
+    if (coachAthleteIds.size > 0 || coachRosterNames.size > 0) {
+      return false;
+    }
+
+    // Fallback if coach roster was not provided
+    const teamVal = String(item.team_name || item.team || (typeof item === 'string' ? item : '')).trim().toUpperCase();
     if (!homeTeamFilter) return true;
-    const cleanT = String(teamVal || '').trim().toUpperCase();
-    if (!cleanT) return true;
-    return cleanT === homeTeamFilter || homeTeamFilter.includes(cleanT) || cleanT.includes(homeTeamFilter);
+    if (!teamVal) return true;
+    return teamVal === homeTeamFilter || homeTeamFilter.includes(teamVal) || teamVal.includes(homeTeamFilter);
   };
 
   const initialLeaderboard = (Array.isArray(matchItem?.leaderboard_entries) && matchItem.leaderboard_entries.length > 0)
     ? matchItem.leaderboard_entries
-        .filter((e: any) => !/^Player\s*\d+$/i.test(e.name || '') && isAthleteFromCoachTeam(e.team_name || e.team))
+        .filter((e: any) => !/^Player\s*\d+$/i.test(e.name || '') && isAthleteFromCoachTeam(e))
         .map((e: any, idx: number) => {
           const rankNum = Number(String(e.rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
           const isTop3 = rankNum >= 1 && rankNum <= 3;
@@ -50,7 +92,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
         })
     : ((Array.isArray(matchItem?.player_stats) && matchItem.player_stats.length > 0)
       ? matchItem.player_stats
-          .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || '') && isAthleteFromCoachTeam(p.team_name || p.team))
+          .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || '') && isAthleteFromCoachTeam(p))
           .map((p: any, idx: number) => {
             const rankNum = Number(String(p.rank || p.place || p.placement_rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
             const isTop3 = rankNum >= 1 && rankNum <= 3;
@@ -76,7 +118,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
     : (statEvent || "Track & Field Event");
   const gameType = matchItem?.game_type || "MEET LOG";
   const dateFormatted = matchItem?.full_date || matchItem?.date_formatted || "RECENT";
-  const entriesCount = leaderboardData.length || matchItem?.entries_count || 0;
+  const entriesCount = leaderboardData.length;
 
   const [fetchedNotes, setFetchedNotes] = useState<string[] | null>(null);
 
@@ -111,7 +153,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
 
             if (Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
               const mapped = data.player_metrics
-                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || '') && !/^Player\s*\d+$/i.test(p.first_name || '') && isAthleteFromCoachTeam(p.team_name))
+                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || '') && !/^Player\s*\d+$/i.test(p.first_name || '') && isAthleteFromCoachTeam(p))
                 .map((p: any, idx: number) => {
                   const matched = pStatLookup.get(String(p.athlete_id || '').toLowerCase()) ||
                     pStatLookup.get(String(p.user_id || '').toLowerCase()) ||
@@ -154,7 +196,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
               }
             } else if (Array.isArray(data.sport_specific_details?.race_results) && data.sport_specific_details.race_results.length > 0) {
               const mapped = data.sport_specific_details.race_results
-                .filter((r: any) => !/^Player\s*\d+$/i.test(r.athlete_name || '') && isAthleteFromCoachTeam(r.team_name))
+                .filter((r: any) => !/^Player\s*\d+$/i.test(r.athlete_name || '') && isAthleteFromCoachTeam(r))
                 .map((r: any, idx: number) => {
                   const rankNum = Number(String(r.placement_rank || r.rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
                   const isTop3 = rankNum >= 1 && rankNum <= 3;
@@ -171,7 +213,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
               }
             } else if (rawPStats.length > 0) {
               const mapped = rawPStats
-                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || '') && isAthleteFromCoachTeam(p.team_name || p.team))
+                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || '') && isAthleteFromCoachTeam(p))
                 .map((p: any, idx: number) => {
                   const rankNum = Number(String(p.rank || p.place || p.placement_rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
                   const isTop3 = rankNum >= 1 && rankNum <= 3;

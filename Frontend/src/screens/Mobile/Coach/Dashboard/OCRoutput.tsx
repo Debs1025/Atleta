@@ -176,6 +176,7 @@ interface OCRoutputProps {
     currentTeam?: any;
     selectedTeamId?: string;
     teams?: any[];
+    athletesPool?: any[];
     onBack?: () => void;
     onConfirmSave?: (finalData: RawOCRDetectedData) => void;
     onGoHome?: () => void;
@@ -214,6 +215,7 @@ export function OCRoutput({
     currentTeam,
     selectedTeamId,
     teams,
+    athletesPool,
     onBack,
     onConfirmSave,
     onGoHome,
@@ -267,25 +269,50 @@ export function OCRoutput({
         if (coachLockedTeamName) coachTeamNames.add(coachLockedTeamName);
 
         const coachRosterList: any[] = [
+            ...(Array.isArray(athletesPool) ? athletesPool : []),
             ...(Array.isArray(coachLockedTeam?.roster_list) ? coachLockedTeam.roster_list : []),
             ...(Array.isArray(coachLockedTeam?.athletes) ? coachLockedTeam.athletes : []),
             ...allCoachTeams.flatMap((t: any) => Array.isArray(t?.roster_list) ? t.roster_list : []),
             ...allCoachTeams.flatMap((t: any) => Array.isArray(t?.athletes) ? t.athletes : []),
         ];
 
+        const coachAthleteIds = new Set<string>();
+        const coachAthleteNames = new Set<string>();
+        coachRosterList.forEach((r: any) => {
+            const aId = String(r.athlete_id || r.user_id || "").toLowerCase();
+            if (aId) {
+                coachAthleteIds.add(aId);
+                coachAthleteIds.add(aId.replace(/^ath_/, ""));
+            }
+            const rName = String(r.full_name || `${r.first_name || ""} ${r.last_name || ""}`).trim().toLowerCase();
+            if (rName) coachAthleteNames.add(rName);
+            if (r.last_name) coachAthleteNames.add(String(r.last_name).trim().toLowerCase());
+        });
+
         const coachAthletes = athletes.filter((a) => {
-            const aTeam = (a.team_name || "").trim().toUpperCase();
+            const aId = String(a.athlete_id || (a as any).user_id || "").toLowerCase();
+            const rawAId = aId.replace(/^ath_/, "");
+            if (aId && (coachAthleteIds.has(aId) || coachAthleteIds.has(rawAId))) return true;
+
             const aName = (a.player_name || "").trim().toLowerCase();
-            const isTeam = coachTeamNames.has(aTeam);
-            const isRoster = coachRosterList.some((r: any) => {
-                const rName = String(r.full_name || `${r.first_name || ""} ${r.last_name || ""}`).trim().toLowerCase();
-                return aName && (rName === aName || rName.includes(aName) || aName.includes(rName));
-            });
-            return isTeam || isRoster;
+            if (aName) {
+                if (coachAthleteNames.has(aName)) return true;
+                for (const cn of coachAthleteNames) {
+                    if (cn && (aName.includes(cn) || cn.includes(aName))) return true;
+                }
+            }
+
+            // If we have coach's rostered athletes, do NOT accept foreign athletes even if they claim same team name
+            if (coachAthleteIds.size > 0 || coachAthleteNames.size > 0) {
+                return false;
+            }
+
+            const aTeam = (a.team_name || "").trim().toUpperCase();
+            return coachTeamNames.has(aTeam);
         });
 
         return coachAthletes.length > 0 ? coachAthletes.map(a => ({ ...a, team_name: coachLockedTeamName || a.team_name })) : athletes;
-    }, [coachLockedTeam, coachLockedTeamName, teams]);
+    }, [coachLockedTeam, coachLockedTeamName, teams, athletesPool]);
 
     // Dynamic Editable Athletes Data State (per active match)
     const [athleteStatsMap, setAthleteStatsMap] = useState<Record<number, DetectedAthleteStat[]>>(() => {

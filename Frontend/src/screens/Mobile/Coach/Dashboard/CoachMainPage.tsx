@@ -2942,6 +2942,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           currentTeam={currentTeam}
           selectedTeamId={selectedTeamId}
           teams={teams}
+          athletesPool={athletesPool}
           onBack={() => setActiveView("ocr_logging")}
           onGoHome={() => {
             setActiveTab("Home");
@@ -2952,6 +2953,27 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const targetCoachTeam = currentTeam || teams.find((t) => t.team_id === selectedTeamId) || teams[0];
             const lockedTeamName = (targetCoachTeam?.team_name || finalData.team_name || "Team").trim();
             const lockedTeamId = targetCoachTeam?.team_id || (finalData as any).team_id || "";
+
+            const ocrSport = (finalData.sport_type || "BASKETBALL").toUpperCase() as any;
+            const isOcrTimed = ocrSport.includes("SWIM") || ocrSport.includes("TRACK") || ocrSport.includes("FIELD");
+
+            // Filter overview strictly to coach's athletes for timed sports
+            const coachOverview = isOcrTimed
+              ? finalData.athlete_overview.filter((p) => {
+                  const pName = String(p.player_name || '').trim().toLowerCase();
+                  const pId = String(p.athlete_id || (p as any).user_id || '').toLowerCase();
+                  const rawPId = pId.replace(/^ath_/, '');
+                  return athletesPool.some((a) => {
+                    const aId = String(a.athlete_id || a.user_id || '').toLowerCase();
+                    const rawAId = aId.replace(/^ath_/, '');
+                    if (pId && (aId === pId || rawAId === rawPId || aId === rawPId || rawAId === pId)) return true;
+                    const aName = String(a.full_name || `${a.first_name || ''} ${a.last_name || ''}`).trim().toLowerCase();
+                    return Boolean(pName && (aName === pName || (a.last_name && pName.includes(String(a.last_name).toLowerCase().trim()))));
+                  });
+                })
+              : finalData.athlete_overview;
+
+            const finalOverview = coachOverview.length > 0 ? coachOverview : finalData.athlete_overview;
 
             // Accurately compute athlete points sum per team
             const homeAthleteSum = finalData.athlete_overview
@@ -2983,9 +3005,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               oppPts = oppAthleteSum;
             }
 
-            const ocrSport = (finalData.sport_type || "BASKETBALL").toUpperCase() as any;
-            const isOcrTimed = ocrSport.includes("SWIM") || ocrSport.includes("TRACK") || ocrSport.includes("FIELD");
-            const firstOcrStat = finalData.athlete_overview[0];
+            const firstOcrStat = finalOverview[0];
             const ocrTime = (firstOcrStat as any)?.time || (firstOcrStat as any)?.finish_time || (firstOcrStat as any)?.mark;
             const ocrEvent = (finalData as any)?.event || (finalData as any)?.event_name || (firstOcrStat as any)?.event || (firstOcrStat as any)?.event_name || (firstOcrStat as any)?.position || "";
             const ocrTitle = isOcrTimed
@@ -3009,8 +3029,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               away_team: isOcrTimed ? "" : (finalData.opponent_team_name || "OPPONENT"),
               home_score: isOcrTimed ? undefined : homePts,
               away_score: isOcrTimed ? undefined : oppPts,
-              entries_count: finalData.athlete_overview.length,
-              player_stats: finalData.athlete_overview.map((p, idx) => ({
+              entries_count: finalOverview.length,
+              player_stats: finalOverview.map((p, idx) => ({
                 ...p,
                 name: p.player_name,
                 player_name: p.player_name,
@@ -3033,7 +3053,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 min: Number(p.min || 0),
                 stats: { ...p, event: p.event || ocrEvent, event_name: p.event_name || p.event || ocrEvent },
               })),
-              leaderboard_entries: finalData.athlete_overview.map((p, idx) => ({
+              leaderboard_entries: finalOverview.map((p, idx) => ({
                 rank: p.rank || p.place || idx + 1,
                 name: p.player_name,
                 detail: [p.event || ocrEvent, p.team_name || lockedTeamName].filter(Boolean).join(" • "),
@@ -3175,7 +3195,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   return found?.athlete_id || p.athlete_id || `ath_ocr_away_${idx + 1}`;
                 });
 
-              const playerStatsPayload = finalData.athlete_overview.map((p, idx) => {
+              const finalSavedAthletes = isOcrTimed ? finalOverview : finalData.athlete_overview;
+              const playerStatsPayload = finalSavedAthletes.map((p, idx) => {
                 const found = findMatchedRosterAthlete(p);
                 const athleteId = found?.athlete_id || p.athlete_id || `ath_ocr_${idx + 1}`;
                 
@@ -3287,10 +3308,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   : `OCR Logged: ${lockedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,
                 playerStats: playerStatsPayload,
-                roster_athletes: homeRosterAthletes,
-                rosterAthletes: homeRosterAthletes,
-                away_roster_athletes: awayRosterAthletes,
-                awayRosterAthletes: awayRosterAthletes,
+                roster_athletes: isOcrTimed ? finalSavedAthletes.map((p, idx) => (findMatchedRosterAthlete(p)?.athlete_id || p.athlete_id || `ath_ocr_${idx + 1}`)) : homeRosterAthletes,
+                rosterAthletes: isOcrTimed ? finalSavedAthletes.map((p, idx) => (findMatchedRosterAthlete(p)?.athlete_id || p.athlete_id || `ath_ocr_${idx + 1}`)) : homeRosterAthletes,
+                away_roster_athletes: isOcrTimed ? [] : awayRosterAthletes,
+                awayRosterAthletes: isOcrTimed ? [] : awayRosterAthletes,
                 scoresheet_url: scoresheetUrlVal,
                 scoresheetUrl: scoresheetUrlVal,
               };
@@ -3535,15 +3556,29 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   else if (sc.includes("BASKET")) sportIcon = "basketball-outline";
                   else if (sc.includes("VOLLEY")) sportIcon = "tennisball-outline";
 
-                  const athCount = Array.isArray(matchItem.player_stats)
-                    ? matchItem.player_stats.length
-                    : Array.isArray(matchItem.athlete_ids)
-                      ? matchItem.athlete_ids.length
-                      : 0;
-
                   const isItemTimed = (matchItem.sport_category || "").toUpperCase().includes("SWIM") || 
                                       (matchItem.sport_category || "").toUpperCase().includes("TRACK") || 
                                       (matchItem.sport_category || "").toUpperCase().includes("FIELD");
+
+                  const athCount = isItemTimed
+                    ? (Array.isArray(matchItem.player_stats)
+                        ? matchItem.player_stats.filter((p: any) => {
+                            const pName = String(p.player_name || p.name || '').trim().toLowerCase();
+                            const pId = String(p.athlete_id || p.user_id || '').toLowerCase().replace(/^ath_/, '');
+                            return athletesPool.some((a) => {
+                              const aId = String(a.athlete_id || a.user_id || '').toLowerCase().replace(/^ath_/, '');
+                              if (pId && aId === pId) return true;
+                              const aName = String(a.full_name || `${a.first_name || ''} ${a.last_name || ''}`).trim().toLowerCase();
+                              return Boolean(pName && (aName === pName || (a.last_name && pName.includes(String(a.last_name).toLowerCase().trim()))));
+                            });
+                          }).length
+                        : (Array.isArray(matchItem.athlete_ids) ? matchItem.athlete_ids.length : 0))
+                    : (Array.isArray(matchItem.player_stats)
+                        ? matchItem.player_stats.length
+                        : Array.isArray(matchItem.athlete_ids)
+                          ? matchItem.athlete_ids.length
+                          : 0);
+
                   const isBballScoreFormat = /^\s*\d+\s*[-:]\s*\d+\s*$/.test(matchItem.score_or_time_summary || "");
                   const displaySummaryText = (isItemTimed && isBballScoreFormat) ? "Official Meet Results" : (matchItem.score_or_time_summary || "Match Recorded");
                   let displayItemTitle = matchItem.event_or_opponent || matchItem.match_name || matchItem.game_name || "Official Match";
@@ -3779,6 +3814,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "perf_trackfield_result" && (
         <TrackfieldMatchResult
           matchItem={selectedMatchItem}
+          coachTeams={teams}
+          coachAthletes={athletesPool}
+          activeTeam={currentTeam}
           onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
         />
       )}
@@ -3786,6 +3824,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "perf_swimming_result" && (
         <SwimmingMatchResult
           matchItem={selectedMatchItem}
+          coachTeams={teams}
+          coachAthletes={athletesPool}
+          activeTeam={currentTeam}
           onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
         />
       )}

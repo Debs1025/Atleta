@@ -198,6 +198,7 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#CBD5E1",
     fontFamily: fontBoldPlatform,
+    marginRight: 10,
   },
   matchBadgeRow: {
     flexDirection: "row",
