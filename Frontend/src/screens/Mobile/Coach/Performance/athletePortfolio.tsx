@@ -803,13 +803,15 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                           onPress={onViewMatchHistory}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.matchOpponentText} numberOfLines={1}>
+                          <Text style={styles.matchOpponentText} numberOfLines={1} ellipsizeMode="tail">
                             {meetTitle}
                           </Text>
                           <View style={styles.matchBadgeRow}>
-                            <Text style={isPodium ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
-                              {badgeText}
-                            </Text>
+                            <View style={[styles.badgePill, isPodium ? styles.badgePillWin : styles.badgePillLoss]}>
+                              <Text style={isPodium ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
+                                {badgeText}
+                              </Text>
+                            </View>
                             <Text style={styles.matchDateText}>
                               {timeStr}
                             </Text>
@@ -830,13 +832,15 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                         onPress={onViewMatchHistory}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.matchOpponentText} numberOfLines={1}>
+                        <Text style={styles.matchOpponentText} numberOfLines={1} ellipsizeMode="tail">
                           {oppText}
                         </Text>
                         <View style={styles.matchBadgeRow}>
-                          <Text style={isWin ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
-                            {isWin ? "WIN" : "LOSE"}
-                          </Text>
+                          <View style={[styles.badgePill, isWin ? styles.badgePillWin : styles.badgePillLoss]}>
+                            <Text style={isWin ? styles.matchResultBadgeWin : styles.matchResultBadgeLoss}>
+                              {isWin ? "WIN" : "LOSE"}
+                            </Text>
+                          </View>
                           <Text style={styles.matchDateText}>
                             {m.date_formatted || "RECENT"}
                           </Text>
