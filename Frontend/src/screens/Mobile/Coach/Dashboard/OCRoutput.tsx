@@ -17,6 +17,10 @@ import {
     loadDynamicSportsSchemas,
     getSportStatSchema,
 } from "../MultiLogging/sportStatSchemas";
+import {
+    getEventsForSport,
+    SportEventOption,
+} from "../MultiLogging/sportEvents";
 
 // Client State Schema Models
 export interface TeamScoreItem {
@@ -148,6 +152,10 @@ export interface RawOCRDetectedData {
     team_scores?: TeamScoreItem[];
     teams?: string[];
     sport_type: "BASKETBALL" | "VOLLEYBALL" | "SWIMMING" | "TRACK AND FIELD" | "BADMINTON" | "PICKLEBALL" | "SOCCER" | string;
+    event?: string;
+    event_name?: string;
+    event_type?: string;
+    discipline?: string;
     file_name?: string;
     scoresheet_url?: string;
     scoresheetUrl?: string;
@@ -395,6 +403,69 @@ export function OCRoutput({
     const isBaseball = sportUpper.includes("BASE") || sportUpper.includes("SOFT");
     const isIndividualSport = isSwimming || isTrack;
     const isBasketball = !isVolleyball && !isSwimming && !isTrack && !isRacket && !isSoccer && !isBaseball;
+
+    const availableEvents: SportEventOption[] = useMemo(() => {
+        return getEventsForSport(detectedEffectiveSport);
+    }, [detectedEffectiveSport]);
+
+    const initialEvent = useMemo(() => {
+        const fromAthletes = athleteStats.find((a) => a.event || a.event_name || (a as any).eventType)?.event
+            || athleteStats.find((a) => a.event_name)?.event_name;
+        const fromMatch = (currentActiveMatch as any).event || (currentActiveMatch as any).event_name || (currentActiveMatch as any).event_type || (currentActiveMatch as any).discipline;
+        return String(fromAthletes || fromMatch || "").trim();
+    }, [athleteStats, currentActiveMatch]);
+
+    const [selectedEventName, setSelectedEventName] = useState<string>(initialEvent);
+    const [showEventPickerModal, setShowEventPickerModal] = useState<boolean>(false);
+    const [customEventInput, setCustomEventInput] = useState<string>("");
+
+    useEffect(() => {
+        if (initialEvent && !selectedEventName) {
+            setSelectedEventName(initialEvent);
+        }
+    }, [initialEvent]);
+
+    const handleSelectEvent = useCallback((chosen: SportEventOption | string) => {
+        const eventLabel = typeof chosen === "string" ? chosen : chosen.label;
+        const distanceMeters = typeof chosen === "string" ? 0 : (chosen.distance_meters || 0);
+
+        setSelectedEventName(eventLabel);
+        setShowEventPickerModal(false);
+
+        // Update all athletes in athleteStatsMap for active match
+        setAthleteStats((prevAthletes) => {
+            return prevAthletes.map((ath) => ({
+                ...ath,
+                event: eventLabel,
+                event_name: eventLabel,
+                eventType: eventLabel,
+                distance_meters: distanceMeters,
+                stats: {
+                    ...(ath.stats || {}),
+                    event: eventLabel,
+                    event_name: eventLabel,
+                    eventType: eventLabel,
+                    distance_meters: distanceMeters,
+                },
+                sport_stats: {
+                    ...(ath.sport_stats || {}),
+                    event: eventLabel,
+                    event_name: eventLabel,
+                    eventType: eventLabel,
+                    distance_meters: distanceMeters,
+                },
+            }));
+        });
+
+        // Also update currentActiveMatch fields
+        (currentActiveMatch as any).event = eventLabel;
+        (currentActiveMatch as any).event_name = eventLabel;
+        (currentActiveMatch as any).event_type = eventLabel;
+        (currentActiveMatch as any).discipline = eventLabel;
+        (currentActiveMatch as any).distance_meters = distanceMeters;
+        (currentActiveMatch as any).match_name = eventLabel;
+        (currentActiveMatch as any).game_name = eventLabel;
+    }, [setAthleteStats, currentActiveMatch]);
 
     const homeTeamDisplay = (coachLockedTeamName || currentActiveMatch.team_name || "HOME TEAM").toUpperCase();
     const rawOpponentName = (currentActiveMatch.opponent_team_name || "").toUpperCase();
@@ -694,6 +765,7 @@ export function OCRoutput({
             const awayRoster = athleteStats
                 .filter((a) => (a.team_name || "").toUpperCase() !== homeTeamUpper)
                 .map((a) => a.athlete_id);
+            const finalEvent = selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || (currentActiveMatch as any).event || "";
             const scoresheetUrlVal = currentActiveMatch.scoresheetUrl || currentActiveMatch.scoresheet_url || "";
             const playerStatsList = athleteStats.map((a) => ({
                 ...a,
@@ -702,6 +774,12 @@ export function OCRoutput({
                 team_name: a.team_name,
                 jersey_number: a.jersey_number,
                 position: a.position,
+                event: a.event || finalEvent,
+                event_name: a.event_name || a.event || finalEvent,
+                eventType: a.eventType || a.event || finalEvent,
+                distance_meters: a.distance_meters || (isIndividualSport ? 50 : 0),
+                time: a.time || a.finish_time || "",
+                finish_time: a.finish_time || a.time || "",
                 pts: a.pts ?? 0,
                 points: a.pts ?? 0,
                 reb: a.reb ?? 0,
@@ -718,9 +796,9 @@ export function OCRoutput({
                 turnovers: a.to ?? 0,
                 min: a.min ?? 0,
                 minutes: a.min ?? 0,
-                stats: { ...a },
-                sport_stats: { ...a },
-                custom_stats: { ...a },
+                stats: { ...a, event: a.event || finalEvent, event_name: a.event_name || a.event || finalEvent, eventType: a.eventType || a.event || finalEvent },
+                sport_stats: { ...a, event: a.event || finalEvent, event_name: a.event_name || a.event || finalEvent, eventType: a.eventType || a.event || finalEvent },
+                custom_stats: { ...a, event: a.event || finalEvent, event_name: a.event_name || a.event || finalEvent, eventType: a.eventType || a.event || finalEvent },
             }));
 
             onConfirmSave({
@@ -729,6 +807,10 @@ export function OCRoutput({
                 team_name: homeTeamDisplay,
                 opponent_team_name: awayTeamDisplay,
                 sport_type: detectedEffectiveSport,
+                event: finalEvent,
+                event_name: finalEvent,
+                event_type: finalEvent,
+                discipline: finalEvent,
                 athlete_overview: athleteStats,
                 playerStats: playerStatsList,
                 player_stats: playerStatsList,
@@ -749,7 +831,7 @@ export function OCRoutput({
         redirectTimerRef.current = setTimeout(() => {
             handleGoHome();
         }, 3000);
-    }, [currentActiveMatch, athleteStats, currentInjuries, onConfirmSave, handleGoHome]);
+    }, [currentActiveMatch, athleteStats, currentInjuries, onConfirmSave, handleGoHome, selectedEventName]);
 
     return (
         <View style={styles.container}>
@@ -859,9 +941,16 @@ export function OCRoutput({
                         <View style={styles.scoreboardMatchScore}>
                             <View style={styles.teamScoreBox}>
                                 <Text style={styles.identityLabel}>EVENT / DISCIPLINE</Text>
-                                <Text style={styles.teamScoreName} numberOfLines={1}>
-                                    {athleteStats[0]?.event || athleteStats[0]?.event_name || currentActiveMatch.team_name || "TIMED EVENT"}
-                                </Text>
+                                <TouchableOpacity
+                                    style={styles.eventPickerTrigger}
+                                    onPress={() => setShowEventPickerModal(true)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.teamScoreName, { color: "#00C8FF", marginBottom: 0 }]} numberOfLines={1}>
+                                        {selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || "TAP TO CHOOSE EVENT"}
+                                    </Text>
+                                    <Ionicons name="chevron-down-circle" size={15} color="#00C8FF" style={{ marginLeft: 6 }} />
+                                </TouchableOpacity>
                             </View>
                             <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
                                 <Text style={styles.identityLabel}>{isTrack ? "TOP MARK / TIME" : "TOP RECORDED TIME"}</Text>
@@ -919,11 +1008,20 @@ export function OCRoutput({
                             <Text style={styles.identityLabel}>
                                 {isIndividualSport ? "EVENT / DISCIPLINE:" : "ASSIGNED TEAM (LOCKED):"}
                             </Text>
-                            <Text style={styles.identityValue}>
-                                {isIndividualSport
-                                    ? (athleteStats[0]?.event || athleteStats[0]?.event_name || currentActiveMatch.team_name || "TIMED EVENT")
-                                    : homeTeamDisplay}
-                            </Text>
+                            {isIndividualSport ? (
+                                <TouchableOpacity
+                                    style={styles.eventPickerTrigger}
+                                    onPress={() => setShowEventPickerModal(true)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.identityValue, { color: "#00C8FF" }]} numberOfLines={1}>
+                                        {selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || "TAP TO CHOOSE EVENT"}
+                                    </Text>
+                                    <Ionicons name="chevron-down-circle" size={15} color="#00C8FF" style={{ marginLeft: 6 }} />
+                                </TouchableOpacity>
+                            ) : (
+                                <Text style={styles.identityValue}>{homeTeamDisplay}</Text>
+                            )}
                         </View>
                         <View style={styles.identityCol}>
                             <Text style={styles.identityLabel}>
@@ -1523,6 +1621,107 @@ export function OCRoutput({
                         >
                             <Text style={styles.modalCtaText}>Go back to Home</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* EVENT PICKER MODAL (FOR INDIVIDUAL / TIMED SPORTS) */}
+            <Modal
+                visible={showEventPickerModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowEventPickerModal(false)}
+            >
+                <View style={styles.eventModalOverlay}>
+                    <View style={styles.eventModalContent}>
+                        {/* Header */}
+                        <View style={styles.eventModalHeader}>
+                            <View style={{ flex: 1, paddingRight: 8 }}>
+                                <Text style={styles.eventModalTitle}>SELECT EVENT / DISCIPLINE</Text>
+                                <Text style={styles.eventModalSubtitle}>
+                                    {sportDisplayName} • Select an event to apply to all logged athletes
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setShowEventPickerModal(false)}
+                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                            >
+                                <Ionicons name="close" size={24} color="#FFFFFF" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Standard Events Scroll List */}
+                        <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={true}>
+                            <View style={styles.eventOptionsGrid}>
+                                {availableEvents.map((ev) => {
+                                    const isSelected = selectedEventName.toLowerCase() === ev.label.toLowerCase() ||
+                                        selectedEventName.toLowerCase() === ev.shortLabel.toLowerCase() ||
+                                        selectedEventName.toLowerCase() === ev.key.toLowerCase();
+                                    return (
+                                        <TouchableOpacity
+                                            key={ev.key}
+                                            style={[
+                                                styles.eventOptionCard,
+                                                isSelected && styles.eventOptionCardSelected,
+                                            ]}
+                                            onPress={() => handleSelectEvent(ev)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <View style={{ flex: 1 }}>
+                                                <Text
+                                                    style={[
+                                                        styles.eventOptionLabel,
+                                                        isSelected && styles.eventOptionLabelSelected,
+                                                    ]}
+                                                >
+                                                    {ev.label}
+                                                </Text>
+                                                {ev.distance_meters > 0 ? (
+                                                    <Text style={styles.eventOptionDistance}>
+                                                        {ev.distance_meters}m {ev.isDistanceEvent ? "Distance" : "Race"}
+                                                    </Text>
+                                                ) : null}
+                                            </View>
+                                            {isSelected ? (
+                                                <Ionicons name="checkmark-circle" size={22} color="#00C8FF" />
+                                            ) : (
+                                                <Ionicons name="radio-button-off" size={20} color="#475569" />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </ScrollView>
+
+                        {/* Custom Event Input Box */}
+                        <View style={styles.customEventSection}>
+                            <Text style={styles.customEventHeader}>OR ENTER CUSTOM EVENT:</Text>
+                            <View style={styles.customEventRow}>
+                                <TextInput
+                                    style={styles.customEventInput}
+                                    placeholder="e.g. 4x50m Medley Relay, 60m Hurdles..."
+                                    placeholderTextColor="#64748B"
+                                    value={customEventInput}
+                                    onChangeText={setCustomEventInput}
+                                />
+                                <TouchableOpacity
+                                    style={[
+                                        styles.customEventApplyBtn,
+                                        !customEventInput.trim() && { opacity: 0.5 },
+                                    ]}
+                                    disabled={!customEventInput.trim()}
+                                    onPress={() => {
+                                        if (customEventInput.trim()) {
+                                            handleSelectEvent(customEventInput.trim());
+                                            setCustomEventInput("");
+                                        }
+                                    }}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.customEventApplyText}>Apply</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                     </View>
                 </View>
             </Modal>

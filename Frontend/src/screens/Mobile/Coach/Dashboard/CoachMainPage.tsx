@@ -2958,11 +2958,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const isOcrTimed = ocrSport.includes("SWIM") || ocrSport.includes("TRACK") || ocrSport.includes("FIELD");
             const firstOcrStat = finalData.athlete_overview[0];
             const ocrTime = (firstOcrStat as any)?.time || (firstOcrStat as any)?.finish_time || (firstOcrStat as any)?.mark;
-            const ocrEvent = (firstOcrStat as any)?.event || (firstOcrStat as any)?.event_name || (firstOcrStat as any)?.position || "";
+            const ocrEvent = (finalData as any)?.event || (finalData as any)?.event_name || (firstOcrStat as any)?.event || (firstOcrStat as any)?.event_name || (firstOcrStat as any)?.position || "";
             const ocrTitle = isOcrTimed
-              ? (ocrEvent || (ocrSport.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet"))
+              ? (ocrEvent ? `${lockedTeamName} • ${ocrEvent}` : (ocrSport.includes("SWIM") ? `${lockedTeamName} • Swimming Meet` : `${lockedTeamName} • Track & Field Meet`))
               : `${lockedTeamName} vs ${finalData.opponent_team_name || "OPPONENT"}`;
-            const ocrSummary = isOcrTimed ? (ocrTime ? `Time: ${ocrTime}` : "Completed") : `${homePts} - ${oppPts}`;
+            const ocrSummary = isOcrTimed ? (ocrTime ? `Time: ${ocrTime}` : "Official Meet Results") : `${homePts} - ${oppPts}`;
             const ocrBadge = isOcrTimed ? "1ST PLACE" : (homePts >= oppPts ? "RESULT WIN" : "RESULT LOSS");
 
             const newMatchItem: MatchHistoryItem = {
@@ -2981,12 +2981,19 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               home_score: isOcrTimed ? undefined : homePts,
               away_score: isOcrTimed ? undefined : oppPts,
               entries_count: finalData.athlete_overview.length,
-              player_stats: finalData.athlete_overview.map((p) => ({
+              player_stats: finalData.athlete_overview.map((p, idx) => ({
                 ...p,
                 name: p.player_name,
                 player_name: p.player_name,
                 team: p.team_name,
                 team_name: p.team_name,
+                event: p.event || ocrEvent,
+                event_name: p.event_name || p.event || ocrEvent,
+                eventType: p.eventType || p.event || ocrEvent,
+                time: p.time || p.finish_time || "",
+                finish_time: p.finish_time || p.time || "",
+                rank: p.rank || p.place || (idx + 1),
+                place: p.place || p.rank || (idx + 1),
                 pts: Number(p.pts || 0),
                 ast: Number(p.ast || 0),
                 reb: Number(p.reb || 0),
@@ -2995,15 +3002,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 pf: Number(p.fouls || p.pf || 0),
                 to: Number(p.to || 0),
                 min: Number(p.min || 0),
-                stats: { ...p },
+                stats: { ...p, event: p.event || ocrEvent, event_name: p.event_name || p.event || ocrEvent },
               })),
               leaderboard_entries: finalData.athlete_overview.map((p, idx) => ({
-                rank: idx + 1,
+                rank: p.rank || p.place || idx + 1,
                 name: p.player_name,
-                detail: p.team_name || lockedTeamName,
-                time_or_score: p.time || `${p.pts || 0} pts`,
+                detail: [p.event || ocrEvent, p.team_name || lockedTeamName].filter(Boolean).join(" • "),
+                time_or_score: p.time || p.finish_time || `${p.pts || 0} pts`,
               })),
-              coach_notes: [`OCR Scanned Match: ${lockedTeamName} vs ${finalData.opponent_team_name || "Opponent"} (${homePts} - ${oppPts})`],
+              coach_notes: [`OCR Scanned Match: ${lockedTeamName} ${ocrEvent ? `• ${ocrEvent}` : `vs ${finalData.opponent_team_name || "Opponent"}`} (${homePts} - ${oppPts})`],
             };
 
             setMatchHistoryList((prev) => [newMatchItem, ...prev]);
@@ -3179,7 +3186,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   shots_on_target: Number(p.shots_on_target ?? 0),
                   tackles: Number(p.tackles ?? 0),
                   finish_time: String(p.finish_time || p.time || ""),
+                  time: String(p.time || p.finish_time || ""),
                   split_times: String(p.split || p.split_times || ""),
+                  event: p.event || ocrEvent,
+                  event_name: p.event_name || p.event || ocrEvent,
+                  eventType: p.eventType || p.event || ocrEvent,
+                  rank: p.rank || p.place || (idx + 1),
+                  place: p.place || p.rank || (idx + 1),
+                  placement_rank: p.rank || p.place || (idx + 1),
+                  distance_meters: p.distance_meters || (isOcrTimed ? 50 : 0),
                 };
 
                 return {
@@ -3188,7 +3203,15 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   player_name: p.player_name,
                   team_name: p.team_name,
                   jersey_number: p.jersey_number,
-                  position: p.position,
+                  position: p.position || (isOcrTimed ? (ocrSport.includes("SWIM") ? "Swimmer" : "Runner") : "Player"),
+                  event: p.event || ocrEvent,
+                  event_name: p.event_name || p.event || ocrEvent,
+                  eventType: p.eventType || p.event || ocrEvent,
+                  time: String(p.time || p.finish_time || ""),
+                  finish_time: String(p.finish_time || p.time || ""),
+                  rank: p.rank || p.place || (idx + 1),
+                  place: p.place || p.rank || (idx + 1),
+                  placement_rank: p.rank || p.place || (idx + 1),
                   pts: rawStats.points,
                   reb: rawStats.rebounds,
                   ast: rawStats.assists,
@@ -3207,10 +3230,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 match_id: newMatchItem.match_id,
                 team_id: lockedTeamId,
                 home_team_name: lockedTeamName,
-                away_team_name: resolvedOpponentName,
-                opponent_team_name: resolvedOpponentName,
-                home_score: homePts,
-                away_score: oppPts,
+                away_team_name: isOcrTimed ? "" : resolvedOpponentName,
+                opponent_team_name: isOcrTimed ? "" : resolvedOpponentName,
+                match_name: ocrTitle,
+                game_name: ocrTitle,
+                event: ocrEvent || undefined,
+                event_name: ocrEvent || undefined,
+                event_type: ocrEvent || undefined,
+                discipline: ocrEvent || undefined,
+                distance_meters: (finalData as any).distance_meters || (isOcrTimed ? 50 : 0),
+                home_score: isOcrTimed ? undefined : homePts,
+                away_score: isOcrTimed ? undefined : oppPts,
                 sport_type:
                   finalData.sport_type === "SWIMMING"
                     ? "Swimming"
@@ -3222,8 +3252,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 match_type: "OCR Scanned Match",
                 match_date: new Date().toISOString(),
                 location: (finalData as any).location || "Arena",
-                game_result: homePts >= oppPts ? "WIN" : "LOSS",
-                notes: `OCR Logged: ${lockedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
+                game_result: isOcrTimed ? "COMPLETED" : (homePts >= oppPts ? "WIN" : "LOSS"),
+                notes: isOcrTimed
+                  ? `OCR Logged: ${lockedTeamName} • ${ocrEvent || "Timed Event"}`
+                  : `OCR Logged: ${lockedTeamName} vs ${resolvedOpponentName} (${homePts} - ${oppPts})`,
                 player_stats: playerStatsPayload,
                 playerStats: playerStatsPayload,
                 roster_athletes: homeRosterAthletes,
