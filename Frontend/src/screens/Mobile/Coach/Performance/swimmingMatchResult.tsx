@@ -73,16 +73,42 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
+            const rawPStats = Array.isArray(data.player_stats) && data.player_stats.length > 0
+              ? data.player_stats
+              : (Array.isArray(data.match?.player_stats) ? data.match.player_stats : []);
+
+            const pStatLookup = new Map<string, any>();
+            rawPStats.forEach((ps: any) => {
+              if (ps.athlete_id) pStatLookup.set(String(ps.athlete_id).toLowerCase(), ps);
+              if (ps.user_id) pStatLookup.set(String(ps.user_id).toLowerCase(), ps);
+              if (ps.player_name) pStatLookup.set(String(ps.player_name).toLowerCase().trim(), ps);
+              if (ps.name) pStatLookup.set(String(ps.name).toLowerCase().trim(), ps);
+            });
+
             if (Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
               const mapped = data.player_metrics
                 .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || '') && !/^Player\s*\d+$/i.test(p.first_name || ''))
                 .map((p: any, idx: number) => {
-                  const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : "");
-                  const event = p.sport_stats?.event_name || p.sport_stats?.event || "";
-                  const detailStr = [dist, event, p.team_name].filter(Boolean).join(" • ") || p.position || "Swimmer";
-                  const timeFormatted = p.sport_stats?.formatted_time || p.sport_stats?.time || p.sport_stats?.finish_time || p.time || p.finish_time || (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : "-");
+                  const matched = pStatLookup.get(String(p.athlete_id || '').toLowerCase()) ||
+                    pStatLookup.get(String(p.user_id || '').toLowerCase()) ||
+                    pStatLookup.get(String(p.player_name || '').toLowerCase().trim());
+
+                  const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : (matched?.distance_m ? `${matched.distance_m}m` : ""));
+                  const event = p.sport_stats?.event_name || p.sport_stats?.event || matched?.event || matched?.event_name || "";
+                  const detailStr = [dist, event, p.team_name || matched?.team_name].filter(Boolean).join(" • ") || p.position || "Swimmer";
+                  const timeFormatted =
+                    p.sport_stats?.formatted_time ||
+                    p.sport_stats?.time ||
+                    p.sport_stats?.finish_time ||
+                    p.time ||
+                    p.finish_time ||
+                    matched?.time ||
+                    matched?.finish_time ||
+                    matched?.formatted_time ||
+                    (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : "-");
+
                   return {
-                    rank: p.sport_stats?.placement_rank || p.sport_stats?.rank || p.rank || p.place || idx + 1,
+                    rank: p.sport_stats?.placement_rank || p.sport_stats?.rank || p.rank || p.place || matched?.rank || matched?.place || idx + 1,
                     name: (p.player_name || `${p.first_name || ''} ${p.last_name || ''}`).trim() || "Athlete",
                     detail: detailStr,
                     time_or_score: timeFormatted,
@@ -103,8 +129,8 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
               if (mapped.length > 0) {
                 setLeaderboardData(mapped);
               }
-            } else if (Array.isArray(data.player_stats) && data.player_stats.length > 0) {
-              const mapped = data.player_stats
+            } else if (rawPStats.length > 0) {
+              const mapped = rawPStats
                 .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || ''))
                 .map((p: any, idx: number) => ({
                   rank: p.rank || p.place || p.placement_rank || idx + 1,
