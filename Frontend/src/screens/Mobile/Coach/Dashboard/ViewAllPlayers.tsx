@@ -286,7 +286,7 @@ export function ViewAllPlayers({
                     onPress={() => handleViewStats(player)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.viewStatsText}>View Stats</Text>
+                    <Text style={styles.viewStatsText}>View Profile</Text>
                   </TouchableOpacity>
                 </View>
               );

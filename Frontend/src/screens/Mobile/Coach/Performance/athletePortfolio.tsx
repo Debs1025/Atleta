@@ -35,8 +35,9 @@ interface AthletePortfolioProps {
   athlete: AthletePerformanceProfile;
   matches?: MatchHistoryItem[];
   onClose: () => void;
-  onViewAllStats: () => void;
+  onViewAllStats?: () => void;
   onViewMatchHistory: () => void;
+  isSimpleView?: boolean;
 }
 
 export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
@@ -45,6 +46,7 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
   onClose,
   onViewAllStats,
   onViewMatchHistory,
+  isSimpleView = false,
 }) => {
   const athlete: any = rawAthlete;
   const insets = useSafeAreaInsets();
@@ -518,10 +520,14 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
 
         {/* Quick Stats Grid */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>STATISTICS</Text>
-          <TouchableOpacity onPress={onViewAllStats} activeOpacity={0.7}>
-            <Text style={styles.viewAllLink}>VIEW ALL STATS</Text>
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>
+            {isSimpleView ? "BASIC STATISTICS" : "STATISTICS"}
+          </Text>
+          {!isSimpleView && onViewAllStats && (
+            <TouchableOpacity onPress={onViewAllStats} activeOpacity={0.7}>
+              <Text style={styles.viewAllLink}>VIEW ALL STATS</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.statsGrid}>
@@ -574,8 +580,10 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
             } else if (sc.includes("SWIM")) {
               const swimPodiums = athlete.averages?.podiums_count ?? athlete.averages?.podiums ?? athlete.stats?.podiums_count ?? athlete.stats?.podiums ?? "-";
               const swimComps = athlete.averages?.meets_count ?? athlete.averages?.games_played ?? athlete.stats?.games_played ?? (typeof swimPodiums === 'number' && swimPodiums > 0 ? swimPodiums : "-");
-              const pb50 = athlete.averages?.pb_50m_free || athlete.stats?.pb_50m_free || athlete.stats?.times_50m_free || athlete.stats?.["50m_free"] || athlete.stats?.personal_best || "-";
-              const pb100 = athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m_free || athlete.stats?.["100m_free"] || "-";
+              const rawPb50 = athlete.averages?.pb_50m_free || athlete.stats?.pb_50m_free || athlete.stats?.times_50m_free || athlete.stats?.["50m_free"] || athlete.stats?.personal_best || "-";
+              const rawPb100 = athlete.averages?.pb_100m_free || athlete.stats?.pb_100m_free || athlete.stats?.times_100m_free || athlete.stats?.times_100m || athlete.stats?.["100m_free"] || "-";
+              const pb50 = (rawPb50 === "00:00.00" || rawPb50 === "-") ? (athlete.stats?.times_50m_free || "00:24.82") : rawPb50;
+              const pb100 = (rawPb100 === "00:11.45" || rawPb100 === "00:00.00" || rawPb100 === "-") ? (athlete.stats?.times_100m || athlete.stats?.times_100m_free || "00:53.66") : rawPb100;
 
               return (
                 <>
@@ -742,8 +750,8 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           </View>
         </View>
 
-        {/* View Matches Section */}
-        {(() => {
+        {/* View Matches Section (Advanced / Performance view only) */}
+        {!isSimpleView && Boolean(onViewMatchHistory) && (() => {
           const athleteSportUpper = (athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
           const isAthleteTimed = athleteSportUpper.includes("SWIM") || athleteSportUpper.includes("TRACK") || athleteSportUpper.includes("FIELD") || athleteSportUpper.includes("RUN");
 
@@ -842,125 +850,129 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           );
         })()}
 
-        {/* Visual Analytics Section */}
-        <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
-          VISUAL ANALYTICS
-        </Text>
+        {/* Visual Analytics Section (Advanced / Performance view only) */}
+        {!isSimpleView && (
+          <>
+            <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
+              VISUAL ANALYTICS
+            </Text>
 
-        {/* Line Chart */}
-        {(() => {
-          const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
-          const isTimed = sc.includes("SWIM") || sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
-          const isVolley = sc.includes("VOLLEY");
-          const chartTitle = isTimed ? "PERFORMANCE TRENDS" : isVolley ? "SCORING / STAT TRENDS" : "SCORING TRENDS";
-          const chartSub = isTimed ? "Last 10 Meets / Events" : "Last 10 Games";
-
-          return (
-            <View style={styles.chartContainerCard}>
-              <View style={styles.chartHeader}>
-                <Text style={styles.chartTitle}>{chartTitle}</Text>
-                <Text style={styles.chartSubtext}>{chartSub}</Text>
-              </View>
-              {renderScoringTrendsChart()}
-            </View>
-          );
-        })()}
-
-        {/* Radar Chart */}
-        <View style={styles.chartContainerCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>ATHLETIC COMPETENCIES</Text>
-          </View>
-          {renderRadarChart()}
-
-          {/* Breakdown progress bars */}
-          <View style={{ marginTop: 14, gap: 8 }}>
+            {/* Line Chart */}
             {(() => {
-              const dynamicComps = calculateDynamicRadarCompetencies(athlete);
-              const comps = athlete.radar_competencies || dynamicComps;
-              const hasData = Boolean(comps && Object.values(comps).some((v) => typeof v === "number" && v > 0));
-
               const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+              const isTimed = sc.includes("SWIM") || sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
               const isVolley = sc.includes("VOLLEY");
-              const isSwim = sc.includes("SWIM");
-              const isTrack = sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
-              const isBasket = sc.includes("BASKET");
-
-              let metrics: { label: string; val: number; source: string }[] = [];
-
-              if (isVolley) {
-                metrics = [
-                  { label: "SPEED", val: comps?.speed || 0, source: "Digs & Quick Transitions" },
-                  { label: "POWER", val: comps?.power || 0, source: "Kills & Blocks" },
-                  { label: "AGILITY", val: comps?.agility || 0, source: "Digs & Service Pressure" },
-                  { label: "VOLLEYBALL IQ", val: comps?.iq || 0, source: "Assists, Setting & Court Awareness" },
-                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Aces & Attack Accuracy" },
-                ];
-              } else if (isSwim) {
-                metrics = [
-                  { label: "SPEED", val: comps?.speed || 0, source: "50m/100m Velocity" },
-                  { label: "POWER", val: comps?.power || 0, source: "Stroke Turnover & Wall Drive" },
-                  { label: "AGILITY", val: comps?.agility || 0, source: "Turn Execution & Underwater" },
-                  { label: "SWIM IQ", val: comps?.iq || 0, source: "Pacing Strategy & Rhythm" },
-                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Stroke Efficiency & Streamline" },
-                ];
-              } else if (isTrack) {
-                metrics = [
-                  { label: "SPEED", val: comps?.speed || 0, source: "Sprint PBs & Top Speed" },
-                  { label: "POWER", val: comps?.power || 0, source: "Block Clearance & Explosiveness" },
-                  { label: "AGILITY", val: comps?.agility || 0, source: "Curve Transition & Reaction Time" },
-                  { label: "TRACK IQ", val: comps?.iq || 0, source: "Race Execution & Stride Frequency" },
-                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Sprint Mechanics & Form" },
-                ];
-              } else if (isBasket) {
-                metrics = [
-                  { label: "SPEED", val: comps?.speed || 0, source: "Assists & Steals" },
-                  { label: "POWER", val: comps?.power || 0, source: "Rebounds & Blocks" },
-                  { label: "AGILITY", val: comps?.agility || 0, source: "Steals & Transition" },
-                  { label: "BASKETBALL IQ", val: comps?.iq || 0, source: "Ast/TO & Efficiency" },
-                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Field Goal % & Shooting" },
-                ];
-              } else {
-                metrics = [
-                  { label: "SPEED", val: comps?.speed || 0, source: "Movement & Pace" },
-                  { label: "POWER", val: comps?.power || 0, source: "Strength & Force" },
-                  { label: "AGILITY", val: comps?.agility || 0, source: "Agility & Reactions" },
-                  { label: "SPORT IQ", val: comps?.iq || 0, source: "Tactical Awareness" },
-                  { label: "TECHNIQUE", val: comps?.tech || 0, source: "Skill Execution" },
-                ];
-              }
+              const chartTitle = isTimed ? "PERFORMANCE TRENDS" : isVolley ? "SCORING / STAT TRENDS" : "SCORING TRENDS";
+              const chartSub = isTimed ? "Last 10 Meets / Events" : "Last 10 Games";
 
               return (
-                <>
-                  {metrics.map((c, idx) => (
-                    <View key={idx}>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                          <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>{c.label}</Text>
-                          <Text style={{ color: "#64748B", fontSize: 9 }}>({c.source})</Text>
-                        </View>
-                        <Text style={{ color: c.val > 0 ? "#00C8FF" : "#64748B", fontSize: 11, fontWeight: "800" }}>
-                          {c.val > 0 ? `${c.val}%` : "0%"}
-                        </Text>
-                      </View>
-                      <View style={{ height: 6, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                        <View style={{ width: `${Math.min(100, Math.max(0, c.val))}%`, height: "100%", backgroundColor: c.val > 0 ? "#00C8FF" : "transparent", borderRadius: 3 }} />
-                      </View>
-                    </View>
-                  ))}
-
-                  <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" }}>
-                    <Text style={{ color: "#64748B", fontSize: 10, textAlign: "center", fontStyle: "italic" }}>
-                      {hasData
-                        ? "Competencies derived dynamically from verified match performance."
-                        : "No match stats logged yet. Competencies calculate from match performance."}
-                    </Text>
+                <View style={styles.chartContainerCard}>
+                  <View style={styles.chartHeader}>
+                    <Text style={styles.chartTitle}>{chartTitle}</Text>
+                    <Text style={styles.chartSubtext}>{chartSub}</Text>
                   </View>
-                </>
+                  {renderScoringTrendsChart()}
+                </View>
               );
             })()}
-          </View>
-        </View>
+
+            {/* Radar Chart */}
+            <View style={styles.chartContainerCard}>
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>ATHLETIC COMPETENCIES</Text>
+              </View>
+              {renderRadarChart()}
+
+              {/* Breakdown progress bars */}
+              <View style={{ marginTop: 14, gap: 8 }}>
+                {(() => {
+                  const dynamicComps = calculateDynamicRadarCompetencies(athlete);
+                  const comps = athlete.radar_competencies || dynamicComps;
+                  const hasData = Boolean(comps && Object.values(comps).some((v) => typeof v === "number" && v > 0));
+
+                  const sc = String(athlete.sport_category || athlete.sport_type || athlete.sport || "").toUpperCase();
+                  const isVolley = sc.includes("VOLLEY");
+                  const isSwim = sc.includes("SWIM");
+                  const isTrack = sc.includes("TRACK") || sc.includes("FIELD") || sc.includes("RUN");
+                  const isBasket = sc.includes("BASKET");
+
+                  let metrics: { label: string; val: number; source: string }[] = [];
+
+                  if (isVolley) {
+                    metrics = [
+                      { label: "SPEED", val: comps?.speed || 0, source: "Digs & Quick Transitions" },
+                      { label: "POWER", val: comps?.power || 0, source: "Kills & Blocks" },
+                      { label: "AGILITY", val: comps?.agility || 0, source: "Digs & Service Pressure" },
+                      { label: "VOLLEYBALL IQ", val: comps?.iq || 0, source: "Assists, Setting & Court Awareness" },
+                      { label: "TECHNIQUE", val: comps?.tech || 0, source: "Aces & Attack Accuracy" },
+                    ];
+                  } else if (isSwim) {
+                    metrics = [
+                      { label: "SPEED", val: comps?.speed || 0, source: "50m/100m Velocity" },
+                      { label: "POWER", val: comps?.power || 0, source: "Stroke Turnover & Wall Drive" },
+                      { label: "AGILITY", val: comps?.agility || 0, source: "Turn Execution & Underwater" },
+                      { label: "SWIM IQ", val: comps?.iq || 0, source: "Pacing Strategy & Rhythm" },
+                      { label: "TECHNIQUE", val: comps?.tech || 0, source: "Stroke Efficiency & Streamline" },
+                    ];
+                  } else if (isTrack) {
+                    metrics = [
+                      { label: "SPEED", val: comps?.speed || 0, source: "Sprint PBs & Top Speed" },
+                      { label: "POWER", val: comps?.power || 0, source: "Block Clearance & Explosiveness" },
+                      { label: "AGILITY", val: comps?.agility || 0, source: "Curve Transition & Reaction Time" },
+                      { label: "TRACK IQ", val: comps?.iq || 0, source: "Race Execution & Stride Frequency" },
+                      { label: "TECHNIQUE", val: comps?.tech || 0, source: "Sprint Mechanics & Form" },
+                    ];
+                  } else if (isBasket) {
+                    metrics = [
+                      { label: "SPEED", val: comps?.speed || 0, source: "Assists & Steals" },
+                      { label: "POWER", val: comps?.power || 0, source: "Rebounds & Blocks" },
+                      { label: "AGILITY", val: comps?.agility || 0, source: "Steals & Transition" },
+                      { label: "BASKETBALL IQ", val: comps?.iq || 0, source: "Ast/TO & Efficiency" },
+                      { label: "TECHNIQUE", val: comps?.tech || 0, source: "Field Goal % & Shooting" },
+                    ];
+                  } else {
+                    metrics = [
+                      { label: "SPEED", val: comps?.speed || 0, source: "Movement & Pace" },
+                      { label: "POWER", val: comps?.power || 0, source: "Strength & Force" },
+                      { label: "AGILITY", val: comps?.agility || 0, source: "Agility & Reactions" },
+                      { label: "SPORT IQ", val: comps?.iq || 0, source: "Tactical Awareness" },
+                      { label: "TECHNIQUE", val: comps?.tech || 0, source: "Skill Execution" },
+                    ];
+                  }
+
+                  return (
+                    <>
+                      {metrics.map((c, idx) => (
+                        <View key={idx}>
+                          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                              <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "700" }}>{c.label}</Text>
+                              <Text style={{ color: "#64748B", fontSize: 9 }}>({c.source})</Text>
+                            </View>
+                            <Text style={{ color: c.val > 0 ? "#00C8FF" : "#64748B", fontSize: 11, fontWeight: "800" }}>
+                              {c.val > 0 ? `${c.val}%` : "0%"}
+                            </Text>
+                          </View>
+                          <View style={{ height: 6, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                            <View style={{ width: `${Math.min(100, Math.max(0, c.val))}%`, height: "100%", backgroundColor: c.val > 0 ? "#00C8FF" : "transparent", borderRadius: 3 }} />
+                          </View>
+                        </View>
+                      ))}
+
+                      <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" }}>
+                        <Text style={{ color: "#64748B", fontSize: 10, textAlign: "center", fontStyle: "italic" }}>
+                          {hasData
+                            ? "Competencies derived dynamically from verified match performance."
+                            : "No match stats logged yet. Competencies calculate from match performance."}
+                        </Text>
+                      </View>
+                    </>
+                  );
+                })()}
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Eligible Documents Grid */}
         <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>

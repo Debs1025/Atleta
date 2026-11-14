@@ -2302,7 +2302,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     }
   }, []);
 
-  const dashboardRecentMatches = useMemo(() => {
+  const allFilteredMatches = useMemo(() => {
     const list = matchHistoryList && matchHistoryList.length > 0 ? matchHistoryList : coachMatches;
     if (!list || list.length === 0) return [];
 
@@ -2318,8 +2318,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       });
     }
 
-    return filtered.slice(0, 4);
+    return filtered;
   }, [matchHistoryList, coachMatches, activeSportFilter]);
+
+  const dashboardRecentMatches = useMemo(() => {
+    return allFilteredMatches.slice(0, 4);
+  }, [allFilteredMatches]);
 
   const handleDeleteTeam = useCallback(async (teamId: string) => {
     const deletedTeam = teams.find((t) => t.team_id === teamId);
@@ -3367,14 +3371,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               </ScrollView>
             </View>
 
-            {/* RECENT MATCHES & MEETS Section */}
+            {/* RECENT MATCHES & MEETS Recap Feed */}
             <View style={styles.recentMatchesSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>RECENT MATCHES & MEETS</Text>
                 <TouchableOpacity
                   onPress={() => {
-                    setActiveTab("Performance");
-                    setActiveView("performance");
+                    setPreviousPortfolioView("dashboard");
+                    setActiveView("match_history");
                   }}
                   activeOpacity={0.7}
                 >
@@ -3461,53 +3465,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               )}
             </View>
 
-            {/* PLAYERS Section (Moved Down) */}
-            <View style={styles.playersSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>PLAYERS</Text>
-                <TouchableOpacity onPress={() => setActiveView("view_all_players")} activeOpacity={0.7}>
-                  <Text style={styles.viewAllText}>View All</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Player Rows */}
-              <View style={styles.playersList}>
-                {isDashboardLoading && filteredDashboardPlayers.length === 0 ? (
-                  <SkeletonPlayerRows count={3} />
-                ) : filteredDashboardPlayers.length === 0 ? (
-                  <View style={{ paddingVertical: 28, alignItems: "center", justifyContent: "center" }}>
-                    <Ionicons name="people-outline" size={36} color="#64748B" />
-                    <Text style={{ color: "#F8FAFC", fontSize: 14, fontWeight: "700", marginTop: 8 }}>
-                      {activeSportFilter !== "ALL" && athletesPool.length > 0
-                        ? `No ${activeSportFilter} Athletes in Roster`
-                        : "No Athletes in Roster Yet"}
-                    </Text>
-                    <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: 20 }}>
-                      {activeSportFilter !== "ALL" && athletesPool.length > 0
-                        ? `You have ${athletesPool.length} athlete(s) in your active roster. Tap 'ALL' above to view all rostered players.`
-                        : "You don't have any athletes in your roster yet. Use the Teams or Discovery tab to add players."}
-                    </Text>
-                  </View>
-                ) : (
-                  filteredDashboardPlayers.map((player, index) => (
-                    <PlayerRowItem
-                      key={player.athlete_id}
-                      player={player}
-                      isLast={index === filteredDashboardPlayers.length - 1}
-                      onViewStats={handleViewStats}
-                    />
-                  ))
-                )}
-              </View>
-            </View>
-
-            {/* TOTAL ATHLETES Card */}
+            {/* TOTAL MATCHES & MEETS Card */}
             <View style={styles.summaryTile}>
               <Text style={styles.summaryLabel}>
-                {activeSportFilter === "ALL" ? "TOTAL ATHLETES" : `TOTAL ATHLETES (${activeSportFilter})`}
+                {activeSportFilter === "ALL" ? "TOTAL MATCHES & MEETS" : `TOTAL MATCHES (${activeSportFilter})`}
               </Text>
               <View style={styles.summaryPill}>
-                <Text style={styles.summaryPillValue}>{filteredDashboardPlayers.length}</Text>
+                <Text style={styles.summaryPillValue}>{dashboardRecentMatches.length}</Text>
               </View>
             </View>
           </ScrollView>
@@ -3613,6 +3577,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         <AthletePortfolio
           athlete={selectedPerfAthlete}
           matches={athleteFilteredMatches}
+          isSimpleView={previousPortfolioView === "dashboard" || previousPortfolioView === "view_all_players"}
           onClose={() => {
             let returnView = previousPortfolioView;
             if (!returnView || returnView === "athlete_portfolio") {
@@ -3659,9 +3624,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
       {activeView === "match_history" && (
         <MatchHistory
-          sportCategory={selectedPerfAthlete?.sport_category}
-          historyItems={athleteFilteredMatches}
-          onClose={() => setActiveView(previousPortfolioView || "performance")}
+          sportCategory={previousPortfolioView === "dashboard" ? (activeSportFilter === "ALL" ? undefined : activeSportFilter) : selectedPerfAthlete?.sport_category}
+          historyItems={previousPortfolioView === "dashboard" ? allFilteredMatches : athleteFilteredMatches}
+          onClose={() => setActiveView(previousPortfolioView || "dashboard")}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
             const matchSport = String(matchItem.sport_category || selectedPerfAthlete?.sport_category || "").toUpperCase();
@@ -3679,21 +3644,21 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "perf_trackfield_result" && (
         <TrackfieldMatchResult
           matchItem={selectedMatchItem}
-          onBack={() => setActiveView(previousPortfolioView || "performance")}
+          onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
         />
       )}
 
       {activeView === "perf_swimming_result" && (
         <SwimmingMatchResult
           matchItem={selectedMatchItem}
-          onBack={() => setActiveView(previousPortfolioView || "performance")}
+          onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
         />
       )}
 
       {activeView === "perf_basketball_result" && (
         <BasketballMatchResult
           matchItem={selectedMatchItem}
-          onBack={() => setActiveView(previousPortfolioView || "performance")}
+          onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
         />
       )}
 
