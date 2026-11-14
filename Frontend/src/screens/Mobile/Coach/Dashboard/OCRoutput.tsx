@@ -257,11 +257,41 @@ export function OCRoutput({
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>("ALL");
 
+    const filterCoachAthletesForTimedSport = useCallback((athletes: DetectedAthleteStat[], sportType: string) => {
+        const sUpper = (sportType || "").toUpperCase();
+        const isInd = sUpper.includes("SWIM") || sUpper.includes("TRACK") || sUpper.includes("FIELD") || sUpper.includes("RUN");
+        if (!isInd || !athletes || athletes.length === 0) return athletes;
+
+        const allCoachTeams = Array.isArray(teams) && teams.length > 0 ? teams : (coachLockedTeam ? [coachLockedTeam] : []);
+        const coachTeamNames = new Set(allCoachTeams.map((t: any) => (t?.team_name || "").trim().toUpperCase()).filter(Boolean));
+        if (coachLockedTeamName) coachTeamNames.add(coachLockedTeamName);
+
+        const coachRosterList: any[] = [
+            ...(Array.isArray(coachLockedTeam?.roster_list) ? coachLockedTeam.roster_list : []),
+            ...(Array.isArray(coachLockedTeam?.athletes) ? coachLockedTeam.athletes : []),
+            ...allCoachTeams.flatMap((t: any) => Array.isArray(t?.roster_list) ? t.roster_list : []),
+            ...allCoachTeams.flatMap((t: any) => Array.isArray(t?.athletes) ? t.athletes : []),
+        ];
+
+        const coachAthletes = athletes.filter((a) => {
+            const aTeam = (a.team_name || "").trim().toUpperCase();
+            const aName = (a.player_name || "").trim().toLowerCase();
+            const isTeam = coachTeamNames.has(aTeam);
+            const isRoster = coachRosterList.some((r: any) => {
+                const rName = String(r.full_name || `${r.first_name || ""} ${r.last_name || ""}`).trim().toLowerCase();
+                return aName && (rName === aName || rName.includes(aName) || aName.includes(rName));
+            });
+            return isTeam || isRoster;
+        });
+
+        return coachAthletes.length > 0 ? coachAthletes.map(a => ({ ...a, team_name: coachLockedTeamName || a.team_name })) : athletes;
+    }, [coachLockedTeam, coachLockedTeamName, teams]);
+
     // Dynamic Editable Athletes Data State (per active match)
     const [athleteStatsMap, setAthleteStatsMap] = useState<Record<number, DetectedAthleteStat[]>>(() => {
         const init: Record<number, DetectedAthleteStat[]> = {};
         matchesList.forEach((m, idx) => {
-            init[idx] = m.athlete_overview || [];
+            init[idx] = filterCoachAthletesForTimedSport(m.athlete_overview || [], m.sport_type || "");
         });
         return init;
     });
@@ -278,7 +308,7 @@ export function OCRoutput({
             lastPayloadKeyRef.current = ocrPayloadKey;
             const updated: Record<number, DetectedAthleteStat[]> = {};
             matchesList.forEach((m, idx) => {
-                updated[idx] = m.athlete_overview || [];
+                updated[idx] = filterCoachAthletesForTimedSport(m.athlete_overview || [], m.sport_type || "");
             });
             setAthleteStatsMap(updated);
 
@@ -473,6 +503,9 @@ export function OCRoutput({
 
     // List of all detected unique teams
     const teamList = useMemo(() => {
+        if (isIndividualSport) {
+            return [homeTeamDisplay].filter(Boolean);
+        }
         const set = new Set<string>();
         if (homeTeamDisplay) set.add(homeTeamDisplay);
         if (awayTeamDisplay) set.add(awayTeamDisplay);
@@ -488,7 +521,7 @@ export function OCRoutput({
             if (a.team_name) set.add(String(a.team_name).trim());
         });
         return Array.from(set).filter((t) => t.length > 0);
-    }, [currentActiveMatch, athleteStats, homeTeamDisplay, awayTeamDisplay]);
+    }, [isIndividualSport, currentActiveMatch, athleteStats, homeTeamDisplay, awayTeamDisplay]);
 
     const sportDisplayName = isVolleyball
         ? "VOLLEYBALL"
@@ -993,15 +1026,35 @@ export function OCRoutput({
                             </Text>
                         </View>
                         <View style={styles.scoreboardMatchScore}>
-                            <View style={styles.teamScoreBox}>
-                                <Text style={styles.identityLabel}>{isTrack ? "TOP MARK / TIME" : "TOP RECORDED TIME"}</Text>
-                                <Text style={styles.teamScoreNum}>
-                                    {(() => {
-                                        const top = athleteStats.find((a) => a.time_or_distance || a.finish_time || a.time || a.distance);
-                                        return top?.time_or_distance || top?.finish_time || top?.time || top?.distance || "00:00.00";
-                                    })()}
-                                </Text>
-                            </View>
+                            {(() => {
+                                const topByRank = athleteStats.find((a) => {
+                                    const r = Number(String(a.rank !== undefined ? a.rank : a.place).replace(/[^\d]/g, ''));
+                                    return r === 1;
+                                });
+                                const top = topByRank || athleteStats.find((a) => a.time_or_distance || a.finish_time || a.time || a.distance) || athleteStats[0];
+                                const topName = top?.player_name || top?.name || (isSwimming ? "Lead Swimmer" : "Lead Athlete");
+                                const topTime = top?.time_or_distance || top?.finish_time || top?.time || top?.distance || "00:00.00";
+
+                                return (
+                                    <>
+                                        <View style={styles.teamScoreBox}>
+                                            <Text style={styles.identityLabel}>{isTrack ? "TOP ATHLETE / 1ST" : "TOP PERFORMER / 1ST"}</Text>
+                                            <Text style={styles.teamScoreName} numberOfLines={1}>
+                                                {topName}
+                                            </Text>
+                                            <Text style={{ color: "#64748B", fontSize: 11, fontWeight: "700", marginTop: 2 }} numberOfLines={1}>
+                                                {selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || (isSwimming ? "Swimming Event" : "Track Event")}
+                                            </Text>
+                                        </View>
+                                        <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
+                                            <Text style={styles.identityLabel}>{isTrack ? "TOP MARK / TIME" : "TOP RECORDED TIME"}</Text>
+                                            <Text style={styles.teamScoreNum}>
+                                                {topTime}
+                                            </Text>
+                                        </View>
+                                    </>
+                                );
+                            })()}
                         </View>
                     </View>
                 ) : (
@@ -1044,37 +1097,63 @@ export function OCRoutput({
                 <View style={styles.cardSection}>
                     <Text style={styles.subLabel}>MATCH IDENTITY</Text>
                     <View style={styles.cardDivider} />
-                    <View style={styles.twoColumnGrid}>
-                        <View style={styles.identityCol}>
-                            <Text style={styles.identityLabel}>
-                                {isIndividualSport ? "EVENT / DISCIPLINE:" : "ASSIGNED TEAM (LOCKED):"}
-                            </Text>
-                            {isIndividualSport ? (
+                    {isIndividualSport ? (
+                        <View style={{ gap: 10 }}>
+                            <View>
+                                <Text style={styles.identityLabel}>EVENT / DISCIPLINE:</Text>
                                 <TouchableOpacity
-                                    style={styles.eventPickerTrigger}
+                                    style={[
+                                        styles.eventPickerTrigger,
+                                        {
+                                            width: "100%",
+                                            justifyContent: "space-between",
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 9,
+                                            marginTop: 4,
+                                        },
+                                    ]}
                                     onPress={() => setShowEventPickerModal(true)}
                                     activeOpacity={0.7}
                                 >
-                                    <Text style={[styles.identityValue, { color: "#00C8FF" }]} numberOfLines={1}>
+                                    <Text
+                                        style={[
+                                            styles.identityValue,
+                                            { color: "#00C8FF", flex: 1, marginRight: 8 },
+                                        ]}
+                                        numberOfLines={1}
+                                    >
                                         {selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || "TAP TO CHOOSE EVENT"}
                                     </Text>
-                                    <Ionicons name="chevron-down-circle" size={15} color="#00C8FF" style={{ marginLeft: 6 }} />
+                                    <Ionicons name="chevron-down-circle" size={18} color="#00C8FF" />
                                 </TouchableOpacity>
-                            ) : (
+                            </View>
+                            <View style={styles.twoColumnGrid}>
+                                <View style={styles.identityCol}>
+                                    <Text style={styles.identityLabel}>ASSIGNED TEAM (LOCKED):</Text>
+                                    <Text style={styles.identityValue} numberOfLines={1}>
+                                        {coachLockedTeamName || homeTeamDisplay}
+                                    </Text>
+                                </View>
+                                <View style={[styles.identityCol, { alignItems: "flex-end" }]}>
+                                    <Text style={styles.identityLabel}>PARTICIPANTS:</Text>
+                                    <Text style={styles.identityValue}>
+                                        {athleteStats.length} REGISTERED ATHLETES
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.twoColumnGrid}>
+                            <View style={styles.identityCol}>
+                                <Text style={styles.identityLabel}>ASSIGNED TEAM (LOCKED):</Text>
                                 <Text style={styles.identityValue}>{homeTeamDisplay}</Text>
-                            )}
+                            </View>
+                            <View style={styles.identityCol}>
+                                <Text style={styles.identityLabel}>OPPONENT:</Text>
+                                <Text style={styles.identityValue}>{awayTeamDisplay || "N/A"}</Text>
+                            </View>
                         </View>
-                        <View style={styles.identityCol}>
-                            <Text style={styles.identityLabel}>
-                                {isIndividualSport ? "PARTICIPANTS:" : "OPPONENT:"}
-                            </Text>
-                            <Text style={styles.identityValue}>
-                                {isIndividualSport
-                                    ? `${athleteStats.length} REGISTERED ATHLETES`
-                                    : (awayTeamDisplay || "N/A")}
-                            </Text>
-                        </View>
-                    </View>
+                    )}
                 </View>
 
                 {/* TEAM SELECTOR FILTER TABS */}

@@ -924,9 +924,26 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const isTimed = sportUpper.includes("SWIM") || sportUpper.includes("TRACK") || sportUpper.includes("FIELD");
               const cleanMeet = (m.game_name || m.match_name || "").replace(/\s*vs\s*OPPONENT.*$/i, "").trim();
 
+              const firstStat = (playerStatsArr && playerStatsArr.length > 0) ? playerStatsArr[0] : null;
+              const statEvent = firstStat?.event || firstStat?.event_name || m.event_name || m.discipline;
+              const statTime = firstStat?.finish_time || firstStat?.time || firstStat?.mark || firstStat?.time_or_distance;
+
               // Team-level event title for Dashboard & Team Match History (individual events are attached per-player in athleteFilteredMatches)
               let eventTitle = "";
-              if (cleanMeet && !cleanMeet.toLowerCase().includes("vs")) {
+              if (isTimed) {
+                const isMeetGenericOrVs = cleanMeet.toLowerCase().includes("vs") || cleanMeet.toLowerCase().includes("atleta varsity");
+                if (cleanMeet && !isMeetGenericOrVs) {
+                  eventTitle = statEvent && !cleanMeet.toLowerCase().includes(statEvent.toLowerCase())
+                    ? `${cleanMeet} • ${statEvent}`
+                    : cleanMeet;
+                } else if (statEvent) {
+                  eventTitle = statEvent;
+                } else if (cleanMeet && !isMeetGenericOrVs) {
+                  eventTitle = cleanMeet;
+                } else {
+                  eventTitle = sportUpper.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet";
+                }
+              } else if (cleanMeet && !cleanMeet.toLowerCase().includes("vs")) {
                 if (homeName && oppName && oppName !== "OPPONENT" && oppName !== "OPPONENT TEAM") {
                   eventTitle = `${cleanMeet} • ${homeName} vs ${oppName}`;
                 } else if (homeName && homeName !== "ATLETA" && homeName !== "ATLETA VARSITY") {
@@ -940,9 +957,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 eventTitle = cleanMeet || `${homeName || "Team"} Meet`;
               }
 
-              let summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS"));
+              let summaryScore = "";
               if (isTimed) {
-                summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : "Official Meet Results";
+                summaryScore = (statTime && statTime !== "-" && statTime !== "Finished") ? `Time: ${statTime}` : "Official Meet Results";
+              } else {
+                summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS"));
               }
 
               let badgeText = m.game_result ? `RESULT ${String(m.game_result).toUpperCase().replace(/^RESULT\s*/, "")}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : (hScore !== undefined && aScore !== undefined ? "RESULT LOSS" : "OFFICIAL"));
@@ -3310,12 +3329,31 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
                   const sportUpper = (m.sport_type || "BASKETBALL").toUpperCase();
                   const isTimed = sportUpper.includes("SWIM") || sportUpper.includes("TRACK") || sportUpper.includes("FIELD");
-                  const pStats = m.player_stats || [];
+                  const pStats = Array.isArray(m.player_stats) && m.player_stats.length > 0
+                    ? m.player_stats
+                    : (Array.isArray(m.playerStats) ? m.playerStats : []);
                   const cleanMeet = (m.game_name || m.match_name || "").replace(/\s*vs\s*OPPONENT.*$/i, "").trim();
+
+                  const firstStat = (pStats && pStats.length > 0) ? pStats[0] : null;
+                  const statEvent = firstStat?.event || firstStat?.event_name || m.event_name || m.discipline;
+                  const statTime = firstStat?.finish_time || firstStat?.time || firstStat?.mark || firstStat?.time_or_distance;
 
                   // Team-level event title for Dashboard & Team Match History
                   let eventTitle = "";
-                  if (cleanMeet && !cleanMeet.toLowerCase().includes("vs")) {
+                  if (isTimed) {
+                    const isMeetGenericOrVs = cleanMeet.toLowerCase().includes("vs") || cleanMeet.toLowerCase().includes("atleta varsity");
+                    if (cleanMeet && !isMeetGenericOrVs) {
+                      eventTitle = statEvent && !cleanMeet.toLowerCase().includes(statEvent.toLowerCase())
+                        ? `${cleanMeet} • ${statEvent}`
+                        : cleanMeet;
+                    } else if (statEvent) {
+                      eventTitle = statEvent;
+                    } else if (cleanMeet && !isMeetGenericOrVs) {
+                      eventTitle = cleanMeet;
+                    } else {
+                      eventTitle = sportUpper.includes("SWIM") ? "Swimming Meet" : "Track & Field Meet";
+                    }
+                  } else if (cleanMeet && !cleanMeet.toLowerCase().includes("vs")) {
                     if (homeName && oppName && oppName !== "OPPONENT" && oppName !== "OPPONENT TEAM") {
                       eventTitle = `${cleanMeet} • ${homeName} vs ${oppName}`;
                     } else if (homeName && homeName !== "ATLETA" && homeName !== "ATLETA VARSITY") {
@@ -3329,9 +3367,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     eventTitle = cleanMeet || `${homeName || "Team"} Meet`;
                   }
 
-                  let summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS"));
+                  let summaryScore = "";
                   if (isTimed) {
-                    summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : "Official Meet Results";
+                    summaryScore = (statTime && statTime !== "-" && statTime !== "Finished") ? `Time: ${statTime}` : "Official Meet Results";
+                  } else {
+                    summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS"));
                   }
 
                   let badgeText = m.game_result ? `RESULT ${String(m.game_result).toUpperCase().replace(/^RESULT\s*/, "")}` : (hScore !== undefined && aScore !== undefined && hScore >= aScore ? "RESULT WIN" : (hScore !== undefined && aScore !== undefined ? "RESULT LOSS" : "OFFICIAL"));
@@ -3501,6 +3541,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                       ? matchItem.athlete_ids.length
                       : 0;
 
+                  const isItemTimed = (matchItem.sport_category || "").toUpperCase().includes("SWIM") || 
+                                      (matchItem.sport_category || "").toUpperCase().includes("TRACK") || 
+                                      (matchItem.sport_category || "").toUpperCase().includes("FIELD");
+                  const isBballScoreFormat = /^\s*\d+\s*[-:]\s*\d+\s*$/.test(matchItem.score_or_time_summary || "");
+                  const displaySummaryText = (isItemTimed && isBballScoreFormat) ? "Official Meet Results" : (matchItem.score_or_time_summary || "Match Recorded");
+                  let displayItemTitle = matchItem.event_or_opponent || matchItem.match_name || matchItem.game_name || "Official Match";
+                  if (isItemTimed && (displayItemTitle.toLowerCase().includes("vs opponent") || displayItemTitle.toLowerCase().includes("atleta varsity vs"))) {
+                    displayItemTitle = (matchItem.sport_category || "").toUpperCase().includes("SWIM") ? "Swimming Meet" : "Track & Field Meet";
+                  }
+
                   return (
                     <TouchableOpacity
                       key={matchItem.match_id}
@@ -3522,7 +3572,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
                       <View style={styles.recentMatchTitleRow}>
                         <Text style={styles.recentMatchTitle} numberOfLines={1}>
-                          {matchItem.event_or_opponent || matchItem.match_name || matchItem.game_name || "Official Match"}
+                          {displayItemTitle}
                         </Text>
                         <View style={[styles.recentMatchBadge, isWin ? styles.recentMatchBadgeWin : styles.recentMatchBadgeOther]}>
                           <Text style={isWin ? styles.recentMatchBadgeTextWin : styles.recentMatchBadgeTextOther}>
@@ -3533,7 +3583,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
                       <View style={styles.recentMatchFooter}>
                         <Text style={styles.recentMatchSummaryText}>
-                          {matchItem.score_or_time_summary || "Match Recorded"}
+                          {displaySummaryText}
                         </Text>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                           {athCount > 0 && (

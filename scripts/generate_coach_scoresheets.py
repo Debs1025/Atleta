@@ -85,8 +85,7 @@ def draw_sheet(out_path, title, subtitle_left, subtitle_right, meta_left, meta_r
 
 # ==============================================================================
 # 1. COACH ARCHIE LIM (SWIMMING) - ATENEO BLUE FAST
-# Rule: Only coach's athletes (no other athletes).
-# Only record performance if top 3; if rank > 3, just add the place!
+# Rule: Includes Coach Archie's swimmers + random swimmers from other teams.
 # ==============================================================================
 swim_cols = [
     ("RANK", 45, 120),
@@ -101,9 +100,15 @@ swim_cols = [
 
 swim_athletes = [
     ("1", "4", "Kayla Sanchez", "Ateneo Blue Fast", "00:52.45", "00:25.10", "48", "GOLD - 1ST PLACE"),
-    ("2", "5", "Luke Gebbie", "Ateneo Blue Fast", "00:52.95", "00:25.40", "47", "SILVER - 2ND PLACE"),
-    ("3", "3", "Remedy Rule", "Ateneo Blue Fast", "00:55.20", "00:26.40", "44", "BRONZE - 3RD PLACE"),
-    ("4", "2", "vball vball", "Ateneo Blue Fast", "-", "-", "-", "4TH PLACE"),
+    ("2", "5", "Miguel Barreto", "DLSU Green Sharks", "00:52.80", "00:25.30", "47", "SILVER - 2ND PLACE"),
+    ("3", "3", "Luke Gebbie", "Ateneo Blue Fast", "00:52.95", "00:25.40", "47", "BRONZE - 3RD PLACE"),
+    ("4", "6", "Jennelle Quinto", "Legaspi Hydro Hawks", "00:53.40", "00:25.65", "46", "4TH PLACE"),
+    ("5", "2", "Remedy Rule", "Ateneo Blue Fast", "00:55.20", "00:26.40", "44", "5TH PLACE"),
+    ("6", "7", "Jette Arana", "Aqua Tiger Swim Team", "00:56.10", "00:26.90", "43", "6TH PLACE"),
+    ("7", "1", "vball vball", "Ateneo Blue Fast", "00:58.30", "00:27.80", "41", "7TH PLACE"),
+    ("8", "8", "Tiffany Morena", "UNC Greyhounds", "00:59.10", "00:28.15", "40", "8TH PLACE"),
+    ("9", "9", "Riley Alindogan", "Legaspi Hydro Hawks", "01:00.25", "00:28.90", "39", "9TH PLACE"),
+    ("10", "10", "Thalia Velasco", "NCF Veloci Tigers", "01:01.40", "00:29.30", "38", "10TH PLACE"),
 ]
 
 draw_sheet(
@@ -120,8 +125,7 @@ draw_sheet(
 
 # ==============================================================================
 # 2. COACH ARCHIE LIM (TRACK & FIELD) - ATENEO TRACK & FIELD
-# Rule: Only coach's athletes (no other athletes).
-# Only record performance if top 3; if rank > 3, just add the place!
+# Rule: Includes Coach Archie's athletes + random athletes from other teams.
 # ==============================================================================
 track_cols = [
     ("RANK", 45, 120),
@@ -135,9 +139,15 @@ track_cols = [
 
 track_athletes = [
     ("1", "#88", "EJ Obiena", "Ateneo Track & Field", "Pole Vault", "6.02m", "GOLD - 1ST PLACE"),
-    ("2", "#11", "Robyn Brown", "Ateneo Track & Field", "400m Hurdles", "55.80s", "SILVER - 2ND PLACE"),
-    ("3", "#4", "Kayla Sanchez", "Ateneo Track & Field", "100m Dash", "11.20s", "BRONZE - 3RD PLACE"),
-    ("4", "#5", "Luke Gebbie", "Ateneo Track & Field", "100m Dash", "-", "4TH PLACE"),
+    ("2", "#17", "Kristina Knott", "UST Tiger Tracksters", "100m Dash", "11.28s", "SILVER - 2ND PLACE"),
+    ("3", "#11", "Robyn Brown", "Ateneo Track & Field", "400m Hurdles", "56.40s", "BRONZE - 3RD PLACE"),
+    ("4", "#22", "Eric Cray", "Philippine National Track Team", "400m Hurdles", "56.95s", "4TH PLACE"),
+    ("5", "#4", "Kayla Sanchez", "Ateneo Track & Field", "100m Dash", "11.55s", "5TH PLACE"),
+    ("6", "#33", "Mark Harry Diones", "Army Athletics", "Triple Jump", "16.15m", "6TH PLACE"),
+    ("7", "#5", "Luke Gebbie", "Ateneo Track & Field", "100m Dash", "11.85s", "7TH PLACE"),
+    ("8", "#08", "Clinton Bautista", "Navy Track Team", "110m Hurdles", "14.10s", "8TH PLACE"),
+    ("9", "#09", "Janry Ubas", "PAF Athletics", "Long Jump", "7.65m", "9TH PLACE"),
+    ("10", "#15", "Carter Lilly", "Air Force Runners", "800m Run", "01:51.20", "10TH PLACE"),
 ]
 
 draw_sheet(
@@ -246,6 +256,7 @@ draw_sheet(
 
 # ==============================================================================
 # 5. COACH PINKY BROSAS (SWIMMING) - PHILIPPINE AQUATICS CLUB
+# Rule: Includes Coach Pinky's swimmers + random swimmers from other teams.
 # ==============================================================================
 pac_cols = [
     ("RANK", 45, 120),
@@ -259,8 +270,13 @@ pac_cols = [
 
 pac_athletes = [
     ("1", "4", "Jarod Hatch", "Philippine Aquatics Club", "100m Butterfly", "00:51.95", "GOLD - 1ST PLACE"),
-    ("2", "5", "Jasmine Alkhaldi", "Philippine Aquatics Club", "100m Freestyle", "00:54.12", "SILVER - 2ND PLACE"),
-    ("3", "3", "Xiandi Chua", "Philippine Aquatics Club", "200m IM", "02:11.45", "BRONZE - 3RD PLACE"),
+    ("2", "5", "Kayla Sanchez", "Ateneo Blue Fast", "100m Freestyle", "00:52.45", "SILVER - 2ND PLACE"),
+    ("3", "3", "Jasmine Alkhaldi", "Philippine Aquatics Club", "100m Freestyle", "00:54.12", "BRONZE - 3RD PLACE"),
+    ("4", "6", "Miguel Barreto", "DLSU Green Sharks", "100m Freestyle", "00:54.80", "4TH PLACE"),
+    ("5", "2", "Xiandi Chua", "Philippine Aquatics Club", "200m IM", "02:11.45", "5TH PLACE"),
+    ("6", "7", "Jennelle Quinto", "Legaspi Hydro Hawks", "100m Freestyle", "00:55.30", "6TH PLACE"),
+    ("7", "1", "Jette Arana", "Aqua Tiger Swim Team", "100m Freestyle", "00:56.50", "7TH PLACE"),
+    ("8", "8", "Riley Alindogan", "Legaspi Hydro Hawks", "100m Freestyle", "00:57.20", "8TH PLACE"),
 ]
 
 draw_sheet(

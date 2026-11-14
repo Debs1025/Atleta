@@ -547,7 +547,16 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     return null;
                 };
 
-                const coachRosterList: any[] = Array.isArray(coachActiveTeam?.roster_list) ? coachActiveTeam.roster_list : [];
+                const allCoachTeams = Array.isArray(teams) && teams.length > 0 ? teams : (coachActiveTeam ? [coachActiveTeam] : []);
+                const coachTeamNames = new Set(allCoachTeams.map((t: any) => (t?.team_name || "").trim().toUpperCase()).filter(Boolean));
+                if (coachTeamName) coachTeamNames.add(coachTeamName);
+
+                const coachRosterList: any[] = [
+                    ...(Array.isArray(coachActiveTeam?.roster_list) ? coachActiveTeam.roster_list : []),
+                    ...(Array.isArray(coachActiveTeam?.athletes) ? coachActiveTeam.athletes : []),
+                    ...allCoachTeams.flatMap((t: any) => Array.isArray(t?.roster_list) ? t.roster_list : []),
+                    ...allCoachTeams.flatMap((t: any) => Array.isArray(t?.athletes) ? t.athletes : []),
+                ];
 
                 const athleteOverview: DetectedAthleteStat[] = rawPlayers.map((p: any, idx: number) => {
                     const pName = String(p.player_name || p.name || "").trim().toLowerCase();
@@ -688,6 +697,30 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     };
                 });
 
+                // Filter athletes: for swimming and track & field, only get times and places of coach's players, discard other athletes
+                let finalAthleteOverview = athleteOverview;
+                if (isIndividualSport) {
+                    const coachAthletesOnly = athleteOverview.filter((a) => {
+                        const aTeam = (a.team_name || "").trim().toUpperCase();
+                        const aName = (a.player_name || "").trim().toLowerCase();
+                        const isTeam = coachTeamNames.has(aTeam);
+                        const isRoster = coachRosterList.some((r: any) => {
+                            const rName = String(r.full_name || `${r.first_name || ""} ${r.last_name || ""}`).trim().toLowerCase();
+                            return aName && (rName === aName || rName.includes(aName) || aName.includes(rName));
+                        });
+                        return isTeam || isRoster;
+                    });
+
+                    if (coachAthletesOnly.length > 0) {
+                        finalAthleteOverview = coachAthletesOnly.map((a) => ({
+                            ...a,
+                            team_name: coachTeamName || homeTeamName,
+                        }));
+                    }
+                }
+
+                const athletesToUse = finalAthleteOverview;
+
                 const ftMade = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.ft_made || 0), 0);
                 const ftAttempts = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.ft_attempted || 0), 0);
                 const pt2Made = rawPlayers.reduce((acc: number, p: any) => acc + parseStatValue(p.fg_made || 0), 0);
@@ -702,7 +735,7 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 const isVolleyballMatch = detectedSport === "VOLLEYBALL";
 
                 const computeAthleteStatTotal = (teamName: string) => {
-                    const filtered = athleteOverview.filter(
+                    const filtered = athletesToUse.filter(
                         (a) => (a.team_name || "").toUpperCase() === teamName.toUpperCase()
                     );
                     if (isSoccerMatch) {
@@ -755,11 +788,11 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     ""
                 );
 
-                const homeAthletes = athleteOverview.filter(a => (a.team_name || "").toUpperCase() === homeTeamName.toUpperCase());
-                const awayAthletes = athleteOverview.filter(a => (a.team_name || "").toUpperCase() !== homeTeamName.toUpperCase());
+                const homeAthletes = athletesToUse.filter(a => (a.team_name || "").toUpperCase() === homeTeamName.toUpperCase());
+                const awayAthletes = isIndividualSport ? [] : athletesToUse.filter(a => (a.team_name || "").toUpperCase() !== homeTeamName.toUpperCase());
                 const homeRosterIds = homeAthletes.map(a => a.athlete_id);
                 const awayRosterIds = awayAthletes.map(a => a.athlete_id);
-                const playerStatsList = athleteOverview.map(a => ({
+                const playerStatsList = athletesToUse.map(a => ({
                     ...a,
                     athlete_id: a.athlete_id,
                     player_name: a.player_name,
@@ -794,15 +827,17 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 return {
                     team_id: coachActiveTeam?.team_id || dataObj.team_id || "",
                     team_name: homeTeamName,
-                    opponent_team_name: oppTeamName,
-                    final_score: `${hScore} - ${aScore}`,
-                    game_result: hScore >= aScore ? "WIN" : "LOSS",
-                    team_scores: [
-                        { team: homeTeamName, score: hScore },
-                        { team: oppTeamName, score: aScore },
-                    ],
+                    opponent_team_name: isIndividualSport ? "" : oppTeamName,
+                    final_score: isIndividualSport ? "Official Meet Results" : `${hScore} - ${aScore}`,
+                    game_result: isIndividualSport ? "OFFICIAL" : (hScore >= aScore ? "WIN" : "LOSS"),
+                    team_scores: isIndividualSport
+                        ? [{ team: homeTeamName, score: 0 }]
+                        : [
+                            { team: homeTeamName, score: hScore },
+                            { team: oppTeamName, score: aScore },
+                        ],
                     injuries: detectedInjuries,
-                    teams: detectedTeamNames,
+                    teams: isIndividualSport ? [homeTeamName] : detectedTeamNames,
                     sport_type: detectedSport as any,
                     file_name: dataObj.file_name || dataObj.filename,
                     scoresheet_url: scoresheetUrlVal,
@@ -813,7 +848,7 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     awayRosterAthletes: awayRosterIds,
                     player_stats: playerStatsList,
                     playerStats: playerStatsList,
-                    athlete_overview: athleteOverview.length > 0 ? athleteOverview : [
+                    athlete_overview: athletesToUse.length > 0 ? athletesToUse : [
                         {
                             athlete_id: "ath_1",
                             player_name: "EXTRACTED ATHLETE",
