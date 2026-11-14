@@ -270,9 +270,16 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   const matchDateParsed = parseSafeDate(payload.match_date || payload.date_time);
   const matchDateIso = matchDateParsed > 0 ? new Date(matchDateParsed).toISOString() : new Date().toISOString();
 
+  const rawCid = String(payload.logged_by_coach_id || payload.coach_id || "").replace(/^coach_/, "");
+  const canCid = rawCid ? `coach_${rawCid}` : undefined;
+
   const rawPayload = {
     ...payload,
     match_id: matchId,
+    coach_id: canCid || payload.coach_id || undefined,
+    logged_by_coach_id: rawCid || payload.logged_by_coach_id || undefined,
+    assigned_coaches: Array.from(new Set([rawCid, canCid, ...(Array.isArray(payload.assigned_coaches) ? payload.assigned_coaches : [])].filter(Boolean))),
+    coaching_staff: Array.from(new Set([rawCid, canCid, ...(Array.isArray(payload.coaching_staff) ? payload.coaching_staff : [])].filter(Boolean))),
     match_date: matchDateIso,
     date_time: payload.date_time || matchDateIso,
     playerStats: playerStatsList,
@@ -652,9 +659,11 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   } catch (_) {}
 
   // 3. Attempt REST API synchronization if online
+  let finalServerSuccess = false;
   try {
     const token = await getStoredAuthToken();
-    const res = await fetch(`${API_BASE}/matches/submit`, {
+    const coachQuery = rawCid ? `?coach_id=${encodeURIComponent(rawCid)}` : '';
+    const res = await fetch(`${API_BASE}/matches/submit${coachQuery}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -663,11 +672,25 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
       },
       body: JSON.stringify(cleanPayload),
     });
-    if (!res.ok) {
+    if (res.ok) {
+      finalServerSuccess = true;
+      const resJson = await res.json().catch(() => null);
+      if (resJson?.match) {
+        const savedMatch = resJson.match;
+        const sId = savedMatch.match_id || savedMatch.id || matchId;
+        const currentCached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
+        const matchesArr: any[] = currentCached ? JSON.parse(currentCached) : [];
+        const updatedArr = [savedMatch, ...matchesArr.filter((m) => (m.match_id || m.id) !== sId && (m.match_id || m.id) !== matchId)];
+        await AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(updatedArr)).catch(() => null);
+        matchesMemoryCache = updatedArr;
+      }
+    } else {
+      const errText = await res.text().catch(() => "");
+      console.warn("Backend match submission note:", res.status, errText);
       isOffline = true;
     }
   } catch (netErr) {
-    // Offline / WiFi off - entirely normal and handled by Firestore persistence
+    // Offline / WiFi off - entirely normal and handled by local offline persistence
     isOffline = true;
   }
 
@@ -676,7 +699,7 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   } catch (_) {}
 
   return {
-    success: firestoreSuccess || true,
+    success: firestoreSuccess || finalServerSuccess,
     match_id: matchId,
     offline: isOffline,
   };
@@ -945,7 +968,7 @@ async function revalidateSportsInBackground(): Promise<void> {
 async function revalidateMatchesInBackground(): Promise<void> {
   try {
     const token = await getStoredAuthToken();
-    const data = await quickFetchJson(`${API_BASE}/matches`, {
+    const data = await quickFetchJson(`${API_BASE}/matches?fresh=true`, {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }, 2500);
@@ -1222,7 +1245,7 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
   // 3. Fast Network Fetch (6.0s timeout)
   try {
     const token = await getStoredAuthToken();
-    const data = await quickFetchJson(`${API_BASE}/matches`, {
+    const data = await quickFetchJson(`${API_BASE}/matches?fresh=true`, {
       Accept: "application/json",
       "Cache-Control": "no-cache",
       Pragma: "no-cache",

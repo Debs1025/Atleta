@@ -798,6 +798,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           clearFirebaseClientCaches();
           await AsyncStorage.removeItem(COACH_DASHBOARD_CACHE_KEY).catch(() => null);
         }
+        const activeCid = String(coach?.coach_id || coach?.user_id || currentUser?.coachId || currentUser?.uid || "").replace(/^coach_/, "");
+        const matchesEndpoint = activeCid ? `/matches?coach_id=${encodeURIComponent(activeCid)}&fresh=true` : `/matches?fresh=true`;
         const [
           profileRes,
           teamsRes,
@@ -816,7 +818,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           withSyncTimeout(requestAuthenticatedJson("/coaches/profile", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/teams", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/sync/coach-snapshot", "GET", undefined, forceFresh).catch(() => null)),
-          withSyncTimeout(requestAuthenticatedJson("/matches", "GET", undefined, forceFresh).catch(() => null)),
+          withSyncTimeout(requestAuthenticatedJson(matchesEndpoint, "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/coaches/athletes", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/notifications", "GET", undefined, forceFresh).catch(() => null)),
           withSyncTimeout(requestAuthenticatedJson("/scouting/proposals/list", "GET", undefined, forceFresh).catch(() => null)),
@@ -2465,7 +2467,35 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   }, []);
 
   const allFilteredMatches = useMemo(() => {
-    const list = coachMatches && coachMatches.length > 0 ? coachMatches : matchHistoryList;
+    const baseList = coachMatches && coachMatches.length > 0 ? coachMatches : matchHistoryList;
+    const matchMap = new Map<string, any>();
+    (baseList || []).forEach((m) => {
+      const id = m.match_id || m.id;
+      if (id) matchMap.set(id, m);
+    });
+
+    const coachId = coach.coach_id || coach.user_id;
+    const cleanCoachId = String(coachId || "").replace(/^coach_/, "");
+    const canonicalCoachId = `coach_${cleanCoachId}`;
+
+    (matchHistoryList || []).forEach((m) => {
+      const id = m.match_id || m.id;
+      if (id && !matchMap.has(id)) {
+        const mLog = String(m.logged_by_coach_id || "");
+        const mCid = String(m.coach_id || "");
+        if (
+          mLog === cleanCoachId ||
+          mCid === canonicalCoachId ||
+          mLog === "coach_default" ||
+          m.is_official === true ||
+          (Array.isArray(m.assigned_coaches) && m.assigned_coaches.some((c: string) => c === cleanCoachId || c === canonicalCoachId))
+        ) {
+          matchMap.set(id, m);
+        }
+      }
+    });
+
+    const list = Array.from(matchMap.values());
     if (!list || list.length === 0) return [];
 
     let filtered = list;
@@ -3477,10 +3507,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               };
 
               // 1. Persist offline-first to Firestore & local storage
-              await saveMatchOfflineFirst(matchPayload).catch(() => null);
+              const persistResult = await saveMatchOfflineFirst(matchPayload).catch((err) => {
+                console.error("saveMatchOfflineFirst error:", err);
+                return { success: false, match_id: matchPayload.match_id, offline: true };
+              });
 
               // 2. Transmit to backend REST API
-              const saveRes = await fetch(`${API_BASE}/matches`, {
+              const coachQ = currentCoachId ? `?coach_id=${encodeURIComponent(currentCoachId)}` : "";
+              const saveRes = await fetch(`${API_BASE}/matches/submit${coachQ}`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -3489,20 +3523,29 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify(matchPayload),
-              });
+              }).catch(() => null);
 
-              if (saveRes.ok) {
-                const resJson = await saveRes.json();
+              if (saveRes && saveRes.ok) {
+                const resJson = await saveRes.json().catch(() => null);
                 if (resJson?.match?.match_id) {
                   newMatchItem.match_id = resJson.match.match_id;
                 }
+              } else if (!persistResult.success && (!saveRes || !saveRes.ok)) {
+                Alert.alert(
+                  "Sync Notice",
+                  "Match saved to device cache and will synchronize to cloud once online."
+                );
               }
 
               // Warm cache and background revalidate matches
               clearAuthMicroCache();
               await getMatchesOfflineFirst(true).catch(() => null);
-            } catch (saveErr) {
-              console.warn("Could not persist match to Firestore:", saveErr);
+            } catch (saveErr: any) {
+              console.error("Could not persist match to Firestore:", saveErr);
+              Alert.alert(
+                "Save Failed",
+                saveErr?.message || "Failed to persist scanned match log. Please check your connection."
+              );
             }
             })();
           }}

@@ -160,10 +160,6 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
 
     setShowInjuryModal(false);
     setActiveDrawerTab("injured");
-    Alert.alert(
-      "Athlete Sidelined",
-      `${injuryTargetPlayer.full_name || injuryTargetPlayer.last_name} has been moved to the injury list (${finalType}).`
-    );
   };
 
   // Return injured athlete to bench

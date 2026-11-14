@@ -356,13 +356,19 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       scoresheet_url: scoresheetUrl,
     };
 
-    if (onSaveComplete) onSaveComplete(payload);
-    setShowSaveSuccessModal(true);
-
     try {
-      await saveMatchOfflineFirst(payload);
-    } catch (err) {
-      console.warn("Offline-first match log save note:", err);
+      const saveRes = await saveMatchOfflineFirst(payload);
+      if (!saveRes?.success) {
+        throw new Error("Unable to save match to database. Please check your network connection.");
+      }
+      if (onSaveComplete) onSaveComplete(payload);
+      setShowSaveSuccessModal(true);
+    } catch (err: any) {
+      console.error("Match save error:", err);
+      Alert.alert(
+        "Save Failed",
+        err?.message || "Failed to persist match log to the database. Please try again."
+      );
     }
   };
 
