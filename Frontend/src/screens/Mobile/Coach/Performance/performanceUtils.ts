@@ -18,6 +18,19 @@ export function parseTimeToSeconds(val: any): number {
 }
 
 export function detectSport(athlete: any): "BASKETBALL" | "VOLLEYBALL" | "SWIMMING" | "TRACK AND FIELD" {
+  // 1. High-confidence position inference (guarantees volleyball/swimming/track athletes are never misidentified)
+  const pos = String(athlete?.position || athlete?.position_or_event || "").toUpperCase().trim();
+  if (pos.includes("OUTSIDE HITTER") || pos.includes("MIDDLE BLOCKER") || pos.includes("OPPOSITE HITTER") || pos.includes("SETTER") || pos.includes("LIBERO") || pos.includes("SPIKER")) {
+    return "VOLLEYBALL";
+  }
+  if (pos.includes("VAULT") || pos.includes("SPRINT") || pos.includes("HURDLE") || pos.includes("JUMP") || pos.includes("THROW") || pos.includes("SHOT PUT") || pos.includes("DISCUS") || pos.includes("JAVELIN")) {
+    return "TRACK AND FIELD";
+  }
+  if (pos.includes("FREE") || pos.includes("FLY") || pos.includes("BACK") || pos.includes("BREAST") || pos.includes("STROKE") || pos.includes("SWIM")) {
+    return "SWIMMING";
+  }
+
+  // 2. Direct sport fields
   const rawSport = String(
     athlete?.sport_category ||
     athlete?.sport_type ||
@@ -32,22 +45,12 @@ export function detectSport(athlete: any): "BASKETBALL" | "VOLLEYBALL" | "SWIMMI
   if (rawSport.includes("TRACK") || rawSport.includes("FIELD") || rawSport.includes("RUN")) return "TRACK AND FIELD";
   if (rawSport.includes("BASKET")) return "BASKETBALL";
 
-  // Position fallback inference
-  const pos = String(athlete?.position || athlete?.position_or_event || "").toUpperCase().trim();
-  if (pos.includes("OUTSIDE HITTER") || pos.includes("MIDDLE BLOCKER") || pos.includes("OPPOSITE HITTER") || pos.includes("SETTER") || pos.includes("LIBERO") || pos.includes("SPIKER")) {
-    return "VOLLEYBALL";
-  }
+  // 3. Position basketball
   if (pos.includes("GUARD") || pos.includes("FORWARD") || pos.includes("CENTER")) {
     return "BASKETBALL";
   }
-  if (pos.includes("VAULT") || pos.includes("SPRINT") || pos.includes("HURDLE") || pos.includes("JUMP") || pos.includes("THROW") || pos.includes("SHOT PUT")) {
-    return "TRACK AND FIELD";
-  }
-  if (pos.includes("FREE") || pos.includes("FLY") || pos.includes("BACK") || pos.includes("BREAST") || pos.includes("STROKE") || pos.includes("SWIM")) {
-    return "SWIMMING";
-  }
 
-  // Stats fallback inference
+  // 4. Stats fallback inference
   const stats = athlete?.stats || athlete?.averages || {};
   if (stats.spike_kills !== undefined || stats.block_points !== undefined || stats.hitting_pct !== undefined || stats.service_aces !== undefined) {
     return "VOLLEYBALL";

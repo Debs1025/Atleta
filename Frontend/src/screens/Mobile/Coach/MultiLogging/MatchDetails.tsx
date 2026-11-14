@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/MatchDetails";
 import { useMatchSession } from "./MatchSessionContext";
 import { requestAuthenticatedJson, getStoredAuthToken } from "../../Authentication/authShared";
-import { saveMatchOfflineFirst } from "../../../../services/firebaseClient";
+import { saveMatchOfflineFirst, parseSafeDate } from "../../../../services/firebaseClient";
 import { getSportStatSchema, loadDynamicSportsSchemas } from "./sportStatSchemas";
 
 interface MatchDetailsProps {
@@ -258,10 +258,10 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
 
     const totalCalculatedHomeScore = playerStatsArray.reduce((sum, p: any) => sum + (p.pts || 0), 0);
     const homeScore = isTimedSport
-      ? undefined
+      ? null
       : (totalCalculatedHomeScore > 0 ? totalCalculatedHomeScore : (normalizedGameResult === "WIN" ? 78 : 65));
     const awayScore = isTimedSport
-      ? undefined
+      ? null
       : (normalizedGameResult === "WIN" ? Math.max(0, (homeScore || 78) - 8) : (homeScore || 65) + 8);
 
     const firstStat = playerStatsArray[0];
@@ -308,12 +308,15 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       ? (gameName.trim() || `${resolvedTeamName} ${defaultEvent}`)
       : (gameName.trim() || `${resolvedTeamName} vs ${opponentName || "OPPONENT"}`);
 
+    const parsedMatchDateMs = parseSafeDate((session as any).date_iso || (session as any).match_date || session.date_time);
+    const matchDateIso = parsedMatchDateMs > 0 ? new Date(parsedMatchDateMs).toISOString() : new Date().toISOString();
+
     // Construct backend-ready match payload with restored Firestore schema attributes
     const payload = {
       match_id: session.match_id || `match_${Date.now()}`,
       team_id: resolvedTeamId || resolvedTeamName,
-      coach_id: effectiveCoachId || undefined,
-      logged_by_coach_id: effectiveCoachId || undefined,
+      coach_id: effectiveCoachId || null,
+      logged_by_coach_id: effectiveCoachId || null,
       coaching_staff: effectiveCoachId ? [effectiveCoachId] : [],
       assigned_coaches: effectiveCoachId ? [effectiveCoachId] : [],
       home_team_name: resolvedTeamName,
@@ -323,11 +326,12 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       game_name: defaultMatchTitle,
       match_type: gameType || (isTimedSport ? "Championship" : "Practice"),
       game_type: gameType || (isTimedSport ? "Championship" : "Practice"),
-      match_date: session.date_time || new Date().toISOString(),
+      match_date: matchDateIso,
+      date_time: matchDateIso,
       location: session.location || "Metro Sports Center",
       sport_type: normalizedSport,
-      eventType: isTimedSport ? defaultEvent : undefined,
-      event_type: isTimedSport ? defaultEvent : undefined,
+      eventType: isTimedSport ? defaultEvent : null,
+      event_type: isTimedSport ? defaultEvent : null,
       game_result: normalizedGameResult,
       rank: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),
       place: isTimedSport ? topRank : (normalizedGameResult === "WIN" ? 1 : 2),

@@ -64,6 +64,8 @@ import { BasketballMatchResult } from "../Performance/basketballMatchResult";
 import {
   getMatchesOfflineFirst,
   saveMatchOfflineFirst,
+  parseSafeDate,
+  getMatchTimestamp,
   getTeamsOfflineFirst,
   getAthletesOfflineFirst,
   getSportsOfflineFirst,
@@ -932,10 +934,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const aScore = m.away_score !== undefined ? Number(m.away_score) : (homeScoreMatch ? parseInt(homeScoreMatch[2], 10) : undefined);
               const homeName = m.home_team_name || m.home_team || (m.notes || "").match(/OCR Logged:\s*([^v]+)\s*vs/i)?.[1]?.trim() || "ATLETA";
               const oppName = m.away_team_name || m.away_team || m.opponent_team_name || "OPPONENT";
-              const rawD = m.match_date || m.date_time || m.created_at;
-              const d = rawD ? new Date(rawD) : null;
-              const dateShort = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
-              const dateFull = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : String(rawD || "RECENT");
+              const matchTs = getMatchTimestamp(m);
+              const d = matchTs > 0 ? new Date(matchTs) : (m.match_date ? new Date(m.match_date) : null);
+              const dateShort = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "RECENT";
+              const dateFull = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "RECENT";
+              const canonicalMatchDate = (d && !isNaN(d.getTime())) ? d.toISOString() : (m.match_date || new Date().toISOString());
 
               const playerStatsArr = Array.isArray(m.player_stats) && m.player_stats.length > 0
                 ? m.player_stats
@@ -1034,7 +1037,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 coach_id: m.coach_id || m.logged_by_coach_id || m.created_by || (Array.isArray(m.assigned_coaches) ? m.assigned_coaches[0] : undefined),
                 logged_by_coach_id: m.logged_by_coach_id || m.coach_id || m.created_by || undefined,
                 coaching_staff: Array.isArray(m.coaching_staff) ? m.coaching_staff : (m.coach_id ? [m.coach_id] : (Array.isArray(m.assigned_coaches) ? m.assigned_coaches : [])),
-                match_date: rawD || (d && !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString()),
+                match_date: canonicalMatchDate,
                 date_formatted: dateShort,
                 full_date: dateFull,
                 date_group: "MATCH LOGS",
@@ -1066,6 +1069,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 entries_count: playerStatsArr.length > 0 ? playerStatsArr.length : (m.entries_count || 0),
                 coach_notes: m.notes ? [m.notes] : ["Match recorded."],
               };
+            });
+            liveMatches.sort((a, b) => {
+              const timeA = getMatchTimestamp(a);
+              const timeB = getMatchTimestamp(b);
+              return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
             });
             setMatchHistoryList(liveMatches);
           } else if (!matchHistoryListRef.current || matchHistoryListRef.current.length === 0) {
@@ -1352,7 +1360,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   ...ath,
                   team_id: t.team_id,
                   team_name: t.team_name,
-                  sport_type: t.sport_type,
+                  sport_type: ath.sport_type || ath.sport || t.sport_type,
                 });
               });
             }
@@ -2252,6 +2260,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   const coachMatches = useMemo(() => {
     if (!matchHistoryList || matchHistoryList.length === 0) return [];
     const coachId = coach.coach_id || coach.user_id;
+    const cleanCoachId = String(coachId || "").replace(/^coach_/, "");
+    const canonicalCoachId = `coach_${cleanCoachId}`;
     const coachTeamIds = new Set(teams.map((t) => t.team_id).filter(Boolean));
     const coachTeamNames = new Set(teams.map((t) => (t.team_name || "").toLowerCase().trim()).filter(Boolean));
 
@@ -2262,12 +2272,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       athletesPool.map((a) => (a.full_name || `${a.first_name || ""} ${a.last_name || ""}`).toLowerCase().trim()).filter(Boolean)
     );
 
-    return matchHistoryList.filter((m: any) => {
-      if (m.coach_id && (m.coach_id === coachId || m.coach_id === coach.user_id)) return true;
-      if (m.logged_by_coach_id && (m.logged_by_coach_id === coachId || m.logged_by_coach_id === coach.user_id)) return true;
-      if (m.created_by && (m.created_by === coachId || m.created_by === coach.user_id)) return true;
-      if (Array.isArray(m.assigned_coaches) && (m.assigned_coaches.includes(coachId) || m.assigned_coaches.includes(coach.user_id))) return true;
-      if (Array.isArray(m.coaching_staff) && (m.coaching_staff.includes(coachId) || m.coaching_staff.includes(coach.user_id))) return true;
+    const matches = matchHistoryList.filter((m: any) => {
+      const mCoachId = String(m.coach_id || "");
+      const mLoggedBy = String(m.logged_by_coach_id || "");
+      const mCreatedBy = String(m.created_by || "");
+
+      if (mCoachId && (mCoachId === coachId || mCoachId === coach.user_id || mCoachId === cleanCoachId || mCoachId === canonicalCoachId)) return true;
+      if (mLoggedBy && (mLoggedBy === coachId || mLoggedBy === coach.user_id || mLoggedBy === cleanCoachId || mLoggedBy === canonicalCoachId)) return true;
+      if (mCreatedBy && (mCreatedBy === coachId || mCreatedBy === coach.user_id || mCreatedBy === cleanCoachId || mCreatedBy === canonicalCoachId)) return true;
+      if (Array.isArray(m.assigned_coaches) && m.assigned_coaches.some((c: string) => c === coachId || c === coach.user_id || c === cleanCoachId || c === canonicalCoachId)) return true;
+      if (Array.isArray(m.coaching_staff) && m.coaching_staff.some((c: string) => c === coachId || c === coach.user_id || c === cleanCoachId || c === canonicalCoachId)) return true;
       if (m.team_id && coachTeamIds.has(m.team_id)) return true;
       const hName = (m.home_team || m.home_team_name || "").toLowerCase().trim();
       const aName = (m.away_team || m.away_team_name || m.opponent_team_name || "").toLowerCase().trim();
@@ -2296,6 +2310,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       if (mPlayerNames.some((pName: string) => coachAthleteNames.has(pName))) return true;
 
       return false;
+    });
+
+    return matches.sort((a, b) => {
+      const timeA = getMatchTimestamp(a);
+      const timeB = getMatchTimestamp(b);
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
     });
   }, [matchHistoryList, coach.coach_id, coach.user_id, teams, athletesPool]);
 
@@ -2436,7 +2456,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       });
     }
 
-    return filtered;
+    return filtered.sort((a, b) => {
+      const timeA = getMatchTimestamp(a);
+      const timeB = getMatchTimestamp(b);
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
   }, [coachMatches, matchHistoryList, activeSportFilter]);
 
   const dashboardRecentMatches = useMemo(() => {
@@ -2569,15 +2593,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       }));
 
       const currentCoachId = coach.coach_id || coach.user_id || currentUser?.coachId || currentUser?.uid;
+      const matchTs = getMatchTimestamp(savedPayload);
+      const matchIso = matchTs > 0 ? new Date(matchTs).toISOString() : new Date().toISOString();
+      const matchDateObj = new Date(matchIso);
       const newMatchItem: MatchHistoryItem = {
         match_id: matchId,
         team_id: savedPayload.team_id || (teams[0]?.team_id),
         coach_id: currentCoachId,
         logged_by_coach_id: currentCoachId,
         coaching_staff: currentCoachId ? [currentCoachId] : [],
-        match_date: savedPayload.match_date || new Date().toISOString(),
-        date_formatted: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        full_date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+        match_date: matchIso,
+        date_formatted: matchDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        full_date: matchDateObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
         date_group: "MATCH LOGS",
         event_or_opponent: eventTitleDisplay,
         game_name: savedPayload.game_name || savedPayload.match_name,
@@ -2610,8 +2637,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         coach_notes: [savedPayload.notes || `Match: ${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"} (${summaryDisplay})`],
       };
 
-      setMatchHistoryList((prev) => [newMatchItem, ...prev.filter((m) => m.match_id !== matchId)]);
-      matchHistoryListRef.current = [newMatchItem, ...(matchHistoryListRef.current || []).filter((m) => m.match_id !== matchId)];
+      const nextMatches = [newMatchItem, ...(matchHistoryListRef.current || []).filter((m) => m.match_id !== matchId)].sort((a, b) => {
+        const timeA = getMatchTimestamp(a);
+        const timeB = getMatchTimestamp(b);
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+      });
+      setMatchHistoryList(nextMatches);
+      matchHistoryListRef.current = nextMatches;
       clearAuthMicroCache();
 
       if (Array.isArray(savedPayload.player_stats)) {
@@ -3149,8 +3181,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               coach_notes: [`OCR Scanned Match: ${lockedTeamName} ${ocrEvent ? `• ${ocrEvent}` : `vs ${finalData.opponent_team_name || "Opponent"}`} (${homePts} - ${oppPts})`],
             };
 
-            setMatchHistoryList((prev) => [newMatchItem, ...prev]);
-            matchHistoryListRef.current = [newMatchItem, ...(matchHistoryListRef.current || [])];
+            const nextOcrMatches = [newMatchItem, ...(matchHistoryListRef.current || [])].sort((a, b) => {
+              const timeA = getMatchTimestamp(a);
+              const timeB = getMatchTimestamp(b);
+              return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+            });
+            setMatchHistoryList(nextOcrMatches);
+            matchHistoryListRef.current = nextOcrMatches;
             clearAuthMicroCache();
 
             // Update roster athletes state with the confirmed OCR performance stats (strictly for owned roster athletes)
@@ -3377,13 +3414,13 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 opponent_team_name: isOcrTimed ? "" : resolvedOpponentName,
                 match_name: ocrTitle,
                 game_name: ocrTitle,
-                event: ocrEvent || undefined,
-                event_name: ocrEvent || undefined,
-                event_type: ocrEvent || undefined,
-                discipline: ocrEvent || undefined,
+                event: ocrEvent || null,
+                event_name: ocrEvent || null,
+                event_type: ocrEvent || null,
+                discipline: ocrEvent || null,
                 distance_meters: (finalData as any).distance_meters || (isOcrTimed ? 50 : 0),
-                home_score: isOcrTimed ? undefined : homePts,
-                away_score: isOcrTimed ? undefined : oppPts,
+                home_score: isOcrTimed ? null : homePts,
+                away_score: isOcrTimed ? null : oppPts,
                 sport_type:
                   finalData.sport_type === "SWIMMING"
                     ? "Swimming"
@@ -3640,7 +3677,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 {activeSportFilter === "ALL" ? "TOTAL MATCHES & MEETS" : `TOTAL MATCHES (${activeSportFilter})`}
               </Text>
               <View style={styles.summaryPill}>
-                <Text style={styles.summaryPillValue}>{dashboardRecentMatches.length}</Text>
+                <Text style={styles.summaryPillValue}>{allFilteredMatches.length}</Text>
               </View>
             </View>
           </ScrollView>

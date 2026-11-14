@@ -22,6 +22,7 @@ import {
   setLogLevel,
   deleteDoc,
   updateDoc,
+  increment,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE, CLOUD_PROD_API, getStoredAuthToken, clearAuthMicroCache } from "../screens/Mobile/Authentication/authShared";
@@ -176,6 +177,85 @@ function pickBetterDistance(existing: string | undefined | null, candidate: stri
 }
 
 /**
+ * Parse any date representation (ISO 8601, formatted local strings, timestamps) into a valid millisecond timestamp.
+ * Essential for Hermes JavaScript engine on Android which returns NaN for non-ISO date strings.
+ */
+export function parseSafeDate(val: any): number {
+  if (!val) return 0;
+  if (typeof val === "number") {
+    return val < 1e11 ? val * 1000 : val;
+  }
+  if (val instanceof Date) return isNaN(val.getTime()) ? 0 : val.getTime();
+  const str = String(val).trim();
+  if (!str) return 0;
+
+  // 1. Try standard ISO/RFC parse
+  const d = new Date(str);
+  const time = d.getTime();
+  if (!isNaN(time) && time > 0) return time;
+
+  // 2. Format: MM/DD/YYYY, HH:MM[:SS] [AM|PM] or YYYY-MM-DD
+  const m = str.match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{1,4})(?:[,\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*(AM|PM)?)?/i);
+  if (m) {
+    let year = parseInt(m[1].length === 4 ? m[1] : m[3], 10);
+    let month = parseInt(m[1].length === 4 ? m[2] : m[1], 10) - 1;
+    let day = parseInt(m[1].length === 4 ? m[3] : m[2], 10);
+    let hour = m[4] ? parseInt(m[4], 10) : 0;
+    const min = m[5] ? parseInt(m[5], 10) : 0;
+    const sec = m[6] ? parseInt(m[6], 10) : 0;
+    const ampm = m[7] ? m[7].toUpperCase() : null;
+    if (ampm === "PM" && hour < 12) hour += 12;
+    if (ampm === "AM" && hour === 12) hour = 0;
+    const dt = new Date(year, month, day, hour, min, sec);
+    if (!isNaN(dt.getTime())) return dt.getTime();
+  }
+
+  // 3. Month Name: Nov 14, 2026 or 14 Nov 2026
+  const monthNames: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const m2 = str.match(/([a-zA-Z]{3,9})[\s,]+(\d{1,2})[\s,]+(\d{4})/i);
+  if (m2) {
+    const monKey = m2[1].slice(0, 3).toLowerCase();
+    if (monthNames[monKey] !== undefined) {
+      const dt = new Date(parseInt(m2[3], 10), monthNames[monKey], parseInt(m2[2], 10));
+      if (!isNaN(dt.getTime())) return dt.getTime();
+    }
+  }
+
+  return 0;
+}
+
+export function getMatchTimestamp(m: any): number {
+  if (!m) return 0;
+  const candidates = [m.match_date, m.created_at, m.timestamp, m.date_time, m.date];
+  for (const c of candidates) {
+    const t = parseSafeDate(c);
+    if (t > 0) return t;
+  }
+  return 0;
+}
+
+/**
+ * Strips all `undefined` values and converts them to valid Firestore representations (`null` or omitted)
+ * to prevent Firebase client SDK from throwing "Unsupported field value: undefined".
+ */
+export function sanitizeForFirestore(val: any): any {
+  if (val === undefined) return null;
+  if (val === null || typeof val !== "object") return val;
+  if (Array.isArray(val)) {
+    return val.map((item) => sanitizeForFirestore(item));
+  }
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(val)) {
+    if (v !== undefined) {
+      result[k] = sanitizeForFirestore(v);
+    } else {
+      result[k] = null;
+    }
+  }
+  return result;
+}
+
+/**
  * Save a match log with Firestore offline data persistence.
  * Writes to Firestore local cache first so it succeeds even when WiFi is off.
  * Firestore automatically synchronizes to the cloud when internet is available.
@@ -187,9 +267,14 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   const awayRosterAthletesList = payload.awayRosterAthletes || payload.away_roster_athletes || [];
   const scoresheetUrlVal = payload.scoresheetUrl || payload.scoresheet_url || "";
 
-  const cleanPayload = {
+  const matchDateParsed = parseSafeDate(payload.match_date || payload.date_time);
+  const matchDateIso = matchDateParsed > 0 ? new Date(matchDateParsed).toISOString() : new Date().toISOString();
+
+  const rawPayload = {
     ...payload,
     match_id: matchId,
+    match_date: matchDateIso,
+    date_time: payload.date_time || matchDateIso,
     playerStats: playerStatsList,
     player_stats: playerStatsList,
     rosterAthletes: rosterAthletesList,
@@ -200,14 +285,16 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     scoresheet_url: scoresheetUrlVal,
     synced_offline: true,
     updated_at: new Date().toISOString(),
-    created_at: payload.created_at || payload.match_date || new Date().toISOString(),
+    created_at: payload.created_at ? (parseSafeDate(payload.created_at) > 0 ? new Date(parseSafeDate(payload.created_at)).toISOString() : new Date().toISOString()) : matchDateIso,
   };
+
+  const cleanPayload = sanitizeForFirestore(rawPayload);
 
   let firestoreSuccess = false;
   let isOffline = false;
 
   try {
-    // 1. Write to Firestore document (persisted in offline IndexedDB/AsyncStorage cache)
+    // 1. Write to Firestore Match_Logs document
     const matchDocRef = doc(db, "Match_Logs", matchId);
     await setDoc(matchDocRef, cleanPayload, { merge: true });
     firestoreSuccess = true;
@@ -505,12 +592,13 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
               timestamp: cleanPayload.created_at,
               created_at: cleanPayload.created_at,
             };
-            await setDoc(doc(db, "Performance_Metrics", metricId), metricDoc, { merge: true }).catch(() => null);
+            const cleanMetricDoc = sanitizeForFirestore(metricDoc);
+            await setDoc(doc(db, "Performance_Metrics", metricId), cleanMetricDoc, { merge: true }).catch(() => null);
 
             // Commit to player's match history sub-collection
             await Promise.all([
-              setDoc(doc(db, "Athlete_Profiles", canonicalAthId, "match_history", matchId), metricDoc, { merge: true }).catch(() => null),
-              setDoc(doc(db, "Athlete_Profiles", cleanAthId, "match_history", matchId), metricDoc, { merge: true }).catch(() => null),
+              setDoc(doc(db, "Athlete_Profiles", canonicalAthId, "match_history", matchId), cleanMetricDoc, { merge: true }).catch(() => null),
+              setDoc(doc(db, "Athlete_Profiles", cleanAthId, "match_history", matchId), cleanMetricDoc, { merge: true }).catch(() => null),
             ]);
           } catch (_) {}
         }
@@ -523,6 +611,39 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   } catch (athErr) {
     console.warn("Athlete local stats update error:", athErr);
   }
+
+  // 2c. Update Coach_Profiles and Teams stats in Firestore
+  try {
+    const coachId = cleanPayload.coach_id || cleanPayload.logged_by_coach_id;
+    if (coachId) {
+      const cleanCid = String(coachId).replace(/^coach_/, "");
+      const canCid = `coach_${cleanCid}`;
+      await Promise.all([
+        updateDoc(doc(db, "Coach_Profiles", canCid), {
+          metric_logs: increment(1),
+          total_matches_logged: increment(1),
+          matches_logged: increment(1),
+          updated_at: new Date().toISOString(),
+        }).catch(() => null),
+        updateDoc(doc(db, "Coach_Profiles", cleanCid), {
+          metric_logs: increment(1),
+          total_matches_logged: increment(1),
+          matches_logged: increment(1),
+          updated_at: new Date().toISOString(),
+        }).catch(() => null),
+      ]);
+    }
+  } catch (_) {}
+
+  try {
+    const teamId = cleanPayload.team_id;
+    if (teamId) {
+      await updateDoc(doc(db, "Teams", teamId), {
+        total_matches: increment(1),
+        updated_at: new Date().toISOString(),
+      }).catch(() => null);
+    }
+  } catch (_) {}
 
   // 3. Attempt REST API synchronization if online
   try {
@@ -703,8 +824,6 @@ export function clearFirebaseClientCaches() {
   activeCoachSportsLastFetched = 0;
   athletesMemoryCache = null;
   athletesLastFetched = 0;
-  matchesMemoryCache = null;
-  matchesLastFetched = 0;
   teamsMemoryCache = null;
   teamsLastFetched = 0;
   AsyncStorage.multiRemove([
@@ -718,7 +837,6 @@ export function clearFirebaseClientCaches() {
     "atleta_coach_dashboard_cache_v2",
     "atleta_discovery_cache",
     "atleta_offline_coach_profile_cache",
-    "atleta_offline_matches_cache",
     "atleta_offline_athletes_cache",
     "atleta_offline_teams_cache",
     "atleta_official_matches_cache",
@@ -1128,6 +1246,11 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
       });
 
       const list = Array.from(mergedMap.values());
+      list.sort((a, b) => {
+        const timeA = getMatchTimestamp(a);
+        const timeB = getMatchTimestamp(b);
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+      });
       matchesMemoryCache = list;
       matchesLastFetched = Date.now();
       AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
@@ -1137,6 +1260,11 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
 
   // Fallback 1: Local backup from AsyncStorage or memory
   if (localBackup.length > 0) {
+    localBackup.sort((a, b) => {
+      const timeA = getMatchTimestamp(a);
+      const timeB = getMatchTimestamp(b);
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
     matchesMemoryCache = localBackup;
     matchesLastFetched = Date.now();
     return localBackup;

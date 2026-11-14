@@ -19,7 +19,7 @@ import { styles } from "./styles/createLog";
 import { SportCategory, AthleteRosterItem, MatchLogSessionState, SportConfigurationItem } from "./types";
 import { useMatchSession } from "./MatchSessionContext";
 import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
-import { getAthletesOfflineFirst, getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { getAthletesOfflineFirst, getSportsOfflineFirst, parseSafeDate } from "../../../../services/firebaseClient";
 import { getEventsForSport, SportEventOption } from "./sportEvents";
 
 declare const process: any;
@@ -810,8 +810,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
     }
 
     const allRosterIds = allSelected.map((a) => a.athlete_id);
+    const targetDateTimeMs = parseSafeDate(`${effectiveDate}, ${effectiveTime}`);
+    const combinedIso = targetDateTimeMs > 0 ? new Date(targetDateTimeMs).toISOString() : new Date().toISOString();
+
     setSessionDetails({
       date_time: `${effectiveDate}, ${effectiveTime}`,
+      date_iso: combinedIso,
+      match_date: combinedIso,
       location: effectiveLocation,
       active_roster: activeRoster,
       bench_roster: benchRoster,
