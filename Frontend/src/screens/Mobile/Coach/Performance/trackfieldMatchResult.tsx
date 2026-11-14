@@ -36,7 +36,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
             rank: p.rank || p.place || p.placement_rank || idx + 1,
             name: p.player_name || p.name || p.athlete_name || "Athlete",
             detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
-            time_or_score: p.time || p.finish_time || p.formatted_time || p.mark || p.sport_stats?.time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || p.stats?.time || p.stats?.finish_time || "-",
+            time_or_score: p.time || p.finish_time || p.formatted_time || p.mark || (p.distance_m ? `${p.distance_m}m` : null) || (p.distance_meters ? `${p.distance_meters}m` : null) || p.sport_stats?.time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || (p.sport_stats?.distance_m ? `${p.sport_stats.distance_m}m` : null) || p.stats?.time || p.stats?.finish_time || "-",
           }))
       : []);
 
@@ -105,6 +105,13 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
                     matched?.time ||
                     matched?.finish_time ||
                     matched?.formatted_time ||
+                    p.mark ||
+                    p.sport_stats?.mark ||
+                    matched?.mark ||
+                    (p.sport_stats?.distance_m ? `${p.sport_stats.distance_m}m` : null) ||
+                    (matched?.distance_m ? `${matched.distance_m}m` : null) ||
+                    (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : null) ||
+                    (matched?.distance_meters ? `${matched.distance_meters}m` : null) ||
                     (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : "-");
 
                   return {
@@ -124,7 +131,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
                   rank: r.placement_rank || r.rank || idx + 1,
                   name: r.athlete_name || "Athlete",
                   detail: r.distance || "Runner",
-                  time_or_score: r.formatted_finish_time || r.time || r.finish_time || "-",
+                  time_or_score: r.formatted_finish_time || r.time || r.finish_time || r.distance || "-",
                 }));
               if (mapped.length > 0) {
                 setLeaderboardData(mapped);
@@ -136,7 +143,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
                   rank: p.rank || p.place || p.placement_rank || idx + 1,
                   name: p.player_name || p.name || "Athlete",
                   detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
-                  time_or_score: p.time || p.finish_time || p.formatted_time || "-",
+                  time_or_score: p.time || p.finish_time || p.formatted_time || p.mark || (p.distance_m ? `${p.distance_m}m` : null) || (p.distance_meters ? `${p.distance_meters}m` : null) || "-",
                 }));
               if (mapped.length > 0) {
                 setLeaderboardData(mapped);
