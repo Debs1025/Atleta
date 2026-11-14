@@ -1423,137 +1423,139 @@ export function OCRoutput({
                     )}
                 </View>
 
-                {/* INJURIES & SIDELINED PLAYERS CARD */}
-                <View
-                    style={{
-                        backgroundColor: "#0F192C",
-                        borderWidth: 1,
-                        borderColor: "rgba(255, 255, 255, 0.08)",
-                        borderRadius: 14,
-                        padding: 16,
-                        marginBottom: 16,
-                    }}
-                >
+                {/* INJURIES & SIDELINED PLAYERS CARD (Team/Ball Sports only) */}
+                {!isIndividualSport && (
                     <View
                         style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: 12,
+                            backgroundColor: "#0F192C",
+                            borderWidth: 1,
+                            borderColor: "rgba(255, 255, 255, 0.08)",
+                            borderRadius: 14,
+                            padding: 16,
+                            marginBottom: 16,
                         }}
                     >
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <Ionicons name="medical" size={17} color="#FF4D6D" />
-                            <Text style={{ fontSize: 13, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0.8 }}>
-                                INJURIES & SIDELINED PLAYERS
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleAddInjury}
+                        <View
                             style={{
                                 flexDirection: "row",
+                                justifyContent: "space-between",
                                 alignItems: "center",
-                                gap: 4,
-                                paddingVertical: 5,
-                                paddingHorizontal: 10,
-                                backgroundColor: "rgba(255, 77, 109, 0.15)",
-                                borderWidth: 1,
-                                borderColor: "#FF4D6D",
-                                borderRadius: 6,
+                                marginBottom: 12,
                             }}
                         >
-                            <Ionicons name="add" size={14} color="#FF4D6D" />
-                            <Text style={{ fontSize: 11, fontWeight: "800", color: "#FF4D6D" }}>LOG INJURY</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {currentInjuries.length === 0 ? (
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                color: "#8E9BAE",
-                                fontStyle: "italic",
-                                textAlign: "center",
-                                paddingVertical: 10,
-                            }}
-                        >
-                            No injuries detected or logged for this game. Tap "Log Injury" if a player was sidelined.
-                        </Text>
-                    ) : (
-                        currentInjuries.map((inj: any, idx: number) => (
-                            <View
-                                key={inj.id || idx}
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                <Ionicons name="medical" size={17} color="#FF4D6D" />
+                                <Text style={{ fontSize: 13, fontWeight: "800", color: "#FFFFFF", letterSpacing: 0.8 }}>
+                                    INJURIES & SIDELINED PLAYERS
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={handleAddInjury}
                                 style={{
-                                    backgroundColor: "rgba(255, 255, 255, 0.04)",
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    paddingVertical: 5,
+                                    paddingHorizontal: 10,
+                                    backgroundColor: "rgba(255, 77, 109, 0.15)",
                                     borderWidth: 1,
-                                    borderColor: "rgba(255, 255, 255, 0.07)",
-                                    borderRadius: 8,
-                                    padding: 10,
-                                    marginBottom: 8,
-                                    gap: 6,
+                                    borderColor: "#FF4D6D",
+                                    borderRadius: 6,
                                 }}
                             >
-                                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                                    <TextInput
-                                        style={{
-                                            flex: 1,
-                                            fontSize: 13,
-                                            fontWeight: "700",
-                                            color: "#FFFFFF",
-                                            backgroundColor: "rgba(255, 255, 255, 0.05)",
-                                            paddingVertical: 5,
-                                            paddingHorizontal: 8,
-                                            borderRadius: 4,
-                                            marginRight: 8,
-                                        }}
-                                        placeholder="Player Name (e.g. Jerom Lastimosa)"
-                                        placeholderTextColor="#64748B"
-                                        value={inj.player_name || ""}
-                                        onChangeText={(t) => handleUpdateInjury(inj.id, "player_name", t)}
-                                    />
-                                    <TouchableOpacity
-                                        onPress={() => handleRemoveInjury(inj.id)}
-                                        style={{ padding: 4 }}
-                                    >
-                                        <Ionicons name="trash-outline" size={16} color="#FF4D6D" />
-                                    </TouchableOpacity>
+                                <Ionicons name="add" size={14} color="#FF4D6D" />
+                                <Text style={{ fontSize: 11, fontWeight: "800", color: "#FF4D6D" }}>LOG INJURY</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {currentInjuries.length === 0 ? (
+                            <Text
+                                style={{
+                                    fontSize: 12,
+                                    color: "#8E9BAE",
+                                    fontStyle: "italic",
+                                    textAlign: "center",
+                                    paddingVertical: 10,
+                                }}
+                            >
+                                No injuries detected or logged for this game. Tap "Log Injury" if a player was sidelined.
+                            </Text>
+                        ) : (
+                            currentInjuries.map((inj: any, idx: number) => (
+                                <View
+                                    key={inj.id || idx}
+                                    style={{
+                                        backgroundColor: "rgba(255, 255, 255, 0.04)",
+                                        borderWidth: 1,
+                                        borderColor: "rgba(255, 255, 255, 0.07)",
+                                        borderRadius: 8,
+                                        padding: 10,
+                                        marginBottom: 8,
+                                        gap: 6,
+                                    }}
+                                >
+                                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                                        <TextInput
+                                            style={{
+                                                flex: 1,
+                                                fontSize: 13,
+                                                fontWeight: "700",
+                                                color: "#FFFFFF",
+                                                backgroundColor: "rgba(255, 255, 255, 0.05)",
+                                                paddingVertical: 5,
+                                                paddingHorizontal: 8,
+                                                borderRadius: 4,
+                                                marginRight: 8,
+                                            }}
+                                            placeholder="Player Name (e.g. Jerom Lastimosa)"
+                                            placeholderTextColor="#64748B"
+                                            value={inj.player_name || ""}
+                                            onChangeText={(t) => handleUpdateInjury(inj.id, "player_name", t)}
+                                        />
+                                        <TouchableOpacity
+                                            onPress={() => handleRemoveInjury(inj.id)}
+                                            style={{ padding: 4 }}
+                                        >
+                                            <Ionicons name="trash-outline" size={16} color="#FF4D6D" />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={{ flexDirection: "row", gap: 8 }}>
+                                        <TextInput
+                                            style={{
+                                                flex: 1,
+                                                fontSize: 11,
+                                                color: "#E2E8F0",
+                                                backgroundColor: "rgba(255, 255, 255, 0.05)",
+                                                paddingVertical: 4,
+                                                paddingHorizontal: 8,
+                                                borderRadius: 4,
+                                            }}
+                                            placeholder="Injury (e.g. Ankle Sprain)"
+                                            placeholderTextColor="#64748B"
+                                            value={inj.injury_type || ""}
+                                            onChangeText={(t) => handleUpdateInjury(inj.id, "injury_type", t)}
+                                        />
+                                        <TextInput
+                                            style={{
+                                                width: 80,
+                                                fontSize: 11,
+                                                color: "#FFB703",
+                                                backgroundColor: "rgba(255, 255, 255, 0.05)",
+                                                paddingVertical: 4,
+                                                paddingHorizontal: 8,
+                                                borderRadius: 4,
+                                            }}
+                                            placeholder="Status"
+                                            placeholderTextColor="#64748B"
+                                            value={inj.status || "Out"}
+                                            onChangeText={(t) => handleUpdateInjury(inj.id, "status", t)}
+                                        />
+                                    </View>
                                 </View>
-                                <View style={{ flexDirection: "row", gap: 8 }}>
-                                    <TextInput
-                                        style={{
-                                            flex: 1,
-                                            fontSize: 11,
-                                            color: "#E2E8F0",
-                                            backgroundColor: "rgba(255, 255, 255, 0.05)",
-                                            paddingVertical: 4,
-                                            paddingHorizontal: 8,
-                                            borderRadius: 4,
-                                        }}
-                                        placeholder="Injury (e.g. Ankle Sprain)"
-                                        placeholderTextColor="#64748B"
-                                        value={inj.injury_type || ""}
-                                        onChangeText={(t) => handleUpdateInjury(inj.id, "injury_type", t)}
-                                    />
-                                    <TextInput
-                                        style={{
-                                            width: 80,
-                                            fontSize: 11,
-                                            color: "#FFB703",
-                                            backgroundColor: "rgba(255, 255, 255, 0.05)",
-                                            paddingVertical: 4,
-                                            paddingHorizontal: 8,
-                                            borderRadius: 4,
-                                        }}
-                                        placeholder="Status"
-                                        placeholderTextColor="#64748B"
-                                        value={inj.status || "Out"}
-                                        onChangeText={(t) => handleUpdateInjury(inj.id, "status", t)}
-                                    />
-                                </View>
-                            </View>
-                        ))
-                    )}
-                </View>
+                            ))
+                        )}
+                    </View>
+                )}
 
                 {/* ACTION BUTTONS STACK */}
                 <View style={styles.actionStack}>

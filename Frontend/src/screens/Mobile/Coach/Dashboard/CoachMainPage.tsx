@@ -985,6 +985,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 roster_athletes: athIds,
                 player_stats: playerStatsArr,
                 playerStats: playerStatsArr,
+                leaderboard_entries: playerStatsArr.map((p: any, idx: number) => {
+                  const pTime = p.time || p.finish_time || p.formatted_time || p.mark || (p.stats && (p.stats.time || p.stats.finish_time)) || (p.sport_stats && (p.sport_stats.time || p.sport_stats.finish_time));
+                  return {
+                    rank: p.rank || p.place || p.placement_rank || (idx + 1),
+                    name: (p.player_name || p.name || p.athlete_name || `Athlete ${idx + 1}`).trim(),
+                    detail: [p.event || p.event_name, p.team_name || p.team || homeName].filter(Boolean).join(" • "),
+                    time_or_score: isTimed ? (pTime || "-") : `${p.pts ?? p.points ?? 0} pts`,
+                  };
+                }),
+                entries_count: playerStatsArr.length > 0 ? playerStatsArr.length : (m.entries_count || 0),
                 coach_notes: m.notes ? [m.notes] : ["Match recorded."],
               };
             });
@@ -3354,6 +3364,17 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     home_score: isTimed ? undefined : hScore,
                     away_score: isTimed ? undefined : aScore,
                     player_stats: pStats,
+                    playerStats: pStats,
+                    leaderboard_entries: pStats.map((p: any, idx: number) => {
+                      const pTime = p.time || p.finish_time || p.formatted_time || p.mark || (p.stats && (p.stats.time || p.stats.finish_time)) || (p.sport_stats && (p.sport_stats.time || p.sport_stats.finish_time));
+                      return {
+                        rank: p.rank || p.place || p.placement_rank || (idx + 1),
+                        name: (p.player_name || p.name || p.athlete_name || `Athlete ${idx + 1}`).trim(),
+                        detail: [p.event || p.event_name, p.team_name || p.team || homeName].filter(Boolean).join(" • "),
+                        time_or_score: isTimed ? (pTime || "-") : `${p.pts ?? p.points ?? 0} pts`,
+                      };
+                    }),
+                    entries_count: pStats.length > 0 ? pStats.length : (m.entries_count || 0),
                     coach_notes: m.notes ? [m.notes] : ["Match recorded."],
                   };
                 });

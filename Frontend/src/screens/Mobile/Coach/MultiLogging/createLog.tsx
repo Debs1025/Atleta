@@ -1079,96 +1079,98 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
           </View>
         )}
 
-        {/* INJURED / SIDELINED PLAYERS SECTION */}
-        <View style={{ marginBottom: 18 }}>
-          <View style={styles.injurySectionHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Ionicons name="medical" size={14} color="#FF4D6D" />
-              <Text style={[styles.subLabel, { color: "#FF4D6D", marginBottom: 0 }]}>
-                INJURED / SIDELINED PLAYERS ({session.injuries?.length || 0})
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.logInjuryHeaderBtn}
-              onPress={() => {
-                setInjuryTargetAthlete(null);
-                setSelectedInjuryType(COMMON_INJURIES[0]);
-                setCustomInjuryType("");
-                setSelectedInjuryStatus(INJURY_STATUSES[0]);
-                setInjuryNotes("");
-                setShowInjuryModal(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={13} color="#FF4D6D" />
-              <Text style={styles.logInjuryHeaderBtnText}>LOG INJURY</Text>
-            </TouchableOpacity>
-          </View>
-
-          {session.injuries && session.injuries.length > 0 ? (
-            session.injuries.map((inj) => (
-              <View key={inj.id} style={styles.injuredAthleteCard}>
-                <View
-                  style={[
-                    styles.avatarPlaceholder,
-                    {
-                      backgroundColor: "rgba(255, 77, 109, 0.15)",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 77, 109, 0.3)",
-                    },
-                  ]}
-                >
-                  <Ionicons name="medkit" size={22} color="#FF4D6D" />
-                </View>
-
-                <View style={styles.athleteInfo}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
-                    <Text style={styles.athleteName}>{inj.player_name}</Text>
-                    <View style={styles.injuredBadge}>
-                      <Ionicons name="alert-circle" size={10} color="#FF4D6D" />
-                      <Text style={styles.injuredBadgeText}>{(inj.status || "OUT").toUpperCase()}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.athleteSubtitle}>
-                    {inj.injury_type || "Injured"} • #{inj.jersey_number || "00"}
-                    {inj.quarter_or_set ? ` • ${inj.quarter_or_set}` : ""}
-                  </Text>
-                  {inj.notes ? (
-                    <Text style={{ color: "#94A3B8", fontSize: 11, fontStyle: "italic", marginTop: 2 }}>
-                      Note: {inj.notes}
-                    </Text>
-                  ) : null}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => removeInjury(inj.id)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                </TouchableOpacity>
+        {/* INJURED / SIDELINED PLAYERS SECTION (Ball/Team Sports only) */}
+        {!(session.sport_type?.toUpperCase().includes("SWIM") || session.sport_type?.toUpperCase().includes("TRACK") || session.sport_type?.toUpperCase().includes("FIELD")) && (
+          <View style={{ marginBottom: 18 }}>
+            <View style={styles.injurySectionHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="medical" size={14} color="#FF4D6D" />
+                <Text style={[styles.subLabel, { color: "#FF4D6D", marginBottom: 0 }]}>
+                  INJURED / SIDELINED PLAYERS ({session.injuries?.length || 0})
+                </Text>
               </View>
-            ))
-          ) : (
-            <TouchableOpacity
-              style={styles.emptyInjuryCard}
-              onPress={() => {
-                setInjuryTargetAthlete(null);
-                setSelectedInjuryType(COMMON_INJURIES[0]);
-                setCustomInjuryType("");
-                setSelectedInjuryStatus(INJURY_STATUSES[0]);
-                setInjuryNotes("");
-                setShowInjuryModal(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="medkit-outline" size={20} color="#FF4D6D" />
-              <Text style={styles.emptyInjuryText}>
-                No injured players logged for this session. Tap to sideline an athlete.
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+              <TouchableOpacity
+                style={styles.logInjuryHeaderBtn}
+                onPress={() => {
+                  setInjuryTargetAthlete(null);
+                  setSelectedInjuryType(COMMON_INJURIES[0]);
+                  setCustomInjuryType("");
+                  setSelectedInjuryStatus(INJURY_STATUSES[0]);
+                  setInjuryNotes("");
+                  setShowInjuryModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={13} color="#FF4D6D" />
+                <Text style={styles.logInjuryHeaderBtnText}>LOG INJURY</Text>
+              </TouchableOpacity>
+            </View>
+
+            {session.injuries && session.injuries.length > 0 ? (
+              session.injuries.map((inj) => (
+                <View key={inj.id} style={styles.injuredAthleteCard}>
+                  <View
+                    style={[
+                      styles.avatarPlaceholder,
+                      {
+                        backgroundColor: "rgba(255, 77, 109, 0.15)",
+                        borderWidth: 1,
+                        borderColor: "rgba(255, 77, 109, 0.3)",
+                      },
+                    ]}
+                  >
+                    <Ionicons name="medkit" size={22} color="#FF4D6D" />
+                  </View>
+
+                  <View style={styles.athleteInfo}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                      <Text style={styles.athleteName}>{inj.player_name}</Text>
+                      <View style={styles.injuredBadge}>
+                        <Ionicons name="alert-circle" size={10} color="#FF4D6D" />
+                        <Text style={styles.injuredBadgeText}>{(inj.status || "OUT").toUpperCase()}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.athleteSubtitle}>
+                      {inj.injury_type || "Injured"} • #{inj.jersey_number || "00"}
+                      {inj.quarter_or_set ? ` • ${inj.quarter_or_set}` : ""}
+                    </Text>
+                    {inj.notes ? (
+                      <Text style={{ color: "#94A3B8", fontSize: 11, fontStyle: "italic", marginTop: 2 }}>
+                        Note: {inj.notes}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeInjury(inj.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <TouchableOpacity
+                style={styles.emptyInjuryCard}
+                onPress={() => {
+                  setInjuryTargetAthlete(null);
+                  setSelectedInjuryType(COMMON_INJURIES[0]);
+                  setCustomInjuryType("");
+                  setSelectedInjuryStatus(INJURY_STATUSES[0]);
+                  setInjuryNotes("");
+                  setShowInjuryModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="medkit-outline" size={20} color="#FF4D6D" />
+                <Text style={styles.emptyInjuryText}>
+                  No injured players logged for this session. Tap to sideline an athlete.
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Available Athletes from DB Section (Inline directly on page) */}
         <View style={{ marginBottom: 18 }}>
