@@ -1260,13 +1260,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               const lName = athObj.last_name || rich.last_name || '';
               const fullName = athObj.full_name || rich.full_name || (fName ? `${fName} ${lName}`.trim() : (athObj.name || rich.name || 'Athlete'));
 
+              const sportCandidate = athObj.sport_type || athObj.sports_type || athObj.sport || rich.sport_type || rich.sports_type || rich.sport || t.sport_type;
+              const effectiveSport = detectSport({ ...rich, ...athObj, sport_category: sportCandidate, sport_type: sportCandidate, position: athObj.position || rich.position });
+
               hydratedRoster.push({
                 athlete_id: athObj.athlete_id || rich.athlete_id || (k ? `ath_${k}` : `ath_${Date.now()}`),
                 user_id: athObj.user_id || rich.user_id || k,
                 first_name: fName || 'Athlete',
                 last_name: lName,
                 full_name: fullName,
-                sport_type: (athObj.sport_type || rich.sport_type || t.sport_type || 'BASKETBALL').toUpperCase() as Team["sport_type"],
+                sport_type: effectiveSport as Team["sport_type"],
+                sport: effectiveSport,
+                sports_type: effectiveSport,
                 position: athObj.position || rich.position || 'Unassigned',
                 jersey_number: athObj.jersey_number !== undefined && athObj.jersey_number !== null ? String(athObj.jersey_number) : (rich.jersey_number !== undefined && rich.jersey_number !== null ? String(rich.jersey_number) : '0'),
                 is_eligibility_verified: athObj.is_eligibility_verified ?? rich.is_eligibility_verified ?? false,
@@ -1304,13 +1309,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 const lName = ha.last_name || rich.last_name || '';
                 const fullName = ha.full_name || rich.full_name || (fName ? `${fName} ${lName}`.trim() : 'Athlete');
 
+                const sportCandidate = ha.sport_type || ha.sports_type || ha.sport || rich.sport_type || rich.sports_type || rich.sport || t.sport_type;
+                const effectiveSport = detectSport({ ...rich, ...ha, sport_category: sportCandidate, sport_type: sportCandidate, position: ha.position || rich.position });
+
                 hydratedRoster.push({
                   athlete_id: ha.athlete_id || rich.athlete_id || `ath_${k}`,
                   user_id: ha.user_id || rich.user_id || k,
                   first_name: fName || 'Athlete',
                   last_name: lName,
                   full_name: fullName,
-                  sport_type: (ha.sport_type || rich.sport_type || t.sport_type || 'BASKETBALL').toUpperCase() as Team["sport_type"],
+                  sport_type: effectiveSport as Team["sport_type"],
+                  sport: effectiveSport,
+                  sports_type: effectiveSport,
                   position: ha.position || rich.position || 'Unassigned',
                   jersey_number: ha.jersey_number !== undefined && ha.jersey_number !== null ? String(ha.jersey_number) : (rich.jersey_number !== undefined && rich.jersey_number !== null ? String(rich.jersey_number) : '0'),
                   is_eligibility_verified: ha.is_eligibility_verified ?? rich.is_eligibility_verified ?? false,
@@ -1356,11 +1366,21 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           processedTeams.forEach((t) => {
             if (Array.isArray(t.roster_list)) {
               t.roster_list.forEach((ath: any) => {
+                const k = normalizeId(ath.athlete_id || ath.user_id);
+                const rich = (k ? richCoachAthletesMap.get(k) : null) || {};
+                const sportCandidate = ath.sport_type || ath.sport || ath.sports_type || rich.sport_type || rich.sport || t.sport_type;
+                const effectiveSport = detectSport({ ...rich, ...ath, sport_category: sportCandidate, sport_type: sportCandidate, position: ath.position || rich.position });
                 coachTeamAthletes.push({
+                  ...rich,
                   ...ath,
                   team_id: t.team_id,
                   team_name: t.team_name,
-                  sport_type: ath.sport_type || ath.sport || t.sport_type,
+                  sport_type: effectiveSport as Team["sport_type"],
+                  sport: effectiveSport,
+                  sports_type: effectiveSport,
+                  averages: ath.averages || rich.averages || ath.stats || rich.stats,
+                  stats: ath.stats || rich.stats || ath.averages || rich.averages,
+                  rating_score: calculatePlayerRating(rich) || calculatePlayerRating(ath) || Number(ath.rating_score || rich.rating_score || 0),
                 });
               });
             }
@@ -1374,12 +1394,16 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             .map((ha: any) => {
               const k = normalizeId(ha.athlete_id || ha.user_id);
               const rich = (k ? richCoachAthletesMap.get(k) : null) || {};
+              const sportCandidate = ha.sport_type || ha.sports_type || ha.sport || rich.sport_type || rich.sports_type || rich.sport;
+              const effectiveSport = detectSport({ ...rich, ...ha, sport_category: sportCandidate, sport_type: sportCandidate, position: ha.position || rich.position });
               return {
                 ...ha,
                 athlete_id: ha.athlete_id || rich.athlete_id || ha.user_id || (k ? `ath_${k}` : `ath_${Date.now()}`),
                 user_id: ha.user_id || rich.user_id || ha.athlete_id || k || '',
                 full_name: ha.full_name || rich.full_name || `${ha.first_name || rich.first_name || ''} ${ha.last_name || rich.last_name || ''}`.trim() || 'Athlete',
-                sport_type: (ha.sport_type || rich.sport_type || 'BASKETBALL').toUpperCase() as Team["sport_type"],
+                sport_type: effectiveSport as Team["sport_type"],
+                sport: effectiveSport,
+                sports_type: effectiveSport,
                 position: ha.position || rich.position || 'Unassigned',
                 jersey_number: ha.jersey_number !== null && ha.jersey_number !== undefined ? String(ha.jersey_number) : (rich.jersey_number !== null && rich.jersey_number !== undefined ? String(rich.jersey_number) : '0'),
                 is_eligibility_verified: Boolean(ha.is_eligibility_verified ?? rich.is_eligibility_verified),
