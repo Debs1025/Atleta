@@ -15,7 +15,7 @@ import { AtletaHeader } from "../Components/AtletaHeader";
 import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
 import { getSportsOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
-import { calculatePlayerRating } from "./performanceUtils";
+import { calculatePlayerRating, detectSport } from "./performanceUtils";
 import {
   SWIMMING_EVENTS,
   TRACK_FIELD_EVENTS,
@@ -86,9 +86,8 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
         const mapped: AthletePerformanceProfile[] = list.map((a: any) => {
           const stats = a.stats || a.averages || {};
           const avg = a.averages || a.stats || {};
-          const sType = String(a.sport_type || a.sport_category || "BASKETBALL").toUpperCase();
-          const isSwim = sType.includes("SWIM");
-          const isTrack = sType.includes("TRACK") || sType.includes("FIELD");
+          const sType = detectSport(a);
+          const isBasket = sType === "BASKETBALL";
 
           const ppg = Number(avg.ppg ?? stats.ppg ?? a.ppg ?? a.pts ?? 0);
           const rpg = Number(avg.rpg ?? stats.rpg ?? a.rpg ?? a.reb ?? 0);
@@ -100,7 +99,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             sport_category: sType,
             averages: {
               ...avg,
-              ...(!isSwim && !isTrack ? { ppg, rpg, apg, per_score: per } : {}),
+              ...(isBasket ? { ppg, rpg, apg, per_score: per } : {}),
               fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
               games_played: Number(avg.games_played ?? stats.games_played ?? 0),
               wins: Number(avg.wins ?? stats.wins ?? 0),
@@ -131,7 +130,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             averages: {
               ...(stats || {}),
               ...(avg || {}),
-              ...(!isSwim && !isTrack ? { ppg, rpg, apg, per_score: per } : {}),
+              ...(isBasket ? { ppg, rpg, apg, per_score: per } : {}),
               games_played: Number(avg.games_played ?? stats.games_played ?? 0),
               wins: Number(avg.wins ?? stats.wins ?? 0),
               per_score: per,
@@ -210,10 +209,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
         const mergedStats = { ...((sourceAthlete as any)?.stats || {}), ...((ath as any)?.stats || {}) };
         const combined = { ...sourceAthlete, ...ath, averages: mergedAverages, stats: mergedStats };
         const resolvedRating = calculatePlayerRating(combined);
+        const resolvedSport = detectSport(combined);
 
         return {
           ...ath,
           ...sourceAthlete,
+          sport_category: resolvedSport,
           rating_score: resolvedRating,
           averages: mergedAverages,
           biometrics: sourceAthlete?.biometrics || ath.biometrics,
@@ -585,12 +586,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                   {athlete.team_name} • {athlete.position_or_event}
                 </Text>
                 {(() => {
-                  const sc = String(athlete.sport_category || '').toUpperCase().trim();
-                  if (!athlete.averages) return null;
+                  const sc = detectSport(athlete);
+                  if (!athlete.averages && !(athlete as any).stats) return null;
                   if (sc.includes("BASKETBALL")) {
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                        {athlete.averages.ppg ?? 0} PPG • {athlete.averages.rpg ?? 0} RPG • {athlete.averages.apg ?? 0} APG
+                        {athlete.averages?.ppg ?? (athlete as any).stats?.ppg ?? 0} PPG • {athlete.averages?.rpg ?? (athlete as any).stats?.rpg ?? 0} RPG • {athlete.averages?.apg ?? (athlete as any).stats?.apg ?? 0} APG
                       </Text>
                     );
                   } else if (sc.includes("SWIM")) {
@@ -684,9 +685,9 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                       </Text>
                     );
                   } else if (sc.includes("VOLLEY")) {
-                    const kills = athlete.averages.kills ?? athlete.averages.spike_kills ?? 0;
-                    const blocks = athlete.averages.blocks ?? athlete.averages.block_points ?? 0;
-                    const aces = athlete.averages.aces ?? athlete.averages.service_aces ?? 0;
+                    const kills = athlete.averages?.spike_kills ?? athlete.averages?.kills ?? (athlete as any).stats?.spike_kills ?? (athlete as any).stats?.kills ?? 0;
+                    const blocks = athlete.averages?.block_points ?? athlete.averages?.blocks ?? (athlete as any).stats?.block_points ?? (athlete as any).stats?.blocks ?? 0;
+                    const aces = athlete.averages?.service_aces ?? athlete.averages?.aces ?? (athlete as any).stats?.service_aces ?? (athlete as any).stats?.aces ?? 0;
                     return (
                       <Text style={{ color: "#38BDF8", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
                         {kills} KILLS • {blocks} BLOCKS • {aces} ACES

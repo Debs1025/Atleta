@@ -75,7 +75,7 @@ import {
   clearFirebaseClientCaches,
 } from "../../../../services/firebaseClient";
 import { useAccount } from "../../../../context/AccountContext";
-import { calculatePlayerRating, calculateDynamicRadarCompetencies, parseTimeToSeconds } from "../Performance/performanceUtils";
+import { calculatePlayerRating, calculateDynamicRadarCompetencies, parseTimeToSeconds, detectSport } from "../Performance/performanceUtils";
 
 // Font Styles
 const fontPlatform = Platform.select({
@@ -576,11 +576,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       stats: mergedStats,
     });
     let rating = dynamicRating;
-    if (rating <= 0 && a.rating_score && a.rating_score !== 85 && a.rating_score !== 75 && a.rating_score !== 99 && a.rating_score !== 96 && a.rating_score !== 94 && a.rating_score !== 93) {
-      const hasRealStats = gp > 0 || ppg > 0 || Boolean(pb50mFree || pb100mFree || pb100mTrack || podiums > 0);
-      if (hasRealStats) {
-        rating = Number(a.rating_score);
-      }
+    if (rating <= 0 && a.rating_score) {
+      rating = Number(a.rating_score);
     }
 
     const phys = a.physical_profile || a.physical_attributes || {};
@@ -617,7 +614,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       location_province: a.province || a.location || "Unassigned",
       team_name: a.team_name || "Team",
       rating_score: rating,
-      sport_category: (a.sport_type || a.sport_category || "BASKETBALL").toUpperCase() as any,
+      sport_category: detectSport(a) as any,
       biometrics: {
         height_ft: heightFt,
         weight_lbs: weightLbs,
