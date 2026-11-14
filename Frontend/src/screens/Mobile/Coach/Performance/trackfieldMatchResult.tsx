@@ -27,17 +27,41 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
+  const homeTeamFilter = String((matchItem as any)?.home_team_name || (matchItem as any)?.team_name || (matchItem as any)?.home_team || '').trim().toUpperCase();
+
+  const isAthleteFromCoachTeam = (teamVal?: string) => {
+    if (!homeTeamFilter) return true;
+    const cleanT = String(teamVal || '').trim().toUpperCase();
+    if (!cleanT) return true;
+    return cleanT === homeTeamFilter || homeTeamFilter.includes(cleanT) || cleanT.includes(homeTeamFilter);
+  };
+
   const initialLeaderboard = (Array.isArray(matchItem?.leaderboard_entries) && matchItem.leaderboard_entries.length > 0)
-    ? matchItem.leaderboard_entries.filter((e: any) => !/^Player\s*\d+$/i.test(e.name || ''))
+    ? matchItem.leaderboard_entries
+        .filter((e: any) => !/^Player\s*\d+$/i.test(e.name || '') && isAthleteFromCoachTeam(e.team_name || e.team))
+        .map((e: any, idx: number) => {
+          const rankNum = Number(String(e.rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
+          const isTop3 = rankNum >= 1 && rankNum <= 3;
+          return {
+            ...e,
+            rank: rankNum,
+            time_or_score: isTop3 ? (e.time_or_score || e.time || "-") : "-",
+          };
+        })
     : ((Array.isArray(matchItem?.player_stats) && matchItem.player_stats.length > 0)
       ? matchItem.player_stats
-          .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || ''))
-          .map((p: any, idx: number) => ({
-            rank: p.rank || p.place || p.placement_rank || idx + 1,
-            name: p.player_name || p.name || p.athlete_name || "Athlete",
-            detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
-            time_or_score: p.time || p.finish_time || p.formatted_time || p.mark || (p.distance_m ? `${p.distance_m}m` : null) || (p.distance_meters ? `${p.distance_meters}m` : null) || p.sport_stats?.time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || (p.sport_stats?.distance_m ? `${p.sport_stats.distance_m}m` : null) || p.stats?.time || p.stats?.finish_time || "-",
-          }))
+          .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || '') && isAthleteFromCoachTeam(p.team_name || p.team))
+          .map((p: any, idx: number) => {
+            const rankNum = Number(String(p.rank || p.place || p.placement_rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
+            const isTop3 = rankNum >= 1 && rankNum <= 3;
+            const rawPerformance = p.time || p.finish_time || p.formatted_time || p.mark || (p.distance_m ? `${p.distance_m}m` : null) || (p.distance_meters ? `${p.distance_meters}m` : null) || p.sport_stats?.time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || (p.sport_stats?.distance_m ? `${p.sport_stats.distance_m}m` : null) || p.stats?.time || p.stats?.finish_time || "-";
+            return {
+              rank: rankNum,
+              name: p.player_name || p.name || p.athlete_name || "Athlete",
+              detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
+              time_or_score: isTop3 ? rawPerformance : "-",
+            };
+          })
       : []);
 
   const [leaderboardData, setLeaderboardData] = useState<any[]>(initialLeaderboard);
@@ -87,7 +111,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
 
             if (Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
               const mapped = data.player_metrics
-                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || '') && !/^Player\s*\d+$/i.test(p.first_name || ''))
+                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || '') && !/^Player\s*\d+$/i.test(p.first_name || '') && isAthleteFromCoachTeam(p.team_name))
                 .map((p: any, idx: number) => {
                   const matched = pStatLookup.get(String(p.athlete_id || '').toLowerCase()) ||
                     pStatLookup.get(String(p.user_id || '').toLowerCase()) ||
@@ -96,7 +120,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
                   const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : (matched?.distance_m ? `${matched.distance_m}m` : ""));
                   const event = p.sport_stats?.event_name || p.sport_stats?.event || matched?.event || matched?.event_name || "";
                   const detailStr = [dist, event, p.team_name || matched?.team_name].filter(Boolean).join(" • ") || p.position || "Runner";
-                  const timeFormatted =
+                  const rawPerformance =
                     p.sport_stats?.formatted_time ||
                     p.sport_stats?.time ||
                     p.sport_stats?.finish_time ||
@@ -114,11 +138,15 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
                     (matched?.distance_meters ? `${matched.distance_meters}m` : null) ||
                     (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : "-");
 
+                  const rankVal = p.sport_stats?.placement_rank || p.sport_stats?.rank || p.rank || p.place || matched?.rank || matched?.place || idx + 1;
+                  const rankNum = Number(String(rankVal).replace(/[^\d]/g, '')) || (idx + 1);
+                  const isTop3 = rankNum >= 1 && rankNum <= 3;
+
                   return {
-                    rank: p.sport_stats?.placement_rank || p.sport_stats?.rank || p.rank || p.place || matched?.rank || matched?.place || idx + 1,
+                    rank: rankNum,
                     name: (p.player_name || `${p.first_name || ''} ${p.last_name || ''}`).trim() || "Athlete",
                     detail: detailStr,
-                    time_or_score: timeFormatted,
+                    time_or_score: isTop3 ? (rawPerformance && rawPerformance !== '-' ? rawPerformance : "-") : "-",
                   };
                 });
               if (mapped.length > 0) {
@@ -126,25 +154,35 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
               }
             } else if (Array.isArray(data.sport_specific_details?.race_results) && data.sport_specific_details.race_results.length > 0) {
               const mapped = data.sport_specific_details.race_results
-                .filter((r: any) => !/^Player\s*\d+$/i.test(r.athlete_name || ''))
-                .map((r: any, idx: number) => ({
-                  rank: r.placement_rank || r.rank || idx + 1,
-                  name: r.athlete_name || "Athlete",
-                  detail: r.distance || "Runner",
-                  time_or_score: r.formatted_finish_time || r.time || r.finish_time || r.distance || "-",
-                }));
+                .filter((r: any) => !/^Player\s*\d+$/i.test(r.athlete_name || '') && isAthleteFromCoachTeam(r.team_name))
+                .map((r: any, idx: number) => {
+                  const rankNum = Number(String(r.placement_rank || r.rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
+                  const isTop3 = rankNum >= 1 && rankNum <= 3;
+                  const rawPerformance = r.formatted_finish_time || r.time || r.finish_time || r.distance || "-";
+                  return {
+                    rank: rankNum,
+                    name: r.athlete_name || "Athlete",
+                    detail: r.distance || "Runner",
+                    time_or_score: isTop3 ? rawPerformance : "-",
+                  };
+                });
               if (mapped.length > 0) {
                 setLeaderboardData(mapped);
               }
             } else if (rawPStats.length > 0) {
               const mapped = rawPStats
-                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || ''))
-                .map((p: any, idx: number) => ({
-                  rank: p.rank || p.place || p.placement_rank || idx + 1,
-                  name: p.player_name || p.name || "Athlete",
-                  detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
-                  time_or_score: p.time || p.finish_time || p.formatted_time || p.mark || (p.distance_m ? `${p.distance_m}m` : null) || (p.distance_meters ? `${p.distance_meters}m` : null) || "-",
-                }));
+                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || '') && isAthleteFromCoachTeam(p.team_name || p.team))
+                .map((p: any, idx: number) => {
+                  const rankNum = Number(String(p.rank || p.place || p.placement_rank || idx + 1).replace(/[^\d]/g, '')) || (idx + 1);
+                  const isTop3 = rankNum >= 1 && rankNum <= 3;
+                  const rawPerformance = p.time || p.finish_time || p.formatted_time || p.mark || (p.distance_m ? `${p.distance_m}m` : null) || (p.distance_meters ? `${p.distance_meters}m` : null) || "-";
+                  return {
+                    rank: rankNum,
+                    name: p.player_name || p.name || "Athlete",
+                    detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
+                    time_or_score: isTop3 ? rawPerformance : "-",
+                  };
+                });
               if (mapped.length > 0) {
                 setLeaderboardData(mapped);
               }

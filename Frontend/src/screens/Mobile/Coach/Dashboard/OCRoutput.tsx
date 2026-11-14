@@ -767,39 +767,93 @@ export function OCRoutput({
                 .map((a) => a.athlete_id);
             const finalEvent = selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || (currentActiveMatch as any).event || "";
             const scoresheetUrlVal = currentActiveMatch.scoresheetUrl || currentActiveMatch.scoresheet_url || "";
-            const playerStatsList = athleteStats.map((a) => ({
-                ...a,
-                athlete_id: a.athlete_id,
-                player_name: a.player_name,
-                team_name: a.team_name,
-                jersey_number: a.jersey_number,
-                position: a.position,
-                event: a.event || finalEvent,
-                event_name: a.event_name || a.event || finalEvent,
-                eventType: a.eventType || a.event || finalEvent,
-                distance_meters: a.distance_meters || (isIndividualSport ? 50 : 0),
-                time: a.time || a.finish_time || "",
-                finish_time: a.finish_time || a.time || "",
-                pts: a.pts ?? 0,
-                points: a.pts ?? 0,
-                reb: a.reb ?? 0,
-                rebounds: a.reb ?? 0,
-                ast: a.ast ?? 0,
-                assists: a.ast ?? 0,
-                stl: a.stl ?? 0,
-                steals: a.stl ?? 0,
-                blk: a.blk ?? 0,
-                blocks: a.blk ?? 0,
-                pf: a.fouls ?? a.pf ?? 0,
-                fouls: a.fouls ?? a.pf ?? 0,
-                to: a.to ?? 0,
-                turnovers: a.to ?? 0,
-                min: a.min ?? 0,
-                minutes: a.min ?? 0,
-                stats: { ...a, event: a.event || finalEvent, event_name: a.event_name || a.event || finalEvent, eventType: a.eventType || a.event || finalEvent },
-                sport_stats: { ...a, event: a.event || finalEvent, event_name: a.event_name || a.event || finalEvent, eventType: a.eventType || a.event || finalEvent },
-                custom_stats: { ...a, event: a.event || finalEvent, event_name: a.event_name || a.event || finalEvent, eventType: a.eventType || a.event || finalEvent },
-            }));
+
+            // In swimming and track & field, no need to mention other teams' athletes since the coach will not need them
+            const relevantAthletes = isIndividualSport
+                ? athleteStats.filter((a) => {
+                    const aTeam = (a.team_name || "").toUpperCase();
+                    return !aTeam || aTeam === homeTeamUpper || homeRoster.includes(a.athlete_id);
+                })
+                : athleteStats;
+
+            const playerStatsList = relevantAthletes.map((a, idx) => {
+                const rawRank = a.rank !== undefined ? a.rank : (a.place !== undefined ? a.place : idx + 1);
+                const parsedRank = rawRank !== null && rawRank !== undefined && !isNaN(Number(String(rawRank).replace(/[^\d]/g, '')))
+                    ? Number(String(rawRank).replace(/[^\d]/g, ''))
+                    : null;
+                const isTop3 = parsedRank !== null ? (parsedRank >= 1 && parsedRank <= 3) : true;
+
+                // In swimming and track & field, only record performance if in top 3; if not, just add the place!
+                const recordedTime = (isIndividualSport && !isTop3) ? "" : (a.time || a.finish_time || "");
+                const recordedFinishTime = (isIndividualSport && !isTop3) ? "" : (a.finish_time || a.time || "");
+
+                return {
+                    ...a,
+                    athlete_id: a.athlete_id,
+                    player_name: a.player_name,
+                    team_name: a.team_name,
+                    jersey_number: a.jersey_number,
+                    position: a.position,
+                    rank: rawRank,
+                    placement_rank: rawRank,
+                    place: rawRank,
+                    event: a.event || finalEvent,
+                    event_name: a.event_name || a.event || finalEvent,
+                    eventType: a.eventType || a.event || finalEvent,
+                    distance_meters: a.distance_meters || (isIndividualSport ? 50 : 0),
+                    time: recordedTime,
+                    finish_time: recordedFinishTime,
+                    pts: a.pts ?? 0,
+                    points: a.pts ?? 0,
+                    reb: a.reb ?? 0,
+                    rebounds: a.reb ?? 0,
+                    ast: a.ast ?? 0,
+                    assists: a.ast ?? 0,
+                    stl: a.stl ?? 0,
+                    steals: a.stl ?? 0,
+                    blk: a.blk ?? 0,
+                    blocks: a.blk ?? 0,
+                    pf: a.fouls ?? a.pf ?? 0,
+                    fouls: a.fouls ?? a.pf ?? 0,
+                    to: a.to ?? 0,
+                    turnovers: a.to ?? 0,
+                    min: a.min ?? 0,
+                    minutes: a.min ?? 0,
+                    stats: {
+                        ...a,
+                        rank: rawRank,
+                        placement_rank: rawRank,
+                        place: rawRank,
+                        time: recordedTime,
+                        finish_time: recordedFinishTime,
+                        event: a.event || finalEvent,
+                        event_name: a.event_name || a.event || finalEvent,
+                        eventType: a.eventType || a.event || finalEvent
+                    },
+                    sport_stats: {
+                        ...a,
+                        rank: rawRank,
+                        placement_rank: rawRank,
+                        place: rawRank,
+                        time: recordedTime,
+                        finish_time: recordedFinishTime,
+                        event: a.event || finalEvent,
+                        event_name: a.event_name || a.event || finalEvent,
+                        eventType: a.eventType || a.event || finalEvent
+                    },
+                    custom_stats: {
+                        ...a,
+                        rank: rawRank,
+                        placement_rank: rawRank,
+                        place: rawRank,
+                        time: recordedTime,
+                        finish_time: recordedFinishTime,
+                        event: a.event || finalEvent,
+                        event_name: a.event_name || a.event || finalEvent,
+                        eventType: a.eventType || a.event || finalEvent
+                    },
+                };
+            });
 
             onConfirmSave({
                 ...currentActiveMatch,
@@ -811,7 +865,7 @@ export function OCRoutput({
                 event_name: finalEvent,
                 event_type: finalEvent,
                 discipline: finalEvent,
-                athlete_overview: athleteStats,
+                athlete_overview: relevantAthletes,
                 playerStats: playerStatsList,
                 player_stats: playerStatsList,
                 injuries: currentInjuries.filter((i: any) => (i.player_name || "").trim().length > 0),

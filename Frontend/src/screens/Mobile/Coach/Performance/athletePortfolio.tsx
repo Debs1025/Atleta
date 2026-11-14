@@ -790,11 +790,14 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                         ? (statEvent && !cleanMeet.includes(statEvent) ? `${cleanMeet} • ${statEvent}` : cleanMeet)
                         : (statEvent || (m.event_or_opponent && !m.event_or_opponent.toLowerCase().includes("vs") ? m.event_or_opponent : `${mSport.includes("SWIM") ? "Swimming" : "Track"} Meet`));
 
-                      const statTime = athStat?.finish_time || athStat?.time || athStat?.mark || athStat?.time_or_distance;
-                      const timeStr = statTime || m.date_formatted || "RECENT";
-                      const rankNum = athStat?.rank || athStat?.place;
-                      const isPodium = rankNum === 1 || rankNum === 2 || rankNum === 3 || (m.result_badge_text || "").includes("WIN");
-                      const badgeText = rankNum === 1 ? "1ST" : (rankNum === 2 ? "2ND" : (rankNum === 3 ? "3RD" : (rankNum ? `#${rankNum}` : (isPodium ? "1ST" : "DONE"))));
+                      const rawRank = athStat?.rank || athStat?.place;
+                      const rankNum = rawRank !== null && rawRank !== undefined && !isNaN(Number(String(rawRank).replace(/[^\d]/g, '')))
+                        ? Number(String(rawRank).replace(/[^\d]/g, ''))
+                        : null;
+                      const isPodium = rankNum !== null ? (rankNum >= 1 && rankNum <= 3) : (m.result_badge_text || "").includes("WIN");
+                      const statTime = isPodium ? (athStat?.finish_time || athStat?.time || athStat?.mark || athStat?.time_or_distance) : null;
+                      const timeStr = statTime || (rankNum ? `Rank #${rankNum}` : (m.date_formatted || "RECORDED"));
+                      const badgeText = rankNum === 1 ? "1ST" : (rankNum === 2 ? "2ND" : (rankNum === 3 ? "3RD" : (rankNum ? `${rankNum}TH` : (isPodium ? "1ST" : "DONE"))));
 
                       return (
                         <TouchableOpacity
