@@ -27,7 +27,20 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
-  const [leaderboardData, setLeaderboardData] = useState<any[]>(matchItem?.leaderboard_entries || []);
+  const initialLeaderboard = (Array.isArray(matchItem?.leaderboard_entries) && matchItem.leaderboard_entries.length > 0)
+    ? matchItem.leaderboard_entries.filter((e: any) => !/^Player\s*\d+$/i.test(e.name || ''))
+    : ((Array.isArray(matchItem?.player_stats) && matchItem.player_stats.length > 0)
+      ? matchItem.player_stats
+          .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || p.name || ''))
+          .map((p: any, idx: number) => ({
+            rank: p.rank || p.place || p.placement_rank || idx + 1,
+            name: p.player_name || p.name || p.athlete_name || "Athlete",
+            detail: [p.event || p.event_name, p.team_name || p.team].filter(Boolean).join(" • ") || "Runner",
+            time_or_score: p.time || p.finish_time || p.formatted_time || "-",
+          }))
+      : []);
+
+  const [leaderboardData, setLeaderboardData] = useState<any[]>(initialLeaderboard);
   const [loading, setLoading] = useState(false);
 
   const rawTitle = matchItem?.match_name || matchItem?.game_name || matchItem?.event_or_opponent || "";
@@ -39,7 +52,7 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
     : (statEvent || "Track & Field Event");
   const gameType = matchItem?.game_type || "MEET LOG";
   const dateFormatted = matchItem?.full_date || matchItem?.date_formatted || "RECENT";
-  const entriesCount = matchItem?.entries_count || leaderboardData.length;
+  const entriesCount = leaderboardData.length || matchItem?.entries_count || 0;
 
   const [fetchedNotes, setFetchedNotes] = useState<string[] | null>(null);
 
@@ -61,19 +74,35 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
           const data = await res.json();
           if (isMounted) {
             if (Array.isArray(data.player_metrics) && data.player_metrics.length > 0) {
-              const mapped = data.player_metrics.map((p: any, idx: number) => {
-                const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : "");
-                const event = p.sport_stats?.event_name || "";
-                const detailStr = [dist, event, p.team_name].filter(Boolean).join(" • ") || p.position || "Athlete";
-                const timeFormatted = p.sport_stats?.formatted_time || p.sport_stats?.time || (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : (p.sport_stats?.finish_time ? `${p.sport_stats.finish_time}s` : "-"));
-                return {
-                  rank: p.sport_stats?.placement_rank || idx + 1,
-                  name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || "Athlete",
-                  detail: detailStr,
-                  time_or_score: timeFormatted,
-                };
-              });
-              setLeaderboardData(mapped);
+              const mapped = data.player_metrics
+                .filter((p: any) => !/^Player\s*\d+$/i.test(p.player_name || '') && !/^Player\s*\d+$/i.test(p.first_name || ''))
+                .map((p: any, idx: number) => {
+                  const dist = p.sport_stats?.distance || (p.sport_stats?.distance_meters ? `${p.sport_stats.distance_meters}m` : "");
+                  const event = p.sport_stats?.event_name || p.sport_stats?.event || "";
+                  const detailStr = [dist, event, p.team_name].filter(Boolean).join(" • ") || p.position || "Runner";
+                  const timeFormatted = p.sport_stats?.formatted_time || p.sport_stats?.time || p.sport_stats?.finish_time || (p.sport_stats?.finish_time_ms ? `${(p.sport_stats.finish_time_ms / 1000).toFixed(2)}s` : "-");
+                  return {
+                    rank: p.sport_stats?.placement_rank || p.sport_stats?.rank || idx + 1,
+                    name: (p.player_name || `${p.first_name || ''} ${p.last_name || ''}`).trim() || "Athlete",
+                    detail: detailStr,
+                    time_or_score: timeFormatted,
+                  };
+                });
+              if (mapped.length > 0) {
+                setLeaderboardData(mapped);
+              }
+            } else if (Array.isArray(data.sport_specific_details?.race_results) && data.sport_specific_details.race_results.length > 0) {
+              const mapped = data.sport_specific_details.race_results
+                .filter((r: any) => !/^Player\s*\d+$/i.test(r.athlete_name || ''))
+                .map((r: any, idx: number) => ({
+                  rank: r.placement_rank || idx + 1,
+                  name: r.athlete_name || "Athlete",
+                  detail: r.distance || "Runner",
+                  time_or_score: r.formatted_finish_time || r.time || "-",
+                }));
+              if (mapped.length > 0) {
+                setLeaderboardData(mapped);
+              }
             }
             if (data.notes && Array.isArray(data.notes) && data.notes.length > 0) {
               setFetchedNotes(data.notes);
