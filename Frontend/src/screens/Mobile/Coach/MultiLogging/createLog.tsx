@@ -1017,35 +1017,6 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                     {athlete.position_or_event} • #{athlete.jersey_number}
                     {athlete.team_name && athlete.team_name !== "Unassigned" && athlete.team_name !== "Unassigned / No Team" ? ` • Team: ${athlete.team_name}` : ""}
                   </Text>
-                  {(session.sport_type?.toUpperCase().includes("SWIM") || session.sport_type?.toUpperCase().includes("TRACK") || session.sport_type?.toUpperCase().includes("FIELD")) && (
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 5,
-                        backgroundColor: "rgba(0, 200, 255, 0.15)",
-                        borderColor: "rgba(0, 200, 255, 0.4)",
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        paddingHorizontal: 8,
-                        paddingVertical: 3,
-                        marginTop: 4,
-                        alignSelf: "flex-start",
-                      }}
-                      onPress={() => setEventPickerAthlete(athlete)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name={session.sport_type?.toUpperCase().includes("SWIM") ? "water-outline" : "speedometer-outline"}
-                        size={12}
-                        color="#00C8FF"
-                      />
-                      <Text style={{ color: "#00C8FF", fontSize: 11, fontWeight: "800" }}>
-                        Event: {athlete.position_or_event || (athlete as any).event || "Select"}
-                      </Text>
-                      <Ionicons name="chevron-down" size={12} color="#00C8FF" />
-                    </TouchableOpacity>
-                  )}
                 </View>
 
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
