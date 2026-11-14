@@ -313,6 +313,66 @@ export function TrackFieldMatchScreen({ onClose, onSaveMatch }: TrackFieldMatchP
             </TouchableOpacity>
           );
         })}
+
+        {session.injuries && session.injuries.length > 0 && (
+          <View style={{ marginTop: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Ionicons name="medical" size={14} color="#FF4D6D" />
+              <Text style={{ color: "#FF4D6D", fontSize: 12, fontWeight: "800", letterSpacing: 0.5 }}>
+                SIDELINED / INJURED ({session.injuries.length})
+              </Text>
+            </View>
+            {session.injuries.map((inj, idx) => (
+              <View
+                key={inj.id || idx}
+                style={{
+                  backgroundColor: "#0D182E",
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 77, 109, 0.3)",
+                  borderRadius: 14,
+                  padding: 14,
+                  marginBottom: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      backgroundColor: "rgba(255, 77, 109, 0.15)",
+                      borderWidth: 1,
+                      borderColor: "rgba(255, 77, 109, 0.3)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons name="medkit" size={20} color="#FF4D6D" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "800" }}>
+                      {inj.player_name}
+                    </Text>
+                    <Text style={{ color: "#FF4D6D", fontSize: 12, fontWeight: "700", marginTop: 2 }}>
+                      {inj.injury_type || "Injured"} • #{inj.jersey_number || "00"} • {inj.status || "Out"}
+                    </Text>
+                    {inj.notes ? (
+                      <Text style={{ color: "#94A3B8", fontSize: 11, fontStyle: "italic", marginTop: 2 }}>
+                        Note: {inj.notes}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                <View style={{ backgroundColor: "rgba(255, 77, 109, 0.2)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                  <Text style={{ color: "#FF4D6D", fontSize: 11, fontWeight: "800" }}>OUT</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Floating Save Action Button */}
