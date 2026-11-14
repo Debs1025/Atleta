@@ -880,11 +880,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
 
-          const rawMatchList = (matchesRes?.matches && Array.isArray(matchesRes.matches) && matchesRes.matches.length > 0)
+          const hasServerMatchResponse = Boolean(matchesRes && Array.isArray(matchesRes.matches));
+          const rawMatchList = hasServerMatchResponse
             ? matchesRes.matches
-            : (syncRes?.scheduled_matches && Array.isArray(syncRes.scheduled_matches))
+            : (syncRes && Array.isArray(syncRes.scheduled_matches))
             ? syncRes.scheduled_matches
-            : [];
+            : (Array.isArray(offlineMatches) ? offlineMatches : []);
 
           const isDeletedMatch = (m: any) => {
             if (!m) return true;
@@ -893,7 +894,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             return s === "DELETED" || s === "REVOKED" || s === "CANCELLED";
           };
           const rawCombined = [...(rawMatchList || [])].filter((m) => !isDeletedMatch(m));
-          if (Array.isArray(offlineMatches)) {
+          if (!hasServerMatchResponse && Array.isArray(offlineMatches)) {
             offlineMatches.forEach((om: any) => {
               const omId = om.match_id || om.id;
               if (omId && !isDeletedMatch(om) && !rawCombined.some((m: any) => (m.match_id || m.id) === omId)) {

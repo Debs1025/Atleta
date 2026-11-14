@@ -1082,8 +1082,8 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }, 6000);
 
-    const list = Array.isArray(data?.matches) ? data.matches : Array.isArray(data) ? data : [];
-    if (list.length > 0) {
+    if (data && (Array.isArray(data.matches) || Array.isArray(data))) {
+      const list = Array.isArray(data.matches) ? data.matches : data;
       matchesMemoryCache = list;
       matchesLastFetched = Date.now();
       AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
@@ -1094,12 +1094,11 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
   // Fallback 1: Firestore persistent local cache
   try {
     const snap = await getDocs(collection(db, "Match_Logs"));
-    if (!snap.empty) {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      matchesMemoryCache = list;
-      matchesLastFetched = Date.now();
-      return list;
-    }
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    matchesMemoryCache = list;
+    matchesLastFetched = Date.now();
+    AsyncStorage.setItem(OFFLINE_MATCHES_CACHE_KEY, JSON.stringify(list)).catch(() => null);
+    return list;
   } catch (_) {
     // Client-side direct Firestore access is restricted by security rules (REST API is primary)
   }
