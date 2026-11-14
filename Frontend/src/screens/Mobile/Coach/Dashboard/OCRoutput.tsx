@@ -940,19 +940,6 @@ export function OCRoutput({
                         </View>
                         <View style={styles.scoreboardMatchScore}>
                             <View style={styles.teamScoreBox}>
-                                <Text style={styles.identityLabel}>EVENT / DISCIPLINE</Text>
-                                <TouchableOpacity
-                                    style={styles.eventPickerTrigger}
-                                    onPress={() => setShowEventPickerModal(true)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Text style={[styles.teamScoreName, { color: "#00C8FF", marginBottom: 0 }]} numberOfLines={1}>
-                                        {selectedEventName || athleteStats[0]?.event || athleteStats[0]?.event_name || "TAP TO CHOOSE EVENT"}
-                                    </Text>
-                                    <Ionicons name="chevron-down-circle" size={15} color="#00C8FF" style={{ marginLeft: 6 }} />
-                                </TouchableOpacity>
-                            </View>
-                            <View style={[styles.teamScoreBox, { alignItems: "flex-end" }]}>
                                 <Text style={styles.identityLabel}>{isTrack ? "TOP MARK / TIME" : "TOP RECORDED TIME"}</Text>
                                 <Text style={styles.teamScoreNum}>
                                     {(() => {
