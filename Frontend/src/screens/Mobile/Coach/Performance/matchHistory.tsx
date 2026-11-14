@@ -113,24 +113,38 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
               let badgeSubtext = isTimed ? "PLACE" : "RESULT";
               let badgeMainText = item.result_badge_text.replace(/^RESULT\s*/i, "").trim();
               if (isTimed) {
-                const rawRank = firstStat?.rank || firstStat?.place || firstStat?.placement_rank || (item as any).rank || (item as any).place || (item as any).placement_rank;
-                const parsedRank = typeof rawRank === "number" ? rawRank : parseInt(String(rawRank).replace(/[^\d]/g, ""), 10);
-                if (parsedRank === 1 || badgeMainText === "WIN" || badgeMainText === "1ST" || badgeMainText === "1ST PLACE") {
+                const allRanks = (item.player_stats || []).map((p: any) => {
+                  const r = p.rank ?? p.place ?? p.placement_rank ?? (p.stats && (p.stats.rank ?? p.stats.place ?? p.stats.placement_rank));
+                  const num = Number(String(r).replace(/[^\d]/g, ""));
+                  return !isNaN(num) && num > 0 ? num : null;
+                }).filter((n: any): n is number => n !== null);
+                const rawRank = allRanks.length > 0 ? Math.min(...allRanks) : (firstStat?.rank || firstStat?.place || firstStat?.placement_rank || (item as any).rank || (item as any).place || (item as any).placement_rank);
+                const parsedRank = typeof rawRank === "number" ? rawRank : parseInt(String(rawRank || "").replace(/[^\d]/g, ""), 10);
+                if (parsedRank === 1) {
                   badgeMainText = "1ST";
                   badgeSubtext = "PLACE";
-                } else if (parsedRank === 2 || badgeMainText === "2ND" || badgeMainText === "2ND PLACE") {
+                } else if (parsedRank === 2) {
                   badgeMainText = "2ND";
                   badgeSubtext = "PLACE";
-                } else if (parsedRank === 3 || badgeMainText === "3RD" || badgeMainText === "3RD PLACE") {
+                } else if (parsedRank === 3) {
                   badgeMainText = "3RD";
                   badgeSubtext = "PLACE";
                 } else if (parsedRank && parsedRank > 3) {
                   badgeSubtext = "RANK";
                   badgeMainText = `#${parsedRank}`;
+                } else if (badgeMainText.includes("1ST")) {
+                  badgeMainText = "1ST";
+                  badgeSubtext = "PLACE";
+                } else if (badgeMainText.includes("2ND")) {
+                  badgeMainText = "2ND";
+                  badgeSubtext = "PLACE";
+                } else if (badgeMainText.includes("3RD")) {
+                  badgeMainText = "3RD";
+                  badgeSubtext = "PLACE";
                 } else if (badgeMainText.includes("4TH") || badgeMainText.includes("#4")) {
                   badgeSubtext = "RANK";
                   badgeMainText = "#4";
-                } else if (badgeMainText === "LOSS") {
+                } else {
                   badgeSubtext = "RESULT";
                   badgeMainText = "DONE";
                 }
