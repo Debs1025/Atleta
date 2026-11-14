@@ -171,7 +171,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       const seedVal = (p as any).seed_time || (tStats as any).seed_time || "";
       const qtsVal = (p as any).qts || (tStats as any).qts || "";
 
-      const rawRank = playerPlaces[p.athlete_id] ?? (p as any).rank ?? (p as any).place ?? (tStats as any).rank ?? parseRankFromResult(gameResult);
+      const rawRank = playerPlaces[p.athlete_id] ?? (p as any).rank ?? (p as any).place ?? (tStats as any).rank ?? (allPlayers.indexOf(p) + 1);
       const rankVal = typeof rawRank === "number" ? rawRank : parseRankFromResult(rawRank);
       const placeText = formatPlaceLabel(rankVal);
 
@@ -396,18 +396,20 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
           </TouchableOpacity>
         </View>
 
-        {/* Game Result Dropdown Picker */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>{isTimedSport ? "Meet Result / Place" : "Game Result"}</Text>
-          <TouchableOpacity
-            style={styles.dropdownBox}
-            onPress={() => setShowResultPicker(true)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dropdownText}>{gameResult}</Text>
-            <Ionicons name="chevron-down" size={18} color="#8E9BAE" />
-          </TouchableOpacity>
-        </View>
+        {/* Game Result Dropdown Picker (Team / Ball Sports only) */}
+        {!isTimedSport && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Game Result</Text>
+            <TouchableOpacity
+              style={styles.dropdownBox}
+              onPress={() => setShowResultPicker(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownText}>{gameResult}</Text>
+              <Ionicons name="chevron-down" size={18} color="#8E9BAE" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Notes / Coach Commentary */}
         <View style={styles.fieldGroup}>
@@ -468,7 +470,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                     </Text>
                     {schema.tableHeaders.map((header, idx) => {
                       if (isTimedSport && (header.key === 'rank' || header.key === 'place')) {
-                        const currentRank = playerPlaces[player.athlete_id] ?? (player as any).rank ?? (player as any).place ?? (tStats as any).rank ?? parseRankFromResult(gameResult);
+                        const currentRank = playerPlaces[player.athlete_id] ?? (player as any).rank ?? (player as any).place ?? (tStats as any).rank ?? (allPlayers.indexOf(player) + 1);
                         const rankNum = typeof currentRank === 'number' ? currentRank : parseRankFromResult(currentRank);
                         const isPodium = rankNum <= 3;
                         const badgeColor = rankNum === 1 ? '#F59E0B' : rankNum === 2 ? '#E2E8F0' : rankNum === 3 ? '#F97316' : '#00C8FF';
@@ -547,7 +549,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                         if (header.key === 'rank' || header.key === 'place') {
                           return (player as any).rank !== undefined
                             ? (player as any).rank
-                            : ((player as any).place !== undefined ? (player as any).place : (tStats.rank ?? (gameResult === "Win" ? 1 : 2)));
+                            : ((player as any).place !== undefined ? (player as any).place : (tStats.rank ?? (allPlayers.indexOf(player) + 1)));
                         }
                         if (header.key === 'pts' || header.key === 'points') {
                           const ptsVal = (player as any).pts !== undefined
@@ -682,7 +684,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
 
       {/* Game Result Selectable Picker Modal */}
       <Modal
-        visible={showResultPicker}
+        visible={showResultPicker && !isTimedSport}
         transparent
         animationType="slide"
         onRequestClose={() => setShowResultPicker(false)}
@@ -690,7 +692,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         <View style={styles.modalOverlay}>
           <View style={styles.pickerContainer}>
             <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>{isTimedSport ? "Select Result / Placement" : "Select Game Result"}</Text>
+              <Text style={styles.pickerTitle}>Select Game Result</Text>
               <TouchableOpacity onPress={() => setShowResultPicker(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
