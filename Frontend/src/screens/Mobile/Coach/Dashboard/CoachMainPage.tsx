@@ -64,6 +64,7 @@ import { BasketballMatchResult } from "../Performance/basketballMatchResult";
 import {
   getMatchesOfflineFirst,
   saveMatchOfflineFirst,
+  clearMatchHistoryOfflineFirst,
   parseSafeDate,
   getMatchTimestamp,
   getTeamsOfflineFirst,
@@ -986,7 +987,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
               let summaryScore = "";
               if (isTimed) {
-                summaryScore = (statTime && statTime !== "-" && statTime !== "Finished") ? `Time: ${statTime}` : "Official Meet Results";
+                const count = playerStatsArr.length > 0 ? playerStatsArr.length : (athIds.length > 0 ? athIds.length : 0);
+                summaryScore = count > 0 ? `${count} ${count === 1 ? "Athlete" : "Athletes"} Logged` : "Official Meet Results";
               } else {
                 summaryScore = hScore !== undefined && aScore !== undefined ? `${hScore} - ${aScore}` : (m.notes || (m.game_result === "WIN" ? "FINAL WIN" : "FINAL LOSS"));
               }
@@ -2462,6 +2464,23 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     }
   }, []);
 
+  const handleClearMatchHistory = useCallback(async () => {
+    try {
+      const matchIdsToClear = Array.from(new Set([
+        ...(coachMatches || []).map((m: any) => m.match_id || m.id),
+        ...(matchHistoryList || []).map((m: any) => m.match_id || m.id),
+      ])).filter(Boolean);
+
+      await clearMatchHistoryOfflineFirst(matchIdsToClear);
+      setMatchHistoryList([]);
+      await getMatchesOfflineFirst(true).catch(() => []);
+      Alert.alert("Success", "Match history cleared successfully.");
+    } catch (err: any) {
+      console.error("Clear match history error:", err);
+      Alert.alert("Error", err?.message || "Failed to clear match history.");
+    }
+  }, [coachMatches, matchHistoryList]);
+
   const allFilteredMatches = useMemo(() => {
     const baseList = coachMatches && coachMatches.length > 0 ? coachMatches : matchHistoryList;
     const matchMap = new Map<string, any>();
@@ -2587,9 +2606,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
       if (isSwim || isTrack) {
         const firstStat = (savedPayload.player_stats || [])[0];
-        const markOrTime = firstStat?.mark || firstStat?.finish_time || firstStat?.time || firstStat?.time_or_distance;
+        const pStats = savedPayload.player_stats || [];
         const ev = firstStat?.event || firstStat?.event_name || "";
-        summaryDisplay = markOrTime ? `Time: ${markOrTime}` : "Completed";
+        summaryDisplay = pStats.length > 0 ? `${pStats.length} ${pStats.length === 1 ? "Athlete" : "Athletes"} Logged` : "Official Meet Results";
 
         const cleanMeet = (savedPayload.game_name || savedPayload.match_name || "").replace(/\s*vs\s*OPPONENT.*$/i, "").trim();
         eventTitleDisplay = (cleanMeet && !cleanMeet.toLowerCase().includes("vs"))
@@ -3168,7 +3187,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const ocrTitle = isOcrTimed
               ? (ocrEvent ? `${lockedTeamName} • ${ocrEvent}` : (ocrSport.includes("SWIM") ? `${lockedTeamName} • Swimming Meet` : `${lockedTeamName} • Track & Field Meet`))
               : `${lockedTeamName} vs ${finalData.opponent_team_name || "OPPONENT"}`;
-            const ocrSummary = isOcrTimed ? (ocrTime ? `Time: ${ocrTime}` : "Official Meet Results") : `${homePts} - ${oppPts}`;
+            const ocrSummary = isOcrTimed ? (finalOverview.length > 0 ? `${finalOverview.length} ${finalOverview.length === 1 ? "Athlete" : "Athletes"} Logged` : "Official Meet Results") : `${homePts} - ${oppPts}`;
             const ocrRanks = finalOverview.map((p) => {
               const r = p.rank ?? p.place ?? (p as any).placement_rank;
               const num = Number(String(r).replace(/[^\d]/g, ""));
@@ -3679,7 +3698,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                           : 0);
 
                   const isBballScoreFormat = /^\s*\d+\s*[-:]\s*\d+\s*$/.test(matchItem.score_or_time_summary || "");
-                  const displaySummaryText = (isItemTimed && isBballScoreFormat) ? "Official Meet Results" : (matchItem.score_or_time_summary || "Match Recorded");
+                  const displaySummaryText = isItemTimed
+                    ? "Official Meet Results"
+                    : (isBballScoreFormat ? `${matchItem.home_score || 0} - ${matchItem.away_score || 0}` : (matchItem.score_or_time_summary || "Match Recorded"));
                   let displayItemTitle = matchItem.event_or_opponent || matchItem.match_name || matchItem.game_name || "Official Match";
                   if (isItemTimed && (displayItemTitle.toLowerCase().includes("vs opponent") || displayItemTitle.toLowerCase().includes("atleta varsity vs"))) {
                     displayItemTitle = (matchItem.sport_category || "").toUpperCase().includes("SWIM") ? "Swimming Meet" : "Track & Field Meet";
@@ -3907,6 +3928,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               setActiveView("perf_trackfield_result");
             }
           }}
+          onClearHistory={handleClearMatchHistory}
         />
       )}
 

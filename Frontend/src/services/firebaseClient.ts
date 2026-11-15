@@ -755,6 +755,53 @@ export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean>
   return true;
 }
 
+export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promise<boolean> {
+  const ids = Array.isArray(matchIds) ? matchIds.filter(Boolean) : [];
+
+  // 1. Direct Firestore document deletion
+  try {
+    for (const mId of ids) {
+      const cleanId = String(mId).replace(/^#/, '').trim();
+      const idVariants = Array.from(new Set([mId, cleanId, `match_${cleanId}`])).filter(Boolean);
+      for (const v of idVariants) {
+        await Promise.all([
+          deleteDoc(doc(db, "Match_Logs", v)).catch(() => null),
+          deleteDoc(doc(db, "Matches", v)).catch(() => null),
+          deleteDoc(doc(db, "Official_Schedules", v)).catch(() => null),
+          deleteDoc(doc(db, "Official_Audits", v)).catch(() => null),
+        ]);
+      }
+    }
+  } catch (err) {
+    console.warn("clearMatchHistoryOfflineFirst Firestore note:", err);
+  }
+
+  // 2. Local cache purge
+  try {
+    await AsyncStorage.removeItem(OFFLINE_MATCHES_CACHE_KEY);
+    matchesMemoryCache = [];
+    matchesLastFetched = 0;
+  } catch (cacheErr) {
+    console.warn("clearMatchHistoryOfflineFirst cache error:", cacheErr);
+  }
+
+  // 3. REST API clear
+  try {
+    const token = await getStoredAuthToken();
+    await fetch(`${API_BASE}/matches/clear`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ match_ids: ids }),
+    }).catch(() => null);
+  } catch (_) {}
+
+  return true;
+}
+
 export async function saveTeamOfflineFirst(teamPayload: any): Promise<boolean> {
   const teamId = teamPayload.team_id || teamPayload.id || `team_${Date.now()}`;
   const cleanPayload = {
