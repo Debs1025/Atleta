@@ -763,6 +763,15 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
     await AsyncStorage.removeItem(OFFLINE_MATCHES_CACHE_KEY);
     matchesMemoryCache = [];
     matchesLastFetched = 0;
+
+    const dashCache = await AsyncStorage.getItem("atleta_coach_dashboard_cache_v2").catch(() => null);
+    if (dashCache) {
+      try {
+        const parsed = JSON.parse(dashCache);
+        parsed.matchHistoryList = [];
+        await AsyncStorage.setItem("atleta_coach_dashboard_cache_v2", JSON.stringify(parsed));
+      } catch (_) {}
+    }
   } catch (cacheErr) {
     console.warn("clearMatchHistoryOfflineFirst cache error:", cacheErr);
   }

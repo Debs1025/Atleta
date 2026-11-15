@@ -2472,7 +2472,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       ])).filter(Boolean);
 
       setMatchHistoryList([]);
+      matchHistoryListRef.current = [];
       await clearMatchHistoryOfflineFirst(matchIdsToClear);
+
+      try {
+        const raw = await AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          parsed.matchHistoryList = [];
+          await AsyncStorage.setItem(COACH_DASHBOARD_CACHE_KEY, JSON.stringify(parsed));
+        }
+      } catch (_) {}
+
       Alert.alert("Success", "Match history cleared successfully.");
     } catch (err: any) {
       console.error("Clear match history error:", err);
