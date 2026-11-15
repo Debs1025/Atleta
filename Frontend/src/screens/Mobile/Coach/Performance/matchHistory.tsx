@@ -248,11 +248,12 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
 
               {/* List of Match Cards */}
               {groupedMatches[groupKey].map((item) => {
-                const sportUpper = (item.sport_category || "").toUpperCase();
+                const sportUpper = (item.sport_category || (item as any).sport || (item as any).sport_type || "").toUpperCase();
                 const isTimed =
                   sportUpper.includes("SWIM") ||
                   sportUpper.includes("TRACK") ||
-                  sportUpper.includes("FIELD");
+                  sportUpper.includes("FIELD") ||
+                  sportUpper.includes("RUN");
 
                 // Extract best stat / entry for display
                 const firstStat =
@@ -298,7 +299,12 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
                     : 0;
 
                 let displayScoreOrSummary = item.score_or_time_summary;
-                if (isTimed) {
+                if (
+                  isTimed ||
+                  String(displayScoreOrSummary || "").toLowerCase().includes("time:") ||
+                  String(displayScoreOrSummary || "").toLowerCase().includes("00:00.00") ||
+                  String(displayScoreOrSummary || "").toLowerCase().includes("mark:")
+                ) {
                   displayScoreOrSummary =
                     athleteCount > 0
                       ? `${athleteCount} ${athleteCount === 1 ? "Athlete" : "Athletes"} Logged`

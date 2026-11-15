@@ -273,6 +273,13 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
   const rawCid = String(payload.logged_by_coach_id || payload.coach_id || "").replace(/^coach_/, "");
   const canCid = rawCid ? `coach_${rawCid}` : undefined;
 
+  const sportUpper = String(payload.sport_type || payload.sport_category || "").toUpperCase();
+  const isTimed = sportUpper.includes("SWIM") || sportUpper.includes("TRACK") || sportUpper.includes("FIELD") || sportUpper.includes("RUN");
+  const athCount = playerStatsList.length > 0 ? playerStatsList.length : rosterAthletesList.length;
+  const computedSummary = isTimed
+    ? (athCount > 0 ? `${athCount} ${athCount === 1 ? "Athlete" : "Athletes"} Logged` : "Official Meet Results")
+    : payload.score_or_time_summary;
+
   const rawPayload = {
     ...payload,
     match_id: matchId,
@@ -282,6 +289,20 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     coaching_staff: Array.from(new Set([rawCid, canCid, ...(Array.isArray(payload.coaching_staff) ? payload.coaching_staff : [])].filter(Boolean))),
     match_date: matchDateIso,
     date_time: payload.date_time || matchDateIso,
+    score_or_time_summary: computedSummary,
+    leaderboard_entries: Array.isArray(payload.leaderboard_entries) && payload.leaderboard_entries.length > 0
+      ? payload.leaderboard_entries
+      : playerStatsList.map((p: any, idx: number) => ({
+          rank: p.rank || (idx + 1),
+          athlete_id: p.athlete_id,
+          name: p.player_name || p.name,
+          detail: p.event || p.event_name || payload.home_team_name || "ATLETA",
+          time_or_score: p.time || p.finish_time || p.mark || (p.pts !== undefined ? `${p.pts} pts` : "-"),
+          time: p.time || p.finish_time || "",
+          finish_time: p.finish_time || p.time || "",
+          mark: p.mark || "",
+          distance_meters: p.distance_meters || 0,
+        })),
     playerStats: playerStatsList,
     player_stats: playerStatsList,
     rosterAthletes: rosterAthletesList,

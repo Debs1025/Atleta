@@ -2418,10 +2418,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         personalizedBadge = "COMPLETED";
       }
 
+      const athSummary = "Official Meet Results";
+
       return {
         ...m,
         event_or_opponent: personalizedTitle,
-        score_or_time_summary: myTime ? `Time: ${myTime}` : (m.score_or_time_summary?.includes("-") ? "Completed" : m.score_or_time_summary),
+        score_or_time_summary: athSummary,
         result_badge_text: personalizedBadge,
       };
     });
@@ -2472,18 +2474,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       ])).filter(Boolean);
 
       setMatchHistoryList([]);
-      matchHistoryListRef.current = [];
       await clearMatchHistoryOfflineFirst(matchIdsToClear);
-
-      try {
-        const raw = await AsyncStorage.getItem(COACH_DASHBOARD_CACHE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          parsed.matchHistoryList = [];
-          await AsyncStorage.setItem(COACH_DASHBOARD_CACHE_KEY, JSON.stringify(parsed));
-        }
-      } catch (_) {}
-
       Alert.alert("Success", "Match history cleared successfully.");
     } catch (err: any) {
       console.error("Clear match history error:", err);
@@ -2704,13 +2695,19 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         leaderboard_entries: mappedPlayerStats.map((p: any, idx: number) => {
           let scoreText = `${p.pts ?? 0} pts`;
           if (isSwim || isTrack) {
-            scoreText = p.mark || p.finish_time || p.time || "Finished";
+            const validPTime = [p.mark, p.finish_time, p.time].find((v) => v && typeof v === "string" && v.trim() !== "" && v.trim() !== "-" && v.trim() !== "00:00.00");
+            scoreText = validPTime || "Finished";
           }
           return {
             rank: p.rank || p.place || (idx + 1),
+            athlete_id: p.athlete_id || p.user_id,
             name: p.player_name || p.name,
             detail: p.event || p.event_name || p.team || savedPayload.home_team_name || "ATLETA",
             time_or_score: scoreText,
+            mark: p.mark,
+            time: p.time,
+            finish_time: p.finish_time,
+            distance_meters: p.distance_meters,
           };
         }),
         coach_notes: [savedPayload.notes || `Match: ${savedPayload.home_team_name || "ATLETA"} vs ${savedPayload.opponent_team_name || "OPPONENT"} (${summaryDisplay})`],
