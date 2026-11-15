@@ -1272,8 +1272,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 last_name: lName,
                 full_name: fullName,
                 sport_type: effectiveSport as Team["sport_type"],
-                sport: effectiveSport,
-                sports_type: effectiveSport,
                 position: athObj.position || rich.position || 'Unassigned',
                 jersey_number: athObj.jersey_number !== undefined && athObj.jersey_number !== null ? String(athObj.jersey_number) : (rich.jersey_number !== undefined && rich.jersey_number !== null ? String(rich.jersey_number) : '0'),
                 is_eligibility_verified: athObj.is_eligibility_verified ?? rich.is_eligibility_verified ?? false,
@@ -1321,8 +1319,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   last_name: lName,
                   full_name: fullName,
                   sport_type: effectiveSport as Team["sport_type"],
-                  sport: effectiveSport,
-                  sports_type: effectiveSport,
                   position: ha.position || rich.position || 'Unassigned',
                   jersey_number: ha.jersey_number !== undefined && ha.jersey_number !== null ? String(ha.jersey_number) : (rich.jersey_number !== undefined && rich.jersey_number !== null ? String(rich.jersey_number) : '0'),
                   is_eligibility_verified: ha.is_eligibility_verified ?? rich.is_eligibility_verified ?? false,
@@ -2470,7 +2466,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const baseList = coachMatches && coachMatches.length > 0 ? coachMatches : matchHistoryList;
     const matchMap = new Map<string, any>();
     (baseList || []).forEach((m) => {
-      const id = m.match_id || m.id;
+      const id = m.match_id || (m as any).id;
       if (id) matchMap.set(id, m);
     });
 
@@ -2479,7 +2475,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     const canonicalCoachId = `coach_${cleanCoachId}`;
 
     (matchHistoryList || []).forEach((m) => {
-      const id = m.match_id || m.id;
+      const id = m.match_id || (m as any).id;
       if (id && !matchMap.has(id)) {
         const mLog = String(m.logged_by_coach_id || "");
         const mCid = String(m.coach_id || "");

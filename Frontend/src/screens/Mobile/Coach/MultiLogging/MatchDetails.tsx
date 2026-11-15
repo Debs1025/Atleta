@@ -102,6 +102,9 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   const [showPlayerPlacePicker, setShowPlayerPlacePicker] = useState<boolean>(false);
   const [selectedPlayerForPlace, setSelectedPlayerForPlace] = useState<string | null>(null);
 
+  // Per-player time input state
+  const [playerTimes, setPlayerTimes] = useState<Record<string, string>>({});
+
   // Picker Modals state
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showResultPicker, setShowResultPicker] = useState(false);
@@ -165,7 +168,10 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
       const eventName = (p as any).eventType || (p as any).event_type || (p as any).event_name || (p as any).event || p.position_or_event || "";
       const eventKey = (p as any).event_key || (tStats as any).event_key || "";
       const markVal = (p as any).mark || (tStats as any).mark || (p as any).distance || "";
-      const timeVal = (tStats.formatted_time && tStats.formatted_time !== "00:00.00") ? tStats.formatted_time : ((p as any).finish_time || (p as any).time || "00:00.00");
+      const editedTime = playerTimes[p.athlete_id];
+      const timeVal = (editedTime !== undefined && editedTime.trim() !== "" && editedTime !== "00:00.00")
+        ? editedTime.trim()
+        : ((tStats.formatted_time && tStats.formatted_time !== "00:00.00") ? tStats.formatted_time : ((p as any).finish_time || (p as any).time || "00:00.00"));
       const distMeters = Number(tStats.distance_meters || (p as any).distance_meters || 0);
       const splitVal = tStats.split_times && tStats.split_times.length > 0 ? tStats.split_times.join(", ") : ((p as any).split || (p as any).split_time || "");
       const seedVal = (p as any).seed_time || (tStats as any).seed_time || "";
@@ -566,6 +572,51 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
                               </Text>
                               <Ionicons name="chevron-down" size={10} color={badgeColor} />
                             </TouchableOpacity>
+                          </View>
+                        );
+                      }
+
+                      if (isTimedSport && (header.key === 'finish_time' || header.key === 'time' || header.key === 'time_or_distance')) {
+                        const existingVal = playerTimes[player.athlete_id] !== undefined
+                          ? playerTimes[player.athlete_id]
+                          : ((tStats.formatted_time && tStats.formatted_time !== "00:00.00")
+                            ? tStats.formatted_time
+                            : ((player as any).finish_time || (player as any).time || ""));
+
+                        return (
+                          <View
+                            key={header.key || idx}
+                            style={{
+                              width: header.width || 95,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              paddingHorizontal: 2,
+                            }}
+                          >
+                            <TextInput
+                              style={{
+                                color: '#00C8FF',
+                                fontSize: 12,
+                                fontWeight: '700',
+                                textAlign: 'center',
+                                backgroundColor: 'rgba(0, 200, 255, 0.08)',
+                                borderColor: 'rgba(0, 200, 255, 0.35)',
+                                borderWidth: 1,
+                                borderRadius: 8,
+                                paddingVertical: 4,
+                                paddingHorizontal: 4,
+                                width: (header.width || 95) - 6,
+                              }}
+                              value={existingVal}
+                              placeholder="00:00.00"
+                              placeholderTextColor="#64748B"
+                              onChangeText={(txt) => {
+                                setPlayerTimes((prev) => ({
+                                  ...prev,
+                                  [player.athlete_id]: txt,
+                                }));
+                              }}
+                            />
                           </View>
                         );
                       }

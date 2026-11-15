@@ -795,8 +795,8 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
                         ? Number(String(rawRank).replace(/[^\d]/g, ''))
                         : null;
                       const isPodium = rankNum !== null ? (rankNum >= 1 && rankNum <= 3) : (m.result_badge_text || "").includes("WIN");
-                      const statTime = isPodium ? (athStat?.finish_time || athStat?.time || athStat?.mark || athStat?.time_or_distance) : null;
-                      const timeStr = statTime || (rankNum ? `Rank #${rankNum}` : (m.date_formatted || "RECORDED"));
+                      const statTime = athStat?.finish_time || athStat?.time || athStat?.mark || athStat?.time_or_distance || athStat?.stats?.finish_time || athStat?.stats?.time || null;
+                      const timeStr = (statTime && statTime !== '-') ? statTime : (rankNum ? `Rank #${rankNum}` : (m.date_formatted || "RECORDED"));
                       const badgeText = rankNum === 1 ? "1ST" : (rankNum === 2 ? "2ND" : (rankNum === 3 ? "3RD" : (rankNum ? `${rankNum}TH` : (isPodium ? "1ST" : "DONE"))));
 
                       return (

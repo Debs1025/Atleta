@@ -841,11 +841,9 @@ export function OCRoutput({
                 const parsedRank = rawRank !== null && rawRank !== undefined && !isNaN(Number(String(rawRank).replace(/[^\d]/g, '')))
                     ? Number(String(rawRank).replace(/[^\d]/g, ''))
                     : null;
-                const isTop3 = parsedRank !== null ? (parsedRank >= 1 && parsedRank <= 3) : true;
-
-                // In swimming and track & field, only record performance if in top 3; if not, just add the place!
-                const recordedTime = (isIndividualSport && !isTop3) ? "" : (a.time || a.finish_time || "");
-                const recordedFinishTime = (isIndividualSport && !isTop3) ? "" : (a.finish_time || a.time || "");
+                // Record performance time for all athletes
+                const recordedTime = a.time || a.finish_time || "";
+                const recordedFinishTime = a.finish_time || a.time || "";
 
                 return {
                     ...a,
