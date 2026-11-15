@@ -166,7 +166,6 @@ export function BasketballMatchScreen({ onClose, onSaveMatch }: BasketballMatchP
   const handleReturnToBench = (athleteId: string) => {
     returnAthleteFromInjury(athleteId, "bench");
     setSelectedInjuredPlayerDetail(null);
-    Alert.alert("Cleared for Play", "Player has been cleared and returned to the bench.");
   };
 
   // Remove injury record

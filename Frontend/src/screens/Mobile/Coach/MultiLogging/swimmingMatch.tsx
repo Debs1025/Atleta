@@ -182,7 +182,6 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
     updateTimingStats(selectedSwimmer.athlete_id, {
       distance_meters: num,
     });
-    Alert.alert("Distance Updated", `Distance set to ${num}M for #${selectedSwimmer.jersey_number} ${selectedSwimmer.last_name}`);
   };
 
   // Toggle Foul / DQ

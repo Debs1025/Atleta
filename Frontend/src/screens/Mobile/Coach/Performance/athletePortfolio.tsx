@@ -98,9 +98,8 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
       athlete.injuryNotes = modalNotes.trim();
 
       setShowConditionModal(false);
-      Alert.alert('Status Updated', `Player status updated to ${modalStatus}.`);
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update player condition.');
+      console.warn('Failed to update player condition:', err);
     } finally {
       setIsSavingCondition(false);
     }

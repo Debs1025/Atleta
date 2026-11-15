@@ -420,19 +420,24 @@ export const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginVertical: 4,
+    alignItems: "flex-start",
+    marginVertical: 6,
+    gap: 14,
   },
   summaryLabelText: {
     color: "#8E9BAE",
     fontSize: 13,
     fontFamily: fontPlatform,
+    flexShrink: 0,
   },
   summaryValueText: {
+    flex: 1,
+    flexShrink: 1,
     color: "#FFFFFF",
     fontSize: 13.5,
     fontWeight: "700",
     fontFamily: fontPlatform,
+    textAlign: "right",
   },
   successBtn: {
     width: "100%",

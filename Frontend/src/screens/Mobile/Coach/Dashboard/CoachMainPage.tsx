@@ -2218,12 +2218,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         )
       );
       setUnreadNotifCount((prev) => Math.max(0, prev - 1));
-      Alert.alert(
-        `Inquiry ${status}`,
-        `You have successfully ${status.toLowerCase()} this recruitment proposal.`
-      );
     } catch (err: any) {
-      Alert.alert("Inquiry Responded", "Your response has been submitted.");
+      console.warn("Inquiry response error:", err);
     }
   }, []);
 
@@ -2474,11 +2470,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       ])).filter(Boolean);
 
       setMatchHistoryList([]);
+      setCoachMatches([]);
       await clearMatchHistoryOfflineFirst(matchIdsToClear);
-      Alert.alert("Success", "Match history cleared successfully.");
     } catch (err: any) {
       console.error("Clear match history error:", err);
-      Alert.alert("Error", err?.message || "Failed to clear match history.");
     }
   }, [coachMatches, matchHistoryList]);
 
@@ -4361,9 +4356,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                                     audit_status: "REQUEST GRANTED",
                                     is_certified: true,
                                   });
-                                  Alert.alert("Import Successful", `Official match record for "${matchName}" has been synchronized to your team records!`);
                                 } catch (e: any) {
-                                  Alert.alert("Import Notice", "Match records are synchronized.");
+                                  console.warn("Match records sync note:", e);
                                 }
                               }}
                             >

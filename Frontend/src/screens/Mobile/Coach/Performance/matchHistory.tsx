@@ -5,8 +5,8 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,6 +45,7 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
     sportCategory ? sportCategory.toUpperCase() : "ALL"
   );
   const [isClearing, setIsClearing] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
 
   // Filter matches based on search query and active sport filter
   const filteredMatches = useMemo(() => {
@@ -103,33 +104,22 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
   }, [filteredMatches]);
 
   const handleConfirmClear = () => {
-    if (historyItems.length === 0) {
-      Alert.alert("No Matches", "There are no matches in your history to clear.");
-      return;
+    if (historyItems.length === 0) return;
+    setShowClearModal(true);
+  };
+
+  const handleExecuteClear = async () => {
+    try {
+      setIsClearing(true);
+      setShowClearModal(false);
+      if (onClearHistory) {
+        await onClearHistory();
+      }
+    } catch (err: any) {
+      console.error("Clear match history error:", err);
+    } finally {
+      setIsClearing(false);
     }
-    Alert.alert(
-      "Clear Match History",
-      "Are you sure you want to clear your match history? This will permanently delete your recorded match logs.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear History",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsClearing(true);
-              if (onClearHistory) {
-                await onClearHistory();
-              }
-            } catch (err: any) {
-              Alert.alert("Error", err?.message || "Failed to clear match history.");
-            } finally {
-              setIsClearing(false);
-            }
-          },
-        },
-      ]
-    );
   };
 
   return (
@@ -412,6 +402,42 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
           ))
         )}
       </ScrollView>
+
+      {/* Custom Sleek Dark Confirmation Modal (Replaces native white Alert) */}
+      <Modal
+        visible={showClearModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowClearModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalBadge}>
+              <Ionicons name="trash-outline" size={30} color="#FF4D6D" />
+            </View>
+            <Text style={styles.modalTitle}>Clear Match History</Text>
+            <Text style={styles.modalSubtitle}>
+              Are you sure you want to clear your match history? This will permanently remove your recorded match logs from this device.
+            </Text>
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowClearModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={handleExecuteClear}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalConfirmText}>Clear History</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

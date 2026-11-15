@@ -197,7 +197,6 @@ export function TrackFieldMatchScreen({ onClose, onSaveMatch }: TrackFieldMatchP
       mark: markStr,
       distance_meters: num,
     });
-    Alert.alert("Mark Saved", `Mark set to ${markStr} for #${selectedAthlete.jersey_number} ${selectedAthlete.last_name}`);
   };
 
   // Save Distance
@@ -207,7 +206,6 @@ export function TrackFieldMatchScreen({ onClose, onSaveMatch }: TrackFieldMatchP
     updateTimingStats(selectedAthlete.athlete_id, {
       distance_meters: num,
     });
-    Alert.alert("Distance Updated", `Distance set to ${num}M for #${selectedAthlete.jersey_number} ${selectedAthlete.last_name}`);
   };
 
   // Toggle Foul / DQ

@@ -283,7 +283,8 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 12,
   },
   summaryLabel: {
     color: "#64748B",
@@ -291,6 +292,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1,
     fontFamily: fontPlatform,
+    flexShrink: 0,
   },
   summaryBadgePill: {
     backgroundColor: "rgba(0, 200, 255, 0.15)",
@@ -307,10 +309,13 @@ const styles = StyleSheet.create({
     fontFamily: fontBoldPlatform,
   },
   summaryValueText: {
+    flex: 1,
+    flexShrink: 1,
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
     fontFamily: fontBoldPlatform,
+    textAlign: "right",
   },
   finishCtaButton: {
     backgroundColor: "#00C8FF",

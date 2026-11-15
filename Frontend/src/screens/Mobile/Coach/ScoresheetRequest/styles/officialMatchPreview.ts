@@ -568,7 +568,8 @@ export const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   summaryLabel: {
     color: '#64748B',
@@ -576,6 +577,7 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     fontFamily: fontMedium,
+    flexShrink: 0,
   },
   summaryBadgePill: {
     backgroundColor: 'rgba(0, 200, 255, 0.15)',
@@ -592,10 +594,13 @@ export const styles = StyleSheet.create({
     fontFamily: fontBold,
   },
   summaryValueText: {
+    flex: 1,
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
     fontFamily: fontBold,
+    textAlign: 'right',
   },
   finishCtaButton: {
     backgroundColor: '#00C8FF',

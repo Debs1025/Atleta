@@ -1412,7 +1412,9 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabelText}>LOCATION</Text>
-                <Text style={styles.summaryValueText}>{session.location}</Text>
+                <Text style={styles.summaryValueText} numberOfLines={2} ellipsizeMode="tail">
+                  {session.location}
+                </Text>
               </View>
             </View>
 
