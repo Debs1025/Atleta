@@ -2470,7 +2470,6 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       ])).filter(Boolean);
 
       setMatchHistoryList([]);
-      setCoachMatches([]);
       await clearMatchHistoryOfflineFirst(matchIdsToClear);
     } catch (err: any) {
       console.error("Clear match history error:", err);

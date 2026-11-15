@@ -9,6 +9,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -110,6 +111,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   const [showResultPicker, setShowResultPicker] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const GAME_TYPES: string[] = isTimedSport
     ? ["Championship", "Invitational", "Time Trials", "Qualifiers", "Practice"]
@@ -154,6 +156,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   };
 
   const handleSaveMatch = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     const normalizedSport = (session.sport_type || "BASKETBALL").toUpperCase();
     const normalizedGameResult = isTimedSport
       ? formatPlaceLabel(parseRankFromResult(gameResult))
@@ -408,6 +412,8 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         "Save Failed",
         err?.message || "Failed to persist match log to the database. Please try again."
       );
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -799,8 +805,20 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
         </View>
 
         {/* Vibrant Blue SAVE MATCH Button */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveMatch} activeOpacity={0.85}>
-          <Text style={styles.saveBtnText}>SAVE MATCH</Text>
+        <TouchableOpacity
+          style={[styles.saveBtn, isSaving && { opacity: 0.75 }]}
+          onPress={handleSaveMatch}
+          disabled={isSaving}
+          activeOpacity={0.85}
+        >
+          {isSaving ? (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.saveBtnText}>SAVING MATCH...</Text>
+            </View>
+          ) : (
+            <Text style={styles.saveBtnText}>SAVE MATCH</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
       </KeyboardAvoidingView>
