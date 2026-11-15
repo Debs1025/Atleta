@@ -137,11 +137,6 @@ export function ViewAllPlayers({
   const handleViewStats = useCallback((player: RosterAthlete) => {
     if (onSelectAthlete) {
       onSelectAthlete(player);
-    } else {
-      Alert.alert(
-        "Player Profile & Stats",
-        `Viewing official performance stats for ${player.full_name} (${player.position} #${player.jersey_number})`
-      );
     }
   }, [onSelectAthlete]);
 

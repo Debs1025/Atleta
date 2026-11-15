@@ -118,7 +118,6 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
 
   const handleEditPress = () => {
     if (onEditResults) onEditResults();
-    else Alert.alert("Edit Results", `Editing match results for ${homeTeam} vs ${awayTeam}`);
   };
 
   return (

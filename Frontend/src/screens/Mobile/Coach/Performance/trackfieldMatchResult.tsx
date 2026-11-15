@@ -394,7 +394,6 @@ export const TrackfieldMatchResult: React.FC<TrackfieldMatchResultProps> = ({
 
   const handleEditPress = () => {
     if (onEditResults) onEditResults();
-    else Alert.alert("Edit Results", `Editing results for ${eventTitle}`);
   };
 
   return (

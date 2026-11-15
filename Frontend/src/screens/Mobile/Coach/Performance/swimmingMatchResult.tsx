@@ -375,7 +375,6 @@ export const SwimmingMatchResult: React.FC<SwimmingMatchResultProps> = ({
 
   const handleEditPress = () => {
     if (onEditResults) onEditResults();
-    else Alert.alert("Edit Results", `Editing results for ${eventTitle}`);
   };
 
   return (
