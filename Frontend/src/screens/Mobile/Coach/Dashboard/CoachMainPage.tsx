@@ -2471,9 +2471,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         ...(matchHistoryList || []).map((m: any) => m.match_id || m.id),
       ])).filter(Boolean);
 
-      await clearMatchHistoryOfflineFirst(matchIdsToClear);
       setMatchHistoryList([]);
-      await getMatchesOfflineFirst(true).catch(() => []);
+      await clearMatchHistoryOfflineFirst(matchIdsToClear);
       Alert.alert("Success", "Match history cleared successfully.");
     } catch (err: any) {
       console.error("Clear match history error:", err);

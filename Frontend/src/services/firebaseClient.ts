@@ -758,25 +758,7 @@ export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean>
 export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promise<boolean> {
   const ids = Array.isArray(matchIds) ? matchIds.filter(Boolean) : [];
 
-  // 1. Direct Firestore document deletion
-  try {
-    for (const mId of ids) {
-      const cleanId = String(mId).replace(/^#/, '').trim();
-      const idVariants = Array.from(new Set([mId, cleanId, `match_${cleanId}`])).filter(Boolean);
-      for (const v of idVariants) {
-        await Promise.all([
-          deleteDoc(doc(db, "Match_Logs", v)).catch(() => null),
-          deleteDoc(doc(db, "Matches", v)).catch(() => null),
-          deleteDoc(doc(db, "Official_Schedules", v)).catch(() => null),
-          deleteDoc(doc(db, "Official_Audits", v)).catch(() => null),
-        ]);
-      }
-    }
-  } catch (err) {
-    console.warn("clearMatchHistoryOfflineFirst Firestore note:", err);
-  }
-
-  // 2. Local cache purge
+  // 1. Instant Local cache purge (<5ms)
   try {
     await AsyncStorage.removeItem(OFFLINE_MATCHES_CACHE_KEY);
     matchesMemoryCache = [];
@@ -785,7 +767,7 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
     console.warn("clearMatchHistoryOfflineFirst cache error:", cacheErr);
   }
 
-  // 3. REST API clear
+  // 2. Fast server-side purge via REST API
   try {
     const token = await getStoredAuthToken();
     await fetch(`${API_BASE}/matches/clear`, {
@@ -798,6 +780,29 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
       body: JSON.stringify({ match_ids: ids }),
     }).catch(() => null);
   } catch (_) {}
+
+  // 3. Parallel client-side Firestore document deletion (with timeout to never block UI)
+  try {
+    const deleteTasks: Promise<any>[] = [];
+    for (const mId of ids) {
+      const cleanId = String(mId).replace(/^#/, '').trim();
+      const idVariants = Array.from(new Set([mId, cleanId, `match_${cleanId}`])).filter(Boolean);
+      for (const v of idVariants) {
+        deleteTasks.push(deleteDoc(doc(db, "Match_Logs", v)).catch(() => null));
+        deleteTasks.push(deleteDoc(doc(db, "Matches", v)).catch(() => null));
+        deleteTasks.push(deleteDoc(doc(db, "Official_Schedules", v)).catch(() => null));
+        deleteTasks.push(deleteDoc(doc(db, "Official_Audits", v)).catch(() => null));
+      }
+    }
+    if (deleteTasks.length > 0) {
+      await Promise.race([
+        Promise.all(deleteTasks),
+        new Promise((res) => setTimeout(res, 2500)),
+      ]);
+    }
+  } catch (err) {
+    console.warn("clearMatchHistoryOfflineFirst Firestore note:", err);
+  }
 
   return true;
 }
