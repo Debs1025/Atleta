@@ -234,7 +234,7 @@ export const MatchHistory: React.FC<MatchHistoryProps> = ({
             <Text style={styles.emptySubtitle}>
               {searchQuery.trim()
                 ? `No match records matching "${searchQuery}"`
-                : `No ${selectedSportFilter !== "ALL" ? selectedSportFilter : ""} match history recorded yet.`}
+                : `No ${selectedSportFilter !== "ALL" ? `${selectedSportFilter} ` : ""}match history recorded yet.`}
             </Text>
           </View>
         ) : (
