@@ -59,18 +59,29 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
 
   const displayAthletes = useMemo(() => {
     if (Array.isArray(athletes) && athletes.length > 0) {
-      return athletes.map((ath) => {
-        const resolvedSport = detectSport(ath);
-        const resolvedRating = calculatePlayerRating(ath);
-        return {
-          ...ath,
-          sport_category: resolvedSport,
-          rating_score: resolvedRating || ath.rating_score,
-        };
-      });
+      const focus = (sportsFocus || "").toUpperCase().trim();
+      return athletes
+        .filter((ath) => {
+          if (!focus) return true;
+          const s = String(ath.sport_category || (ath as any).sport_type || (ath as any).sport || detectSport(ath) || "").toUpperCase().trim();
+          if (focus.includes("BASKET")) return s.includes("BASKET");
+          if (focus.includes("VOLLEY")) return s.includes("VOLLEY");
+          if (focus.includes("SWIM")) return s.includes("SWIM");
+          if (focus.includes("TRACK") || focus.includes("FIELD")) return s.includes("TRACK") || s.includes("FIELD");
+          return s === focus;
+        })
+        .map((ath) => {
+          const resolvedSport = detectSport(ath);
+          const resolvedRating = calculatePlayerRating(ath);
+          return {
+            ...ath,
+            sport_category: resolvedSport,
+            rating_score: resolvedRating || ath.rating_score,
+          };
+        });
     }
     return [];
-  }, [athletes]);
+  }, [athletes, sportsFocus]);
 
   const isTimedTab = useMemo(() => {
     const focus = (sportsFocus || "").toUpperCase();

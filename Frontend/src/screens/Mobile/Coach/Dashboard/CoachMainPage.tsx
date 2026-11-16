@@ -741,17 +741,31 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               setSelectedTeamId(cached.teams[0].team_id);
             }
           }
+          const cachedCoachSport = String(cached.coachProfile?.sports_focus || cached.coachProfile?.sport_type || cached.coach?.sports_focus || "BASKETBALL").toUpperCase().trim();
+          const filterByCachedSport = (list: any[]) => {
+            if (!cachedCoachSport) return list;
+            return list.filter((a) => {
+              const s = String(a.sport_category || a.sport_type || a.sport || a.sports_type || detectSport(a) || "").toUpperCase().trim();
+              if (cachedCoachSport.includes("BASKET")) return s.includes("BASKET");
+              if (cachedCoachSport.includes("VOLLEY")) return s.includes("VOLLEY");
+              if (cachedCoachSport.includes("SWIM")) return s.includes("SWIM");
+              if (cachedCoachSport.includes("TRACK") || cachedCoachSport.includes("FIELD")) return s.includes("TRACK") || s.includes("FIELD");
+              return s === cachedCoachSport;
+            });
+          };
+
           if (Array.isArray(cached.athletesPool) && cached.athletesPool.length > 0) {
-            setAthletesPool(cached.athletesPool);
+            setAthletesPool(filterByCachedSport(cached.athletesPool));
             setIsDashboardLoading(false);
           }
           if (Array.isArray(cached.matchHistoryList) && cached.matchHistoryList.length > 0) {
             setMatchHistoryList(cached.matchHistoryList);
           }
           if (Array.isArray(cached.perfAthletes) && cached.perfAthletes.length > 0) {
-            setPerfAthletes(cached.perfAthletes);
-            if (cached.perfAthletes[0]) {
-              setSelectedPerfAthlete(cached.perfAthletes[0]);
+            const scopedPerf = filterByCachedSport(cached.perfAthletes);
+            setPerfAthletes(scopedPerf);
+            if (scopedPerf[0]) {
+              setSelectedPerfAthlete(scopedPerf[0]);
             }
           }
           if (Array.isArray(cached.dynamicSports) && cached.dynamicSports.length > 0) {
@@ -1494,13 +1508,24 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               }
             }
           }
-          const allHandledAthletes = Array.from(seenMap.values());
+          const effectiveProfile = validProfileRes || validOfflineProfileRes;
+          const resolvedCoachSport = (effectiveProfile?.sports_focus || effectiveProfile?.sport_type || coachProfile?.sports_focus || "BASKETBALL").toUpperCase().trim();
+          const matchesCoachSport = (a: any) => {
+            if (!resolvedCoachSport) return true;
+            const s = String(a.sport_category || a.sport_type || a.sport || a.sports_type || detectSport(a) || "").toUpperCase().trim();
+            if (resolvedCoachSport.includes("BASKET")) return s.includes("BASKET");
+            if (resolvedCoachSport.includes("VOLLEY")) return s.includes("VOLLEY");
+            if (resolvedCoachSport.includes("SWIM")) return s.includes("SWIM");
+            if (resolvedCoachSport.includes("TRACK") || resolvedCoachSport.includes("FIELD")) return s.includes("TRACK") || s.includes("FIELD");
+            return s === resolvedCoachSport;
+          };
+
+          const allHandledAthletes = Array.from(seenMap.values()).filter(matchesCoachSport);
           setAthletesPool(allHandledAthletes);
 
           let updatedCoachSnapshot: UserCoach | null = null;
           let updatedProfileSnapshot: CoachProfileState | null = null;
 
-          const effectiveProfile = validProfileRes || validOfflineProfileRes;
           if (effectiveProfile || tokenUid || tokenEmail) {
             const fallbackEmailName = (tokenEmail || effectiveProfile?.email || coach.email || "").split("@")[0];
             const fallbackName = fallbackEmailName ? (fallbackEmailName.charAt(0).toUpperCase() + fallbackEmailName.slice(1)) : "Coach";
@@ -1579,7 +1604,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           // Merge unassigned handled athletes into mappedPerf if not already present
           if (rawCoachAthletes.length > 0) {
             const existingIds = new Set(mappedPerf.map((p) => p.athlete_id));
-            rawCoachAthletes.forEach((ha: any) => {
+            rawCoachAthletes.filter(matchesCoachSport).forEach((ha: any) => {
               const aId = ha.athlete_id || ha.user_id;
               if (!existingIds.has(aId)) {
                 mappedPerf.push(computeAthletePerformance(ha, liveMatches));
