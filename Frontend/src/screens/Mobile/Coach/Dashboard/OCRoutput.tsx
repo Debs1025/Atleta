@@ -28,6 +28,17 @@ export interface TeamScoreItem {
     score: number;
 }
 
+export const AVAILABLE_SPORTS = [
+    { id: "BASKETBALL", label: "Basketball", icon: "basketball-outline" },
+    { id: "VOLLEYBALL", label: "Volleyball", icon: "football-outline" },
+    { id: "SWIMMING", label: "Swimming", icon: "water-outline" },
+    { id: "TRACK AND FIELD", label: "Track & Field", icon: "walk-outline" },
+    { id: "SOCCER", label: "Soccer", icon: "football-outline" },
+    { id: "BADMINTON", label: "Badminton", icon: "tennisball-outline" },
+    { id: "PICKLEBALL", label: "Pickleball", icon: "tennisball-outline" },
+    { id: "BASEBALL", label: "Baseball", icon: "baseball-outline" },
+];
+
 export interface DetectedAthleteStat {
     athlete_id: string;
     player_name: string;
@@ -421,6 +432,9 @@ export function OCRoutput({
         };
     }, []);
 
+    const [overrideSport, setOverrideSport] = useState<string | null>(null);
+    const [showSportSelectorModal, setShowSportSelectorModal] = useState<boolean>(false);
+
     // Contextual text analysis to disambiguate Track & Field vs Swimming
     const nonSportContextText = useMemo(() => {
         const anyMatch = currentActiveMatch as any;
@@ -430,22 +444,78 @@ export function OCRoutput({
             anyMatch.game_name || "",
             anyMatch.customGameTitle || "",
             anyMatch.event || "",
-            anyMatch.team_name || "",
-            anyMatch.opponent_team_name || "",
-            ...athleteStats.map((a: any) => `${a.event || ''} ${a.event_name || ''} ${a.team_name || ''} ${a.player_name || ''}`),
+            ...athleteStats.map((a: any) => `${a.event || ''} ${a.event_name || ''}`),
         ].join(" ").toUpperCase();
     }, [currentActiveMatch, athleteStats]);
 
-    const hasExplicitTrackKeywords = /DASH|100MD|200MD|400MD|800MD|1500MD|RELAY|4X100|4X400|LONG\s*JUMP|LONGJUMP|SHOT\s*PUT|SHOTPUT|DISCUS|JAVELIN|HURDLE|TRACK|FIELD|RUNNERS?|ATHLETICS?|SPRINT|POLE\s*VAULT|TRIPLE\s*JUMP|HIGH\s*JUMP/i.test(nonSportContextText);
+    const hasExplicitTrackKeywords = /\b(?:100MD|200MD|400MD|800MD|1500MD|DASH|SPRINT|LONG\s*JUMP|LONGJUMP|SHOT\s*PUT|SHOTPUT|DISCUS|JAVELIN|HURDLES?|POLE\s*VAULT|TRIPLE\s*JUMP|HIGH\s*JUMP|RELAY|4X100|4X400)\b/i.test(nonSportContextText);
     const hasExplicitSwimKeywords = /FREESTYLE|BUTTERFLY|BREASTSTROKE|BACKSTROKE|\bIM\b|MEDLEY|POOL|STROKE/i.test(nonSportContextText);
 
-    const detectedEffectiveSport = (() => {
-        const rawUpper = (currentActiveMatch.sport_type || "BASKETBALL").toUpperCase();
-        if ((rawUpper.includes("SWIM") || rawUpper.includes("BASKET")) && hasExplicitTrackKeywords && !hasExplicitSwimKeywords) {
+    const detectedEffectiveSport = useMemo(() => {
+        if (overrideSport) return overrideSport;
+        const rawUpper = String(currentActiveMatch.sport_type || "").toUpperCase().trim();
+
+        // 1. Unequivocal player stats signatures
+        const hasBball = athleteStats.some((a: any) =>
+            Number(a.rebounds || 0) > 0 ||
+            Number(a.assists || 0) > 0 ||
+            Number(a.steals || 0) > 0 ||
+            Number(a.blocks || 0) > 0 ||
+            Number(a.three_made || 0) > 0 ||
+            Number(a.fg_made || 0) > 0 ||
+            Number(a.ft_made || 0) > 0 ||
+            Number(a.turnovers || 0) > 0
+        );
+        if (hasBball) return "BASKETBALL";
+
+        const hasVball = athleteStats.some((a: any) =>
+            Number(a.kills || 0) > 0 ||
+            Number(a.digs || 0) > 0 ||
+            Number(a.service_aces || 0) > 0 ||
+            Number(a.attack_attempts || 0) > 0
+        );
+        if (hasVball) return "VOLLEYBALL";
+
+        const hasSoccer = athleteStats.some((a: any) =>
+            Number(a.goals || 0) > 0 ||
+            Number(a.saves || 0) > 0 ||
+            Number(a.tackles || 0) > 0
+        );
+        if (hasSoccer) return "SOCCER";
+
+        const hasRacket = athleteStats.some((a: any) =>
+            Number(a.smash_winners || 0) > 0 ||
+            Number(a.net_kills || 0) > 0
+        );
+        if (hasRacket) return "BADMINTON";
+
+        const hasBaseball = athleteStats.some((a: any) =>
+            Number(a.at_bats || 0) > 0 ||
+            Number(a.runs || 0) > 0 ||
+            Number(a.hits || 0) > 0
+        );
+        if (hasBaseball) return "BASEBALL";
+
+        // 2. Disambiguate individual timed sports (Swim vs Track)
+        if (rawUpper.includes("SWIM") && hasExplicitTrackKeywords && !hasExplicitSwimKeywords) {
             return "TRACK & FIELD";
         }
-        return rawUpper;
-    })();
+        if (rawUpper.includes("TRACK") && hasExplicitSwimKeywords && !hasExplicitTrackKeywords) {
+            return "SWIMMING";
+        }
+
+        // 3. Honor match's sport_type
+        if (rawUpper.includes("VOLLEY")) return "VOLLEYBALL";
+        if (rawUpper.includes("BASKET")) return "BASKETBALL";
+        if (rawUpper.includes("SWIM")) return "SWIMMING";
+        if (rawUpper.includes("TRACK") || rawUpper.includes("ATHLETIC")) return "TRACK & FIELD";
+        if (rawUpper.includes("SOCCER") || rawUpper.includes("FOOTBALL")) return "SOCCER";
+        if (rawUpper.includes("BADMINTON")) return "BADMINTON";
+        if (rawUpper.includes("PICKLE")) return "PICKLEBALL";
+        if (rawUpper.includes("BASE") || rawUpper.includes("SOFT")) return "BASEBALL";
+
+        return rawUpper || "BASKETBALL";
+    }, [overrideSport, currentActiveMatch.sport_type, athleteStats, hasExplicitTrackKeywords, hasExplicitSwimKeywords]);
 
     const activeSportSchema = useMemo(() => {
         return getSportStatSchema(detectedEffectiveSport, customSchemas);
@@ -959,7 +1029,14 @@ export function OCRoutput({
                     >
                         <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitleBeside} numberOfLines={1}>OCR RESULT • {sportDisplayName}</Text>
+                    <TouchableOpacity
+                        style={{ flexDirection: "row", alignItems: "center", flex: 1, marginLeft: 8 }}
+                        onPress={() => setShowSportSelectorModal(true)}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.headerTitleBeside} numberOfLines={1}>OCR RESULT • {sportDisplayName}</Text>
+                        <Ionicons name="chevron-down" size={15} color="#00E5FF" style={{ marginLeft: 6 }} />
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -1037,7 +1114,26 @@ export function OCRoutput({
 
                 {/* TITLE SECTION WITH UNDERLINE */}
                 <View style={styles.topTitleSection}>
-                    <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
+                        <TouchableOpacity
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                backgroundColor: "rgba(0, 229, 255, 0.12)",
+                                borderColor: "#00E5FF",
+                                borderWidth: 1,
+                                borderRadius: 12,
+                                paddingHorizontal: 8,
+                                paddingVertical: 4,
+                            }}
+                            onPress={() => setShowSportSelectorModal(true)}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="swap-horizontal" size={13} color="#00E5FF" style={{ marginRight: 4 }} />
+                            <Text style={{ color: "#00E5FF", fontSize: 11, fontWeight: "700" }}>{sportDisplayName} ▾</Text>
+                        </TouchableOpacity>
+                    </View>
                     <View style={styles.accentUnderline} />
                 </View>
 
@@ -1871,6 +1967,80 @@ export function OCRoutput({
                         </View>
                     </View>
                 </View>
+            </Modal>
+            {/* SPORT SELECTOR MODAL */}
+            <Modal
+                visible={showSportSelectorModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowSportSelectorModal(false)}
+            >
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        backgroundColor: "rgba(0,0,0,0.75)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        padding: 20,
+                    }}
+                    activeOpacity={1}
+                    onPress={() => setShowSportSelectorModal(false)}
+                >
+                    <TouchableOpacity
+                        style={{
+                            width: "100%",
+                            maxWidth: 360,
+                            backgroundColor: "#0A1120",
+                            borderRadius: 16,
+                            borderColor: "rgba(0, 229, 255, 0.3)",
+                            borderWidth: 1,
+                            padding: 20,
+                        }}
+                        activeOpacity={1}
+                    >
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                            <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "800" }}>CHANGE SPORT</Text>
+                            <TouchableOpacity onPress={() => setShowSportSelectorModal(false)}>
+                                <Ionicons name="close" size={20} color="#8E9BAE" />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={{ color: "#8E9BAE", fontSize: 12, marginBottom: 14 }}>
+                            Select the sport for this scoresheet to apply the correct stats schema and scoreboard.
+                        </Text>
+                        {AVAILABLE_SPORTS.map((s) => {
+                            const isSelected = detectedEffectiveSport.toUpperCase().includes(s.id);
+                            return (
+                                <TouchableOpacity
+                                    key={s.id}
+                                    style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        paddingVertical: 11,
+                                        paddingHorizontal: 14,
+                                        borderRadius: 10,
+                                        marginBottom: 8,
+                                        backgroundColor: isSelected ? "rgba(0, 229, 255, 0.15)" : "rgba(255,255,255,0.04)",
+                                        borderColor: isSelected ? "#00E5FF" : "transparent",
+                                        borderWidth: 1,
+                                    }}
+                                    onPress={() => {
+                                        setOverrideSport(s.id);
+                                        setShowSportSelectorModal(false);
+                                    }}
+                                >
+                                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                        <Ionicons name={s.icon as any} size={18} color={isSelected ? "#00E5FF" : "#FFFFFF"} style={{ marginRight: 10 }} />
+                                        <Text style={{ color: isSelected ? "#00E5FF" : "#FFFFFF", fontSize: 14, fontWeight: isSelected ? "700" : "500" }}>
+                                            {s.label}
+                                        </Text>
+                                    </View>
+                                    {isSelected && <Ionicons name="checkmark-circle" size={18} color="#00E5FF" />}
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </TouchableOpacity>
+                </TouchableOpacity>
             </Modal>
         </View>
     );

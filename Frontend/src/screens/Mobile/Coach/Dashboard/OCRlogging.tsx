@@ -441,41 +441,60 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     dataObj.sport_type ||
                     dataObj.sport ||
                     ""
-                ).toUpperCase();
-
-                let detectedSport = "BASKETBALL";
-                if (rawSport.includes("VOLLEY")) {
-                    detectedSport = "VOLLEYBALL";
-                } else if (rawSport.includes("SWIM")) {
-                    detectedSport = "SWIMMING";
-                } else if (rawSport.includes("TRACK") || rawSport.includes("RUN") || rawSport.includes("FIELD") || rawSport.includes("ATHLETIC")) {
-                    detectedSport = "TRACK AND FIELD";
-                } else if (rawSport.includes("BADMINTON")) {
-                    detectedSport = "BADMINTON";
-                } else if (rawSport.includes("PICKLE")) {
-                    detectedSport = "PICKLEBALL";
-                } else if (rawSport.includes("SOCCER") || rawSport.includes("FOOTBALL")) {
-                    detectedSport = "SOCCER";
-                } else if (rawSport.includes("BASE") || rawSport.includes("SOFT")) {
-                    detectedSport = "BASEBALL";
-                } else if (rawSport.length > 0) {
-                    detectedSport = rawSport;
-                }
+                ).toUpperCase().trim();
 
                 // Attribute signature double-check
+                const hasBballStats = rawPlayers.some((p: any) =>
+                    Number(p.rebounds || 0) > 0 ||
+                    Number(p.assists || 0) > 0 ||
+                    Number(p.steals || 0) > 0 ||
+                    Number(p.blocks || 0) > 0 ||
+                    Number(p.turnovers || 0) > 0 ||
+                    Number(p.fg_made || 0) > 0 ||
+                    Number(p.three_made || 0) > 0 ||
+                    Number(p.ft_made || 0) > 0
+                );
                 const hasVballStats = rawPlayers.some((p: any) => Number(p.kills || 0) > 0 || Number(p.digs || 0) > 0 || Number(p.service_aces || 0) > 0 || Number(p.attack_attempts || 0) > 0);
-                const hasSwimTimes = rawPlayers.some((p: any) => p.finish_time || p.stroke_count || p.split_time);
-                const hasTrackMarks = rawPlayers.some((p: any) => p.distance_m || (p.event && (String(p.event).toLowerCase().includes("m ") || String(p.event).toLowerCase().includes("relay") || String(p.event).toLowerCase().includes("dash"))));
+                const hasSwimTimes = rawPlayers.some((p: any) => p.stroke_count || p.split_time || (p.event && /FREESTYLE|BUTTERFLY|BREASTSTROKE|BACKSTROKE|\bIM\b|MEDLEY|50M|100M.*FREE/i.test(String(p.event))));
+                const hasTrackMarks = rawPlayers.some((p: any) => p.distance_m || p.qts || (p.event && /\b(?:100MD|200MD|400MD|800MD|1500MD|DASH|SPRINT|LONG\s*JUMP|SHOT\s*PUT|DISCUS|JAVELIN|HURDLE|POLE\s*VAULT|RELAY)\b/i.test(String(p.event))));
                 const hasSoccerStats = rawPlayers.some((p: any) => Number(p.goals || 0) > 0 || Number(p.saves || 0) > 0 || Number(p.tackles || 0) > 0);
                 const hasRacketStats = rawPlayers.some((p: any) => Number(p.smash_winners || 0) > 0 || Number(p.net_kills || 0) > 0 || Number(p.service_faults || 0) > 0);
                 const hasBaseballStats = rawPlayers.some((p: any) => Number(p.at_bats || 0) > 0 || Number(p.runs || 0) > 0 || Number(p.hits || 0) > 0 || Number(p.innings_pitched || 0) > 0);
 
-                if (hasVballStats) detectedSport = "VOLLEYBALL";
-                else if (hasSwimTimes) detectedSport = "SWIMMING";
-                else if (hasTrackMarks) detectedSport = "TRACK AND FIELD";
-                else if (hasSoccerStats) detectedSport = "SOCCER";
-                else if (hasRacketStats) detectedSport = "BADMINTON";
-                else if (hasBaseballStats) detectedSport = "BASEBALL";
+                let detectedSport = "BASKETBALL";
+                if (hasBballStats) {
+                    detectedSport = "BASKETBALL";
+                } else if (hasVballStats) {
+                    detectedSport = "VOLLEYBALL";
+                } else if (hasSoccerStats) {
+                    detectedSport = "SOCCER";
+                } else if (hasSwimTimes && !hasTrackMarks) {
+                    detectedSport = "SWIMMING";
+                } else if (hasTrackMarks && !hasSwimTimes) {
+                    detectedSport = "TRACK AND FIELD";
+                } else if (hasRacketStats) {
+                    detectedSport = "BADMINTON";
+                } else if (hasBaseballStats) {
+                    detectedSport = "BASEBALL";
+                } else if (rawSport.includes("VOLLEY")) {
+                    detectedSport = "VOLLEYBALL";
+                } else if (rawSport.includes("SWIM")) {
+                    detectedSport = "SWIMMING";
+                } else if (rawSport.includes("TRACK") || rawSport.includes("ATHLETIC")) {
+                    detectedSport = "TRACK AND FIELD";
+                } else if (rawSport.includes("SOCCER") || rawSport.includes("FOOTBALL")) {
+                    detectedSport = "SOCCER";
+                } else if (rawSport.includes("BADMINTON")) {
+                    detectedSport = "BADMINTON";
+                } else if (rawSport.includes("PICKLE")) {
+                    detectedSport = "PICKLEBALL";
+                } else if (rawSport.includes("BASE") || rawSport.includes("SOFT")) {
+                    detectedSport = "BASEBALL";
+                } else if (rawSport.includes("BASKET")) {
+                    detectedSport = "BASKETBALL";
+                } else if (rawSport.length > 0) {
+                    detectedSport = rawSport;
+                }
 
                 // 2. Dynamic Team Names - Strictly lock home team context to Coach's selected team
                 const teamScoresArr = Array.isArray(dataObj.team_scores) ? dataObj.team_scores : [];
