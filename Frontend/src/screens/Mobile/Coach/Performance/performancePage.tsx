@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AtletaHeader } from "../Components/AtletaHeader";
 import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
-import { getSportsOfflineFirst, getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 import { calculatePlayerRating, detectSport } from "./performanceUtils";
 import {
   SWIMMING_EVENTS,
@@ -35,9 +34,8 @@ interface PerformancePageProps {
   unreadNotificationCount?: number;
   athletes?: AthletePerformanceProfile[];
   avatarUrl?: string | null;
+  sportsFocus?: string;
 }
-
-const DEFAULT_CATEGORIES = ["ALL", "BASKETBALL", "SWIMMING", "TRACK AND FIELD"];
 
 export const PerformancePage: React.FC<PerformancePageProps> = ({
   onSelectAthlete,
@@ -49,197 +47,86 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   unreadNotificationCount = 0,
   athletes = [],
   avatarUrl,
+  sportsFocus,
 }) => {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("ALL");
   const [selectedEventType, setSelectedEventType] = useState<string>("ALL");
   const [isEventModalOpen, setIsEventModalOpen] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(5);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
-  const [liveAthletes, setLiveAthletes] = useState<AthletePerformanceProfile[]>([]);
-
-  const isTimedTab =
-    activeTab === "SWIMMING" ||
-    activeTab === "TRACK AND FIELD" ||
-    activeTab.includes("SWIM") ||
-    activeTab.includes("TRACK") ||
-    activeTab.includes("FIELD");
-
-  const availableEvents: SportEventOption[] = useMemo(() => {
-    if (activeTab === "SWIMMING" || activeTab.includes("SWIM")) return SWIMMING_EVENTS;
-    if (activeTab === "TRACK AND FIELD" || activeTab.includes("TRACK") || activeTab.includes("FIELD")) return TRACK_FIELD_EVENTS;
-    return [];
-  }, [activeTab]);
-
-  useEffect(() => {
-    setSelectedEventType("ALL");
-  }, [activeTab]);
-
-  useEffect(() => {
-    let isMounted = true;
-    getAthletesOfflineFirst()
-      .then((list) => {
-        if (!isMounted || !Array.isArray(list) || list.length === 0) return;
-        const mapped: AthletePerformanceProfile[] = list.map((a: any) => {
-          const stats = a.stats || a.averages || {};
-          const avg = a.averages || a.stats || {};
-          const sType = detectSport(a);
-          const isBasket = sType === "BASKETBALL";
-
-          const ppg = Number(avg.ppg ?? stats.ppg ?? a.ppg ?? a.pts ?? 0);
-          const rpg = Number(avg.rpg ?? stats.rpg ?? a.rpg ?? a.reb ?? 0);
-          const apg = Number(avg.apg ?? stats.apg ?? a.ast ?? a.apg ?? 0);
-          const per = Number(avg.per_score ?? stats.per_score ?? stats.per ?? a.per ?? (ppg > 0 ? Math.round(ppg * 1.3 + 12) : 0));
-          
-          const rating = calculatePlayerRating({
-            ...a,
-            sport_category: sType,
-            averages: {
-              ...avg,
-              ...(isBasket ? { ppg, rpg, apg, per_score: per } : {}),
-              fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
-              games_played: Number(avg.games_played ?? stats.games_played ?? 0),
-              wins: Number(avg.wins ?? stats.wins ?? 0),
-            },
-            stats,
-          });
-
-          const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
-          const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
-          const wingspanCm = a.physical_attributes?.wingspan_cm || a.physical_profile?.wingspan_cm || a.wingspan_cm;
-
-          return {
-            athlete_id: a.athlete_id || a.user_id || a.id || `ath_${Date.now()}`,
-            user_id: a.user_id || a.athlete_id || a.id || "",
-            full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || "Athlete",
-            birthdate: a.birthdate || a.dob || "2004-10-03",
-            position_or_event: a.position || a.position_or_event || "Player",
-            location_province: a.province || a.location || "Camarines Sur",
-            team_name: a.team_name || "Free Agent",
-            rating_score: rating,
-            sport_category: sType as any,
-            biometrics: a.biometrics || {
-              height_ft: heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : "-",
-              weight_lbs: weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : "-",
-              wingspan_ft: wingspanCm ? `${Math.floor(wingspanCm / 30.48)}'${Math.round((wingspanCm % 30.48) / 2.54)}"` : "-",
-              vertical_jump_in: a.physical_profile?.vertical_cm ? `${Math.round(a.physical_profile.vertical_cm / 2.54)}"` : "-",
-            },
-            averages: {
-              ...(stats || {}),
-              ...(avg || {}),
-              ...(isBasket ? { ppg, rpg, apg, per_score: per } : {}),
-              games_played: Number(avg.games_played ?? stats.games_played ?? 0),
-              wins: Number(avg.wins ?? stats.wins ?? 0),
-              per_score: per,
-              fg_percentage: Number(avg.fg_percentage ?? stats.fg_pct ?? 0),
-              kills: avg.kills ?? avg.spike_kills ?? stats.kills ?? stats.spike_kills ?? 0,
-              spike_kills: avg.spike_kills ?? avg.kills ?? stats.spike_kills ?? stats.kills ?? 0,
-              blocks: avg.blocks ?? avg.block_points ?? stats.blocks ?? stats.block_points ?? 0,
-              block_points: avg.block_points ?? avg.blocks ?? stats.block_points ?? stats.blocks ?? 0,
-              aces: avg.aces ?? avg.service_aces ?? stats.aces ?? stats.service_aces ?? 0,
-              service_aces: avg.service_aces ?? avg.aces ?? stats.service_aces ?? stats.aces ?? 0,
-              digs: avg.digs ?? stats.digs ?? 0,
-              assists: avg.assists ?? stats.assists ?? 0,
-              spike_accuracy: avg.spike_accuracy ?? stats.spike_accuracy ?? 0,
-              service_errors: avg.service_errors ?? stats.service_errors ?? 0,
-              pb_100m: avg.pb_100m || stats.pb_100m,
-              pb_200m: avg.pb_200m || stats.pb_200m,
-              reaction_time_s: avg.reaction_time_s || stats.reaction_time_s,
-              win_rate_pct: avg.win_rate_pct ?? stats.win_rate_pct,
-              pb_50m_free: avg.pb_50m_free || stats.pb_50m_free,
-              pb_100m_free: avg.pb_100m_free || stats.pb_100m_free,
-              swim_index_score: avg.swim_index_score ?? stats.swim_index_score,
-              podiums_count: avg.podiums_count ?? stats.podiums_count,
-            },
-            radar_competencies: a.radar_competencies || undefined,
-            eligibility_documents: {
-              psa_verified: Boolean(a.eligibility_documents?.psa_verified || a.documents?.psa_birth_certificate?.status === 'Verified'),
-              residency_verified: Boolean(a.eligibility_documents?.proof_of_residency || a.eligibility_documents?.residency_verified || a.documents?.proof_of_residency?.status === 'Verified'),
-            },
-            workload_analytics: a.workload_analytics || a.workload || undefined,
-            scoring_trends_last_10: Array.isArray(a.scoring_trends_last_10) && a.scoring_trends_last_10.length > 0 ? a.scoring_trends_last_10 : [],
-          };
-        });
-        setLiveAthletes(mapped);
-      })
-      .catch((err) => console.warn("Performance live sync:", err));
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    getSportsOfflineFirst()
-      .then((sports: any) => {
-        if (!isMounted || !Array.isArray(sports) || sports.length === 0) return;
-        const seen = new Set<string>();
-        const mapped: string[] = ["ALL"];
-        sports.forEach((s: any) => {
-          const raw = String(s.sport_name || s.name || s.id || '').toUpperCase().trim();
-          if (!raw || seen.has(raw)) return;
-          seen.add(raw);
-          mapped.push(raw);
-        });
-        if (mapped.length > 1) {
-          setCategories(mapped);
-        }
-      })
-      .catch((err: any) => console.warn('Could not fetch dynamic sports for performance:', err));
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const displayAthletes = useMemo(() => {
-    const baseList = Array.isArray(athletes) && athletes.length > 0 ? athletes : liveAthletes;
-    if (Array.isArray(baseList) && baseList.length > 0) {
-      return baseList.map((ath) => {
-        const matchingLive = liveAthletes.find(
-          (la) =>
-            (la.athlete_id && ath.athlete_id && (la.athlete_id === ath.athlete_id || la.user_id === ath.user_id)) ||
-            (la.full_name && ath.full_name && la.full_name.toLowerCase() === ath.full_name.toLowerCase())
-        );
-        const sourceAthlete = matchingLive || ath;
-        const mergedAverages = { ...(sourceAthlete?.averages || {}), ...(ath.averages || {}) };
-        const mergedStats = { ...((sourceAthlete as any)?.stats || {}), ...((ath as any)?.stats || {}) };
-        const combined = { ...sourceAthlete, ...ath, averages: mergedAverages, stats: mergedStats };
-        const resolvedRating = calculatePlayerRating(combined);
-        const resolvedSport = detectSport(combined);
-
+    if (Array.isArray(athletes) && athletes.length > 0) {
+      return athletes.map((ath) => {
+        const resolvedSport = detectSport(ath);
+        const resolvedRating = calculatePlayerRating(ath);
         return {
           ...ath,
-          ...sourceAthlete,
           sport_category: resolvedSport,
-          rating_score: resolvedRating,
-          averages: mergedAverages,
-          biometrics: sourceAthlete?.biometrics || ath.biometrics,
-          scoring_trends_last_10: (sourceAthlete?.scoring_trends_last_10 && sourceAthlete.scoring_trends_last_10.length > 0)
-            ? sourceAthlete.scoring_trends_last_10
-            : ath.scoring_trends_last_10,
+          rating_score: resolvedRating || ath.rating_score,
         };
       });
     }
     return [];
-  }, [athletes, liveAthletes]);
+  }, [athletes]);
+
+  const isTimedTab = useMemo(() => {
+    const focus = (sportsFocus || "").toUpperCase();
+    if (focus) {
+      return (
+        focus === "SWIMMING" ||
+        focus === "TRACK AND FIELD" ||
+        focus.includes("SWIM") ||
+        focus.includes("TRACK") ||
+        focus.includes("FIELD")
+      );
+    }
+    if (displayAthletes.length === 0) return false;
+    return displayAthletes.every(
+      (a) =>
+        (a.sport_category || "").toUpperCase().includes("SWIM") ||
+        (a.sport_category || "").toUpperCase().includes("TRACK") ||
+        (a.sport_category || "").toUpperCase().includes("FIELD")
+    );
+  }, [sportsFocus, displayAthletes]);
+
+  const timedSport = useMemo(() => {
+    const focus = (sportsFocus || "").toUpperCase();
+    if (focus.includes("SWIM")) return "SWIMMING";
+    if (focus.includes("TRACK") || focus.includes("FIELD")) return "TRACK AND FIELD";
+    const timedAthlete = displayAthletes.find(
+      (a) =>
+        (a.sport_category || "").toUpperCase().includes("SWIM") ||
+        (a.sport_category || "").toUpperCase().includes("TRACK") ||
+        (a.sport_category || "").toUpperCase().includes("FIELD")
+    );
+    if (!timedAthlete) return null;
+    const cat = (timedAthlete.sport_category || "").toUpperCase();
+    if (cat.includes("SWIM")) return "SWIMMING";
+    return "TRACK AND FIELD";
+  }, [sportsFocus, displayAthletes]);
+
+  const availableEvents: SportEventOption[] = useMemo(() => {
+    if (timedSport === "SWIMMING") return SWIMMING_EVENTS;
+    if (timedSport === "TRACK AND FIELD") return TRACK_FIELD_EVENTS;
+    return [];
+  }, [timedSport]);
 
   const filteredAthletes = useMemo(() => {
     let list = displayAthletes.filter((ath) => {
-      const matchesTab =
-        activeTab === "ALL" || (ath.sport_category || "").toUpperCase() === activeTab.toUpperCase();
-      const matchesSearch =
-        (ath.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (ath.team_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (ath.position_or_event || "").toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesTab && matchesSearch;
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        (ath.full_name || "").toLowerCase().includes(q) ||
+        (ath.team_name || "").toLowerCase().includes(q) ||
+        (ath.position_or_event || "").toLowerCase().includes(q)
+      );
     });
 
     if (isTimedTab && selectedEventType !== "ALL") {
-      const opt = findEventOption(activeTab, selectedEventType);
+      const opt = findEventOption(timedSport || "", selectedEventType);
       const key = opt?.key || selectedEventType.toLowerCase().replace(/[^a-z0-9]/g, "_");
       const isDist = !!opt?.isDistanceEvent;
 
@@ -265,7 +152,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
     }
 
     return list;
-  }, [displayAthletes, activeTab, searchQuery, isTimedTab, selectedEventType]);
+  }, [displayAthletes, searchQuery, isTimedTab, selectedEventType, timedSport]);
 
   return (
     <View style={styles.container}>
@@ -318,32 +205,6 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           ) : null}
         </View>
 
-        {/* Category Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabsScroll}
-          contentContainerStyle={styles.tabsScrollContent}
-        >
-          {categories.map((cat) => {
-            const isActive = activeTab === cat;
-            return (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.tabButton, isActive && styles.tabButtonActive]}
-                onPress={() => setActiveTab(cat)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[styles.tabText, isActive && styles.tabTextActive]}
-                >
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
         {/* Event Type Filter for Swimming and Track & Field */}
         {isTimedTab && (
           <View style={{ marginBottom: 16 }}>
@@ -376,7 +237,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <Ionicons
-                  name={activeTab.includes("SWIM") ? "water-outline" : "stopwatch-outline"}
+                  name={timedSport === "SWIMMING" ? "water-outline" : "stopwatch-outline"}
                   size={18}
                   color="#00C8FF"
                 />
@@ -471,7 +332,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                     <View>
                       <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }}>Select Event Type</Text>
                       <Text style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
-                        Filter athletes by {activeTab} event
+                        Filter athletes by {timedSport || "sport"} event
                       </Text>
                     </View>
                     <TouchableOpacity onPress={() => setIsEventModalOpen(false)} style={{ padding: 4 }}>

@@ -2493,7 +2493,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     } catch (err: any) {
       console.error("Clear match history error:", err);
     }
-  }, [coachMatches, matchHistoryList, allFilteredMatches, coach, currentUser]);
+  }, [coachMatches, matchHistoryList, coach, currentUser]);
 
   const allFilteredMatches = useMemo(() => {
     const baseList = coachMatches && coachMatches.length > 0 ? coachMatches : matchHistoryList;
@@ -3869,6 +3869,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         <PerformancePage
           athletes={perfAthletes}
           avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+          sportsFocus={coachProfile.sports_focus}
           onSelectAthlete={(ath) => {
             setSelectedPerfAthlete(ath);
             setPreviousPortfolioView("performance");
