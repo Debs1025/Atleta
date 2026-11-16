@@ -280,6 +280,19 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
     ? (athCount > 0 ? `${athCount} ${athCount === 1 ? "Athlete" : "Athletes"} Logged` : "Official Meet Results")
     : payload.score_or_time_summary;
 
+  // Un-blacklist matchId from cleared IDs if re-saved
+  try {
+    AsyncStorage.getItem("atleta_cleared_match_ids").then((clStr) => {
+      if (clStr) {
+        const parsed = JSON.parse(clStr);
+        if (Array.isArray(parsed) && parsed.includes(matchId)) {
+          const updated = parsed.filter((id) => id !== matchId);
+          AsyncStorage.setItem("atleta_cleared_match_ids", JSON.stringify(updated)).catch(() => null);
+        }
+      }
+    }).catch(() => null);
+  } catch (_) {}
+
   const rawPayload = {
     ...payload,
     match_id: matchId,
@@ -752,7 +765,7 @@ export async function saveMatchOfflineFirst(payload: any): Promise<{ success: bo
 
 export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean> {
   const cleanId = String(matchId).replace(/^#/, '').trim();
-  const idVariants = Array.from(new Set([matchId, cleanId, `match_${cleanId}`])).filter(Boolean);
+  const idVariants = Array.from(new Set([matchId, cleanId, `match_${cleanId}`, `MATCH_${cleanId}`])).filter(Boolean);
 
   // 1. Direct Firestore document deletion
   try {
@@ -768,12 +781,17 @@ export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean>
     console.warn("deleteMatchOfflineFirst Firestore note:", err);
   }
 
-  // 2. Local cache purge
+  // 2. Local cache purge & track in cleared match IDs
   try {
+    const clStr = await AsyncStorage.getItem("atleta_cleared_match_ids").catch(() => null);
+    const parsed: string[] = clStr ? JSON.parse(clStr) : [];
+    const updated = Array.from(new Set([...parsed, ...idVariants]));
+    await AsyncStorage.setItem("atleta_cleared_match_ids", JSON.stringify(updated)).catch(() => null);
+
     const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
     if (cached) {
-      const parsed: any[] = JSON.parse(cached);
-      const filtered = parsed.filter((m) => {
+      const parsedMatches: any[] = JSON.parse(cached);
+      const filtered = parsedMatches.filter((m) => {
         const id = m.match_id || m.id;
         return !idVariants.includes(id);
       });
@@ -785,10 +803,10 @@ export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean>
     console.warn("deleteMatchOfflineFirst cache error:", cacheErr);
   }
 
-  // 3. REST API deletion
+  // 3. REST API deletion (with force flag)
   try {
     const token = await getStoredAuthToken();
-    await fetch(`${API_BASE}/matches/${cleanId}`, {
+    await fetch(`${API_BASE}/matches/${cleanId}?force=true`, {
       method: "DELETE",
       headers: {
         Accept: "application/json",
@@ -800,7 +818,7 @@ export async function deleteMatchOfflineFirst(matchId: string): Promise<boolean>
   return true;
 }
 
-export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promise<boolean> {
+export async function clearMatchHistoryOfflineFirst(matchIds?: string[], coachId?: string): Promise<boolean> {
   const ids = Array.isArray(matchIds) ? matchIds.filter(Boolean) : [];
 
   // 1. Instant Local cache purge (<5ms)
@@ -808,6 +826,19 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
     await AsyncStorage.removeItem(OFFLINE_MATCHES_CACHE_KEY);
     matchesMemoryCache = [];
     matchesLastFetched = 0;
+
+    // Track cleared IDs persistently so they never resurrect on re-fetch
+    if (ids.length > 0) {
+      const existingClearedStr = await AsyncStorage.getItem("atleta_cleared_match_ids").catch(() => null);
+      const existingCleared: string[] = existingClearedStr ? JSON.parse(existingClearedStr) : [];
+      const idVariants: string[] = [];
+      ids.forEach((id) => {
+        const cId = String(id).replace(/^#/, "").trim();
+        idVariants.push(id, cId, `match_${cId}`, `MATCH_${cId}`);
+      });
+      const combinedCleared = Array.from(new Set([...existingCleared, ...idVariants]));
+      await AsyncStorage.setItem("atleta_cleared_match_ids", JSON.stringify(combinedCleared)).catch(() => null);
+    }
 
     const dashCache = await AsyncStorage.getItem("atleta_coach_dashboard_cache_v2").catch(() => null);
     if (dashCache) {
@@ -824,6 +855,7 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
   // 2. Fast server-side purge via REST API
   try {
     const token = await getStoredAuthToken();
+    const cleanCid = coachId ? String(coachId).replace(/^coach_/, "") : "";
     await fetch(`${API_BASE}/matches/clear`, {
       method: "POST",
       headers: {
@@ -831,7 +863,7 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
         Accept: "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ match_ids: ids }),
+      body: JSON.stringify({ match_ids: ids, coach_id: cleanCid || undefined }),
     }).catch(() => null);
   } catch (_) {}
 
@@ -840,7 +872,7 @@ export async function clearMatchHistoryOfflineFirst(matchIds?: string[]): Promis
     const deleteTasks: Promise<any>[] = [];
     for (const mId of ids) {
       const cleanId = String(mId).replace(/^#/, '').trim();
-      const idVariants = Array.from(new Set([mId, cleanId, `match_${cleanId}`])).filter(Boolean);
+      const idVariants = Array.from(new Set([mId, cleanId, `match_${cleanId}`, `MATCH_${cleanId}`])).filter(Boolean);
       for (const v of idVariants) {
         deleteTasks.push(deleteDoc(doc(db, "Match_Logs", v)).catch(() => null));
         deleteTasks.push(deleteDoc(doc(db, "Matches", v)).catch(() => null));
@@ -1324,21 +1356,40 @@ export async function getActiveCoachSportsOfflineFirst(forceRefresh: boolean = f
  * Cache-first (instant 0-10ms) -> background revalidation -> fast REST -> Firestore -> AsyncStorage.
  */
 export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Promise<any[]> {
-  // Pre-load local cached matches
+  // Pre-load local cached matches & cleared IDs
+  let clearedIdsSet = new Set<string>();
+  try {
+    const clStr = await AsyncStorage.getItem("atleta_cleared_match_ids").catch(() => null);
+    if (clStr) {
+      const parsed = JSON.parse(clStr);
+      if (Array.isArray(parsed)) parsed.forEach((id) => clearedIdsSet.add(String(id)));
+    }
+  } catch (_) {}
+
+  const isNotCleared = (m: any) => {
+    if (!m) return false;
+    const id = String(m.match_id || m.id || "");
+    const cleanId = id.replace(/^#/, "").trim();
+    if (clearedIdsSet.has(id) || clearedIdsSet.has(cleanId) || clearedIdsSet.has(`match_${cleanId}`) || clearedIdsSet.has(`MATCH_${cleanId}`)) {
+      return false;
+    }
+    return !m.deleted && !m.is_deleted && m.status !== "DELETED";
+  };
+
   let localBackup: any[] = [];
   try {
     const cached = await AsyncStorage.getItem(OFFLINE_MATCHES_CACHE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        localBackup = parsed;
+        localBackup = parsed.filter(isNotCleared);
       }
     }
   } catch (_) {}
 
   // 1. Instant Memory Cache (0ms)
   if (!forceRefresh && matchesMemoryCache && matchesMemoryCache.length > 0 && Date.now() - matchesLastFetched < MEMORY_CACHE_TTL_MS) {
-    return matchesMemoryCache;
+    return matchesMemoryCache.filter(isNotCleared);
   }
 
   // 2. Fast Local AsyncStorage Cache (<10ms)
@@ -1359,12 +1410,12 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
     }, 6000);
 
     if (data && (Array.isArray(data.matches) || Array.isArray(data))) {
-      const serverList = Array.isArray(data.matches) ? data.matches : data;
+      const serverList = (Array.isArray(data.matches) ? data.matches : data).filter(isNotCleared);
       // Intelligently merge server matches with locally persisted recent matches so newly saved matches never disappear
       const mergedMap = new Map<string, any>();
       serverList.forEach((m: any) => {
         const id = m.match_id || m.id;
-        if (id && !m.deleted && !m.is_deleted) mergedMap.set(id, m);
+        if (id) mergedMap.set(id, m);
       });
 
       // Preserve local/offline matches if not yet in server payload and not explicitly deleted
@@ -1375,7 +1426,7 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
 
       localCandidates.forEach((m: any) => {
         const id = m.match_id || m.id;
-        if (id && !mergedMap.has(id) && !m.deleted && !m.is_deleted) {
+        if (id && !mergedMap.has(id) && isNotCleared(m)) {
           mergedMap.set(id, m);
         }
       });
@@ -1405,13 +1456,13 @@ export async function getMatchesOfflineFirst(forceRefresh: boolean = false): Pro
     return localBackup;
   }
   if (matchesMemoryCache && matchesMemoryCache.length > 0) {
-    return matchesMemoryCache;
+    return matchesMemoryCache.filter(isNotCleared);
   }
 
   // Fallback 2: Firestore persistent local cache
   try {
     const snap = await getDocs(collection(db, "Match_Logs"));
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(isNotCleared);
     if (list.length > 0) {
       matchesMemoryCache = list;
       matchesLastFetched = Date.now();

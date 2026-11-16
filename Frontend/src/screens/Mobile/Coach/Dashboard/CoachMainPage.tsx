@@ -884,8 +884,22 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
 
+          let clearedIdsSet = new Set<string>();
+          try {
+            const clStr = await AsyncStorage.getItem("atleta_cleared_match_ids").catch(() => null);
+            if (clStr) {
+              const parsed = JSON.parse(clStr);
+              if (Array.isArray(parsed)) parsed.forEach((id) => clearedIdsSet.add(String(id)));
+            }
+          } catch (_) {}
+
           const isDeletedMatch = (m: any) => {
             if (!m) return true;
+            const mId = String(m.match_id || m.id || "");
+            const cleanId = mId.replace(/^#/, "").trim();
+            if (clearedIdsSet.has(mId) || clearedIdsSet.has(cleanId) || clearedIdsSet.has(`match_${cleanId}`) || clearedIdsSet.has(`MATCH_${cleanId}`)) {
+              return true;
+            }
             if (m.deleted === true || m.is_deleted === true) return true;
             const s = String(m.status || m.audit_status || m.verification_status || "").toUpperCase();
             return s === "DELETED" || s === "REVOKED" || s === "CANCELLED";
@@ -2464,17 +2478,22 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
   const handleClearMatchHistory = useCallback(async () => {
     try {
+      const activeCoachId = coach?.coach_id || coach?.user_id || currentUser?.coachId || currentUser?.uid;
       const matchIdsToClear = Array.from(new Set([
         ...(coachMatches || []).map((m: any) => m.match_id || m.id),
         ...(matchHistoryList || []).map((m: any) => m.match_id || m.id),
+        ...(allFilteredMatches || []).map((m: any) => m.match_id || m.id),
       ])).filter(Boolean);
 
       setMatchHistoryList([]);
-      await clearMatchHistoryOfflineFirst(matchIdsToClear);
+      matchHistoryListRef.current = [];
+      clearAuthMicroCache();
+      clearFirebaseClientCaches();
+      await clearMatchHistoryOfflineFirst(matchIdsToClear, activeCoachId);
     } catch (err: any) {
       console.error("Clear match history error:", err);
     }
-  }, [coachMatches, matchHistoryList]);
+  }, [coachMatches, matchHistoryList, allFilteredMatches, coach, currentUser]);
 
   const allFilteredMatches = useMemo(() => {
     const baseList = coachMatches && coachMatches.length > 0 ? coachMatches : matchHistoryList;
