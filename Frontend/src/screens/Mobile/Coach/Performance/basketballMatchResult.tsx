@@ -86,6 +86,10 @@ export const BasketballMatchResult: React.FC<BasketballMatchResultProps> = ({
                 pts: Number(p.sport_stats?.points ?? p.sport_stats?.pts ?? p.pts ?? 0),
                 ast: Number(p.sport_stats?.assists ?? p.sport_stats?.ast ?? p.ast ?? 0),
                 reb: Number(p.sport_stats?.rebounds ?? p.sport_stats?.reb ?? p.reb ?? 0),
+                kills: Number(p.sport_stats?.kills ?? p.sport_stats?.spike_kills ?? p.kills ?? 0),
+                blocks: Number(p.sport_stats?.blocks ?? p.sport_stats?.block_points ?? p.sport_stats?.blk ?? p.blocks ?? 0),
+                aces: Number(p.sport_stats?.service_aces ?? p.sport_stats?.aces ?? p.aces ?? 0),
+                digs: Number(p.sport_stats?.digs ?? p.digs ?? 0),
               }));
               setPlayerStats(mapped);
             }
