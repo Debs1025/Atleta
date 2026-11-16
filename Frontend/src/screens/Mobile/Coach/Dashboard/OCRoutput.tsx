@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import styles from "./styles/OCRoutput";
+import { ScoresheetViewerModal } from "../Components/ScoresheetViewerModal";
 import {
     loadDynamicSportsSchemas,
     getSportStatSchema,
@@ -269,6 +270,21 @@ export function OCRoutput({
     const [isEditing, setIsEditing] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>("ALL");
+    const [showScoresheetViewer, setShowScoresheetViewer] = useState<boolean>(false);
+
+    const currentScoresheetUrl = useMemo(() => {
+        return (
+            (currentActiveMatch as any)?.scoresheet_url ||
+            (currentActiveMatch as any)?.scoresheetUrl ||
+            (currentActiveMatch as any)?.file_url ||
+            (currentActiveMatch as any)?.fileUrl ||
+            (rawOCRData as any)?.scoresheet_url ||
+            (rawOCRData as any)?.scoresheetUrl ||
+            (rawOCRData as any)?.file_url ||
+            (rawOCRData as any)?.fileUrl ||
+            ""
+        );
+    }, [currentActiveMatch, rawOCRData]);
 
     const filterCoachAthletesForTimedSport = useCallback((athletes: DetectedAthleteStat[], sportType: string) => {
         const sUpper = (sportType || "").toUpperCase();
@@ -1037,6 +1053,17 @@ export function OCRoutput({
                         <Text style={styles.headerTitleBeside} numberOfLines={1}>OCR RESULT • {sportDisplayName}</Text>
                         <Ionicons name="chevron-down" size={15} color="#00E5FF" style={{ marginLeft: 6 }} />
                     </TouchableOpacity>
+
+                    {/* EYE BUTTON TO VIEW ORIGINAL SCORESHEET */}
+                    <TouchableOpacity
+                        style={styles.headerEyeButton}
+                        onPress={() => setShowScoresheetViewer(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel="View Original Scoresheet"
+                    >
+                        <Ionicons name="eye-outline" size={16} color="#00E5FF" />
+                        <Text style={styles.headerEyeButtonText}>SHEET</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -1116,23 +1143,33 @@ export function OCRoutput({
                 <View style={styles.topTitleSection}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                         <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
-                        <TouchableOpacity
-                            style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                backgroundColor: "rgba(0, 229, 255, 0.12)",
-                                borderColor: "#00E5FF",
-                                borderWidth: 1,
-                                borderRadius: 12,
-                                paddingHorizontal: 8,
-                                paddingVertical: 4,
-                            }}
-                            onPress={() => setShowSportSelectorModal(true)}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons name="swap-horizontal" size={13} color="#00E5FF" style={{ marginRight: 4 }} />
-                            <Text style={{ color: "#00E5FF", fontSize: 11, fontWeight: "700" }}>{sportDisplayName} ▾</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <TouchableOpacity
+                                style={styles.sheetPillButton}
+                                onPress={() => setShowScoresheetViewer(true)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="eye-outline" size={13} color="#00E5FF" style={{ marginRight: 4 }} />
+                                <Text style={styles.sheetPillButtonText}>VIEW SHEET</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    backgroundColor: "rgba(0, 229, 255, 0.12)",
+                                    borderColor: "#00E5FF",
+                                    borderWidth: 1,
+                                    borderRadius: 12,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 4,
+                                }}
+                                onPress={() => setShowSportSelectorModal(true)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="swap-horizontal" size={13} color="#00E5FF" style={{ marginRight: 4 }} />
+                                <Text style={{ color: "#00E5FF", fontSize: 11, fontWeight: "700" }}>{sportDisplayName} ▾</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                     <View style={styles.accentUnderline} />
                 </View>
@@ -2042,6 +2079,14 @@ export function OCRoutput({
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>
+            {/* FULLSCREEN ZOOMABLE SCORESHEET VIEWER */}
+            <ScoresheetViewerModal
+                visible={showScoresheetViewer}
+                imageUrl={currentScoresheetUrl}
+                title={currentActiveMatch.file_name || rawOCRData?.file_name || "Original Scoresheet"}
+                subtitle={`${sportDisplayName} • ${currentActiveMatch.team_name || "Scoresheet"}`}
+                onClose={() => setShowScoresheetViewer(false)}
+            />
         </View>
     );
 }

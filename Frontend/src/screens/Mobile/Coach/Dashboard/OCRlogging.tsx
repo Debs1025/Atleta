@@ -21,6 +21,7 @@ import * as FileSystem from "expo-file-system";
 import styles from "./styles/OCRlogging";
 import { RawOCRDetectedData, DetectedAthleteStat } from "./OCRoutput";
 import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
+import { ScoresheetViewerModal } from "../Components/ScoresheetViewerModal";
 
 // Client State Schema Models
 export interface UploadedFileItem {
@@ -798,9 +799,11 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     aScore = oppAthleteSum;
                 }
 
+                const matchedFile = uploadedFiles.find(f => f.file_name === (dataObj.file_name || dataObj.filename));
                 const scoresheetUrlVal = String(
                     dataObj.scoresheet_url ||
                     dataObj.scoresheetUrl ||
+                    matchedFile?.file_url ||
                     responseData?.scoresheet_url ||
                     responseData?.scoresheetUrl ||
                     uploadedFiles[0]?.file_url ||
@@ -1130,72 +1133,38 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 </TouchableOpacity>
             </ScrollView>
 
-            {/* CUSTOM PREVIEW / INFO MODAL */}
+            {/* FULLSCREEN ZOOMABLE SCORESHEET VIEWER */}
+            <ScoresheetViewerModal
+                visible={Boolean(previewFile)}
+                imageUrl={previewFile?.file_url}
+                title={previewFile?.file_name}
+                subtitle={`${previewFile?.file_type} • ${previewFile ? formatFileSize(previewFile.file_size_bytes) : ""}`}
+                onClose={() => setPreviewFile(null)}
+            />
+
+            {/* CUSTOM INFO / ALERT MODAL */}
             <Modal
-                visible={Boolean(previewFile || modalMessage)}
+                visible={Boolean(modalMessage)}
                 transparent
                 animationType="fade"
-                onRequestClose={() => {
-                    setPreviewFile(null);
-                    setModalMessage(null);
-                }}
+                onRequestClose={() => setModalMessage(null)}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.previewModalCard}>
                         <View style={styles.previewHeader}>
-                            <Text style={styles.previewTitle}>
-                                {previewFile ? previewFile.file_name : "OCR UPLOAD PORTAL"}
-                            </Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setPreviewFile(null);
-                                    setModalMessage(null);
-                                }}
-                            >
+                            <Text style={styles.previewTitle}>OCR UPLOAD PORTAL</Text>
+                            <TouchableOpacity onPress={() => setModalMessage(null)}>
                                 <Ionicons name="close" size={20} color="#FFFFFF" />
                             </TouchableOpacity>
                         </View>
 
-                        <View style={[styles.previewBody, previewFile && { padding: 8, minHeight: 280, justifyContent: 'center' }]}>
-                            {previewFile ? (
-                                <View style={{ width: "100%", alignItems: "center" }}>
-                                    {previewFile.file_url ? (
-                                        <Image
-                                            source={{ uri: previewFile.file_url }}
-                                            style={{
-                                                width: "100%",
-                                                height: 300,
-                                                borderRadius: 8,
-                                                backgroundColor: "#070D19",
-                                            }}
-                                            resizeMode="contain"
-                                        />
-                                    ) : (
-                                        <View style={{ height: 200, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Ionicons name="document-text-outline" size={54} color="#00C8FF" />
-                                            <Text style={[styles.previewMetaText, { marginTop: 12 }]}>Document loaded from device cache.</Text>
-                                        </View>
-                                    )}
-                                    <View style={{ marginTop: 10, width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
-                                        <Text style={[styles.previewMetaText, { color: "#FFFFFF", fontWeight: "700", flex: 1 }]} numberOfLines={1}>
-                                            {previewFile.file_name}
-                                        </Text>
-                                        <Text style={[styles.previewMetaText, { color: "#00C8FF", fontSize: 11, marginLeft: 8 }]}>
-                                            {previewFile.file_type} • {formatFileSize(previewFile.file_size_bytes)}
-                                        </Text>
-                                    </View>
-                                </View>
-                            ) : (
-                                <Text style={styles.previewMetaText}>{modalMessage}</Text>
-                            )}
+                        <View style={styles.previewBody}>
+                            <Text style={styles.previewMetaText}>{modalMessage}</Text>
                         </View>
 
                         <TouchableOpacity
                             style={styles.modalCtaButton}
-                            onPress={() => {
-                                setPreviewFile(null);
-                                setModalMessage(null);
-                            }}
+                            onPress={() => setModalMessage(null)}
                             activeOpacity={0.85}
                         >
                             <Text style={styles.modalCtaText}>CLOSE</Text>
