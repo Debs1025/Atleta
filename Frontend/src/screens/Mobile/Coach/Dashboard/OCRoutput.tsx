@@ -1053,17 +1053,6 @@ export function OCRoutput({
                         <Text style={styles.headerTitleBeside} numberOfLines={1}>OCR RESULT • {sportDisplayName}</Text>
                         <Ionicons name="chevron-down" size={15} color="#00E5FF" style={{ marginLeft: 6 }} />
                     </TouchableOpacity>
-
-                    {/* EYE BUTTON TO VIEW ORIGINAL SCORESHEET */}
-                    <TouchableOpacity
-                        style={styles.headerEyeButton}
-                        onPress={() => setShowScoresheetViewer(true)}
-                        activeOpacity={0.8}
-                        accessibilityLabel="View Original Scoresheet"
-                    >
-                        <Ionicons name="eye-outline" size={16} color="#00E5FF" />
-                        <Text style={styles.headerEyeButtonText}>SHEET</Text>
-                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -1141,36 +1130,7 @@ export function OCRoutput({
 
                 {/* TITLE SECTION WITH UNDERLINE */}
                 <View style={styles.topTitleSection}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                        <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                            <TouchableOpacity
-                                style={styles.sheetPillButton}
-                                onPress={() => setShowScoresheetViewer(true)}
-                                activeOpacity={0.7}
-                            >
-                                <Ionicons name="eye-outline" size={13} color="#00E5FF" style={{ marginRight: 4 }} />
-                                <Text style={styles.sheetPillButtonText}>VIEW SHEET</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    backgroundColor: "rgba(0, 229, 255, 0.12)",
-                                    borderColor: "#00E5FF",
-                                    borderWidth: 1,
-                                    borderRadius: 12,
-                                    paddingHorizontal: 8,
-                                    paddingVertical: 4,
-                                }}
-                                onPress={() => setShowSportSelectorModal(true)}
-                                activeOpacity={0.7}
-                            >
-                                <Ionicons name="swap-horizontal" size={13} color="#00E5FF" style={{ marginRight: 4 }} />
-                                <Text style={{ color: "#00E5FF", fontSize: 11, fontWeight: "700" }}>{sportDisplayName} ▾</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                    <Text style={styles.screenTitle}>DETECTED MATCH STATISTICS</Text>
                     <View style={styles.accentUnderline} />
                 </View>
 
@@ -1253,7 +1213,17 @@ export function OCRoutput({
 
                 {/* MATCH IDENTITY CARD */}
                 <View style={styles.cardSection}>
-                    <Text style={styles.subLabel}>MATCH IDENTITY</Text>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text style={styles.subLabel}>MATCH IDENTITY</Text>
+                        <TouchableOpacity
+                            style={styles.identitySheetBtn}
+                            onPress={() => setShowScoresheetViewer(true)}
+                            activeOpacity={0.75}
+                        >
+                            <Ionicons name="eye-outline" size={14} color="#00E5FF" />
+                            <Text style={styles.identitySheetBtnText}>VIEW SCORESHEET</Text>
+                        </TouchableOpacity>
+                    </View>
                     <View style={styles.cardDivider} />
                     {isIndividualSport ? (
                         <View style={{ gap: 10 }}>
@@ -1837,6 +1807,16 @@ export function OCRoutput({
 
                 {/* ACTION BUTTONS STACK */}
                 <View style={styles.actionStack}>
+                    {/* VIEW ORIGINAL SCORESHEET */}
+                    <TouchableOpacity
+                        style={styles.viewOriginalSheetButton}
+                        onPress={() => setShowScoresheetViewer(true)}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="image-outline" size={18} color="#00E5FF" />
+                        <Text style={styles.viewOriginalSheetButtonText}>VIEW ORIGINAL SCORESHEET</Text>
+                    </TouchableOpacity>
+
                     {/* CONFIRM & SAVE */}
                     <TouchableOpacity
                         style={styles.confirmButton}
