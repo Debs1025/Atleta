@@ -104,8 +104,6 @@ export const DiscoveryPlayer: React.FC<{
                 : (athlete.recruitment_status && athlete.recruitment_status.toLowerCase() !== 'unassigned'
                     ? athlete.recruitment_status
                     : 'Available');
-            const effPct = Number(athlete.efficiency_pct ?? 75);
-            const filledCount = Math.min(5, Math.max(1, Math.round((effPct / 100) * 5)));
 
             const verticalIn = extractVerticalLeapInches(athlete);
             const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athleteName || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
@@ -240,15 +238,6 @@ export const DiscoveryPlayer: React.FC<{
                       );
                     }
                   })()}
-                </View>
-
-                <View pointerEvents="none" style={styles.levelBarContainer}>
-                  {[1, 2, 3, 4, 5].map((step) => {
-                    const isFilled = step <= filledCount;
-                    return (
-                      <View key={step} style={[styles.levelSegment, isFilled ? styles.levelSegmentFilled : { backgroundColor: '#1E293B' }, step === filledCount ? styles.levelSegmentActiveHigh : null]} />
-                    );
-                  })}
                 </View>
               </TouchableOpacity>
             );

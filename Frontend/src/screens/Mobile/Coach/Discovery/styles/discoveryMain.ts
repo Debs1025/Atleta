@@ -249,7 +249,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 0,
   },
   statCol: {
     alignItems: "flex-start",
