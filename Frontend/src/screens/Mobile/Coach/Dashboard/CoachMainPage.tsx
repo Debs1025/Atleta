@@ -1329,7 +1329,26 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             }
           });
 
-          const processedTeams: Team[] = rawTeamsList.map((t: any) => {
+          // Deduplicate raw teams by team_name + sport_type to prevent duplicate cards
+          const dedupedRawTeamsMap = new Map<string, any>();
+          for (const t of rawTeamsList) {
+            const key = `${String(t.team_name || "").toLowerCase().trim()}___${String(t.sport_type || "").toLowerCase().trim()}`;
+            if (!dedupedRawTeamsMap.has(key)) {
+              dedupedRawTeamsMap.set(key, t);
+            } else {
+              const existing = dedupedRawTeamsMap.get(key);
+              const isCurrentManaged = managedTeamIdsList.has(String(t.team_id || "").toLowerCase());
+              const isExistingManaged = managedTeamIdsList.has(String(existing.team_id || "").toLowerCase());
+              const currentRosterLen = (Array.isArray(t.roster_list) ? t.roster_list.length : 0);
+              const existingRosterLen = (Array.isArray(existing.roster_list) ? existing.roster_list.length : 0);
+              if ((!isExistingManaged && isCurrentManaged) || (currentRosterLen > existingRosterLen)) {
+                dedupedRawTeamsMap.set(key, t);
+              }
+            }
+          }
+          const uniqueRawTeams = Array.from(dedupedRawTeamsMap.values());
+
+          const processedTeams: Team[] = uniqueRawTeams.map((t: any) => {
             const rawRoster: any[] = Array.isArray(t.roster_list) ? t.roster_list : Array.isArray(t.athletes) ? t.athletes : [];
             const rosterSeen = new Set<string>();
             const hydratedRoster: RosterAthlete[] = [];
@@ -3602,9 +3621,18 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                 };
               });
 
+              const matchedCoachTeam = teams.find((t) => {
+                const tName = String(t.team_name || "").toLowerCase().trim();
+                const resName = resolvedTeamName.toLowerCase().trim();
+                const tSport = String(t.sport_type || "").toUpperCase().trim();
+                const resSport = String(finalData.sport_type || "").toUpperCase().trim();
+                return (tName === resName || tName.includes(resName) || resName.includes(tName)) && (tSport === resSport || !resSport);
+              });
+              const resolvedActualTeamId = matchedCoachTeam?.team_id || (lockedTeamId && lockedTeamId !== lockedTeamName ? lockedTeamId : undefined) || currentTeam?.team_id || undefined;
+
               const matchPayload = {
                 match_id: newMatchItem.match_id,
-                team_id: lockedTeamId || lockedTeamName,
+                team_id: resolvedActualTeamId || lockedTeamId || lockedTeamName,
                 coach_id: currentCoachId,
                 logged_by_coach_id: currentCoachId,
                 coaching_staff: currentCoachId ? [currentCoachId] : [],
