@@ -609,11 +609,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
     const rawTrends = a.scoring_trends_last_10;
     const trends = Array.isArray(rawTrends) && rawTrends.length > 0 ? rawTrends : (matchTrends.length > 0 ? matchTrends : (ppg > 0 ? [ppg] : []));
+    const resolvedAvatar = a.avatar_url || a.profile_image || a.profile_picture || a.photo_url || a.avatar || "";
 
     return {
       athlete_id: a.athlete_id || a.user_id || `ath_${Date.now()}`,
       user_id: a.user_id || a.athlete_id || "",
       full_name: a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || 'Athlete',
+      avatar_url: resolvedAvatar,
+      profile_image: resolvedAvatar,
       birthdate: a.birthdate || a.dob || "-",
       position_or_event: a.position || "Athlete",
       location_province: a.province || a.location || "Unassigned",

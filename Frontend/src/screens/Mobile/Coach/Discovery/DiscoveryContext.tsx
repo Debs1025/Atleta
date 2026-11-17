@@ -521,7 +521,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             },
             calculated_per: per,
             efficiency_pct: eff,
-            avatar_url: a.avatar_url,
+            avatar_url: a.avatar_url || a.profile_image || a.profile_picture || a.photo_url || a.avatar || '',
             contact_info: {
               email: a.email || a.contact_email || 'N/A',
               phone: a.contact_number || a.phone || 'N/A',

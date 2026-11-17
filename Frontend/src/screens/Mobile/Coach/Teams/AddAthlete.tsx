@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   ScrollView,
   Text,
@@ -358,9 +359,18 @@ export function AddAthlete({
               <View key={athlete.athlete_id} style={styles.athleteCard}>
                 {/* TOP CARD ROW */}
                 <View style={styles.cardTopRow}>
-                  <View style={styles.avatarThumbnail}>
-                    <Ionicons name="person" size={26} color="#64748B" />
-                  </View>
+                  {(() => {
+                    const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athlete.full_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
+                    return (
+                      <View style={[styles.avatarThumbnail, { overflow: 'hidden' }]}>
+                        {avatarUri ? (
+                          <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="person" size={26} color="#64748B" />
+                        )}
+                      </View>
+                    );
+                  })()}
 
                   <View style={styles.cardMainInfo}>
                     <View style={styles.nameIdRow}>

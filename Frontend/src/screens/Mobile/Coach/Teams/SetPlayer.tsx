@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import {
+  Image,
   Modal,
   ScrollView,
   Text,
@@ -219,9 +220,18 @@ export function SetPlayer({
                 activeOpacity={0.8}
               >
                 <View style={styles.playerInfoLeft}>
-                  <View style={styles.avatarCircle}>
-                    <Ionicons name="person" size={22} color="#64748B" />
-                  </View>
+                  {(() => {
+                    const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athlete.full_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
+                    return (
+                      <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
+                        {avatarUri ? (
+                          <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: 22 }} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="person" size={22} color="#64748B" />
+                        )}
+                      </View>
+                    );
+                  })()}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.playerName}>{athlete.full_name}</Text>
                     {athlete.status_tag ? (

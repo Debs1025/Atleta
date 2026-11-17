@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   ScrollView,
   Alert,
@@ -390,15 +391,26 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
       >
         {/* Hero Card */}
         <View style={styles.heroCard}>
-          <View style={styles.diamondContainer}>
-            <View style={styles.diamondBorder} />
-            <Ionicons
-              name="person"
-              size={32}
-              color="#00C8FF"
-              style={styles.diamondIcon}
-            />
-          </View>
+          {(() => {
+            const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athlete.full_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=200&bold=true`;
+            return (
+              <View style={[styles.diamondContainer, { overflow: 'hidden', borderRadius: 16 }]}>
+                {avatarUri ? (
+                  <Image source={{ uri: avatarUri }} style={{ width: 68, height: 68, borderRadius: 16 }} resizeMode="cover" />
+                ) : (
+                  <>
+                    <View style={styles.diamondBorder} />
+                    <Ionicons
+                      name="person"
+                      size={32}
+                      color="#00C8FF"
+                      style={styles.diamondIcon}
+                    />
+                  </>
+                )}
+              </View>
+            );
+          })()}
 
           <Text style={styles.heroName}>{athlete.full_name}</Text>
           <Text style={styles.heroBirthdate}>

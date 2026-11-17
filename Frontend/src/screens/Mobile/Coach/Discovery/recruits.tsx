@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
@@ -59,9 +60,18 @@ export const RecruitsPage: React.FC<RecruitsProps> = ({ onBack }) => {
             return (
               <View key={item.scout_id} style={styles.recruitCard}>
                 <View style={styles.leftGroup}>
-                  <View style={styles.avatarCircle}>
-                    <Ionicons name="person" size={18} color="#00C8FF" />
-                  </View>
+                  {(() => {
+                    const avatarUri = matchedAthlete?.avatar_url || (item as any).avatar_url || (matchedAthlete as any)?.profile_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.athlete_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
+                    return (
+                      <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
+                        {avatarUri ? (
+                          <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: 19 }} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="person" size={18} color="#00C8FF" />
+                        )}
+                      </View>
+                    );
+                  })()}
 
                   <View style={{ flex: 1 }}>
                     <Text style={styles.recruitName}>{item.athlete_name}</Text>

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   Pressable,
   ScrollView,
@@ -107,6 +108,7 @@ export const DiscoveryPlayer: React.FC<{
             const filledCount = Math.min(5, Math.max(1, Math.round((effPct / 100) * 5)));
 
             const verticalIn = extractVerticalLeapInches(athlete);
+            const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athleteName || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
 
             return (
               <TouchableOpacity
@@ -119,8 +121,12 @@ export const DiscoveryPlayer: React.FC<{
               >
                 <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                   <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingRight: 8 }}>
-                    <View pointerEvents="none" style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center' }}>
-                      <Ionicons name="person" size={18} color="#00C8FF" />
+                    <View pointerEvents="none" style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                      <Image
+                        source={{ uri: avatarUri }}
+                        style={{ width: '100%', height: '100%', borderRadius: 19 }}
+                        resizeMode="cover"
+                      />
                     </View>
                     <View pointerEvents="box-none" style={{ flex: 1 }}>
                       <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

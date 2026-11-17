@@ -237,6 +237,8 @@ export interface AthletePerformanceProfile {
   athlete_id: string;
   user_id: string;
   full_name: string;
+  avatar_url?: string;
+  profile_image?: string;
   birthdate: string; // e.g. "March 12, 2006"
   position_or_event: string; // e.g. "Point Guard", "200m Swimmer"
   location_province: string; // e.g. "Camaligan, PHI"

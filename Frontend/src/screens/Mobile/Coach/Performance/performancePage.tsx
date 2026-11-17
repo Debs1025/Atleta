@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   ScrollView,
@@ -441,15 +442,21 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
             </Text>
           </View>
         ) : (
-          filteredAthletes.slice(0, visibleCount).map((athlete) => (
+          filteredAthletes.slice(0, visibleCount).map((athlete) => {
+            const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athlete.full_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
+            return (
             <TouchableOpacity
               key={athlete.athlete_id}
               style={styles.athleteCard}
               onPress={() => onSelectAthlete(athlete)}
               activeOpacity={0.85}
             >
-              <View style={styles.avatarBox}>
-                <Ionicons name="person" size={24} color="#00C8FF" />
+              <View style={[styles.avatarBox, { overflow: "hidden" }]}>
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={{ width: "100%", height: "100%", borderRadius: 12 }}
+                  resizeMode="cover"
+                />
               </View>
 
               <View style={styles.cardCenter}>
@@ -594,7 +601,8 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                 <Text style={styles.ratingLabel}>{athlete.rating_score && athlete.rating_score > 0 ? "RATING" : "UNRATED"}</Text>
               </View>
             </TouchableOpacity>
-          ))
+          );
+          })
         )}
 
         {/* Expansion Button */}
