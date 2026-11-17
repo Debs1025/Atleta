@@ -1284,7 +1284,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             }
           });
 
-          // Ingest scouted proposals so any newly scouted player shows up immediately on coach dashboard
+          // Ingest scouted proposals only if explicitly accepted so unaccepted players are not added to coach team
           const rawProposals: any[] = Array.isArray(proposalsRes)
             ? proposalsRes
             : Array.isArray(proposalsRes?.proposals)
@@ -1299,6 +1299,11 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             const fName = aDetails.first_name || '';
             const lName = aDetails.last_name || '';
             const fullName = p.athlete_name || (fName ? `${fName} ${lName}`.trim() : 'Athlete');
+            const rawOfferStatus = String(p.offer_status || p.status || 'PENDING').toUpperCase();
+            const isAccepted = ['ACCEPTED', 'ACTIVE', 'SIGNED', 'COMMITTED', 'ROSTERED'].includes(rawOfferStatus);
+
+            // Athlete must be accepted first before being added to coach team and managed pool
+            if (!isAccepted) return;
 
             const scoutObj = {
               athlete_id: pAthId || `ath_${pNorm}`,
@@ -1312,8 +1317,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               coach_id: cleanEffectiveCoachId,
               coach_scout_id: cleanEffectiveCoachId,
               is_scouted: true,
-              scout_status: p.offer_status || 'PENDING',
-              recruitment_status: p.offer_status === 'ACCEPTED' ? 'Active Roster' : `Scouted (${p.offer_status || 'Pending'})`,
+              scout_status: 'ACCEPTED',
+              recruitment_status: 'Active Roster',
             };
 
             if (!richCoachAthletesMap.has(pNorm)) {
@@ -1655,6 +1660,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           if (rawCoachAthletes.length > 0) {
             const existingIds = new Set(mappedPerf.map((p) => p.athlete_id));
             rawCoachAthletes.filter(matchesCoachSport).forEach((ha: any) => {
+              if (ha.is_scouted && (ha.scout_status || ha.offer_status || '').toUpperCase() !== 'ACCEPTED') return;
               const aId = ha.athlete_id || ha.user_id;
               if (!existingIds.has(aId)) {
                 mappedPerf.push(computeAthletePerformance(ha, liveMatches));
@@ -2316,6 +2322,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         )
       );
       setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+      if (status === "Accepted") {
+        // Re-sync coach data so accepted athlete is immediately added to team roster & performance page
+        await fetchDashboardDataRef.current(true).catch(() => null);
+      }
     } catch (err: any) {
       console.warn("Inquiry response error:", err);
     }
