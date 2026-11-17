@@ -364,14 +364,14 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
               <Text style={styles.modalTitle}>
                 # {selectedSwimmer?.jersey_number} {selectedSwimmer?.last_name}
               </Text>
-              <TouchableOpacity onPress={handleCloseModal}>
-                <Ionicons name="close" size={24} color="#0B1528" />
+              <TouchableOpacity onPress={handleCloseModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={24} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
             {/* EVENT PICKER BAR */}
-            <View style={{ marginBottom: 14 }}>
-              <Text style={{ color: "#475569", fontSize: 10, fontWeight: "900", letterSpacing: 1, marginBottom: 8 }}>
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ color: "#94A3B8", fontSize: 11, fontWeight: "900", letterSpacing: 1, marginBottom: 8 }}>
                 CHOOSE SWIMMING EVENT
               </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -386,16 +386,16 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                       key={ev.key}
                       onPress={() => handleSelectEvent(ev)}
                       style={{
-                        backgroundColor: isSelected ? "#00C8FF" : "#F1F5F9",
-                        borderColor: isSelected ? "#0099CC" : "#CBD5E1",
+                        backgroundColor: isSelected ? "#00C8FF" : "#0E1A30",
+                        borderColor: isSelected ? "#00C8FF" : "#1E293B",
                         borderWidth: 1.5,
                         borderRadius: 8,
-                        paddingHorizontal: 12,
-                        paddingVertical: 7,
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ color: isSelected ? "#070D19" : "#334155", fontSize: 12, fontWeight: isSelected ? "900" : "700" }}>
+                      <Text style={{ color: isSelected ? "#070D19" : "#94A3B8", fontSize: 12, fontWeight: isSelected ? "900" : "700" }}>
                         {ev.label}
                       </Text>
                     </TouchableOpacity>
@@ -404,12 +404,12 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
               </ScrollView>
             </View>
 
-            {/* 4-Tile White/Dark-Bordered Action Grid */}
+            {/* 4-Tile Action Grid (Dark Basketball-Themed) */}
             <View style={styles.gridContainer}>
               {/* TILE 1: TIMER */}
               <View style={styles.actionBox}>
                 <View style={styles.actionBoxHeader}>
-                  <Ionicons name="time-outline" size={24} color="#0B1528" />
+                  <Ionicons name="time-outline" size={24} color="#00C8FF" />
                   <Text style={styles.actionBoxLabel}>TIMER</Text>
                 </View>
                 <TextInput
@@ -418,14 +418,14 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                     {
                       textAlign: "center",
                       borderBottomWidth: 1,
-                      borderBottomColor: "#CBD5E1",
+                      borderBottomColor: "#1E293B",
                       width: "88%",
                       paddingVertical: 2,
                     },
                   ]}
                   value={isTimerRunning ? formatStopwatch(elapsedMs) : manualTimeStr}
                   placeholder="00:00.00"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor="#64748B"
                   onChangeText={handleManualTimeChange}
                   editable={!isTimerRunning}
                 />
@@ -438,7 +438,7 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                     <Ionicons
                       name={isTimerRunning ? "pause-sharp" : "play-sharp"}
                       size={22}
-                      color="#FFFFFF"
+                      color="#070D19"
                     />
                   </TouchableOpacity>
 
@@ -447,7 +447,7 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                     onPress={handleRetryStopwatch}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="refresh-sharp" size={22} color="#0B1528" />
+                    <Ionicons name="refresh-sharp" size={22} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -455,7 +455,7 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
               {/* TILE 2: DISTANCE */}
               <View style={styles.actionBox}>
                 <View style={styles.actionBoxHeader}>
-                  <MaterialCommunityIcons name="swap-horizontal" size={24} color="#0B1528" />
+                  <MaterialCommunityIcons name="swap-horizontal" size={24} color="#00C8FF" />
                   <Text style={styles.actionBoxLabel}>DISTANCE</Text>
                 </View>
 
@@ -464,6 +464,7 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                     style={styles.distanceInput}
                     keyboardType="numeric"
                     value={distanceVal}
+                    placeholderTextColor="#64748B"
                     onChangeText={setDistanceVal}
                   />
                   <Text style={styles.distanceUnit}>M</Text>
@@ -482,7 +483,7 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
               <TouchableOpacity
                 style={[
                   styles.actionBox,
-                  selectedSwimmer?.timing_stats?.is_foul_dq && styles.actionBoxActive,
+                  selectedSwimmer?.timing_stats?.is_foul_dq && styles.actionBoxFoulActive,
                 ]}
                 onPress={handleToggleFoulDQ}
                 activeOpacity={0.8}
@@ -490,11 +491,11 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                 <Ionicons
                   name="flag-outline"
                   size={26}
-                  color={selectedSwimmer?.timing_stats?.is_foul_dq ? "#EF4444" : "#0B1528"}
+                  color={selectedSwimmer?.timing_stats?.is_foul_dq ? "#EF4444" : "#00C8FF"}
                 />
                 <Text style={styles.actionBoxLabel}>FOUL / DQ</Text>
                 {selectedSwimmer?.timing_stats?.is_foul_dq && (
-                  <Text style={{ color: "#EF4444", fontSize: 11, fontWeight: "800", marginTop: 4 }}>
+                  <Text style={{ color: "#EF4444", fontSize: 11, fontWeight: "900", marginTop: 4 }}>
                     STATUS: SET
                   </Text>
                 )}
@@ -506,7 +507,7 @@ export function SwimmingMatchScreen({ onClose, onSaveMatch }: SwimmingMatchProps
                 onPress={handleRecordSplit}
                 activeOpacity={0.8}
               >
-                <Ionicons name="git-branch-outline" size={26} color="#0B1528" />
+                <Ionicons name="git-branch-outline" size={26} color="#00C8FF" />
                 <Text style={styles.actionBoxLabel}>SPLIT TIME</Text>
                 {recordedSplits.length > 0 && (
                   <Text style={styles.splitListBadge}>
