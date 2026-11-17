@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Image, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import styles from "./styles/SignupScreen";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import { Ionicons } from "@expo/vector-icons";
 import { InAppGoogleAuthModal } from "./InAppGoogleAuthModal";
 let NativeGoogleSignin: any = null;
 try {
@@ -119,7 +122,9 @@ const DEFAULT_ATHLETE_VALUES: AthleteSignupValues = {
   gender: "Male",
   province: "Camarines Sur",
   sport_type: "" as any,
-  terms_accepted: false
+  terms_accepted: false,
+  avatar_url: null,
+  profile_image: null
 };
 
 const DEFAULT_COACH_VALUES: CoachSignupValues = {
@@ -135,7 +140,9 @@ const DEFAULT_COACH_VALUES: CoachSignupValues = {
   regional_affiliation: "",
   national_sports_league: "",
   eligible_documents: null,
-  terms_accepted: false
+  terms_accepted: false,
+  avatar_url: null,
+  profile_image: null
 };
 
 function ChoiceGroup({ label, placeholder = "Select an option", options, value, error, onChange }: ChoiceGroupProps) {
@@ -209,11 +216,13 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
   const [socialToken, setSocialToken] = useState<{ provider: "google" | "facebook"; idToken: string } | null>(null);
   const [coachSport, setCoachSport] = useState<string>("");
   const [sportOptions, setSportOptions] = useState<string[]>(DEFAULT_SPORT_OPTIONS);
-  const socialProfileRef = useRef<{ first_name: string; last_name: string; email: string }>({
+  const socialProfileRef = useRef<{ first_name: string; last_name: string; email: string; avatarUrl?: string }>({
     first_name: "",
     last_name: "",
     email: "",
+    avatarUrl: "",
   });
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const isFirstMount = useRef(true);
 
   // Restore staged OAuth session on mount if recovering from network drops or app reloads
@@ -231,7 +240,13 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           const fn = staged.firstName || "";
           const ln = staged.lastName || "";
           const em = staged.email || "";
-          socialProfileRef.current = { first_name: fn, last_name: ln, email: em };
+          const av = staged.avatarUrl || "";
+          socialProfileRef.current = { first_name: fn, last_name: ln, email: em, avatarUrl: av };
+          if (av) {
+            setAvatarUri(av);
+            athleteForm.setValue("avatar_url", av);
+            coachForm.setValue("avatar_url", av);
+          }
           if (fn) {
             athleteForm.setValue("first_name", fn);
             coachForm.setValue("first_name", fn);
@@ -266,7 +281,13 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       const fn = initialSocialData.initialData?.first_name || "";
       const ln = initialSocialData.initialData?.last_name || "";
       const em = initialSocialData.initialData?.email || "";
-      socialProfileRef.current = { first_name: fn, last_name: ln, email: em };
+      const av = initialSocialData.initialData?.avatar_url || "";
+      socialProfileRef.current = { first_name: fn, last_name: ln, email: em, avatarUrl: av };
+      if (av) {
+        setAvatarUri(av);
+        athleteForm.setValue("avatar_url", av);
+        coachForm.setValue("avatar_url", av);
+      }
 
       athleteForm.setValue("first_name", fn);
       athleteForm.setValue("last_name", ln);
@@ -297,6 +318,13 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         role,
       });
 
+      if (extracted.avatarUrl && !av) {
+        setAvatarUri(extracted.avatarUrl);
+        socialProfileRef.current.avatarUrl = extracted.avatarUrl;
+        athleteForm.setValue("avatar_url", extracted.avatarUrl);
+        coachForm.setValue("avatar_url", extracted.avatarUrl);
+      }
+
       persistOAuthUserDocument({
         uid: extracted.uid,
         email: extracted.email,
@@ -305,7 +333,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         authProvider: initialSocialData.socialToken.provider,
         firstName: extracted.firstName,
         lastName: extracted.lastName,
-        avatarUrl: extracted.avatarUrl,
+        avatarUrl: extracted.avatarUrl || av,
         socialToken: initialSocialData.socialToken,
       }).catch((persistErr) => {
         console.warn("[OAuthPersistence] Post-OAuth initial staging notice:", persistErr);
@@ -468,6 +496,14 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
             role,
           });
 
+          const av = extracted.avatarUrl || userObj?.photo || "";
+          if (av) {
+            socialProfileRef.current.avatarUrl = av;
+            setAvatarUri(av);
+            athleteForm.setValue("avatar_url", av);
+            coachForm.setValue("avatar_url", av);
+          }
+
           await persistOAuthUserDocument({
             uid: extracted.uid,
             email: extracted.email || em,
@@ -533,6 +569,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
     const currentLast = athleteForm.getValues("last_name") || coachForm.getValues("last_name") || sp.last_name || "";
     const currentEmail = athleteForm.getValues("email") || coachForm.getValues("email") || sp.email || "";
     const currentContact = athleteForm.getValues("contact_number") || coachForm.getValues("contact_number") || "";
+    const currentAvatar = athleteForm.getValues("avatar_url") || coachForm.getValues("avatar_url") || avatarUri || sp.avatarUrl || "";
 
     athleteForm.reset({
       ...DEFAULT_ATHLETE_VALUES,
@@ -540,6 +577,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       last_name: currentLast,
       email: currentEmail,
       contact_number: currentContact,
+      avatar_url: currentAvatar || null,
+      profile_image: currentAvatar || null,
     });
     coachForm.reset({
       ...DEFAULT_COACH_VALUES,
@@ -547,8 +586,86 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       last_name: currentLast,
       email: currentEmail,
       contact_number: currentContact,
+      avatar_url: currentAvatar || null,
+      profile_image: currentAvatar || null,
     });
   }, [athleteForm, coachForm, role]);
+
+  const handlePickAvatar = () => {
+    Alert.alert(
+      "Profile Photo",
+      "Choose a photo for your profile",
+      [
+        {
+          text: "Choose from Library",
+          onPress: async () => {
+            try {
+              await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                const picked = result.assets[0];
+                const manip = await ImageManipulator.manipulateAsync(
+                  picked.uri,
+                  [{ resize: { width: 300, height: 300 } }],
+                  { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+                );
+                const finalUri = `data:image/jpeg;base64,${manip.base64}`;
+                setAvatarUri(finalUri);
+                athleteForm.setValue("avatar_url", finalUri, { shouldDirty: true });
+                coachForm.setValue("avatar_url", finalUri, { shouldDirty: true });
+              }
+            } catch (err) {
+              console.warn("Avatar pick error:", err);
+            }
+          },
+        },
+        {
+          text: "Take Photo",
+          onPress: async () => {
+            try {
+              await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
+              const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                const picked = result.assets[0];
+                const manip = await ImageManipulator.manipulateAsync(
+                  picked.uri,
+                  [{ resize: { width: 300, height: 300 } }],
+                  { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+                );
+                const finalUri = `data:image/jpeg;base64,${manip.base64}`;
+                setAvatarUri(finalUri);
+                athleteForm.setValue("avatar_url", finalUri, { shouldDirty: true });
+                coachForm.setValue("avatar_url", finalUri, { shouldDirty: true });
+              }
+            } catch (err) {
+              console.warn("Avatar camera error:", err);
+            }
+          },
+        },
+        avatarUri
+          ? {
+              text: "Remove Photo",
+              style: "destructive",
+              onPress: () => {
+                setAvatarUri(null);
+                athleteForm.setValue("avatar_url", null, { shouldDirty: true });
+                coachForm.setValue("avatar_url", null, { shouldDirty: true });
+              },
+            }
+          : { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const handleSubmissionError = (error: any) => {
     const rawMsg = getAuthErrorMessage(error, "Unable to create the account right now.");
@@ -653,6 +770,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       if (socialToken) {
         const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
         const { role: _r, ...restValues } = values;
+        const avatarToSubmit = avatarUri || socialProfileRef.current.avatarUrl || undefined;
         const result = await requestJson(endpoint, {
           id_token: socialToken.idToken,
           idToken: socialToken.idToken,
@@ -661,6 +779,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           provider: socialToken.provider,
           role: "Athlete",
           is_registration: true,
+          avatar_url: avatarToSubmit,
+          profile_image: avatarToSubmit,
           ...restValues
         });
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
@@ -683,6 +803,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         athleteForm.reset();
         setSocialToken(null);
+        setAvatarUri(null);
         await clearStagedOAuthData();
 
         Alert.alert(
@@ -697,7 +818,13 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         }
         return;
       } else {
-        await requestJson("/users/register", { ...values, role: "Athlete" });
+        const avatarToSubmit = avatarUri || undefined;
+        await requestJson("/users/register", {
+          ...values,
+          role: "Athlete",
+          avatar_url: avatarToSubmit,
+          profile_image: avatarToSubmit,
+        });
 
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY).catch(() => null);
@@ -719,6 +846,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         athleteForm.reset();
         setSocialToken(null);
+        setAvatarUri(null);
 
         Alert.alert(
           "Account Created",
@@ -752,6 +880,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       if (socialToken) {
         const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
         const { role: _r, ...restValues } = values;
+        const avatarToSubmit = avatarUri || socialProfileRef.current.avatarUrl || undefined;
         const result = await requestJson(endpoint, {
           id_token: socialToken.idToken,
           idToken: socialToken.idToken,
@@ -761,6 +890,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           role: "Coach",
           is_registration: true,
           sport_type: coachSport,
+          avatar_url: avatarToSubmit,
+          profile_image: avatarToSubmit,
           ...restValues
         });
         // For coaches, immediately purge any temporary session tokens to strictly enforce admin approval gate
@@ -787,6 +918,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         coachForm.reset();
         setDocumentFile(null);
         setSocialToken(null);
+        setAvatarUri(null);
         await clearStagedOAuthData();
 
         Alert.alert(
@@ -801,6 +933,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         }
         return;
       } else {
+        const avatarToSubmit = avatarUri || undefined;
         const payload = {
           role: "Coach",
           first_name: values.first_name,
@@ -814,6 +947,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           current_institution: values.current_institution,
           regional_affiliation: values.regional_affiliation,
           national_sports_league: values.national_sports_league || undefined,
+          avatar_url: avatarToSubmit,
+          profile_image: avatarToSubmit,
           professional_documents: documentFile ? [documentFile.name || "coach_license.pdf"] : []
         };
 
@@ -859,6 +994,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
         coachForm.reset();
         setDocumentFile(null);
         setSocialToken(null);
+        setAvatarUri(null);
 
         Alert.alert(
           "Account Pending",
@@ -905,6 +1041,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       setFeedback(null);
       try {
         const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
+        const avatarToSubmit = avatarUri || socialProfileRef.current.avatarUrl || undefined;
         const result = await requestJson(endpoint, {
           id_token: currentToken,
           idToken: currentToken,
@@ -913,6 +1050,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           provider: socialToken.provider,
           role: "Athlete",
           is_registration: true,
+          avatar_url: avatarToSubmit,
+          profile_image: avatarToSubmit,
           first_name: values.first_name || socialProfileRef.current.first_name,
           last_name: values.last_name || socialProfileRef.current.last_name,
           email: values.email || socialProfileRef.current.email,
@@ -946,6 +1085,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         athleteForm.reset();
         setSocialToken(null);
+        setAvatarUri(null);
         await clearStagedOAuthData();
 
         // Prevent automatic login after successful sign-up; clear local session and redirect to Login
@@ -996,6 +1136,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
       setFeedback(null);
       try {
         const endpoint = socialToken.provider === "google" ? "/users/google-login" : "/users/facebook-login";
+        const avatarToSubmit = avatarUri || socialProfileRef.current.avatarUrl || undefined;
         const result = await requestJson(endpoint, {
           id_token: currentToken,
           idToken: currentToken,
@@ -1004,6 +1145,8 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
           provider: socialToken.provider,
           role: "Coach",
           is_registration: true,
+          avatar_url: avatarToSubmit,
+          profile_image: avatarToSubmit,
           first_name: values.first_name || socialProfileRef.current.first_name,
           last_name: values.last_name || socialProfileRef.current.last_name,
           email: values.email || socialProfileRef.current.email,
@@ -1039,6 +1182,7 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
         coachForm.reset();
         setSocialToken(null);
+        setAvatarUri(null);
         await clearStagedOAuthData();
 
         Alert.alert(
@@ -1145,6 +1289,80 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
 
           {step === 2 ? (
             <View>
+              {/* Profile Photo Upload / Social Preview Section */}
+              <View style={styles.avatarSection}>
+                <Pressable
+                  style={styles.avatarTouchable}
+                  onPress={handlePickAvatar}
+                  accessibilityRole="button"
+                  accessibilityLabel="Profile picture"
+                >
+                  <View style={[styles.avatarBox, !avatarUri && styles.avatarBoxEmpty]}>
+                    {avatarUri ? (
+                      <Image
+                        source={{ uri: avatarUri }}
+                        style={styles.avatarPhoto}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Image
+                        source={require("../../../assets/profile.png")}
+                        style={styles.avatarPlaceholderImage}
+                        resizeMode="contain"
+                      />
+                    )}
+                    {socialToken ? (
+                      <View style={styles.socialBadge}>
+                        <Image
+                          source={
+                            socialToken.provider === "google"
+                              ? require("../../../assets/google.png")
+                              : require("../../../assets/facebook.png")
+                          }
+                          style={styles.socialBadgeIcon}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.cameraBadge}>
+                        <Ionicons name="camera" size={16} color="#070D19" />
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+
+                <Text style={styles.avatarTitle}>
+                  {socialToken
+                    ? `Connected with ${socialToken.provider === "google" ? "Google" : "Facebook"}`
+                    : (avatarUri ? "Profile Photo Added" : "Add Profile Photo")}
+                </Text>
+                <Text style={styles.avatarSubtitle}>
+                  {socialToken
+                    ? "Profile picture synced from your account. Tap to change."
+                    : (avatarUri ? "Tap photo to change or remove" : "Optional • Tap to upload from gallery or camera")}
+                </Text>
+
+                <View style={styles.avatarActions}>
+                  <Pressable onPress={handlePickAvatar} hitSlop={8}>
+                    <Text style={styles.avatarActionText}>
+                      {avatarUri ? "Change Photo" : "Upload Photo"}
+                    </Text>
+                  </Pressable>
+                  {avatarUri ? (
+                    <Pressable
+                      onPress={() => {
+                        setAvatarUri(null);
+                        athleteForm.setValue("avatar_url", null, { shouldDirty: true });
+                        coachForm.setValue("avatar_url", null, { shouldDirty: true });
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.avatarRemoveText}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+
               <FormField control={activeForm.control as never} name={"first_name" as never} label="First Name" placeholder="G. Francis" error={sharedErrors.first_name?.message} />
               <FormField control={activeForm.control as never} name={"last_name" as never} label="Last Name" placeholder="Pelonio" error={sharedErrors.last_name?.message} />
               <FormField control={activeForm.control as never} name={"email" as never} label="Email Address" placeholder="coach@gmail.com" autoCapitalize="none" keyboardType="email-address" error={sharedErrors.email?.message} />
@@ -1322,6 +1540,13 @@ export function SignupScreen({ onGoLogin, initialSocialData, onAuthenticated }: 
               provider: socialModal.provider,
               role,
             });
+
+            if (extracted.avatarUrl) {
+              socialProfileRef.current.avatarUrl = extracted.avatarUrl;
+              setAvatarUri(extracted.avatarUrl);
+              athleteForm.setValue("avatar_url", extracted.avatarUrl);
+              coachForm.setValue("avatar_url", extracted.avatarUrl);
+            }
 
             persistOAuthUserDocument({
               uid: extracted.uid,

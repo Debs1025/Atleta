@@ -171,7 +171,9 @@ export const athleteSignupSchema = z.object({
   sport_type: z.string().trim().min(1, "Select a sport type.").max(100, "Sport name is too long."),
   terms_accepted: z.boolean().refine((val) => val === true, {
     message: "You must agree to the Terms of Service and Privacy Protocol."
-  })
+  }),
+  avatar_url: z.string().optional().nullable(),
+  profile_image: z.string().optional().nullable()
 });
 
 export const coachSignupSchema = z.object({
@@ -200,7 +202,9 @@ export const coachSignupSchema = z.object({
     .optional(),
   terms_accepted: z.boolean().refine((val) => val === true, {
     message: "You must agree to the Terms of Service and Privacy Protocol."
-  })
+  }),
+  avatar_url: z.string().optional().nullable(),
+  profile_image: z.string().optional().nullable()
 });
 
 export const loginSchema = z.object({

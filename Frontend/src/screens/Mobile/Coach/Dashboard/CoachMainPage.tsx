@@ -2311,23 +2311,40 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     }
   }, []);
 
-  const handleRespondInquiry = useCallback(async (inquiryId: string, status: "Accepted" | "Declined") => {
+  const handleRespondInquiry = useCallback(async (inquiryId: string, status: "Accepted" | "Declined", notifId?: string) => {
     try {
-      await requestAuthenticatedJson(`/inquiries/${inquiryId}/respond`, "PATCH", { status }).catch(() => null);
+      // Optimistically update notifications list immediately
       setNotificationsList((prev) =>
-        prev.map((n) =>
-          (n.inquiry_id || n.scout_id || n.id || n.notification_id) === inquiryId
+        prev.map((n) => {
+          const match =
+            (n.inquiry_id && n.inquiry_id === inquiryId) ||
+            (n.scout_id && n.scout_id === inquiryId) ||
+            (n.id && (n.id === inquiryId || n.id === notifId)) ||
+            (n.notification_id && (n.notification_id === inquiryId || n.notification_id === notifId)) ||
+            (n.metadata?.scout_id && (n.metadata.scout_id === inquiryId || n.metadata.scout_id === notifId));
+          return match
             ? { ...n, is_read: true, status: status.toUpperCase(), offer_status: status.toUpperCase() }
-            : n
-        )
+            : n;
+        })
       );
       setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+
+      const targetId = inquiryId || notifId;
+      await requestAuthenticatedJson(`/inquiries/${targetId}/respond`, "PATCH", { status });
+
       if (status === "Accepted") {
+        Alert.alert(
+          "Inquiry Accepted",
+          "You have accepted this recruitment inquiry. The athlete is now part of your team roster!"
+        );
         // Re-sync coach data so accepted athlete is immediately added to team roster & performance page
         await fetchDashboardDataRef.current(true).catch(() => null);
+      } else {
+        Alert.alert("Inquiry Declined", "You have declined this recruitment inquiry.");
       }
     } catch (err: any) {
       console.warn("Inquiry response error:", err);
+      Alert.alert("Error", err?.message || "Failed to respond to inquiry. Please try again.");
     }
   }, []);
 
@@ -4337,8 +4354,21 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                     const titleLower = (notif.title || notif.headline || "").toLowerCase();
                     const bodyLower = (notif.message_body || notif.message || notif.body || notif.notes || "").toLowerCase();
 
-                    const isAccepted = titleLower.includes("accepted") || bodyLower.includes("accepted") || notif.status === "ACCEPTED" || notif.offer_status === "ACCEPTED" || notif.inquiry_status === "ACCEPTED";
-                    const isDeclined = titleLower.includes("declined") || bodyLower.includes("declined") || notif.status === "DECLINED" || notif.offer_status === "DECLINED" || notif.inquiry_status === "DECLINED";
+                    const notifStatusUpper = (notif.status || "").toUpperCase();
+                    const notifOfferStatusUpper = (notif.offer_status || notif.metadata?.offer_status || notif.inquiry_status || "").toUpperCase();
+
+                    const isAccepted =
+                      notifStatusUpper === "ACCEPTED" ||
+                      notifOfferStatusUpper === "ACCEPTED" ||
+                      titleLower.includes("accepted") ||
+                      bodyLower.includes("accepted");
+
+                    const isDeclined =
+                      notifStatusUpper === "DECLINED" ||
+                      notifOfferStatusUpper === "DECLINED" ||
+                      titleLower.includes("declined") ||
+                      bodyLower.includes("declined");
+
                     const isSentByCoach = notif.is_sender === true || notif.sender_role === "Coach" || titleLower.includes("sent") || bodyLower.includes("you sent") || notif.initiated_by === coach?.coach_id || notif.initiated_by === coach?.user_id;
 
                     const isScoresheetShared = notif.type === "SCORESHEET_SHARED" || Boolean(notif.scoresheet_url || notif.scoresheetUrl);
@@ -4490,7 +4520,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                                 borderRadius: 8,
                                 alignItems: "center",
                               }}
-                              onPress={() => handleRespondInquiry(inquiryId || notifId, "Accepted")}
+                              onPress={() => handleRespondInquiry(inquiryId || notif.metadata?.scout_id || notifId, "Accepted", notifId)}
                             >
                               <Text style={{ color: "#080F21", fontWeight: "800", fontSize: 12 }}>ACCEPT</Text>
                             </TouchableOpacity>
@@ -4504,7 +4534,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                                 borderRadius: 8,
                                 alignItems: "center",
                               }}
-                              onPress={() => handleRespondInquiry(inquiryId || notifId, "Declined")}
+                              onPress={() => handleRespondInquiry(inquiryId || notif.metadata?.scout_id || notifId, "Declined", notifId)}
                             >
                               <Text style={{ color: "#94A3B8", fontWeight: "800", fontSize: 12 }}>DECLINE</Text>
                             </TouchableOpacity>
