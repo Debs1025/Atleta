@@ -656,7 +656,8 @@ function AthleteHomePageContent({ onLogout }: AthleteHomePageProps) {
         const rawType = n.type || "ACTION_REQUIRED";
         const isRecruitment = rawType.includes("INQUIRY") || rawType.includes("RECRUITMENT");
 
-        if (isRecruitment && processedInquiryIds.size > 0) {
+        const specificScoutId = n.metadata?.scout_id || n.scout_id;
+        if (isRecruitment && specificScoutId && processedInquiryIds.has(specificScoutId)) {
           return;
         }
 

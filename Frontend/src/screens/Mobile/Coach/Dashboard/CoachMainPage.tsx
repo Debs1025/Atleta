@@ -848,7 +848,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         const allTeamsRes: any = null;
 
         if (isMounted) {
-          // Process Notifications (deduplicated by unique notification ID)
+          // Process Notifications & Inquiries (strictly deduplicated by inquiry/scout ID and content signature)
           const rawNotifs: any[] = Array.isArray(notifsRes?.notifications)
             ? [...notifsRes.notifications]
             : Array.isArray(notifsRes)
@@ -862,40 +862,87 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             : [];
 
           const effectiveCoachId = coach?.coach_id || coach?.user_id || currentUser?.coachId || currentUser?.uid;
-          rawInquiries.forEach((inq: any) => {
-            const inqId = inq.scout_id || inq.inquiry_id || inq.id;
-            const isSentByCoach = inq.is_sender === true || inq.sender_role === "Coach" || inq.initiated_by === effectiveCoachId || inq.initiated_by === coach?.user_id || inq.initiated_by === currentUser?.cleanUid;
-            const athName = inq.athlete_name || inq.athlete_details?.full_name || "Athlete";
-            rawNotifs.push({
-              id: inqId,
-              notification_id: inqId,
-              inquiry_id: inqId,
-              scout_id: inqId,
-              type: "RECRUITMENT_INQUIRY",
-              title: inq.title || (isSentByCoach ? `Recruitment Proposal to ${athName}` : `Inquiry from ${athName}`),
-              headline: inq.headline || (isSentByCoach ? `Proposal Sent to ${athName}` : `New Inquiry from ${athName}`),
-              message: inq.message || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
-              message_body: inq.message_body || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
-              status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
-              offer_status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
-              is_read: inq.is_read || false,
-              created_at: inq.date_initiated || inq.created_at || new Date().toISOString(),
-              actionable: !isSentByCoach,
-              is_sender: isSentByCoach,
-              athlete_id: inq.athlete_id,
-              athlete_name: athName,
+
+          // Track known scout/inquiry IDs and content signatures to prevent duplicate cards
+          const seenScoutIds = new Set<string>();
+          const seenSignatures = new Set<string>();
+
+          // Pre-populate and deduplicate raw notifications
+          const cleanedNotifs: any[] = [];
+          rawNotifs.forEach((n: any) => {
+            const scoutId = n.metadata?.scout_id || n.scout_id || n.inquiry_id;
+            const notifId = String(n.notification_id || n.id || "");
+            const contentSig = `${n.title || ""}_${n.message || n.message_body || ""}`.trim().toLowerCase();
+
+            // Check if we already have this notification or scout inquiry
+            if (scoutId && seenScoutIds.has(scoutId)) return;
+            if (notifId && seenScoutIds.has(notifId)) return;
+            if (contentSig && seenSignatures.has(contentSig)) return;
+
+            if (scoutId) seenScoutIds.add(scoutId);
+            if (notifId) seenScoutIds.add(notifId);
+            if (contentSig) seenSignatures.add(contentSig);
+
+            cleanedNotifs.push({
+              ...n,
+              inquiry_id: scoutId || n.inquiry_id,
+              scout_id: scoutId || n.scout_id,
             });
           });
 
-          const seenNotifIds = new Set<string>();
-          const dedupedNotifs = rawNotifs.filter((n: any) => {
-            const nId = String(n.notification_id || n.id || `${n.created_at}_${n.title}`);
-            if (seenNotifIds.has(nId)) return false;
-            seenNotifIds.add(nId);
-            return true;
+          // Merge raw inquiries: enrich existing notification or push if not present
+          rawInquiries.forEach((inq: any) => {
+            const inqId = inq.scout_id || inq.inquiry_id || inq.id;
+            if (!inqId) return;
+
+            const isSentByCoach = inq.is_sender === true || inq.sender_role === "Coach" || inq.initiated_by === effectiveCoachId || inq.initiated_by === coach?.user_id || inq.initiated_by === currentUser?.cleanUid;
+            const athName = inq.athlete_name || inq.athlete_details?.full_name || "Athlete";
+
+            // If a notification with this scout_id or inquiry_id already exists, enrich it instead of adding duplicate
+            const existIdx = cleanedNotifs.findIndex((n: any) =>
+              (n.scout_id === inqId || n.inquiry_id === inqId || n.metadata?.scout_id === inqId || n.id === inqId || n.notification_id === inqId)
+            );
+
+            if (existIdx >= 0) {
+              cleanedNotifs[existIdx] = {
+                ...cleanedNotifs[existIdx],
+                inquiry_id: inqId,
+                scout_id: inqId,
+                offer_status: (inq.offer_status || inq.status || cleanedNotifs[existIdx].offer_status || "SENT").toUpperCase(),
+                status: (inq.offer_status || inq.status || cleanedNotifs[existIdx].status || "SENT").toUpperCase(),
+                athlete_name: athName,
+                actionable: !isSentByCoach,
+                is_sender: isSentByCoach,
+              };
+            } else if (!seenScoutIds.has(inqId)) {
+              seenScoutIds.add(inqId);
+              cleanedNotifs.push({
+                id: inqId,
+                notification_id: inqId,
+                inquiry_id: inqId,
+                scout_id: inqId,
+                type: "RECRUITMENT_INQUIRY",
+                title: inq.title || (isSentByCoach ? `Recruitment Proposal to ${athName}` : `Inquiry from ${athName}`),
+                headline: inq.headline || (isSentByCoach ? `Proposal Sent to ${athName}` : `New Inquiry from ${athName}`),
+                message: inq.message || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
+                message_body: inq.message_body || inq.offer_message || (isSentByCoach ? `Proposal sent.` : `${athName} is interested in joining your team.`),
+                status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
+                offer_status: (inq.offer_status || inq.status || "SENT").toUpperCase(),
+                is_read: inq.is_read || false,
+                created_at: inq.date_initiated || inq.created_at || new Date().toISOString(),
+                actionable: !isSentByCoach,
+                is_sender: isSentByCoach,
+                athlete_id: inq.athlete_id,
+                athlete_name: athName,
+              });
+            }
           });
-          setNotificationsList(dedupedNotifs);
-          const unreadCount = dedupedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
+
+          // Sort newest first
+          cleanedNotifs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+          setNotificationsList(cleanedNotifs);
+          const unreadCount = cleanedNotifs.filter((n: any) => !n.is_read && n.status !== "READ").length;
           setUnreadNotifCount(unreadCount);
 
           let clearedIdsSet = new Set<string>();
@@ -1808,10 +1855,19 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           };
 
           const existIdx = updated.findIndex(
-            (n: any) => (n.inquiry_id || n.scout_id || n.id || n.notification_id) === inqId
+            (n: any) =>
+              (n.inquiry_id || n.scout_id || n.metadata?.scout_id || n.id || n.notification_id) === inqId ||
+              (n.metadata?.scout_id && n.metadata.scout_id === inqId)
           );
           if (existIdx >= 0) {
-            updated[existIdx] = { ...updated[existIdx], ...item };
+            updated[existIdx] = {
+              ...updated[existIdx],
+              ...item,
+              id: updated[existIdx].id || inqId,
+              notification_id: updated[existIdx].notification_id || inqId,
+              inquiry_id: inqId,
+              scout_id: inqId,
+            };
           } else {
             updated.unshift(item);
           }
@@ -4263,7 +4319,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
                   {notificationsList.map((notif, idx) => {
                     const isUnread = !notif.is_read && notif.status !== "READ";
                     const notifId = notif.notification_id || notif.id || `notif_${idx}`;
-                    const inquiryId = notif.inquiry_id || notif.scout_id || notif.data?.inquiry_id || (notif.type === "RECRUITMENT_INQUIRY" ? notif.id : null);
+                    const inquiryId = notif.inquiry_id || notif.scout_id || notif.metadata?.scout_id || notif.data?.inquiry_id || (notif.type === "RECRUITMENT_INQUIRY" ? (notif.metadata?.scout_id || notif.id) : null);
 
                     const titleLower = (notif.title || notif.headline || "").toLowerCase();
                     const bodyLower = (notif.message_body || notif.message || notif.body || notif.notes || "").toLowerCase();
