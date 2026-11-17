@@ -9,3 +9,5 @@ web-build
 coverage
 firebaseConfig.ts
 package-lock.json
+*.tar.gz
+*.apk
