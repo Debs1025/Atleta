@@ -95,7 +95,22 @@ def create_scoresheet(filename, title, league_info, match_meta, team1_info, team
         draw.line([(w - 550, current_y + 68), (w - 60, current_y + 68)], fill=(15, 23, 42), width=2)
         draw.text((w - 550, current_y + 76), "SIGNATURE VERIFIED / AUDIT LOGGED TO ATLETA CENTRAL REGISTRY", fill=(100, 116, 139), font=small_font)
 
-    out_file = os.path.join(OUT_DIR, filename)
+    sport_dir = OUT_DIR
+    if "basketball" in filename:
+        sport_dir = os.path.join(OUT_DIR, "Basketball")
+    elif "volleyball" in filename:
+        sport_dir = os.path.join(OUT_DIR, "Volleyball")
+    elif "soccer" in filename:
+        sport_dir = os.path.join(OUT_DIR, "Soccer")
+    elif "badminton" in filename:
+        sport_dir = os.path.join(OUT_DIR, "Badminton")
+    elif "swimming" in filename:
+        sport_dir = os.path.join(OUT_DIR, "Swimming")
+    elif "track" in filename:
+        sport_dir = os.path.join(OUT_DIR, "Track_and_Field")
+
+    os.makedirs(sport_dir, exist_ok=True)
+    out_file = os.path.join(sport_dir, filename)
     img.save(out_file, "PNG")
     print(f"Generated: {out_file}")
 

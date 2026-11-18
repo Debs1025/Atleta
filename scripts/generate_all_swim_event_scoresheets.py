@@ -2,8 +2,8 @@ import os
 import re
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR1 = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets"
-OUT_DIR2 = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/standardized"
+OUT_DIR1 = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/Swimming/Robredo_Swim_Cup_Events"
+OUT_DIR2 = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/Standardized_Benchmarks"
 ARTIFACT_DIR = "/home/gerard/.gemini/antigravity/brain/383f7655-9e28-4251-b5dd-c53b45f09f9e"
 
 os.makedirs(OUT_DIR1, exist_ok=True)

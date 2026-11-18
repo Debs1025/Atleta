@@ -2,7 +2,7 @@ import os
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/standardized"
+OUT_DIR = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/Standardized_Benchmarks"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 def get_bold_font(size):

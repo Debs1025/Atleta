@@ -1,7 +1,7 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/coach_test_sheets"
+OUT_DIR = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/Coach_Test_Sheets"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 def get_bold_font(size):

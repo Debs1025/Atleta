@@ -566,7 +566,9 @@ async function runTestSuite() {
   console.log('📌 PHASE 3B: OCR SCORESHEET EXTRACTION & ROSTER MATCHING');
   console.log('----------------------------------------------------------------');
 
-  const sampleSheetPath = path.resolve(__dirname, '../../sample_scoresheets/real_scoresheet_bball_page1.png');
+  const sampleSheetPath = fs.existsSync(path.resolve(__dirname, '../../sample_scoresheets/Basketball/basketball_page1.png'))
+    ? path.resolve(__dirname, '../../sample_scoresheets/Basketball/basketball_page1.png')
+    : path.resolve(__dirname, '../../sample_scoresheets/real_scoresheet_bball_page1.png');
   if (fs.existsSync(sampleSheetPath)) {
     const fileBuffer = fs.readFileSync(sampleSheetPath);
     const mockFile: Express.Multer.File = {

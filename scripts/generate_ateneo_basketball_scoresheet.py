@@ -2,7 +2,7 @@ import os
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
-OUT_DIR = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets"
+OUT_DIR = "/home/gerard/Desktop/School/Atleta-dev_test_branch/sample_scoresheets/Basketball"
 os.makedirs(OUT_DIR, exist_ok=True)
 OUT_PATH = os.path.join(OUT_DIR, "ateneo_blue_eagles_game_scoresheet.png")
 

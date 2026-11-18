@@ -32,7 +32,9 @@ async function runOcrE2EVerification() {
   // -------------------------------------------------------------
   console.log('--- TEST 1: Single-Page Document Extraction (Points, Fouls & Roster) ---');
 
-  const sampleSinglePath = path.resolve(__dirname, '../../sample_scoresheets/complete_basketball_boxscore.png');
+  const sampleSinglePath = fs.existsSync(path.resolve(__dirname, '../../sample_scoresheets/Basketball/complete_basketball_boxscore.png'))
+    ? path.resolve(__dirname, '../../sample_scoresheets/Basketball/complete_basketball_boxscore.png')
+    : path.resolve(__dirname, '../../sample_scoresheets/complete_basketball_boxscore.png');
   const hasSampleFile = fs.existsSync(sampleSinglePath);
   assert(hasSampleFile, 'Sample single-page basketball boxscore file exists', sampleSinglePath);
 
