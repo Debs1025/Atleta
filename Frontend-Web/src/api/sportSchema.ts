@@ -543,11 +543,15 @@ export function calculateDynamicMatchScore(
     const homeItem = teamScores.find((t) => (t.team || '').toUpperCase() === homeTeamName.toUpperCase()) || teamScores[0];
     const awayItem = teamScores.find((t) => (t.team || '').toUpperCase() === awayTeamName.toUpperCase()) || teamScores[1];
     if (homeItem?.score !== undefined && awayItem?.score !== undefined) {
-      return {
-        homeScore: Number(homeItem.score),
-        awayScore: Number(awayItem.score),
-        scoreUnit,
-      };
+      const hScore = Number(homeItem.score);
+      const aScore = Number(awayItem.score);
+      if (hScore > 0 || aScore > 0) {
+        return {
+          homeScore: hScore,
+          awayScore: aScore,
+          scoreUnit,
+        };
+      }
     }
   }
 

@@ -331,7 +331,26 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
   let hScore: number;
   let aScore: number;
 
-  if (detectedScoresList.length >= 2) {
+  let parsedFinalH = NaN;
+  let parsedFinalA = NaN;
+  if (matchInfo.final_score && typeof matchInfo.final_score === 'string') {
+    const parts = matchInfo.final_score.split(/[-–—:]/).map((s: string) => Number(s.trim()));
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      parsedFinalH = parts[0];
+      parsedFinalA = parts[1];
+    }
+  }
+
+  const rawHomeScore = homeScoreItem?.score !== undefined ? Number(homeScoreItem.score) : NaN;
+  const rawAwayScore = awayScoreItem?.score !== undefined ? Number(awayScoreItem.score) : NaN;
+
+  if (!isNaN(rawHomeScore) && !isNaN(rawAwayScore) && (rawHomeScore > 0 || rawAwayScore > 0)) {
+    hScore = rawHomeScore;
+    aScore = rawAwayScore;
+  } else if (!isNaN(parsedFinalH) && !isNaN(parsedFinalA) && (parsedFinalH > 0 || parsedFinalA > 0)) {
+    hScore = parsedFinalH;
+    aScore = parsedFinalA;
+  } else if (detectedScoresList.length >= 2) {
     const maxScore = Math.max(...detectedScoresList);
     const minScore = Math.min(...detectedScoresList);
     if (homeAthleteSum >= oppAthleteSum) {
@@ -346,6 +365,23 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
     aScore = oppAthleteSum;
   }
 
+  const resolvedFinalScore = (!isNaN(parsedFinalH) && !isNaN(parsedFinalA) && (parsedFinalH > 0 || parsedFinalA > 0))
+    ? `${parsedFinalH} - ${parsedFinalA}`
+    : (hScore > 0 || aScore > 0)
+      ? `${hScore} - ${aScore}`
+      : (matchInfo.final_score && matchInfo.final_score !== '0 - 0' ? String(matchInfo.final_score) : `${hScore} - ${aScore}`);
+
+  const resolvedTeamScores = teamScoresArr.length > 0
+    ? teamScoresArr.map((t: any) => ({
+        team: String(t.team || t.team_name || t.name || '').toUpperCase(),
+        score: Number(t.score ?? t.pts ?? t.points ?? 0),
+        is_home: t.is_home,
+      }))
+    : [
+        { team: homeTeamName, score: hScore },
+        { team: oppTeamName, score: aScore },
+      ];
+
   const ocrHomeRosterIds: string[] = [];
   const ocrAwayRosterIds: string[] = [];
   athleteOverview.forEach((a) => {
@@ -359,12 +395,9 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
   return {
     team_name: homeTeamName,
     opponent_team_name: oppTeamName,
-    final_score: `${hScore} - ${aScore}`,
-    game_result: hScore >= aScore ? 'WIN' : 'LOSS',
-    team_scores: [
-      { team: homeTeamName, score: hScore },
-      { team: oppTeamName, score: aScore },
-    ],
+    final_score: resolvedFinalScore,
+    game_result: matchInfo.game_result || dataObj.game_result || (hScore >= aScore ? 'WIN' : 'LOSS'),
+    team_scores: resolvedTeamScores,
     teams: detectedTeamNames,
     sport_type: rawSport,
     scoresheet_url: scoresheetUrl,
@@ -411,15 +444,15 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
 
 // Helper to test if two scoresheets belong to the same match
 const isSameMatch = (m1: any, m2: any): boolean => {
-  const s1 = String(m1.sport_category || m1.sport_type || '').trim().toLowerCase();
-  const s2 = String(m2.sport_category || m2.sport_type || '').trim().toLowerCase();
-  const h1 = String(m1.home_team_name || m1.home_team || m1.team_name || '').trim().toLowerCase();
-  const h2 = String(m2.home_team_name || m2.home_team || m2.team_name || '').trim().toLowerCase();
-  const o1 = String(m1.opponent_team_name || m1.away_team || '').trim().toLowerCase();
-  const o2 = String(m2.opponent_team_name || m2.away_team || '').trim().toLowerCase();
+  const s1 = String(m1.sport_category || m1.sport_type || m1.match_info?.sport_type || '').trim().toLowerCase();
+  const s2 = String(m2.sport_category || m2.sport_type || m2.match_info?.sport_type || '').trim().toLowerCase();
+  const h1 = String(m1.home_team_name || m1.home_team || m1.team_name || m1.match_info?.home_team_name || m1.match_info?.home_team || m1.team_scores?.[0]?.team || '').trim().toLowerCase();
+  const h2 = String(m2.home_team_name || m2.home_team || m2.team_name || m2.match_info?.home_team_name || m2.match_info?.home_team || m2.team_scores?.[0]?.team || '').trim().toLowerCase();
+  const o1 = String(m1.opponent_team_name || m1.away_team || m1.match_info?.opponent_team_name || m1.match_info?.away_team || m1.team_scores?.[1]?.team || '').trim().toLowerCase();
+  const o2 = String(m2.opponent_team_name || m2.away_team || m2.match_info?.opponent_team_name || m2.match_info?.away_team || m2.team_scores?.[1]?.team || '').trim().toLowerCase();
 
   const sameSport = s1 === s2 || !s1 || !s2;
-  const sameHome = h1 === h2 || h1.includes(h2) || h2.includes(h1);
+  const sameHome = !h1 || !h2 || h1 === h2 || h1.includes(h2) || h2.includes(h1);
   const sameOpp = !o1 || !o2 || o1 === o2 || o1.includes(o2) || o2.includes(o1);
 
   return sameSport && sameHome && sameOpp;
@@ -596,6 +629,57 @@ const mergeContinuationRosters = (base: RawOCRDetectedData, continuation: RawOCR
   const awayAthletes = mergedAthletes.filter((a) => a.team_name === base.opponent_team_name).map((a) => a.athlete_id);
   const combinedScoresheetUrl = base.scoresheet_url || continuation.scoresheet_url || base.scoresheetUrl || continuation.scoresheetUrl;
 
+  const baseScoresList = (base.team_scores || [])
+    .map((t: any) => Number(t.score))
+    .filter((s: number) => !isNaN(s) && s > 0);
+  const contScoresList = (continuation.team_scores || [])
+    .map((t: any) => Number(t.score))
+    .filter((s: number) => !isNaN(s) && s > 0);
+
+  // Preserve non-zero team_scores
+  let mergedTeamScores = base.team_scores || [];
+  if (isIndividualSport || (base.team_scores && base.team_scores.length > 2) || (continuation.team_scores && continuation.team_scores.length > 2)) {
+    const teamScoreMap = new Map<string, number>();
+    (base.team_scores || []).forEach((t: any) => {
+      const name = String(t.team || t.team_name || '').toUpperCase();
+      if (name) teamScoreMap.set(name, Math.max(teamScoreMap.get(name) || 0, Number(t.score || 0)));
+    });
+    (continuation.team_scores || []).forEach((t: any) => {
+      const name = String(t.team || t.team_name || '').toUpperCase();
+      if (name) teamScoreMap.set(name, Math.max(teamScoreMap.get(name) || 0, Number(t.score || 0)));
+    });
+    if (teamScoreMap.size > 0) {
+      mergedTeamScores = Array.from(teamScoreMap.entries()).map(([team, score]) => ({ team, score }));
+    }
+  } else if (hSum > 0 || aSum > 0) {
+    const baseH = base.team_scores?.[0]?.score || 0;
+    const baseA = base.team_scores?.[1]?.score || 0;
+    mergedTeamScores = [
+      { team: base.team_name || 'HOME TEAM', score: hSum > 0 ? hSum : baseH },
+      { team: base.opponent_team_name || 'OPPONENT TEAM', score: aSum > 0 ? aSum : baseA },
+    ];
+  } else if (base.team_scores && base.team_scores.length > 0 && baseScoresList.length > 0) {
+    mergedTeamScores = base.team_scores;
+  } else if (continuation.team_scores && continuation.team_scores.length > 0 && contScoresList.length > 0) {
+    mergedTeamScores = continuation.team_scores;
+  }
+
+  // Preserve non-zero final_score
+  let mergedFinalScore = `${hSum} - ${aSum}`;
+  if (base.final_score && base.final_score !== '0 - 0' && base.final_score !== '0-0') {
+    mergedFinalScore = base.final_score;
+  } else if (continuation.final_score && continuation.final_score !== '0 - 0' && continuation.final_score !== '0-0') {
+    mergedFinalScore = continuation.final_score;
+  } else if (hSum > 0 || aSum > 0) {
+    mergedFinalScore = `${hSum} - ${aSum}`;
+  } else if (mergedTeamScores.length >= 2 && mergedTeamScores.some((t: any) => Number(t.score) > 0)) {
+    mergedFinalScore = `${mergedTeamScores[0].score || 0} - ${mergedTeamScores[1].score || 0}`;
+  }
+
+  const finalParts = mergedFinalScore.split(/[-–—:]/).map((s: string) => Number(s.trim()));
+  const fH = finalParts.length === 2 && !isNaN(finalParts[0]) ? finalParts[0] : hSum;
+  const fA = finalParts.length === 2 && !isNaN(finalParts[1]) ? finalParts[1] : aSum;
+
   return {
     ...base,
     teams: allTeams,
@@ -605,14 +689,9 @@ const mergeContinuationRosters = (base: RawOCRDetectedData, continuation: RawOCR
     scoresheetUrl: combinedScoresheetUrl,
     rosterAthletes: Array.from(new Set([...(base.rosterAthletes || []), ...(continuation.rosterAthletes || []), ...homeAthletes])),
     awayRosterAthletes: Array.from(new Set([...(base.awayRosterAthletes || []), ...(continuation.awayRosterAthletes || []), ...awayAthletes])),
-    team_scores: (isIndividualSport && hSum === 0 && aSum === 0 && base.team_scores && base.team_scores.length > 0)
-      ? base.team_scores
-      : [
-          { team: base.team_name || 'HOME TEAM', score: hSum },
-          { team: base.opponent_team_name || 'OPPONENT TEAM', score: aSum },
-        ],
-    final_score: (isIndividualSport && hSum === 0 && aSum === 0 && base.final_score) ? base.final_score : `${hSum} - ${aSum}`,
-    game_result: hSum >= aSum ? 'WIN' : 'LOSS',
+    team_scores: mergedTeamScores,
+    final_score: mergedFinalScore,
+    game_result: fH >= fA ? 'WIN' : 'LOSS',
   };
 };
 
@@ -688,15 +767,21 @@ export const OCRLoggingPage: React.FC = () => {
         matchesArr.length > 1 &&
         matchesArr.every((m: any) => isSameMatch(matchesArr[0], m));
 
-      if (responseData?.batch_mode && isSingleMatchMultiPart) {
+      if (matchesArr.length > 1 && isSingleMatchMultiPart) {
         // Multi-part sheets of the same match -> consolidate into one match
         let accumulated = mapSingleMatch(matchesArr[0]);
         for (let p = 1; p < matchesArr.length; p++) {
           const pageData = mapSingleMatch(matchesArr[p], accumulated.athlete_overview.length);
           accumulated = mergeContinuationRosters(accumulated, pageData);
         }
+        if (responseData?.match_info?.final_score && (!accumulated.final_score || accumulated.final_score === '0 - 0')) {
+          accumulated.final_score = responseData.match_info.final_score;
+        }
+        if (Array.isArray(responseData?.team_scores) && responseData.team_scores.length > 0 && (!accumulated.team_scores || accumulated.team_scores.length === 0 || accumulated.team_scores.every((t: any) => !t.score))) {
+          accumulated.team_scores = responseData.team_scores;
+        }
         parsedOcrResult = accumulated;
-      } else if (responseData?.batch_mode && matchesArr.length > 1) {
+      } else if (matchesArr.length > 1) {
         // Genuinely distinct batch matches
         const separatedMatches = matchesArr.map((m: any, idx: number) => mapSingleMatch(m, idx * 50));
         parsedOcrResult = {
