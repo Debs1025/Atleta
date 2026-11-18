@@ -191,6 +191,19 @@ const SPORT_TEMPLATES: Record<string, SportTemplate> = {
       { label: 'Batting Average', key: 'batting_average', category: 'PERCENTAGE', formula: '(hits / at_bats) * 100' },
     ],
   },
+  TRACK_AND_FIELD: {
+    name: 'TRACK & FIELD',
+    shortId: 'TF',
+    winCondition: 'EVENT_SPECIFIC',
+    positions: ['SPRINTER', 'MIDDLE DISTANCE', 'LONG DISTANCE', 'HURDLER', 'JUMPER', 'THROWER'],
+    stats: [
+      { label: 'Time / Distance', key: 'time_or_distance', category: 'COUNT' },
+      { label: 'Place', key: 'rank', category: 'COUNT' },
+      { label: 'Event Type', key: 'eventType', category: 'COUNT' },
+      { label: 'QTS', key: 'qts', category: 'COUNT' },
+      { label: 'Points', key: 'pts', category: 'COUNT' },
+    ],
+  },
 };
 
 // ─── 3 INITIAL CORE SPORTS ───────────────────────────────────────────────────
@@ -240,11 +253,11 @@ export const INITIAL_DEFAULT_SPORTS: SportConfiguration[] = [
     sport_name: 'TRACK & FIELD',
     short_identifier: 'TF',
     configurable_stats: [
-      { stat_name_key: 'finish_time_ms', measurement_category: 'Time (ms)', label: 'FINISH TIME' },
-      { stat_name_key: 'distance_meters', measurement_category: 'Distance (m)', label: 'DISTANCE (M)' },
-      { stat_name_key: 'split_times_ms', measurement_category: 'Time (ms)', label: 'SPLIT TIME' },
-      { stat_name_key: 'attempt_number', measurement_category: 'Count', label: 'ATTEMPT NUMBER' },
-      { stat_name_key: 'pace_per_km', measurement_category: 'Time (ms)', label: 'PACE PER KM' },
+      { stat_name_key: 'time_or_distance', measurement_category: 'Time (ms)', label: 'TIME / DISTANCE' },
+      { stat_name_key: 'rank', measurement_category: 'Count', label: 'PLACE' },
+      { stat_name_key: 'eventType', measurement_category: 'Count', label: 'EVENT TYPE' },
+      { stat_name_key: 'qts', measurement_category: 'Time (ms)', label: 'QTS' },
+      { stat_name_key: 'pts', measurement_category: 'Count', label: 'POINTS' },
     ],
     scoring_rules: { win_condition: 'EVENT_SPECIFIC' },
     positions: ['SPRINTER', 'MIDDLE DISTANCE', 'LONG DISTANCE', 'HURDLER', 'JUMPER', 'THROWER'],

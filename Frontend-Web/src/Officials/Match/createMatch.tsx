@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Info,
   Users,
@@ -30,6 +30,7 @@ import {
   setCachedData,
   getCachedData,
   getSports,
+  linkMatchToBracketSlot,
 } from '../../api/client';
 import { saveScoresheetFilesToIndexedDB } from '../../api/scoresheetStorage';
 import type { AuthUser, MatchAuditDetail, BoxScoreRow, RaceResultRow, SportConfiguration, MatchSummaryItem } from '../../api/types';
@@ -45,22 +46,12 @@ import {
 import { Navbar } from '../Components/Navbar';
 import { Sidebar } from '../Components/Sidebar';
 import { styles } from './styles/createMatch';
+import { handleTableDragScroll } from '../Components/dragScroll';
 
 export interface SportOptionItem {
   id: string;
   sportName: string;
   name: string;
-}
-
-export interface MatchInjuryEntry {
-  id: string;
-  player_name: string;
-  team: string;
-  quarter_or_set?: string;
-  injury_type: string;
-  status: 'Out' | 'Day-to-Day' | 'Sidelined' | 'Questionable';
-  notes?: string;
-  is_ocr_detected?: boolean;
 }
 
 export const toTitleCaseSport = (name: string): string => {
@@ -320,12 +311,16 @@ export const extractMatchDetails = (
     if (rawRaces.length > 0) {
       raceResults = sortRaceResultsByTime(rawRaces.map((r: any, idx: number) => ({
         placement_rank: String(r.rank || r.placement_rank || r.place || idx + 1),
+        rank: String(r.rank || r.placement_rank || r.place || idx + 1),
         athlete_name: String(r.athlete_name || r.name || r.player_name || `Athlete ${idx + 1}`).toUpperCase(),
         team_name: r.team_name || r.team || r.institutional_affiliation || r.current_institution || r.institution || r.affiliation || r.school || r.delegation || `Delegation ${(idx % 2) + 1}`,
         distance: r.distance || r.event || r.event_name || '100m',
-        finish_time: r.finish_time || r.time || r.formatted_time || '00:58.21',
-        seed_time: r.seed_time || r.seed || r.entry_time || 'NT',
-        points: typeof r.points === 'number' ? r.points : (typeof r.pts === 'number' ? r.pts : (parseFloat(r.points || r.pts) || 0)),
+        eventType: r.eventType || r.event || r.event_name || r.discipline || r.distance || '100m',
+        time_or_distance: r.time_or_distance || r.time || r.distance || r.finish_time || r.mark || '',
+        finish_time: r.finish_time || r.time || r.formatted_time || r.time_or_distance || '00:58.21',
+        qts: r.qts || r.seed_time || r.seed || r.qualifying_time || '',
+        pts: r.pts !== undefined ? r.pts : (r.points !== undefined ? r.points : 0),
+        points: r.points !== undefined ? r.points : (r.pts !== undefined ? r.pts : 0),
         split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
         efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
         is_disqualified: Boolean(r.is_disqualified),
@@ -333,12 +328,16 @@ export const extractMatchDetails = (
     } else if (rawPlayers.length > 0) {
       raceResults = sortRaceResultsByTime(rawPlayers.map((p: any, idx: number) => ({
         placement_rank: String(p.rank || p.place || p.placement_rank || idx + 1),
+        rank: String(p.rank || p.place || p.placement_rank || idx + 1),
         athlete_name: String(p.player_name || p.name || `Athlete ${idx + 1}`).toUpperCase(),
         team_name: p.team_name || p.team || p.institutional_affiliation || p.current_institution || p.institution || p.affiliation || p.school || p.delegation || `Delegation ${(idx % 2) + 1}`,
         distance: p.event || p.event_name || p.distance || '100m',
+        eventType: p.eventType || p.event || p.event_name || p.discipline || p.distance || '100m',
+        time_or_distance: p.time_or_distance || p.time || p.distance || p.finish_time || p.mark || p.stats?.time_or_distance || '',
         finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
-        seed_time: p.seed_time || p.seed || p.entry_time || p.stats?.seed_time || p.sport_stats?.seed_time || 'NT',
-        points: typeof p.points === 'number' ? p.points : (typeof p.pts === 'number' ? p.pts : (typeof p.stats?.points === 'number' ? p.stats.points : (parseFloat(p.points || p.pts) || 0))),
+        qts: p.qts || p.seed_time || p.seed || p.qualifying_time || p.stats?.qts || '',
+        pts: p.pts !== undefined ? p.pts : (p.points !== undefined ? p.points : (p.stats?.pts ?? p.stats?.points ?? 0)),
+        points: p.points !== undefined ? p.points : (p.pts !== undefined ? p.pts : (p.stats?.points ?? p.stats?.pts ?? 0)),
         split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
         efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
         is_disqualified: Boolean(p.is_disqualified),
@@ -495,6 +494,14 @@ export const extractMatchDetails = (
 
 export const CreateMatch: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const paramTournamentId = searchParams.get('tournamentId') || '';
+  const paramTournamentName = searchParams.get('tournamentName') || '';
+  const paramBracketMatchId = searchParams.get('bracketMatchId') || '';
+  const paramHome = searchParams.get('home') || '';
+  const paramAway = searchParams.get('away') || '';
+  const paramSport = searchParams.get('sport') || '';
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const appendFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -507,6 +514,25 @@ export const CreateMatch: React.FC = () => {
   const [sportCategory, setSportCategory] = useState('Basketball');
   const [sportsList, setSportsList] = useState<SportOptionItem[]>(() => buildCreateSportsList());
   const [configuredSports, setConfiguredSports] = useState<SportConfiguration[]>([]);
+
+  // Pre-fill parameters when arriving from a tournament bracket slot
+  useEffect(() => {
+    if (paramSport) {
+      const formatted = toTitleCaseSport(paramSport);
+      if (formatted) setSportCategory(formatted);
+    }
+    if (paramHome) setHomeTeam(paramHome);
+    if (paramAway) setAwayTeam(paramAway);
+    if (paramHome && paramAway) {
+      setTeams([paramHome, paramAway]);
+    }
+    if (paramTournamentName || (paramHome && paramAway)) {
+      const baseName = paramTournamentName
+        ? `${paramTournamentName}: ${paramHome || 'Team 1'} vs ${paramAway || 'Team 2'}`
+        : `${paramHome} vs ${paramAway}`;
+      setGameName(baseName);
+    }
+  }, [paramTournamentId, paramTournamentName, paramBracketMatchId, paramHome, paramAway, paramSport]);
 
   // Strict array deduplication keyed by normalized sport name, sorted alphabetically
   const uniqueSports = useMemo(() => {
@@ -582,6 +608,7 @@ export const CreateMatch: React.FC = () => {
     teams: string[];
     gameName: string;
     venue?: string;
+    tournamentId?: string;
   } | null>(null);
 
   const activeSportCategory = (ocrDetectedSport || sportCategory || 'Basketball').trim();
@@ -589,11 +616,14 @@ export const CreateMatch: React.FC = () => {
   const isVolleyball = normalizedSportUpper.includes('VOLLEY');
   const isSoccer = normalizedSportUpper.includes('SOCCER') || normalizedSportUpper.includes('FOOTBALL');
   const isBadminton = normalizedSportUpper.includes('BADM');
-  const isIndividualSport =
+  const isTrack =
     normalizedSportUpper.includes('TRACK') ||
-    normalizedSportUpper.includes('SWIM') ||
     normalizedSportUpper.includes('FIELD') ||
-    normalizedSportUpper.includes('ATHLETIC') ||
+    normalizedSportUpper.includes('RUN') ||
+    normalizedSportUpper.includes('ATHLETIC');
+  const isIndividualSport =
+    isTrack ||
+    normalizedSportUpper.includes('SWIM') ||
     normalizedSportUpper.includes('TIME');
 
   const activeSportConfig = useMemo<SportConfiguration | null>(() => {
@@ -614,35 +644,6 @@ export const CreateMatch: React.FC = () => {
   // Dynamic Scoreboard State (from OCR extraction and live edits)
   const [ocrDetectedTeamScores, setOcrDetectedTeamScores] = useState<{ team: string; score: number }[]>([]);
   const [ocrFinalScoreStr, setOcrFinalScoreStr] = useState<string | null>(null);
-
-  // Match Injuries / Sidelined Athletes State (Manual + OCR auto-detected)
-  const [matchInjuries, setMatchInjuries] = useState<MatchInjuryEntry[]>([]);
-
-  const handleAddInjury = useCallback(() => {
-    setMatchInjuries((prev) => [
-      ...prev,
-      {
-        id: `inj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        player_name: '',
-        team: homeTeam || 'Home',
-        quarter_or_set: '',
-        injury_type: 'Ankle Sprain',
-        status: 'Out',
-        notes: '',
-        is_ocr_detected: false,
-      },
-    ]);
-  }, [homeTeam]);
-
-  const handleUpdateInjury = useCallback((id: string, field: keyof MatchInjuryEntry, val: any) => {
-    setMatchInjuries((prev) =>
-      prev.map((inj) => (inj.id === id ? { ...inj, [field]: val } : inj))
-    );
-  }, []);
-
-  const handleRemoveInjury = useCallback((id: string) => {
-    setMatchInjuries((prev) => prev.filter((inj) => inj.id !== id));
-  }, []);
 
   // Dynamic Score Calculation (Aligned with Mobile getDynamicTeamScore)
   const getDynamicTeamScore = useCallback(
@@ -1311,8 +1312,6 @@ export const CreateMatch: React.FC = () => {
             team_name: r.team_name || r.team || r.institutional_affiliation || r.current_institution || r.institution || r.affiliation || r.school || r.delegation || finalHomeTeam,
             distance: r.distance || r.event || r.event_name || '100m',
             finish_time: r.finish_time || r.time || r.formatted_time || '00:58.42',
-            seed_time: r.seed_time || r.seed || r.entry_time || 'NT',
-            points: typeof r.points === 'number' ? r.points : (typeof r.pts === 'number' ? r.pts : (parseFloat(r.points || r.pts) || 0)),
             split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
             efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
             is_disqualified: Boolean(r.is_disqualified),
@@ -1325,8 +1324,6 @@ export const CreateMatch: React.FC = () => {
             team_name: p.team_name || p.team || p.delegation || `Delegation ${(idx % 2) + 1}`,
             distance: p.event || p.event_name || p.distance || '100m',
             finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
-            seed_time: p.seed_time || p.seed || p.entry_time || p.stats?.seed_time || p.sport_stats?.seed_time || 'NT',
-            points: typeof p.points === 'number' ? p.points : (typeof p.pts === 'number' ? p.pts : (typeof p.stats?.points === 'number' ? p.stats.points : (parseFloat(p.points || p.pts) || 0))),
             split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
             efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
             is_disqualified: Boolean(p.is_disqualified),
@@ -1487,26 +1484,6 @@ export const CreateMatch: React.FC = () => {
         if (aRows.length > 0) setAwayRoster(sortAthletesByPrimaryMetric(aRows, sportCategory, activeSportConfig));
       }
 
-      // Extract injuries / sidelined players detected from scoresheet OCR
-      const detectedInjuries = Array.isArray(ocrRes?.injuries)
-        ? ocrRes.injuries
-        : (Array.isArray(ocrRes?.parsed_tables?.injuries) ? ocrRes.parsed_tables.injuries : []);
-
-      if (detectedInjuries.length > 0) {
-        setMatchInjuries(
-          detectedInjuries.map((inj: any, idx: number) => ({
-            id: `ocr_inj_${idx}_${Date.now()}`,
-            player_name: String(inj.player_name || inj.name || '').trim(),
-            team: String(inj.team || inj.team_name || finalHomeTeam || 'Home').trim(),
-            quarter_or_set: String(inj.quarter_or_set || inj.quarter || inj.period || '').trim(),
-            injury_type: String(inj.injury_type || inj.injury || 'Ankle Sprain').trim(),
-            status: ((inj.status as any) || 'Out'),
-            notes: String(inj.notes || '').trim(),
-            is_ocr_detected: true,
-          }))
-        );
-      }
-
       setOcrCompleted(true);
     } catch (scanErr: any) {
       console.warn('Standalone OCR error:', scanErr);
@@ -1601,13 +1578,18 @@ export const CreateMatch: React.FC = () => {
   };
 
   const addRaceAthlete = () => {
+    const nextRank = String(raceResults.length + 1);
     const newRace: RaceResultRow = {
-      placement_rank: String(raceResults.length + 1),
+      placement_rank: nextRank,
+      rank: nextRank,
       athlete_name: 'NEW ATHLETE',
       team_name: teams[0] || homeTeam || 'Delegation 1',
       distance: '100m',
+      eventType: '100m',
+      time_or_distance: '00:00.00',
       finish_time: '00:00.00',
-      seed_time: '00:00.00',
+      qts: '—',
+      pts: 0,
       points: 0,
       split_times: ['00:00.00'],
       efficiency: 100,
@@ -1911,6 +1893,10 @@ export const CreateMatch: React.FC = () => {
         gameName: gameName.trim() || `${finalHome} vs ${finalAway}`,
         game_name: gameName.trim() || `${finalHome} vs ${finalAway}`,
         gameReferenceId: gameName.trim() || undefined,
+        tournament_id: paramTournamentId || undefined,
+        tournament_name: paramTournamentName || undefined,
+        tournamentId: paramTournamentId || undefined,
+        tournamentName: paramTournamentName || undefined,
         coaches: coaches.map((c) => c.trim()).filter(Boolean),
         assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
         scoresheet_url: networkScoresheetUrl,
@@ -1926,7 +1912,6 @@ export const CreateMatch: React.FC = () => {
         race_results: isIndividualSport ? raceResults : undefined,
         raceResults: isIndividualSport ? raceResults : undefined,
         sport_specific_details: isIndividualSport ? { race_results: raceResults } : undefined,
-        injuries: matchInjuries.filter((inj) => inj.player_name.trim().length > 0),
         notes: notes.trim(),
         home_score: homeDynamicScore.num,
         away_score: awayDynamicScore.num,
@@ -2042,7 +2027,21 @@ export const CreateMatch: React.FC = () => {
           is_certified: false,
           assigned_coaches: coaches.map((c) => c.trim()).filter(Boolean),
           coach_name: coaches[0]?.trim() || undefined,
+          tournament_id: paramTournamentId || undefined,
+          tournament_name: paramTournamentName || undefined,
         };
+
+        if (paramTournamentId && paramBracketMatchId) {
+          linkMatchToBracketSlot(
+            paramTournamentId,
+            paramBracketMatchId,
+            cleanMatchId,
+            networkScoresheetUrl || finalScoresheetUrlPayload,
+            homeDynamicScore.num,
+            awayDynamicScore.num,
+            dynamicMatchResult.homeResult === 'WIN' ? finalHome : dynamicMatchResult.homeResult === 'LOSE' ? finalAway : undefined
+          ).catch((err) => console.error('Error linking match to bracket slot:', err));
+        }
 
         setCachedData(`match_audit_detail_${cleanMatchId}`, cachedDetail);
         try {
@@ -2117,6 +2116,7 @@ export const CreateMatch: React.FC = () => {
         teams: participating,
         gameName: gameName.trim() || `${finalHome} vs ${finalAway}`,
         venue: venueLocation,
+        tournamentId: paramTournamentId || undefined,
       });
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to create match instance.');
@@ -2144,7 +2144,7 @@ export const CreateMatch: React.FC = () => {
           </span>
         </div>
 
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
@@ -2311,7 +2311,7 @@ export const CreateMatch: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginTop: '2px' }}>
                     <span>{podium.team_name || 'Individual'}</span>
                     <strong style={{ color: '#0B132B', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {podium.finish_time}
+                      {podium.time_or_distance || podium.finish_time}
                     </strong>
                   </div>
                 </div>
@@ -2320,18 +2320,17 @@ export const CreateMatch: React.FC = () => {
           </div>
         )}
 
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
-                <th style={{ ...styles.statTh, width: '90px' }}>[ RANK ]</th>
+                <th style={{ ...styles.statTh, width: '90px' }}>{isTrack ? '[ PLACE ]' : '[ RANK ]'}</th>
                 <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ ATHLETE NAME ]</th>
                 <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
-                <th style={styles.statTh}>[ EVENT / DISTANCE ]</th>
-                <th style={styles.statTh}>[ FINISH TIME ]</th>
-                <th style={styles.statTh}>[ SEED TIME ]</th>
-                <th style={styles.statTh}>[ POINTS ]</th>
-                <th style={styles.statTh}>[ PLACE ]</th>
+                <th style={styles.statTh}>{isTrack ? '[ EVENT TYPE ]' : '[ EVENT / DISTANCE ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ TIME / DISTANCE ]' : '[ FINISH TIME ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ QTS ]' : '[ SPLIT TIMES ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ POINTS ]' : '[ EFFICIENCY ]'}</th>
                 <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
               </tr>
             </thead>
@@ -2355,7 +2354,7 @@ export const CreateMatch: React.FC = () => {
                             backgroundColor: isGold ? '#FEF08A' : isSilver ? '#E2E8F0' : isBronze ? '#FFEDD5' : '#F1F5F9',
                             color: isGold ? '#854D0E' : isSilver ? '#334155' : isBronze ? '#9A3412' : '#475569',
                           }}>
-                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || idx + 1}`}
+                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || row.rank || idx + 1}`}
                           </span>
                         </div>
                       </td>
@@ -2378,16 +2377,22 @@ export const CreateMatch: React.FC = () => {
                       <td style={styles.statTd}>
                         <input
                           type="text"
-                          value={row.distance}
-                          onChange={(e) => updateRaceStat(idx, 'distance', e.target.value)}
+                          value={row.eventType || row.event || row.distance || ''}
+                          onChange={(e) => {
+                            updateRaceStat(idx, 'eventType', e.target.value);
+                            updateRaceStat(idx, 'distance', e.target.value);
+                          }}
                           style={styles.statInput}
                         />
                       </td>
                       <td style={styles.statTd}>
                         <input
                           type="text"
-                          value={row.finish_time}
-                          onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)}
+                          value={row.time_or_distance || row.finish_time || ''}
+                          onChange={(e) => {
+                            updateRaceStat(idx, 'time_or_distance', e.target.value);
+                            updateRaceStat(idx, 'finish_time', e.target.value);
+                          }}
                           style={{
                             ...styles.statInput,
                             fontWeight: (isGold || isSilver || isBronze) ? 800 : 600,
@@ -2396,29 +2401,41 @@ export const CreateMatch: React.FC = () => {
                         />
                       </td>
                       <td style={styles.statTd}>
-                        <input
-                          type="text"
-                          value={row.seed_time || ''}
-                          placeholder="00:00.00"
-                          onChange={(e) => updateRaceStat(idx, 'seed_time', e.target.value)}
-                          style={styles.statInput}
-                        />
+                        {isTrack ? (
+                          <input
+                            type="text"
+                            value={row.qts || ''}
+                            onChange={(e) => updateRaceStat(idx, 'qts', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={Array.isArray(row.split_times) ? row.split_times.join(' / ') : String(row.split_times || '')}
+                            onChange={(e) => updateRaceStat(idx, 'split_times', e.target.value.split('/').map((s) => s.trim()))}
+                            style={styles.statInput}
+                          />
+                        )}
                       </td>
                       <td style={styles.statTd}>
-                        <input
-                          type="number"
-                          value={row.points !== undefined ? row.points : 0}
-                          onChange={(e) => updateRaceStat(idx, 'points', Number(e.target.value) || 0)}
-                          style={styles.statInput}
-                        />
-                      </td>
-                      <td style={styles.statTd}>
-                        <input
-                          type="text"
-                          value={row.placement_rank || (idx + 1)}
-                          onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)}
-                          style={styles.statInput}
-                        />
+                        {isTrack ? (
+                          <input
+                            type="number"
+                            value={row.pts !== undefined ? row.pts : (row.points !== undefined ? row.points : 0)}
+                            onChange={(e) => {
+                              updateRaceStat(idx, 'pts', Number(e.target.value) || 0);
+                              updateRaceStat(idx, 'points', Number(e.target.value) || 0);
+                            }}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          <input
+                            type="number"
+                            value={row.efficiency ?? 100}
+                            onChange={(e) => updateRaceStat(idx, 'efficiency', Number(e.target.value) || 0)}
+                            style={styles.statInput}
+                          />
+                        )}
                       </td>
                       <td style={{ ...styles.statTd, borderRight: 'none', textAlign: 'center' }}>
                         <button
@@ -2435,7 +2452,7 @@ export const CreateMatch: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={9} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
+                  <td colSpan={8} style={{ padding: '20px', color: '#64748B', textAlign: 'center' }}>
                     No race results extracted yet. Click below to add an athlete row.
                   </td>
                 </tr>
@@ -3199,238 +3216,10 @@ export const CreateMatch: React.FC = () => {
               </div>
             )}
 
-            {/* Section 04: INJURIES & SIDELINED PLAYERS */}
+            {/* Section 04: NOTES */}
             <div style={styles.sectionCard}>
               <div style={styles.sectionHeaderRow}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertTriangle style={{ width: 17, height: 17, color: '#E11D48' }} />
-                  <h3 style={styles.sectionHeading}>04. INJURIES & SIDELINED PLAYERS</h3>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {matchInjuries.some((inj) => inj.is_ocr_detected) && (
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        fontWeight: 900,
-                        padding: '4px 8px',
-                        backgroundColor: '#FFF1F2',
-                        color: '#E11D48',
-                        border: '1px solid #FECDD3',
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      ⚡ OCR DETECTED ({matchInjuries.filter((i) => i.is_ocr_detected).length})
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleAddInjury}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '5px 12px',
-                      backgroundColor: '#0B132B',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      borderRadius: '2px',
-                    }}
-                  >
-                    <Plus style={{ width: 13, height: 13 }} />
-                    ADD INJURY LOG
-                  </button>
-                </div>
-              </div>
-
-              {matchInjuries.length === 0 ? (
-                <div
-                  style={{
-                    padding: '24px 16px',
-                    textAlign: 'center',
-                    border: '1.5px dashed #CBD5E1',
-                    borderRadius: '4px',
-                    backgroundColor: '#F8FAFC',
-                  }}
-                >
-                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
-                    No injured or sidelined players recorded for this match.
-                  </p>
-                  <p style={{ margin: '4px 0 14px', fontSize: '11px', color: '#94A3B8' }}>
-                    Log any athlete injuries sustained during this match manually, or let OCR auto-detect them from scoresheet remarks.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleAddInjury}
-                    style={{
-                      padding: '6px 14px',
-                      backgroundColor: '#FFFFFF',
-                      border: '1.5px solid #0B132B',
-                      boxShadow: '2px 2px 0px #0B132B',
-                      color: '#0B132B',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    + ADD INJURED / SIDELINED PLAYER
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 1.3fr 1fr 1.7fr 1.2fr 2fr 36px',
-                      gap: '8px',
-                      fontSize: '10px',
-                      fontWeight: 900,
-                      color: '#64748B',
-                      textTransform: 'uppercase',
-                      padding: '0 4px',
-                    }}
-                  >
-                    <span>Player Name</span>
-                    <span>Team</span>
-                    <span>Period/Quarter</span>
-                    <span>Injury Type</span>
-                    <span>Status</span>
-                    <span>Notes / Treatment</span>
-                    <span></span>
-                  </div>
-
-                  {matchInjuries.map((inj) => (
-                    <div
-                      key={inj.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '2fr 1.3fr 1fr 1.7fr 1.2fr 2fr 36px',
-                        gap: '8px',
-                        alignItems: 'center',
-                        padding: '8px 10px',
-                        border: '1.5px solid #0B132B',
-                        backgroundColor: inj.is_ocr_detected ? '#FFFBEB' : '#FFFFFF',
-                        boxShadow: '2px 2px 0px #0B132B',
-                      }}
-                    >
-                      <div style={{ position: 'relative' }}>
-                        <input
-                          type="text"
-                          placeholder="e.g. John Doe"
-                          value={inj.player_name}
-                          onChange={(e) => handleUpdateInjury(inj.id, 'player_name', e.target.value)}
-                          style={{ ...styles.input, fontSize: '12px', padding: '6px 8px' }}
-                          list="roster-players-datalist"
-                        />
-                        {inj.is_ocr_detected && (
-                          <span
-                            style={{
-                              position: 'absolute',
-                              right: '6px',
-                              top: '7px',
-                              fontSize: '8px',
-                              fontWeight: 900,
-                              color: '#D97706',
-                              backgroundColor: '#FEF3C7',
-                              padding: '1px 4px',
-                              borderRadius: '2px',
-                            }}
-                          >
-                            OCR
-                          </span>
-                        )}
-                      </div>
-
-                      <select
-                        value={inj.team}
-                        onChange={(e) => handleUpdateInjury(inj.id, 'team', e.target.value)}
-                        style={{ ...styles.select, fontSize: '12px', padding: '6px 8px' }}
-                      >
-                        <option value={homeTeam || 'Home'}>{homeTeam || 'Home Team'}</option>
-                        <option value={awayTeam || 'Away'}>{awayTeam || 'Away Team'}</option>
-                      </select>
-
-                      <input
-                        type="text"
-                        placeholder="Q2 / Set 1"
-                        value={inj.quarter_or_set || ''}
-                        onChange={(e) => handleUpdateInjury(inj.id, 'quarter_or_set', e.target.value)}
-                        style={{ ...styles.input, fontSize: '12px', padding: '6px 8px' }}
-                      />
-
-                      <select
-                        value={inj.injury_type}
-                        onChange={(e) => handleUpdateInjury(inj.id, 'injury_type', e.target.value)}
-                        style={{ ...styles.select, fontSize: '12px', padding: '6px 8px' }}
-                      >
-                        <option value="Ankle Sprain">Ankle Sprain</option>
-                        <option value="Knee Sprain / Contusion">Knee Sprain / Contusion</option>
-                        <option value="Hamstring Strain">Hamstring Strain</option>
-                        <option value="Groin / Quadriceps Strain">Groin / Quad Strain</option>
-                        <option value="Muscle Cramps">Severe Cramps</option>
-                        <option value="Concussion Protocol">Concussion Protocol</option>
-                        <option value="Shoulder / Arm Injury">Shoulder / Arm Injury</option>
-                        <option value="Wrist / Finger Dislocation">Wrist / Finger Dislocation</option>
-                        <option value="Laceration / Bleeding">Laceration / Bleeding</option>
-                        <option value="Fatigue / Heat Exhaustion">Heat Exhaustion / Fatigue</option>
-                        <option value="Other / Medical Withdrawal">Other / Medical Withdrawal</option>
-                      </select>
-
-                      <select
-                        value={inj.status}
-                        onChange={(e) => handleUpdateInjury(inj.id, 'status', e.target.value as any)}
-                        style={{ ...styles.select, fontSize: '12px', padding: '6px 8px' }}
-                      >
-                        <option value="Out">Out for Game</option>
-                        <option value="Sidelined">Sidelined</option>
-                        <option value="Day-to-Day">Day-to-Day</option>
-                        <option value="Questionable">Questionable</option>
-                      </select>
-
-                      <input
-                        type="text"
-                        placeholder="e.g. Left ankle iced, did not return"
-                        value={inj.notes || ''}
-                        onChange={(e) => handleUpdateInjury(inj.id, 'notes', e.target.value)}
-                        style={{ ...styles.input, fontSize: '12px', padding: '6px 8px' }}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveInjury(inj.id)}
-                        style={{
-                          backgroundColor: '#FFF1F2',
-                          border: '1px solid #FECDD3',
-                          color: '#E11D48',
-                          padding: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          borderRadius: '3px',
-                        }}
-                        title="Remove injury record"
-                      >
-                        <Trash2 style={{ width: 13, height: 13 }} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <datalist id="roster-players-datalist">
-                    {[...homeRoster, ...awayRoster].map((p, idx) => (
-                      <option key={`${p.player_name}_${idx}`} value={p.player_name} />
-                    ))}
-                  </datalist>
-                </div>
-              )}
-            </div>
-
-            {/* Section 05: NOTES */}
-            <div style={styles.sectionCard}>
-              <div style={styles.sectionHeaderRow}>
-                <h3 style={styles.sectionHeading}>05. NOTES</h3>
+                <h3 style={styles.sectionHeading}>04. NOTES</h3>
                 <FileText style={styles.headerIcon} />
               </div>
 
@@ -3691,9 +3480,35 @@ export const CreateMatch: React.FC = () => {
             )}
 
             <div style={styles.modalActions}>
+              {createdMatchInfo.tournamentId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/tournaments/${createdMatchInfo.tournamentId}`)}
+                  className="hover-btn-solid"
+                  style={{
+                    ...styles.modalPrimaryBtn,
+                    backgroundColor: '#00C8FF',
+                    color: '#070D19',
+                    marginBottom: '8px',
+                  }}
+                >
+                  <Trophy style={{ width: 15, height: 15 }} />
+                  <span>RETURN TO TOURNAMENT BRACKET</span>
+                  <span>→</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => navigate(`/matches/${createdMatchInfo.matchId.replace(/^#/, '')}`)}
+                onClick={() =>
+                  navigate(`/matches/${createdMatchInfo.matchId.replace(/^#/, '')}`, {
+                    state: createdMatchInfo.tournamentId
+                      ? {
+                          returnUrl: `/tournaments/${createdMatchInfo.tournamentId}`,
+                          returnLabel: 'BACK TO TOURNAMENT BRACKET',
+                        }
+                      : undefined,
+                  })
+                }
                 className="hover-btn-solid"
                 style={styles.modalPrimaryBtn}
               >

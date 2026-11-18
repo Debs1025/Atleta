@@ -65,11 +65,10 @@ export interface AuthUser {
 
 export interface AuthResponse {
   token: string;
-  user: AuthUser;
-  message?: string;
-  accessToken?: string;
   refreshToken?: string;
   refresh_token?: string;
+  user: AuthUser;
+  message?: string;
 }
 
 export interface AuditQueueItem {
@@ -161,7 +160,6 @@ export interface CreateMatchPayload {
   away_score?: number;
   game_result?: string;
   final_score?: string;
-  injuries?: any[];
   [key: string]: any;
 }
 
@@ -228,11 +226,18 @@ export interface BoxScoreRow {
 export interface RaceResultRow {
   athlete_id?: string;
   placement_rank: number | string;
+  rank?: number | string;
   athlete_name: string;
+  player_name?: string;
   team_name?: string;
-  distance: string;
+  distance?: string;
+  event?: string;
+  eventType?: string;
+  event_name?: string;
+  time_or_distance?: string;
   finish_time: string;
-  seed_time?: string;
+  qts?: string;
+  pts?: number | string;
   points?: number | string;
   split_times?: string[] | number[];
   efficiency?: number;
@@ -272,6 +277,8 @@ export interface MatchAuditDetail {
   is_locked?: boolean;
   assigned_coaches?: string[];
   coach_name?: string;
+  tournament_id?: string;
+  tournament_name?: string;
 }
 
 export interface MatchSummaryItem {
@@ -302,10 +309,6 @@ export interface OfficialNotificationItem {
   is_read: boolean;
   created_at: string;
   requested_by_coach?: string;
-  match_name?: string;
-  matchName?: string;
-  customGameTitle?: string;
-  custom_game_title?: string;
   match_context?: string;
   sport_discipline?: string;
   [key: string]: any;
@@ -347,8 +350,6 @@ export interface AdminCoachQueueItem {
   first_name?: string;
   last_name?: string;
   email?: string;
-  certification_license_num?: string;
-  coach_license_number?: string;
   sport_type?: string;
   years_of_experience?: number;
   current_institution?: string;
@@ -524,6 +525,9 @@ export interface DetectedAthleteStat {
   // Timed / Individual (Swimming / Track & Field)
   time?: string;
   finish_time?: string;
+  time_or_distance?: string;
+  qts?: string;
+  eventType?: string;
   event?: string;
   event_name?: string;
   stroke_count?: number;

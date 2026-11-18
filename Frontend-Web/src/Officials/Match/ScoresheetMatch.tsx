@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
@@ -34,6 +34,8 @@ import {
   invalidateCache,
   getSports,
   recordDeletedMatch,
+  advanceBracketTeam,
+  linkMatchToBracketSlot,
 } from '../../api/client';
 import { scanScoresheetStandalone, scanMultipleScoresheets } from '../../api/ocr';
 import { saveScoresheetFilesToIndexedDB, getScoresheetFilesFromIndexedDB } from '../../api/scoresheetStorage';
@@ -48,36 +50,43 @@ import {
   type SportColumnDef,
 } from '../../api/sportSchema';
 import { styles } from './styles/ScoresheetMatch';
+import { handleTableDragScroll } from '../Components/dragScroll';
 
 const BentoThumbnail: React.FC<{ url: string; alt: string; fallbackText: string }> = ({ url, alt, fallbackText }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setHasError(false);
-    setIsLoaded(false);
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
   }, [url]);
 
   if (hasError) {
     return (
-      <div style={{ ...styles.bentoThumb, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '8px', textAlign: 'center' }}>
-        <FileText style={{ width: 28, height: 28, color: '#64748B' }} />
-        <span style={{ fontSize: '10px', fontWeight: 800, color: '#0B132B' }}>{fallbackText}</span>
+      <div style={styles.bentoErrorBox}>
+        <FileText style={styles.bentoFileIcon} />
+        <span style={styles.bentoErrorText}>{fallbackText}</span>
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', height: '130px', position: 'relative', backgroundColor: '#F8FAFC', borderRadius: '2px', overflow: 'hidden' }}>
+    <div style={styles.bentoThumbWrap}>
       {!isLoaded && (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Loader2 style={{ width: 20, height: 20, color: '#64748B', animation: 'spin 1s linear infinite' }} />
+        <div style={styles.bentoLoaderWrap}>
+          <Loader2 style={styles.bentoLoaderIcon} />
         </div>
       )}
       <img
+        ref={imgRef}
         src={url}
         alt={alt}
-        style={{ ...styles.bentoThumb, display: isLoaded ? 'block' : 'none' }}
+        style={isLoaded ? styles.bentoThumbLoaded : styles.bentoThumbLoading}
         onLoad={() => setIsLoaded(true)}
         onError={() => setHasError(true)}
       />
@@ -88,17 +97,22 @@ const BentoThumbnail: React.FC<{ url: string; alt: string; fallbackText: string 
 const SingleScoresheetThumbnail: React.FC<{ url: string; alt: string }> = ({ url, alt }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setHasError(false);
-    setIsLoaded(false);
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
   }, [url]);
 
   if (hasError) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', minHeight: '160px', padding: '16px', textAlign: 'center' }}>
-        <FileText style={{ width: 36, height: 36, color: '#64748B' }} />
-        <span style={{ fontSize: '11px', fontWeight: 800, color: '#0B132B' }}>SCORESHEET PREVIEW</span>
+      <div style={styles.scoresheetErrorBox}>
+        <FileText style={styles.scoresheetFileIcon} />
+        <span style={styles.scoresheetErrorText}>SCORESHEET PREVIEW</span>
       </div>
     );
   }
@@ -106,20 +120,21 @@ const SingleScoresheetThumbnail: React.FC<{ url: string; alt: string }> = ({ url
   return (
     <div style={styles.scoresheetImgWrap}>
       {!isLoaded && (
-        <div style={{ width: '100%', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Loader2 style={{ width: 24, height: 24, color: '#64748B', animation: 'spin 1s linear infinite' }} />
+        <div style={styles.scoresheetLoaderWrap}>
+          <Loader2 style={styles.scoresheetLoaderIcon} />
         </div>
       )}
       <img
+        ref={imgRef}
         src={url}
         alt={alt}
-        style={{ ...styles.scoresheetThumb, display: isLoaded ? 'block' : 'none' }}
+        style={isLoaded ? styles.scoresheetThumbLoaded : styles.scoresheetThumbLoading}
         onLoad={() => setIsLoaded(true)}
         onError={() => setHasError(true)}
       />
       {isLoaded && (
         <div style={styles.scoresheetEnlargeBadge}>
-          <Eye style={{ width: 13, height: 13 }} />
+          <Eye style={styles.scoresheetEyeIcon} />
           <span>CLICK TO ENLARGE PREVIEW</span>
         </div>
       )}
@@ -130,6 +145,7 @@ const SingleScoresheetThumbnail: React.FC<{ url: string; alt: string }> = ({ url
 export const ScoresheetMatch: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const appendFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -283,17 +299,23 @@ export const ScoresheetMatch: React.FC = () => {
     return s.includes('swim') || s.includes('track') || s.includes('field') || s.includes('athletic') || (raceResults && raceResults.length > 0);
   }, [matchData?.sport_type, raceResults]);
 
+  const isTrack = useMemo(() => {
+    const s = (matchData?.sport_type || '').toLowerCase();
+    return s.includes('track') || s.includes('field') || s.includes('run') || s.includes('athletic');
+  }, [matchData?.sport_type]);
+
   const mvpPlayer = useMemo(() => {
     if (isIndividualSport) {
       if (raceResults && raceResults.length > 0) {
         const top = [...raceResults].sort((a, b) => Number(a.placement_rank || 99) - Number(b.placement_rank || 99))[0];
         if (top) {
+          const topMark = top.time_or_distance || top.finish_time;
           return {
             playerName: top.athlete_name || (top as any).athlete || 'Top Performer',
             jerseyNo: undefined,
             teamName: top.team_name || 'Individual',
             score: 1,
-            metricLabel: `Rank #${top.placement_rank || 1} • ${top.finish_time && top.finish_time !== '00:00.00' ? top.finish_time : 'Winner'}`,
+            metricLabel: `Rank #${top.placement_rank || 1} • ${topMark && topMark !== '00:00.00' ? topMark : 'Winner'}`,
             pts: undefined,
             reb: undefined,
             ast: undefined,
@@ -474,8 +496,6 @@ export const ScoresheetMatch: React.FC = () => {
       team_name: 'DELEGATION',
       distance: '100M',
       finish_time: '00:00.00',
-      seed_time: '00:00.00',
-      points: 0,
       split_times: [],
       efficiency: 0,
       is_disqualified: false,
@@ -1098,6 +1118,55 @@ export const ScoresheetMatch: React.FC = () => {
         console.warn('Error updating dashboard cache on certify:', e);
       }
 
+      // Automatically sync scores and advancement with tournament bracket if linked
+      const targetTournamentId = updatedDetail.tournament_id || (location.state as any)?.tournamentId;
+      if (targetTournamentId) {
+        try {
+          const hScore = typeof homeScore === 'number' ? homeScore : 0;
+          const aScore = typeof awayScore === 'number' ? awayScore : 0;
+          const winnerName = hScore > aScore ? (homeTeamDisplayName || 'Home Team') : aScore > hScore ? (awayTeamDisplayName || 'Away Team') : undefined;
+
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('atleta_cached_bracket_')) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const list = JSON.parse(raw);
+                if (Array.isArray(list)) {
+                  const br = list.find((b: any) => b.bracket_id === targetTournamentId);
+                  if (br && br.stages) {
+                    for (const stage of br.stages) {
+                      for (const m of stage.matches) {
+                        const mLinked = String(m.linked_match_id || '').replace(/^#/, '');
+                        const mMatchId = String(m.match_id || '').replace(/^#/, '');
+                        if (mLinked === cleanId || mLinked === matchLookupId || mMatchId === cleanId) {
+                          let actualWinnerName = winnerName;
+                          if (winnerName) {
+                            const wLower = winnerName.trim().toLowerCase();
+                            if (m.home_team?.team_name?.trim().toLowerCase() === wLower) {
+                              actualWinnerName = m.home_team.team_name;
+                            } else if (m.away_team?.team_name?.trim().toLowerCase() === wLower) {
+                              actualWinnerName = m.away_team.team_name;
+                            }
+                          }
+                          if (actualWinnerName) {
+                            advanceBracketTeam(targetTournamentId, m.match_id, actualWinnerName, hScore, aScore).catch(() => {});
+                          } else {
+                            linkMatchToBracketSlot(targetTournamentId, m.match_id, cleanId, scoresheetUrl, hScore, aScore).catch(() => {});
+                          }
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error syncing certified match with tournament bracket:', e);
+        }
+      }
+
       setActiveModal(null);
     } catch (err: any) {
       setActionError(err?.message || 'Certification failed.');
@@ -1263,7 +1332,7 @@ export const ScoresheetMatch: React.FC = () => {
             </button>
           )}
         </div>
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
@@ -1291,8 +1360,32 @@ export const ScoresheetMatch: React.FC = () => {
                     <td style={styles.statTdName}>
                       {isEditing && !isCertified ? (
                         <input type="text" value={row.player_name} onChange={(e) => updateBasketballStat(teamType, idx, 'player_name', e.target.value)} style={styles.statInputName} />
+                      ) : row.player_name?.toUpperCase().includes('TOTAL') ? (
+                        <span style={{ color: '#0B132B', fontWeight: 800 }}>
+                          {row.player_name}
+                        </span>
                       ) : (
-                        <span style={{ color: '#0B132B', fontWeight: 700 }}>
+                        <span
+                          style={styles.statPlayerLink}
+                          title="View athlete profile & analytics"
+                          onClick={() => {
+                            const rawId = (row as any).athlete_id || (row as any).user_id || `ath_${encodeURIComponent(row.player_name || '')}`;
+                            navigate(`/athletes/${rawId}`, {
+                              state: {
+                                athlete: {
+                                  athlete_id: (row as any).athlete_id,
+                                  name: row.player_name,
+                                  jersey_no: row.jersey_no,
+                                  position: row.position,
+                                  team_name: teamType === 'home' ? homeTeamDisplayName : awayTeamDisplayName,
+                                  sport: matchData?.sport_type,
+                                },
+                                currentMatch: matchData,
+                                matchRow: row,
+                              },
+                            });
+                          }}
+                        >
                           {row.player_name}
                         </span>
                       )}
@@ -1444,7 +1537,7 @@ export const ScoresheetMatch: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginTop: '2px' }}>
                     <span>{podium.team_name || 'Individual'}</span>
                     <strong style={{ color: '#0B132B', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {podium.finish_time}
+                      {podium.time_or_distance || podium.finish_time}
                     </strong>
                   </div>
                 </div>
@@ -1453,18 +1546,17 @@ export const ScoresheetMatch: React.FC = () => {
           </div>
         )}
 
-        <div style={styles.statsTableFrame}>
+        <div style={styles.statsTableFrame} onMouseDown={handleTableDragScroll}>
           <table style={styles.statsTable}>
             <thead>
               <tr>
-                <th style={styles.statThRank}>[ RANK ]</th>
-                <th style={styles.statThPlayerName}>[ ATHLETE NAME ]</th>
+                <th style={styles.statThRank}>{isTrack ? '[ PLACE ]' : '[ RANK ]'}</th>
+                <th style={styles.statThPlayerName}>{isTrack ? '[ ATHLETE NAME ]' : '[ ATHLETE NAME ]'}</th>
                 <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
-                <th style={styles.statTh}>[ DISTANCE ]</th>
-                <th style={styles.statTh}>[ FINISH TIME ]</th>
-                <th style={styles.statTh}>[ SEED TIME ]</th>
-                <th style={styles.statTh}>[ POINTS ]</th>
-                <th style={styles.statTh}>[ PLACE ]</th>
+                <th style={styles.statTh}>{isTrack ? '[ EVENT TYPE ]' : '[ DISTANCE ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ TIME / DISTANCE ]' : '[ FINISH TIME ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ QTS ]' : '[ SPLIT TIMES ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ POINTS ]' : '[ EFFICIENCY ]'}</th>
                 <th style={isEditing && !isCertified ? styles.statTh : styles.statThLast}>[ STATUS ]</th>
                 {isEditing && !isCertified && (
                   <th style={styles.statThLast}>[ ACTION ]</th>
@@ -1482,7 +1574,12 @@ export const ScoresheetMatch: React.FC = () => {
                   return (
                     <tr key={`race-${idx}`} style={{ ...styles.statTr, backgroundColor: rowBg }}>
                       <td style={styles.statTd}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {isEditing && !isCertified ? (
+                          <input type="text" value={row.placement_rank || row.rank || ''} onChange={(e) => {
+                            updateRaceStat(idx, 'placement_rank', e.target.value);
+                            updateRaceStat(idx, 'rank', e.target.value);
+                          }} style={styles.statInput} />
+                        ) : (
                           <span style={{
                             padding: '3px 8px',
                             borderRadius: '6px',
@@ -1491,15 +1588,33 @@ export const ScoresheetMatch: React.FC = () => {
                             backgroundColor: isGold ? '#FEF08A' : isSilver ? '#E2E8F0' : isBronze ? '#FFEDD5' : '#F1F5F9',
                             color: isGold ? '#854D0E' : isSilver ? '#334155' : isBronze ? '#9A3412' : '#475569',
                           }}>
-                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || idx + 1}`}
+                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || row.rank || idx + 1}`}
                           </span>
-                        </div>
+                        )}
                       </td>
                       <td style={styles.statTdName}>
                         {isEditing && !isCertified ? (
                           <input type="text" value={row.athlete_name} onChange={(e) => updateRaceStat(idx, 'athlete_name', e.target.value)} style={styles.statInputName} />
                         ) : (
-                          <span style={{ color: '#0B132B', fontWeight: 700 }}>
+                          <span
+                            style={styles.statPlayerLink}
+                            title="View athlete profile & analytics"
+                            onClick={() => {
+                              const rawId = row.athlete_id || (row as any).user_id || `ath_${encodeURIComponent(row.athlete_name || '')}`;
+                              navigate(`/athletes/${rawId}`, {
+                                state: {
+                                  athlete: {
+                                    athlete_id: row.athlete_id,
+                                    name: row.athlete_name,
+                                    team_name: row.team_name,
+                                    sport: matchData?.sport_type,
+                                  },
+                                  currentMatch: matchData,
+                                  matchRow: row,
+                                },
+                              });
+                            }}
+                          >
                             {row.athlete_name}
                           </span>
                         )}
@@ -1509,26 +1624,70 @@ export const ScoresheetMatch: React.FC = () => {
                           <input type="text" value={row.team_name || ''} onChange={(e) => updateRaceStat(idx, 'team_name', e.target.value)} style={styles.statInput} />
                         ) : (row.team_name || 'Individual')}
                       </td>
-                      <td style={styles.statTd}>{row.distance}</td>
+                      <td style={styles.statTd}>
+                        {isEditing && !isCertified ? (
+                          <input
+                            type="text"
+                            value={row.eventType || row.event || row.distance || ''}
+                            onChange={(e) => {
+                              updateRaceStat(idx, 'eventType', e.target.value);
+                              updateRaceStat(idx, 'distance', e.target.value);
+                            }}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          row.eventType || row.event || row.distance || '—'
+                        )}
+                      </td>
                       <td style={styles.statTdBold}>
                         {isEditing && !isCertified ? (
-                          <input type="text" value={row.finish_time} onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)} style={styles.statInput} />
-                        ) : row.finish_time}
+                          <input
+                            type="text"
+                            value={row.time_or_distance || row.finish_time || ''}
+                            onChange={(e) => {
+                              updateRaceStat(idx, 'time_or_distance', e.target.value);
+                              updateRaceStat(idx, 'finish_time', e.target.value);
+                            }}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          row.time_or_distance || row.finish_time || '—'
+                        )}
                       </td>
                       <td style={styles.statTd}>
-                        {isEditing && !isCertified ? (
-                          <input type="text" value={row.seed_time || ''} placeholder="00:00.00" onChange={(e) => updateRaceStat(idx, 'seed_time', e.target.value)} style={styles.statInput} />
-                        ) : (row.seed_time || '—')}
+                        {isTrack ? (
+                          isEditing && !isCertified ? (
+                            <input
+                              type="text"
+                              value={row.qts || ''}
+                              onChange={(e) => updateRaceStat(idx, 'qts', e.target.value)}
+                              style={styles.statInput}
+                            />
+                          ) : (
+                            row.qts || '—'
+                          )
+                        ) : (
+                          Array.isArray(row.split_times) ? row.split_times.join(' / ') : '—'
+                        )}
                       </td>
                       <td style={styles.statTd}>
-                        {isEditing && !isCertified ? (
-                          <input type="number" value={row.points !== undefined ? row.points : 0} onChange={(e) => updateRaceStat(idx, 'points', Number(e.target.value) || 0)} style={styles.statInput} />
-                        ) : (row.points ?? 0)}
-                      </td>
-                      <td style={styles.statTd}>
-                        {isEditing && !isCertified ? (
-                          <input type="text" value={row.placement_rank || (idx + 1)} onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)} style={styles.statInput} />
-                        ) : (row.placement_rank || (idx + 1))}
+                        {isTrack ? (
+                          isEditing && !isCertified ? (
+                            <input
+                              type="number"
+                              value={row.pts !== undefined ? row.pts : (row.points !== undefined ? row.points : 0)}
+                              onChange={(e) => {
+                                updateRaceStat(idx, 'pts', Number(e.target.value) || 0);
+                                updateRaceStat(idx, 'points', Number(e.target.value) || 0);
+                              }}
+                              style={styles.statInput}
+                            />
+                          ) : (
+                            row.pts !== undefined ? row.pts : (row.points !== undefined ? row.points : 0)
+                          )
+                        ) : (
+                          row.efficiency || 0
+                        )}
                       </td>
                       <td style={isEditing && !isCertified ? styles.statTd : styles.statTdLast}>
                         <span style={row.is_disqualified ? styles.statusDq : styles.statusOfficial}>
@@ -1552,7 +1711,7 @@ export const ScoresheetMatch: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={isEditing && !isCertified ? 10 : 9} style={styles.tableEmptyNotice}>
+                  <td colSpan={isEditing && !isCertified ? 9 : 8} style={styles.tableEmptyNotice}>
                     No race results recorded. Upload official scoresheet below to extract results with OCR.
                   </td>
                 </tr>
@@ -1626,13 +1785,28 @@ export const ScoresheetMatch: React.FC = () => {
     }));
   }, [uploadedFiles, scoresheetUrl, scoresheetUrls, matchData]);
 
+  const stateReturnUrl = (location.state as any)?.returnUrl;
+  const returnUrl = stateReturnUrl || '/dashboard';
+  const returnLabel =
+    (location.state as any)?.returnLabel ||
+    (returnUrl === '/matches'
+      ? 'BACK TO ALL MATCHES'
+      : returnUrl.includes('/tournaments')
+      ? 'BACK TO TOURNAMENT BRACKET'
+      : 'RETURN TO DASHBOARD');
+
   return (
     <div style={styles.shell}>
       <main style={styles.contentArea}>
         <div style={styles.topReturnBar}>
-          <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-outline" style={styles.returnBtn}>
+          <button
+            type="button"
+            onClick={() => returnUrl ? navigate(returnUrl) : navigate('/dashboard')}
+            className="hover-btn-outline"
+            style={styles.returnBtn}
+          >
             <ArrowLeft style={{ width: 15, height: 15 }} />
-            <span>RETURN TO DASHBOARD</span>
+            <span>{returnLabel}</span>
           </button>
         </div>
 
@@ -2088,8 +2262,13 @@ export const ScoresheetMatch: React.FC = () => {
             </div>
             <p style={styles.modalDesc}>Match record <strong style={{ color: '#0B132B' }}>#{cleanId}</strong> was successfully removed.</p>
             <div style={styles.modalActions}>
-              <button type="button" onClick={() => navigate('/dashboard')} className="hover-btn-solid" style={styles.modalConfirmBtnGreen}>
-                RETURN TO DASHBOARD
+              <button
+                type="button"
+                onClick={() => returnUrl ? navigate(returnUrl) : navigate('/dashboard')}
+                className="hover-btn-solid"
+                style={styles.modalConfirmBtnGreen}
+              >
+                {returnLabel}
               </button>
             </div>
           </div>

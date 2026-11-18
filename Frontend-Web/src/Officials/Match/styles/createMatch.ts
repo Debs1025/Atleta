@@ -16,12 +16,17 @@ export const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     height: 'calc(100vh - 58px)',
     overflow: 'hidden',
+    backgroundColor: '#F0F6FE',
   },
   contentArea: {
     flex: 1,
     height: '100%',
     padding: '24px 40px 31px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F0F6FE',
+    backgroundImage:
+      'radial-gradient(at 95% 5%, rgba(56, 189, 248, 0.08) 0px, transparent 45%), ' +
+      'radial-gradient(at 5% 95%, rgba(37, 99, 235, 0.05) 0px, transparent 45%), ' +
+      'linear-gradient(180deg, #F8FAFD 0%, #EEF5FC 100%)',
     overflowY: 'auto',
     maxWidth: '1280px',
     boxSizing: 'border-box',
@@ -470,10 +475,14 @@ export const styles: Record<string, React.CSSProperties> = {
     border: '1.5px solid #0B132B',
     backgroundColor: '#FFFFFF',
     overflowX: 'auto',
+    cursor: 'grab',
+    scrollbarWidth: 'thin',
+    WebkitOverflowScrolling: 'touch',
     marginBottom: '10px',
   },
   statsTable: {
     width: '100%',
+    minWidth: 'max-content',
     borderCollapse: 'collapse',
     fontSize: '11.5px',
     textAlign: 'center',
@@ -497,11 +506,13 @@ export const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid #E2E8F0',
     color: '#0B132B',
     fontWeight: 600,
+    whiteSpace: 'nowrap',
   },
   statTdName: {
     textAlign: 'left',
     paddingLeft: '10px',
     fontWeight: 700,
+    whiteSpace: 'nowrap',
   },
   statInput: {
     width: '100%',

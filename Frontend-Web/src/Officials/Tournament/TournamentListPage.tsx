@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Plus, RefreshCw, Award, ChevronRight, Edit2, Trash2, AlertCircle, X } from 'lucide-react';
 import { Navbar } from '../Components/Navbar';
@@ -10,6 +10,7 @@ import {
   getSports,
   getTournamentBrackets,
   deleteTournamentBracket,
+  isTournamentDeleted,
   TournamentBracket,
 } from '../../api/client';
 import type { AuthUser } from '../../api/types';
@@ -112,15 +113,41 @@ export const TournamentListPage: React.FC = () => {
 
   const [selectedSport, setSelectedSport] = useState('ALL');
 
-  const [brackets, setBrackets] = useState<TournamentBracket[]>(() =>
-    getCachedData<TournamentBracket[]>('tournament_brackets_ALL') ||
-    getCachedData<TournamentBracket[]>('tournament_brackets_all') || []
-  );
+  const [allBrackets, setAllBrackets] = useState<TournamentBracket[]>(() => {
+    const memAll =
+      getCachedData<TournamentBracket[]>('tournament_brackets_ALL') ||
+      getCachedData<TournamentBracket[]>('tournament_brackets_all');
+    if (memAll && memAll.length > 0) {
+      return memAll.filter((b) => !isTournamentDeleted(b.bracket_id));
+    }
+    try {
+      const raw =
+        localStorage.getItem('atleta_cached_bracket_ALL') ||
+        localStorage.getItem('atleta_cached_bracket_all');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter((b: any) => !isTournamentDeleted(b.bracket_id));
+      }
+    } catch { }
+    return [];
+  });
 
-  const [loading, setLoading] = useState(!brackets.length);
+  const [loading, setLoading] = useState(!allBrackets.length);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editingBracket, setEditingBracket] = useState<TournamentBracket | null>(null);
   const [deletingBracket, setDeletingBracket] = useState<TournamentBracket | null>(null);
+
+  // Instant zero-lag synchronous filtering
+  const displayedBrackets = useMemo(() => {
+    const norm = selectedSport.trim().toUpperCase();
+    return allBrackets.filter((b) => {
+      if (isTournamentDeleted(b.bracket_id)) return false;
+      if (norm === 'ALL') return true;
+      const bSport = String(b.sport_type || '').trim().toUpperCase();
+      return bSport === norm;
+    });
+  }, [allBrackets, selectedSport]);
 
   useEffect(() => {
     if (!getStoredToken()) navigate('/login');
@@ -135,31 +162,46 @@ export const TournamentListPage: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  const loadBrackets = useCallback(async (sport: string, force = false) => {
-    const cacheKey = `tournament_brackets_${sport}`;
-    const cached = getCachedData<TournamentBracket[]>(cacheKey);
-
-    if (cached && cached.length > 0 && !force) {
-      setBrackets(cached);
-      setLoading(false);
-      getTournamentBrackets(sport).then(setBrackets).catch(() => {});
-      return;
-    }
-
-    setLoading(true);
+  const loadBrackets = useCallback(async (force = false) => {
     try {
-      const list = await getTournamentBrackets(sport);
-      setBrackets(list);
+      const list = await getTournamentBrackets('ALL', force);
+      if (Array.isArray(list)) {
+        const active = list.filter((b) => !isTournamentDeleted(b.bracket_id));
+        setAllBrackets(active);
+      }
     } catch {
-      // keep stale
+      // keep existing
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await loadBrackets(true);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 600);
+    }
+  };
+
   useEffect(() => {
-    loadBrackets(selectedSport);
-  }, [selectedSport, loadBrackets]);
+    try {
+      const raw =
+        localStorage.getItem('atleta_cached_bracket_ALL') ||
+        localStorage.getItem('atleta_cached_bracket_all');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setAllBrackets(parsed.filter((b: any) => !isTournamentDeleted(b.bracket_id)));
+        }
+      }
+    } catch { }
+    loadBrackets();
+  }, [loadBrackets]);
 
   const confirmDelete = async () => {
     if (!deletingBracket) return;
@@ -167,7 +209,7 @@ export const TournamentListPage: React.FC = () => {
     setDeletingBracket(null);
     try {
       await deleteTournamentBracket(b.bracket_id);
-      setBrackets((prev) => prev.filter((item) => item.bracket_id !== b.bracket_id));
+      setAllBrackets((prev) => prev.filter((item) => item.bracket_id !== b.bracket_id));
     } catch {
       alert('Failed to remove tournament.');
     }
@@ -182,19 +224,18 @@ export const TournamentListPage: React.FC = () => {
           {/* Header */}
           <div style={styles.headerRow}>
             <div style={styles.headerLeft}>
-              <div style={styles.iconBox}><Trophy size={22} /></div>
               <div>
                 <h1 style={styles.titleH1}>TOURNAMENTS</h1>
                 <p style={styles.subtitle}>
-                  {brackets.length > 0
-                    ? `${brackets.length} tournament${brackets.length !== 1 ? 's' : ''} found — click one to view its bracket`
+                  {displayedBrackets.length > 0
+                    ? `${displayedBrackets.length} tournament${displayedBrackets.length !== 1 ? 's' : ''} found — click one to view its bracket`
                     : 'Create and manage single-elimination tournament brackets'}
                 </p>
               </div>
             </div>
             <div style={styles.headerActions}>
-              <button type="button" style={styles.refreshBtn} onClick={() => loadBrackets(selectedSport, true)}>
-                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <button type="button" style={styles.refreshBtn} onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw size={15} className={isRefreshing || loading ? 'animate-spin' : ''} />
                 <span>Refresh</span>
               </button>
               <button type="button" style={styles.createBtn} onClick={() => setShowCreate(true)}>
@@ -218,12 +259,12 @@ export const TournamentListPage: React.FC = () => {
           </div>
 
           {/* Content */}
-          {loading && !brackets.length ? (
+          {loading && !allBrackets.length ? (
             <div style={styles.loadingBox}>
               <div style={styles.spinner} />
               <span style={styles.spinnerText}>Loading tournaments...</span>
             </div>
-          ) : brackets.length === 0 ? (
+          ) : displayedBrackets.length === 0 ? (
             <div style={styles.emptyBox}>
               <div style={styles.emptyIcon}><Trophy size={36} /></div>
               <div>
@@ -239,11 +280,11 @@ export const TournamentListPage: React.FC = () => {
             </div>
           ) : (
             <div style={styles.grid}>
-              {brackets.map((b) => (
+              {displayedBrackets.map((b) => (
                 <TournamentCard
                   key={b.bracket_id}
                   bracket={b}
-                  onClick={() => navigate(`/tournaments/${b.bracket_id}`, { state: { bracket: b } })}
+                  onClick={() => navigate(`/tournaments/${b.bracket_id}`)}
                   onEdit={(e) => {
                     e.stopPropagation();
                     setEditingBracket(b);
@@ -270,13 +311,13 @@ export const TournamentListPage: React.FC = () => {
             setEditingBracket(null);
           }}
           onSaved={(savedBracket) => {
-            if (editingBracket) {
-              setBrackets((prev) =>
-                prev.map((item) => (item.bracket_id === savedBracket.bracket_id ? savedBracket : item))
-              );
-            } else {
-              setBrackets((prev) => [savedBracket, ...prev]);
-            }
+            setAllBrackets((prev) => {
+              const exists = prev.some((item) => item.bracket_id === savedBracket.bracket_id);
+              if (exists) {
+                return prev.map((item) => (item.bracket_id === savedBracket.bracket_id ? savedBracket : item));
+              }
+              return [savedBracket, ...prev];
+            });
             setShowCreate(false);
             setEditingBracket(null);
           }}

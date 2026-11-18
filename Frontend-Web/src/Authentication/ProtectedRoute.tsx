@@ -1,12 +1,6 @@
 import React, { useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import {
-  getStoredToken,
-  getStoredUser,
-  warmOfficialAppCache,
-  warmAdminAppCache,
-  scheduleSilentTokenRefresh,
-} from '../api/client';
+import { getStoredToken, getStoredUser, warmOfficialAppCache, warmAdminAppCache } from '../api/client';
 import type { AuthUser } from '../api/types';
 
 export const isUserAdmin = (user?: AuthUser | null): boolean => {
@@ -27,12 +21,9 @@ export const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }
   const token = getStoredToken();
 
   useEffect(() => {
-    if (token) {
-      scheduleSilentTokenRefresh(token);
-      if (!isAdminCacheWarmed) {
-        isAdminCacheWarmed = true;
-        warmAdminAppCache();
-      }
+    if (token && !isAdminCacheWarmed) {
+      isAdminCacheWarmed = true;
+      warmAdminAppCache();
     }
   }, [token]);
 
@@ -54,12 +45,9 @@ export const OfficialRoute: React.FC<{ children: React.ReactNode }> = ({ childre
   const token = getStoredToken();
 
   useEffect(() => {
-    if (token) {
-      scheduleSilentTokenRefresh(token);
-      if (!isOfficialCacheWarmed) {
-        isOfficialCacheWarmed = true;
-        warmOfficialAppCache();
-      }
+    if (token && !isOfficialCacheWarmed) {
+      isOfficialCacheWarmed = true;
+      warmOfficialAppCache();
     }
   }, [token]);
 

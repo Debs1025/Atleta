@@ -140,7 +140,10 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
     const redCards = parseRobustStatNum(p.red_cards ?? p.rc, 'red_cards', 0);
 
     // Timed / Individual box score metrics
-    const finishTime = String(p.finish_time || p.time || p.result_time || p.mark || '').trim();
+    const timeOrDistance = String(p.time_or_distance || p.time || p.distance || p.finish_time || p.mark || p.result_time || '').trim();
+    const qts = String(p.qts || p.seed_time || p.seed || p.qualifying_time || p.standard || '').trim();
+    const eventType = String(p.eventType || p.event || p.event_name || p.discipline || athleteEvent || '').trim();
+    const finishTime = String(p.finish_time || p.time || p.result_time || p.mark || timeOrDistance || '').trim();
     const splitTime = String(p.split || p.split_time || p.split_1 || p.lap_splits || '').trim();
     const split2 = String(p.split_2 || p.split_second || '').trim();
     const distanceM = parseRobustStatNum(p.distance_m ?? p.distance ?? p.dist, 'distance_m', 0);
@@ -158,6 +161,12 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
       ...(typeof p.stats === 'object' && p.stats !== null ? p.stats : {}),
       ...(typeof p.sport_stats === 'object' && p.sport_stats !== null ? p.sport_stats : {}),
       ...p,
+      time_or_distance: timeOrDistance || finishTime,
+      qts,
+      eventType,
+      rank,
+      place: rank,
+      placement_rank: rank,
       event: athleteEvent,
       event_id: athleteEventId,
       pts,
@@ -218,7 +227,6 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
       wind,
       heat,
       lane,
-      placement_rank: rank,
     };
 
     return {
@@ -230,6 +238,11 @@ const mapSingleMatch = (dataObj: any, startingIdx = 0): RawOCRDetectedData => {
       position: p.position || 'G',
       event: athleteEvent,
       event_id: athleteEventId,
+      eventType,
+      time_or_distance: timeOrDistance || finishTime,
+      qts,
+      rank,
+      place: rank,
       heat,
       lane,
       placement_rank: rank,

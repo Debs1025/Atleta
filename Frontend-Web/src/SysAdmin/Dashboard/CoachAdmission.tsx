@@ -58,7 +58,7 @@ export const CoachAdmission: React.FC<CoachAdmissionProps> = ({
       await approveCoachAccreditation(currentCoach.coach_id);
       setCurrentCoach((prev) => ({ ...prev, account_status: 'Active', status: 'VERIFIED' }));
       onUpdate(currentCoach.coach_id, 'Active', 'VERIFIED');
-      setActionSuccess('Coach accreditation approved. Verification email sent to coach.');
+      setActionSuccess('Coach accreditation approved and verified successfully.');
       setTimeout(() => {
         setActionSuccess(null);
         onClose();
@@ -82,7 +82,7 @@ export const CoachAdmission: React.FC<CoachAdmissionProps> = ({
       await rejectCoachAccreditation(currentCoach.coach_id, rejectReason.trim());
       setCurrentCoach((prev) => ({ ...prev, account_status: 'Rejected', status: 'REJECTED' }));
       onUpdate(currentCoach.coach_id, 'Rejected', 'REJECTED');
-      setActionSuccess('Coach accreditation application declined. Notification email sent to coach.');
+      setActionSuccess('Coach accreditation application declined.');
       setTimeout(() => {
         setActionSuccess(null);
         onClose();
@@ -126,10 +126,6 @@ export const CoachAdmission: React.FC<CoachAdmissionProps> = ({
           {[
             { label: 'UID REFERENCE', value: formatCoachId(currentCoach.coach_id) },
             { label: 'COACH NAME', value: currentCoach.full_name || 'Coach Applicant' },
-            {
-              label: 'COACH LICENSE NUMBER',
-              value: currentCoach.certification_license_num || currentCoach.coach_license_number || 'N/A',
-            },
             {
               label: 'INSTITUTIONAL AFFILIATION',
               value: currentCoach.institutional_affiliation || currentCoach.current_institution || 'Independent / Unassigned',

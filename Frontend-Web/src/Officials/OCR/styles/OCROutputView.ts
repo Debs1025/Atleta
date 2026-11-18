@@ -260,9 +260,13 @@ export const styles: Record<string, React.CSSProperties> = {
   },
   tableWrap: {
     overflowX: 'auto',
+    cursor: 'grab',
+    scrollbarWidth: 'thin',
+    WebkitOverflowScrolling: 'touch',
   },
   table: {
     width: '100%',
+    minWidth: 'max-content',
     textAlign: 'left',
     fontSize: '12px',
     borderCollapse: 'collapse',
@@ -278,10 +282,12 @@ export const styles: Record<string, React.CSSProperties> = {
   },
   th: {
     padding: '12px 16px',
+    whiteSpace: 'nowrap',
   },
   thCenter: {
     padding: '12px 12px',
     textAlign: 'center',
+    whiteSpace: 'nowrap',
   },
   tbodyRow: {
     borderBottom: '1px solid #F1F5F9',
@@ -292,14 +298,17 @@ export const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     fontWeight: 700,
     color: '#64748B',
+    whiteSpace: 'nowrap',
   },
   tdAthleteName: {
     padding: '12px 16px',
     fontWeight: 700,
     color: '#0B132B',
+    whiteSpace: 'nowrap',
   },
   tdTeam: {
     padding: '12px 16px',
+    whiteSpace: 'nowrap',
   },
   teamBadgeHome: {
     padding: '2px 10px',
