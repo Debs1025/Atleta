@@ -537,7 +537,7 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     detectedSport = rawSport;
                 }
 
-                // 2. Dynamic Team Names - Strictly lock home team context to Coach's selected team
+                // 2. Dynamic Team Names - Respect detected teams and align with coach team if matching
                 const teamScoresArr = Array.isArray(dataObj.team_scores) ? dataObj.team_scores : [];
                 const homeScoreItem = teamScoresArr.find((t: any) => t.is_home === true);
                 const awayScoreItem = teamScoresArr.find((t: any) => t.is_home === false);
@@ -556,7 +556,22 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     ""
                 ).trim().toUpperCase();
 
-                const homeTeamName = coachTeamName || rawOcrHome || (isIndividualSport ? "HEAT / LANE 1" : "TEAM A");
+                const isGenericName = (name: string) => !name || /^(TEAM\s*[A-Z0-9]?|HOME|AWAY|UNKNOWN|HEAT.*|LANE.*|ATHLETES?)$/i.test(name.trim());
+
+                let homeTeamName = rawOcrHome;
+                let oppTeamName = "";
+
+                if (coachTeamName) {
+                    if (rawOcrHome && (rawOcrHome.includes(coachTeamName) || coachTeamName.includes(rawOcrHome))) {
+                        homeTeamName = coachTeamName;
+                    } else if (isGenericName(rawOcrHome)) {
+                        homeTeamName = coachTeamName;
+                    }
+                }
+
+                if (!homeTeamName || isGenericName(homeTeamName)) {
+                    homeTeamName = isIndividualSport ? "HEAT / LANE 1" : "TEAM A";
+                }
 
                 const rawOcrOpp = String(
                     dataObj.match_info?.opponent_team_name ||
@@ -567,11 +582,15 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     ""
                 ).trim().toUpperCase();
 
-                const oppTeamName = (rawOcrOpp && rawOcrOpp !== homeTeamName)
-                    ? rawOcrOpp
-                    : (rawOcrHome && rawOcrHome !== homeTeamName)
-                    ? rawOcrHome
-                    : (isIndividualSport ? "HEAT / LANE 2" : "OPPONENT");
+                if (coachTeamName && rawOcrOpp && (rawOcrOpp.includes(coachTeamName) || coachTeamName.includes(rawOcrOpp))) {
+                    oppTeamName = coachTeamName;
+                } else if (rawOcrOpp && rawOcrOpp !== homeTeamName && !isGenericName(rawOcrOpp)) {
+                    oppTeamName = rawOcrOpp;
+                } else if (rawOcrHome && rawOcrHome !== homeTeamName && !isGenericName(rawOcrHome)) {
+                    oppTeamName = rawOcrHome;
+                } else {
+                    oppTeamName = isIndividualSport ? "HEAT / LANE 2" : "OPPONENT";
+                }
 
                 const detectedTeamNames = Array.from(
                     new Set([
@@ -628,8 +647,8 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     let resolvedTeam = String(p.team_name || p.team || "").trim().toUpperCase();
                     if (isCoachRosterPlayer) {
                         resolvedTeam = homeTeamName;
-                    } else if (!resolvedTeam || resolvedTeam === "UNKNOWN" || resolvedTeam === "TEAM A" || resolvedTeam === "HOME") {
-                        resolvedTeam = (coachTeamName ? oppTeamName : (idx < halfCount ? oppTeamName : homeTeamName));
+                    } else if (!resolvedTeam || isGenericName(resolvedTeam)) {
+                        resolvedTeam = (idx < halfCount ? homeTeamName : oppTeamName);
                     }
 
                     const fgSplit = parseSplitStat(p.fg || p.field_goals || p.fgm_fga);
@@ -816,24 +835,45 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 const oppAthleteSum = computeAthleteStatTotal(oppTeamName);
 
                 const homeDirectScoreItem = teamScoresArr.find(
-                    (t: any) => String(t.team || "").trim().toUpperCase() === homeTeamName.toUpperCase()
-                );
+                    (t: any) => {
+                        const name = String(t.team || "").trim().toUpperCase();
+                        return name === homeTeamName.toUpperCase() || (homeTeamName && name.includes(homeTeamName)) || (name && homeTeamName.includes(name));
+                    }
+                ) || (teamScoresArr.length > 0 && homeTeamName === String(teamScoresArr[0]?.team || "").trim().toUpperCase() ? teamScoresArr[0] : undefined);
+
                 const oppDirectScoreItem = teamScoresArr.find(
-                    (t: any) => String(t.team || "").trim().toUpperCase() === oppTeamName.toUpperCase()
-                );
+                    (t: any) => {
+                        const name = String(t.team || "").trim().toUpperCase();
+                        return name === oppTeamName.toUpperCase() || (oppTeamName && name.includes(oppTeamName)) || (name && oppTeamName.includes(name));
+                    }
+                ) || (teamScoresArr.length > 1 ? teamScoresArr[1] : undefined);
+
+                let parsedFinalH = NaN;
+                let parsedFinalA = NaN;
+                if (dataObj.match_info?.final_score && typeof dataObj.match_info.final_score === 'string') {
+                    const parts = dataObj.match_info.final_score.split(/[-–—:]/).map((s: string) => Number(s.trim()));
+                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        parsedFinalH = parts[0];
+                        parsedFinalA = parts[1];
+                    }
+                }
 
                 let hScore: number;
                 let aScore: number;
 
-                if (homeDirectScoreItem && !isNaN(Number(homeDirectScoreItem.score))) {
+                if (homeDirectScoreItem && !isNaN(Number(homeDirectScoreItem.score)) && Number(homeDirectScoreItem.score) > 0) {
                     hScore = Math.max(Number(homeDirectScoreItem.score), homeAthleteSum);
+                } else if (!isNaN(parsedFinalH) && parsedFinalH > 0) {
+                    hScore = parsedFinalH;
                 } else {
                     hScore = homeAthleteSum;
                 }
 
-                if (oppDirectScoreItem && !isNaN(Number(oppDirectScoreItem.score))) {
+                if (oppDirectScoreItem && !isNaN(Number(oppDirectScoreItem.score)) && Number(oppDirectScoreItem.score) > 0) {
                     aScore = Math.max(Number(oppDirectScoreItem.score), oppAthleteSum);
-                } else if (teamScoresArr.length > 1 && !isNaN(Number(teamScoresArr[1].score))) {
+                } else if (!isNaN(parsedFinalA) && parsedFinalA > 0) {
+                    aScore = parsedFinalA;
+                } else if (teamScoresArr.length > 1 && !isNaN(Number(teamScoresArr[1].score)) && Number(teamScoresArr[1].score) > 0) {
                     aScore = Math.max(Number(teamScoresArr[1].score), oppAthleteSum);
                 } else {
                     aScore = oppAthleteSum;
@@ -886,18 +926,32 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                     ? dataObj.injuries
                     : (Array.isArray(responseData?.injuries) ? responseData.injuries : []);
 
+                const resolvedFinalScore = (!isNaN(parsedFinalH) && !isNaN(parsedFinalA) && (parsedFinalH > 0 || parsedFinalA > 0))
+                    ? `${parsedFinalH} - ${parsedFinalA}`
+                    : (hScore > 0 || aScore > 0)
+                    ? `${hScore} - ${aScore}`
+                    : (dataObj.match_info?.final_score && dataObj.match_info.final_score !== "0 - 0"
+                        ? String(dataObj.match_info.final_score)
+                        : (isIndividualSport ? "Official Meet Results" : `${hScore} - ${aScore}`));
+
+                const resolvedTeamScores = teamScoresArr.length > 0
+                    ? teamScoresArr.map((t: any) => ({
+                        team: String(t.team || t.team_name || t.name || "").toUpperCase(),
+                        score: Number(t.score ?? t.pts ?? t.points ?? 0),
+                        is_home: t.is_home,
+                    }))
+                    : [
+                        { team: homeTeamName, score: hScore },
+                        { team: oppTeamName, score: aScore },
+                    ];
+
                 return {
                     team_id: coachActiveTeam?.team_id || dataObj.team_id || "",
                     team_name: homeTeamName,
                     opponent_team_name: isIndividualSport ? "" : oppTeamName,
-                    final_score: isIndividualSport ? "Official Meet Results" : `${hScore} - ${aScore}`,
+                    final_score: resolvedFinalScore,
                     game_result: isIndividualSport ? "OFFICIAL" : (hScore >= aScore ? "WIN" : "LOSS"),
-                    team_scores: isIndividualSport
-                        ? [{ team: homeTeamName, score: 0 }]
-                        : [
-                            { team: homeTeamName, score: hScore },
-                            { team: oppTeamName, score: aScore },
-                        ],
+                    team_scores: resolvedTeamScores,
                     injuries: detectedInjuries,
                     teams: isIndividualSport ? [homeTeamName] : detectedTeamNames,
                     sport_type: detectedSport as any,
@@ -949,12 +1003,17 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 const subMatches = responseData.matches.map((m: any) => mapSingleMatchData(m));
 
                 // Check if all uploaded sheets belong to the same match (same sport & same home team, e.g. 1st half and 2nd half parts)
+                const isGeneric = (n: string) => !n || /^(team\s*[a-z0-9]?|home|away|unknown|heat.*|lane.*|athletes?)$/i.test(n.trim());
                 const firstSport = (subMatches[0].sport_type || "").toUpperCase();
                 const firstHome = (subMatches[0].team_name || "").toUpperCase();
                 const isSingleMatchMultiPart = subMatches.every(
-                    (m: any) =>
-                        (m.sport_type || "").toUpperCase() === firstSport &&
-                        (m.team_name || "").toUpperCase() === firstHome
+                    (m: any) => {
+                        const mSport = (m.sport_type || "").toUpperCase();
+                        const mHome = (m.team_name || "").toUpperCase();
+                        const sameSport = mSport === firstSport || !mSport || !firstSport;
+                        const sameHome = isGeneric(firstHome) || isGeneric(mHome) || firstHome === mHome || firstHome.includes(mHome) || mHome.includes(firstHome);
+                        return sameSport && sameHome;
+                    }
                 );
 
                 if (isSingleMatchMultiPart) {
@@ -995,12 +1054,27 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                         });
                         const summedAthletes = Array.from(mergedAthletesMap.values());
                         const baseMatch = subMatches[0];
-                        const lastSubMatch = responseData.matches[responseData.matches.length - 1];
+                        const contMatch = subMatches[1] || subMatches[0];
+
+                        let resolvedFinal = (responseData.match_info?.final_score && responseData.match_info.final_score !== "0 - 0")
+                            ? responseData.match_info.final_score
+                            : (baseMatch.final_score && baseMatch.final_score !== "0 - 0"
+                                ? baseMatch.final_score
+                                : (contMatch.final_score && contMatch.final_score !== "0 - 0"
+                                    ? contMatch.final_score
+                                    : `${baseMatch.team_scores[0]?.score || 0} - ${baseMatch.team_scores[1]?.score || 0}`));
+
+                        const resolvedTeamScores = (responseData.team_scores && responseData.team_scores.length > 0 && responseData.team_scores.some((t: any) => Number(t.score) > 0))
+                            ? responseData.team_scores
+                            : (baseMatch.team_scores && baseMatch.team_scores.length > 0 && baseMatch.team_scores.some((t: any) => Number(t.score) > 0)
+                                ? baseMatch.team_scores
+                                : contMatch.team_scores);
+
                         parsedOcrResult = {
                             ...baseMatch,
                             athlete_overview: summedAthletes,
-                            final_score: responseData.match_info?.final_score || `${baseMatch.team_scores[0]?.score || 0} - ${baseMatch.team_scores[1]?.score || 0}`,
-                            team_scores: responseData.team_scores || baseMatch.team_scores,
+                            final_score: resolvedFinal,
+                            team_scores: resolvedTeamScores,
                         };
                     }
                 } else {

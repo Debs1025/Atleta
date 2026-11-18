@@ -610,7 +610,20 @@ export function OCRoutput({
         (currentActiveMatch as any).game_name = eventLabel;
     }, [setAthleteStats, currentActiveMatch]);
 
-    const homeTeamDisplay = (coachLockedTeamName || currentActiveMatch.team_name || "HOME TEAM").toUpperCase();
+    const coachTeamNameUpper = (coachLockedTeamName || "").trim().toUpperCase();
+    const matchHomeUpper = (currentActiveMatch.team_name || "").trim().toUpperCase();
+    const isGeneric = (n: string) => !n || /^(TEAM\s*[A-Z0-9]?|HOME|AWAY|UNKNOWN|HEAT.*|LANE.*|ATHLETES?)$/i.test(n.trim());
+
+    const homeTeamDisplay = useMemo(() => {
+        if (!isGeneric(matchHomeUpper)) {
+            if (coachTeamNameUpper && (matchHomeUpper.includes(coachTeamNameUpper) || coachTeamNameUpper.includes(matchHomeUpper))) {
+                return coachTeamNameUpper;
+            }
+            return matchHomeUpper;
+        }
+        return coachTeamNameUpper || "HOME TEAM";
+    }, [coachTeamNameUpper, matchHomeUpper]);
+
     const rawOpponentName = (currentActiveMatch.opponent_team_name || "").toUpperCase();
     const awayTeamDisplay = (rawOpponentName && rawOpponentName !== homeTeamDisplay ? rawOpponentName : "OPPONENT").toUpperCase();
 
@@ -620,20 +633,36 @@ export function OCRoutput({
             return [homeTeamDisplay].filter(Boolean);
         }
         const set = new Set<string>();
-        if (homeTeamDisplay) set.add(homeTeamDisplay);
-        if (awayTeamDisplay) set.add(awayTeamDisplay);
+        if (homeTeamDisplay && !isGeneric(homeTeamDisplay)) set.add(homeTeamDisplay);
+        if (awayTeamDisplay && awayTeamDisplay !== "OPPONENT" && !isGeneric(awayTeamDisplay)) set.add(awayTeamDisplay);
         if (currentActiveMatch.teams && Array.isArray(currentActiveMatch.teams)) {
-            currentActiveMatch.teams.forEach((t) => set.add(String(t).trim()));
+            currentActiveMatch.teams.forEach((t) => {
+                const s = String(t).trim().toUpperCase();
+                if (s && !isGeneric(s)) set.add(s);
+            });
         }
         if (currentActiveMatch.team_scores && Array.isArray(currentActiveMatch.team_scores)) {
-            currentActiveMatch.team_scores.forEach((t) => set.add(String(t.team).trim()));
+            currentActiveMatch.team_scores.forEach((t) => {
+                const s = String(t.team).trim().toUpperCase();
+                if (s && !isGeneric(s)) set.add(s);
+            });
         }
-        if (currentActiveMatch.team_name) set.add(String(currentActiveMatch.team_name).trim());
-        if (currentActiveMatch.opponent_team_name) set.add(String(currentActiveMatch.opponent_team_name).trim());
+        if (currentActiveMatch.team_name) {
+            const s = String(currentActiveMatch.team_name).trim().toUpperCase();
+            if (s && !isGeneric(s)) set.add(s);
+        }
+        if (currentActiveMatch.opponent_team_name) {
+            const s = String(currentActiveMatch.opponent_team_name).trim().toUpperCase();
+            if (s && !isGeneric(s)) set.add(s);
+        }
         athleteStats.forEach((a) => {
-            if (a.team_name) set.add(String(a.team_name).trim());
+            if (a.team_name) {
+                const s = String(a.team_name).trim().toUpperCase();
+                if (s && !isGeneric(s)) set.add(s);
+            }
         });
-        return Array.from(set).filter((t) => t.length > 0);
+        const result = Array.from(set).filter((t) => t.length > 0);
+        return result.length > 0 ? result : [homeTeamDisplay, awayTeamDisplay];
     }, [isIndividualSport, currentActiveMatch, athleteStats, homeTeamDisplay, awayTeamDisplay]);
 
     const sportDisplayName = isVolleyball
@@ -756,7 +785,7 @@ export function OCRoutput({
         const athleteSum = teamAthletes.reduce((s, p) => s + Number(p.pts || 0), 0);
         let pts = athleteSum;
         if (found && found.score !== undefined && found.score !== null && !isNaN(Number(found.score))) {
-            pts = Math.max(Number(found.score), athleteSum);
+            pts = Number(found.score) > 0 ? Number(found.score) : athleteSum;
         }
         return {
             primary: `${pts} PTS`,
