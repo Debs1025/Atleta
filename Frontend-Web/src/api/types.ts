@@ -226,10 +226,19 @@ export interface BoxScoreRow {
 export interface RaceResultRow {
   athlete_id?: string;
   placement_rank: number | string;
+  rank?: number | string;
   athlete_name: string;
+  player_name?: string;
   team_name?: string;
-  distance: string;
+  distance?: string;
+  event?: string;
+  eventType?: string;
+  event_name?: string;
+  time_or_distance?: string;
   finish_time: string;
+  qts?: string;
+  pts?: number | string;
+  points?: number | string;
   split_times?: string[] | number[];
   efficiency?: number;
   is_disqualified?: boolean;
@@ -516,6 +525,9 @@ export interface DetectedAthleteStat {
   // Timed / Individual (Swimming / Track & Field)
   time?: string;
   finish_time?: string;
+  time_or_distance?: string;
+  qts?: string;
+  eventType?: string;
   event?: string;
   event_name?: string;
   stroke_count?: number;

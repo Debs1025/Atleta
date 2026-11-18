@@ -311,10 +311,16 @@ export const extractMatchDetails = (
     if (rawRaces.length > 0) {
       raceResults = sortRaceResultsByTime(rawRaces.map((r: any, idx: number) => ({
         placement_rank: String(r.rank || r.placement_rank || r.place || idx + 1),
+        rank: String(r.rank || r.placement_rank || r.place || idx + 1),
         athlete_name: String(r.athlete_name || r.name || r.player_name || `Athlete ${idx + 1}`).toUpperCase(),
         team_name: r.team_name || r.team || r.institutional_affiliation || r.current_institution || r.institution || r.affiliation || r.school || r.delegation || `Delegation ${(idx % 2) + 1}`,
         distance: r.distance || r.event || r.event_name || '100m',
-        finish_time: r.finish_time || r.time || r.formatted_time || '00:58.21',
+        eventType: r.eventType || r.event || r.event_name || r.discipline || r.distance || '100m',
+        time_or_distance: r.time_or_distance || r.time || r.distance || r.finish_time || r.mark || '',
+        finish_time: r.finish_time || r.time || r.formatted_time || r.time_or_distance || '00:58.21',
+        qts: r.qts || r.seed_time || r.seed || r.qualifying_time || '',
+        pts: r.pts !== undefined ? r.pts : (r.points !== undefined ? r.points : 0),
+        points: r.points !== undefined ? r.points : (r.pts !== undefined ? r.pts : 0),
         split_times: Array.isArray(r.split_times) ? r.split_times : [String(r.split_times || r.split_time || '—')],
         efficiency: typeof r.efficiency === 'number' ? r.efficiency : parseFloat(String(r.efficiency || 98.5)) || 98.5,
         is_disqualified: Boolean(r.is_disqualified),
@@ -322,10 +328,16 @@ export const extractMatchDetails = (
     } else if (rawPlayers.length > 0) {
       raceResults = sortRaceResultsByTime(rawPlayers.map((p: any, idx: number) => ({
         placement_rank: String(p.rank || p.place || p.placement_rank || idx + 1),
+        rank: String(p.rank || p.place || p.placement_rank || idx + 1),
         athlete_name: String(p.player_name || p.name || `Athlete ${idx + 1}`).toUpperCase(),
         team_name: p.team_name || p.team || p.institutional_affiliation || p.current_institution || p.institution || p.affiliation || p.school || p.delegation || `Delegation ${(idx % 2) + 1}`,
         distance: p.event || p.event_name || p.distance || '100m',
+        eventType: p.eventType || p.event || p.event_name || p.discipline || p.distance || '100m',
+        time_or_distance: p.time_or_distance || p.time || p.distance || p.finish_time || p.mark || p.stats?.time_or_distance || '',
         finish_time: p.finish_time || p.time || p.formatted_time || p.stats?.finish_time || p.sport_stats?.finish_time || p.sport_stats?.formatted_time || '00:59.00',
+        qts: p.qts || p.seed_time || p.seed || p.qualifying_time || p.stats?.qts || '',
+        pts: p.pts !== undefined ? p.pts : (p.points !== undefined ? p.points : (p.stats?.pts ?? p.stats?.points ?? 0)),
+        points: p.points !== undefined ? p.points : (p.pts !== undefined ? p.pts : (p.stats?.points ?? p.stats?.pts ?? 0)),
         split_times: Array.isArray(p.splits || p.split_times) ? (p.splits || p.split_times) : [String(p.split_time || p.splits || '—')],
         efficiency: typeof p.efficiency === 'number' ? p.efficiency : parseFloat(String(p.efficiency || p.calculated_efficiency || 100)) || 100,
         is_disqualified: Boolean(p.is_disqualified),
@@ -604,11 +616,14 @@ export const CreateMatch: React.FC = () => {
   const isVolleyball = normalizedSportUpper.includes('VOLLEY');
   const isSoccer = normalizedSportUpper.includes('SOCCER') || normalizedSportUpper.includes('FOOTBALL');
   const isBadminton = normalizedSportUpper.includes('BADM');
-  const isIndividualSport =
+  const isTrack =
     normalizedSportUpper.includes('TRACK') ||
-    normalizedSportUpper.includes('SWIM') ||
     normalizedSportUpper.includes('FIELD') ||
-    normalizedSportUpper.includes('ATHLETIC') ||
+    normalizedSportUpper.includes('RUN') ||
+    normalizedSportUpper.includes('ATHLETIC');
+  const isIndividualSport =
+    isTrack ||
+    normalizedSportUpper.includes('SWIM') ||
     normalizedSportUpper.includes('TIME');
 
   const activeSportConfig = useMemo<SportConfiguration | null>(() => {
@@ -1563,12 +1578,19 @@ export const CreateMatch: React.FC = () => {
   };
 
   const addRaceAthlete = () => {
+    const nextRank = String(raceResults.length + 1);
     const newRace: RaceResultRow = {
-      placement_rank: String(raceResults.length + 1),
+      placement_rank: nextRank,
+      rank: nextRank,
       athlete_name: 'NEW ATHLETE',
       team_name: teams[0] || homeTeam || 'Delegation 1',
       distance: '100m',
+      eventType: '100m',
+      time_or_distance: '00:00.00',
       finish_time: '00:00.00',
+      qts: '—',
+      pts: 0,
+      points: 0,
       split_times: ['00:00.00'],
       efficiency: 100,
       is_disqualified: false,
@@ -2289,7 +2311,7 @@ export const CreateMatch: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginTop: '2px' }}>
                     <span>{podium.team_name || 'Individual'}</span>
                     <strong style={{ color: '#0B132B', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {podium.finish_time}
+                      {podium.time_or_distance || podium.finish_time}
                     </strong>
                   </div>
                 </div>
@@ -2302,13 +2324,13 @@ export const CreateMatch: React.FC = () => {
           <table style={styles.statsTable}>
             <thead>
               <tr>
-                <th style={{ ...styles.statTh, width: '90px' }}>[ RANK ]</th>
+                <th style={{ ...styles.statTh, width: '90px' }}>{isTrack ? '[ PLACE ]' : '[ RANK ]'}</th>
                 <th style={{ ...styles.statTh, textAlign: 'left', paddingLeft: '12px' }}>[ ATHLETE NAME ]</th>
                 <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
-                <th style={styles.statTh}>[ EVENT / DISTANCE ]</th>
-                <th style={styles.statTh}>[ FINISH TIME ]</th>
-                <th style={styles.statTh}>[ SPLIT TIMES ]</th>
-                <th style={styles.statTh}>[ EFFICIENCY ]</th>
+                <th style={styles.statTh}>{isTrack ? '[ EVENT TYPE ]' : '[ EVENT / DISTANCE ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ TIME / DISTANCE ]' : '[ FINISH TIME ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ QTS ]' : '[ SPLIT TIMES ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ POINTS ]' : '[ EFFICIENCY ]'}</th>
                 <th style={{ ...styles.statTh, width: '40px', borderRight: 'none' }}></th>
               </tr>
             </thead>
@@ -2332,7 +2354,7 @@ export const CreateMatch: React.FC = () => {
                             backgroundColor: isGold ? '#FEF08A' : isSilver ? '#E2E8F0' : isBronze ? '#FFEDD5' : '#F1F5F9',
                             color: isGold ? '#854D0E' : isSilver ? '#334155' : isBronze ? '#9A3412' : '#475569',
                           }}>
-                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || idx + 1}`}
+                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || row.rank || idx + 1}`}
                           </span>
                         </div>
                       </td>
@@ -2355,16 +2377,22 @@ export const CreateMatch: React.FC = () => {
                       <td style={styles.statTd}>
                         <input
                           type="text"
-                          value={row.distance}
-                          onChange={(e) => updateRaceStat(idx, 'distance', e.target.value)}
+                          value={row.eventType || row.event || row.distance || ''}
+                          onChange={(e) => {
+                            updateRaceStat(idx, 'eventType', e.target.value);
+                            updateRaceStat(idx, 'distance', e.target.value);
+                          }}
                           style={styles.statInput}
                         />
                       </td>
                       <td style={styles.statTd}>
                         <input
                           type="text"
-                          value={row.finish_time}
-                          onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)}
+                          value={row.time_or_distance || row.finish_time || ''}
+                          onChange={(e) => {
+                            updateRaceStat(idx, 'time_or_distance', e.target.value);
+                            updateRaceStat(idx, 'finish_time', e.target.value);
+                          }}
                           style={{
                             ...styles.statInput,
                             fontWeight: (isGold || isSilver || isBronze) ? 800 : 600,
@@ -2373,20 +2401,41 @@ export const CreateMatch: React.FC = () => {
                         />
                       </td>
                       <td style={styles.statTd}>
-                        <input
-                          type="text"
-                          value={Array.isArray(row.split_times) ? row.split_times.join(' / ') : String(row.split_times || '')}
-                          onChange={(e) => updateRaceStat(idx, 'split_times', e.target.value.split('/').map((s) => s.trim()))}
-                          style={styles.statInput}
-                        />
+                        {isTrack ? (
+                          <input
+                            type="text"
+                            value={row.qts || ''}
+                            onChange={(e) => updateRaceStat(idx, 'qts', e.target.value)}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={Array.isArray(row.split_times) ? row.split_times.join(' / ') : String(row.split_times || '')}
+                            onChange={(e) => updateRaceStat(idx, 'split_times', e.target.value.split('/').map((s) => s.trim()))}
+                            style={styles.statInput}
+                          />
+                        )}
                       </td>
                       <td style={styles.statTd}>
-                        <input
-                          type="number"
-                          value={row.efficiency ?? 100}
-                          onChange={(e) => updateRaceStat(idx, 'efficiency', Number(e.target.value) || 0)}
-                          style={styles.statInput}
-                        />
+                        {isTrack ? (
+                          <input
+                            type="number"
+                            value={row.pts !== undefined ? row.pts : (row.points !== undefined ? row.points : 0)}
+                            onChange={(e) => {
+                              updateRaceStat(idx, 'pts', Number(e.target.value) || 0);
+                              updateRaceStat(idx, 'points', Number(e.target.value) || 0);
+                            }}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          <input
+                            type="number"
+                            value={row.efficiency ?? 100}
+                            onChange={(e) => updateRaceStat(idx, 'efficiency', Number(e.target.value) || 0)}
+                            style={styles.statInput}
+                          />
+                        )}
                       </td>
                       <td style={{ ...styles.statTd, borderRight: 'none', textAlign: 'center' }}>
                         <button

@@ -102,15 +102,11 @@ export const compressImageForOcr = (
   });
 };
 
-const FALLBACK_DIRECT_KEY = atob('QVEuQWI4Uk42S0c2TERYSVVJMERoc2xRNHlTTm9VdzRqZDlkSzVmaXBDeTlFaFZENmQ0b3c=');
+const FALLBACK_DIRECT_KEY = atob('QVEuQWI4Uk42S2pkcnhfcElnMFBjb1BWY1VwNVllRnlJak0tbDZQX0owNVhrYU9wNXRKakk=');
 
 export function sanitizeGeminiKey(raw?: string): string {
   if (!raw) return FALLBACK_DIRECT_KEY;
   let k = String(raw).trim().replace(/^["']|["']$/g, '');
-  // Auto-correct common typographical corruption: LDXYIUI0 -> LDXIUI0
-  if (k.includes('LDXYIUI0')) {
-    k = k.replace('LDXYIUI0', 'LDXIUI0');
-  }
   return k || FALLBACK_DIRECT_KEY;
 }
 
@@ -406,19 +402,24 @@ Return the extraction in this exact JSON structure:
 
 /**
  * Single-file OCR scan routing to backend OCR scanning engines.
- * Supports both JSON base64 payloads (required by Vercel Serverless) and multipart FormData,
- * with resilient direct client Gemini Vision fallback to guarantee zero downtime.
+ * Uses identical high-performance logic from Mobile (Coach Dashboard OCRlogging):
+ * 1. Primary: JSON with compressed Base64 payload directly to canonical /matches/ocr/scan
+ * 2. Fallback: Standard fetch FormData multipart to /matches/ocr/scan
+ * 3. Fallback: Secondary backend endpoints (/matches/scan-scoresheet, /matches/web/scan-scoresheet)
+ * 4. Fallback: Client-side Gemini Vision OCR directly with verified key if backend is unreachable
+ * CRUCIAL: We do NOT send an 'x-gemini-key' header so backend uses its own server environment GEMINI_API_KEY.
  */
 export const scanScoresheetOCR = async (file: File): Promise<any> => {
-  // 1. Prepare base64 representation for serverless backend compatibility (Vercel Node)
   let base64Payload = '';
   let payloadMime = file.type || 'image/jpeg';
+  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const isImage = file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(fileExt);
 
   try {
-    if (file.type && file.type.startsWith('image/')) {
+    if (isImage) {
       const comp = await compressImageForOcr(file, 1600, 0.8);
       base64Payload = comp.base64Data;
-      payloadMime = comp.mimeType || file.type || 'image/jpeg';
+      payloadMime = comp.mimeType || 'image/jpeg';
     } else {
       const dUrl = await readFileAsDataUrl(file);
       base64Payload = dUrl.split(',')[1] || '';
@@ -429,70 +430,83 @@ export const scanScoresheetOCR = async (file: File): Promise<any> => {
     base64Payload = dUrl.split(',')[1] || '';
   }
 
-  const endpoints = [
-    `${BASE_URL}/matches/scan-scoresheet`,
-    `${BASE_URL}/matches/ocr/scan`,
-    `${BASE_URL}/matches/web/scan-scoresheet`,
-  ];
+  const token = getStoredToken();
+  const canonicalEndpoint = `${BASE_URL}/matches/ocr/scan`;
+  let responseData: any = null;
+  let lastErrorMessage = '';
 
-  let lastError: Error | null = null;
+  // Method 1: JSON with optimized Base64 (Reliable, fast, works across all platforms & serverless - EXACTLY like Mobile)
+  if (base64Payload) {
+    try {
+      const res = await fetch(canonicalEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          base64: base64Payload,
+          filename: isImage ? `${file.name.replace(/\.[^/.]+$/, '')}.jpg` : file.name,
+          mimetype: payloadMime,
+        }),
+      });
 
-  for (const ep of endpoints) {
-    // Attempt 1: Multipart FormData with x-gemini-key header
+      if (res.ok) {
+        responseData = await handleResponse<any>(res);
+      } else {
+        const errBody = await res.text().catch(() => '');
+        lastErrorMessage = `Server returned ${res.status}: ${errBody}`;
+        console.warn('OCR JSON fetch failed:', lastErrorMessage);
+      }
+    } catch (fetchErr: any) {
+      lastErrorMessage = fetchErr?.message || String(fetchErr);
+      console.warn('OCR JSON fetch exception:', lastErrorMessage);
+    }
+  }
+
+  // Method 2: Standard fetch FormData fallback (EXACTLY like Mobile)
+  if (!responseData) {
     try {
       const formData = new FormData();
-      formData.append('file', file, file.name);
-      formData.append('scoresheet', file, file.name);
+      formData.append('file', file, isImage ? `${file.name.replace(/\.[^/.]+$/, '')}.jpg` : file.name);
 
-      const formRes = await authFetch(ep, {
+      const res = await fetch(canonicalEndpoint, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
-          'x-gemini-key': DIRECT_GEMINI_KEY,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: formData,
       });
 
-      if (formRes.ok) {
-        const res = await handleResponse<any>(formRes);
-        const hasPlayers =
-          (Array.isArray(res?.player_summary) && res.player_summary.length > 0) ||
-          (Array.isArray(res?.parsed_tables?.player_summary) && res.parsed_tables.player_summary.length > 0) ||
-          (Array.isArray(res?.parsed_tables?.player_box_scores) && res.parsed_tables.player_box_scores.length > 0) ||
-          (res?.match_info?.final_score && res.match_info.final_score !== '0 - 0');
-
-        if (hasPlayers) {
-          return res;
-        }
-        console.warn('⚠️ [OCR] Backend returned empty stub. Invoking direct client Gemini Vision OCR...');
-        if (base64Payload) {
-          try {
-            return await scanScoresheetDirectGemini(base64Payload, payloadMime, file.name);
-          } catch (directErr) {
-            console.error('Direct Gemini OCR error after stub:', directErr);
-            return res;
-          }
-        }
-        return res;
+      if (res.ok) {
+        responseData = await handleResponse<any>(res);
+      } else {
+        const errBody = await res.text().catch(() => '');
+        lastErrorMessage = `FormData returned ${res.status}: ${errBody}`;
+        console.warn('OCR FormData fetch failed:', lastErrorMessage);
       }
-
-      const errTxt = await formRes.text().catch(() => '');
-      if (formRes.status !== 404) {
-        lastError = new Error(`OCR scanner returned status ${formRes.status}: ${errTxt}`);
-      }
-    } catch (err: any) {
-      lastError = err;
+    } catch (fdErr: any) {
+      lastErrorMessage = fdErr?.message || String(fdErr);
+      console.warn('OCR FormData fetch exception:', lastErrorMessage);
     }
+  }
 
-    // Attempt 2: JSON Base64 Payload with x-gemini-key header
-    if (base64Payload) {
+  // Method 3: Alternative backend endpoints fallback (/matches/scan-scoresheet, /matches/web/scan-scoresheet)
+  if (!responseData && base64Payload) {
+    const fallbackEndpoints = [
+      `${BASE_URL}/matches/scan-scoresheet`,
+      `${BASE_URL}/matches/web/scan-scoresheet`,
+    ];
+    for (const ep of fallbackEndpoints) {
       try {
-        const jsonRes = await authFetch(ep, {
+        const res = await fetch(ep, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            'x-gemini-key': DIRECT_GEMINI_KEY,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             base64: base64Payload,
@@ -500,48 +514,29 @@ export const scanScoresheetOCR = async (file: File): Promise<any> => {
             mimetype: payloadMime,
           }),
         });
-
-        if (jsonRes.ok) {
-          const res = await handleResponse<any>(jsonRes);
-          const hasPlayers =
-            (Array.isArray(res?.player_summary) && res.player_summary.length > 0) ||
-            (Array.isArray(res?.parsed_tables?.player_summary) && res.parsed_tables.player_summary.length > 0) ||
-            (Array.isArray(res?.parsed_tables?.player_box_scores) && res.parsed_tables.player_box_scores.length > 0) ||
-            (res?.match_info?.final_score && res.match_info.final_score !== '0 - 0');
-
-          if (hasPlayers) {
-            return res;
-          }
-          console.warn('⚠️ [OCR] Backend returned empty stub. Invoking direct client Gemini Vision OCR...');
-          try {
-            return await scanScoresheetDirectGemini(base64Payload, payloadMime, file.name);
-          } catch (directErr) {
-            console.error('Direct Gemini OCR error after stub:', directErr);
-            return res;
-          }
+        if (res.ok) {
+          responseData = await handleResponse<any>(res);
+          break;
         }
-
-        const errTxt = await jsonRes.text().catch(() => '');
-        if (jsonRes.status !== 404) {
-          lastError = new Error(`OCR scanner returned status ${jsonRes.status}: ${errTxt}`);
-        }
-      } catch (err: any) {
-        lastError = err;
-      }
+      } catch {}
     }
   }
 
-  // Resilient Direct Gemini Vision fallback if backend endpoints failed or timed out
-  if (base64Payload) {
+  // Method 4: Client-side Gemini Vision OCR as resilient final fallback
+  if (!responseData && base64Payload) {
     try {
-      console.warn('⚠️ [OCR] Backend unreachable or timed out. Running client-side Gemini Vision OCR directly...');
-      return await scanScoresheetDirectGemini(base64Payload, payloadMime, file.name);
+      console.warn('⚠️ [OCR] Backend unavailable. Running client-side Gemini Vision OCR directly...');
+      responseData = await scanScoresheetDirectGemini(base64Payload, payloadMime, file.name);
     } catch (directErr) {
       console.error('Direct client Gemini Vision OCR failed:', directErr);
     }
   }
 
-  throw lastError || new Error('Failed to connect to backend OCR scanner. Please make sure the backend server is reachable.');
+  if (responseData) {
+    return responseData;
+  }
+
+  throw new Error(lastErrorMessage || 'Unable to extract scoresheet data from the uploaded file. Please check that the scoresheet image is clear and readable.');
 };
 
 export const scanScoresheetStandalone = async (rawFile: File): Promise<any> => {
@@ -565,63 +560,158 @@ export const scanMultipleScoresheets = async (files: File[]): Promise<any> => {
   if (!files || files.length === 0) return null;
   if (files.length === 1) return scanScoresheetOCR(files[0]);
 
-  const formData = new FormData();
-  files.forEach((f) => {
-    formData.append('files', f);
-  });
+  const token = getStoredToken();
+  const multiEndpoint = `${BASE_URL}/matches/mobile/multi/scan-scoresheet`;
+  let responseData: any = null;
+  let lastErrorMessage = '';
 
-  const endpoints = [
-    `${BASE_URL}/matches/mobile/multi/scan-scoresheet`,
-    `${BASE_URL}/matches/multi/scan-scoresheet`,
-    `${BASE_URL}/matches/web/multi/scan-scoresheet`,
-  ];
-
-  let lastError: Error | null = null;
-  for (const ep of endpoints) {
+  // Prepare base64 files (identical to Mobile)
+  const base64Files: Array<{ base64: string; filename: string; mimetype: string }> = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const fExt = f.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const isImg = f.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(fExt);
+    let b64 = '';
+    let mime = f.type || 'image/jpeg';
     try {
-      const res = await authFetch(ep, {
+      if (isImg) {
+        const comp = await compressImageForOcr(f, 1600, 0.8);
+        b64 = comp.base64Data;
+        mime = comp.mimeType || 'image/jpeg';
+      } else {
+        const dUrl = await readFileAsDataUrl(f);
+        b64 = dUrl.split(',')[1] || '';
+        mime = f.type || (f.name.endsWith('.csv') ? 'text/csv' : 'application/pdf');
+      }
+      if (b64) {
+        base64Files.push({
+          base64: b64,
+          filename: isImg ? `${f.name.replace(/\.[^/.]+$/, '')}.jpg` : f.name,
+          mimetype: mime,
+        });
+      }
+    } catch (err) {
+      console.warn('Could not read file for multi-upload as base64:', err);
+    }
+  }
+
+  // Method 1: JSON with optimized Base64 array (EXACTLY like Mobile)
+  if (base64Files.length === files.length && base64Files.length > 0) {
+    try {
+      const res = await fetch(multiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ files: base64Files }),
+      });
+
+      if (res.ok) {
+        responseData = await handleResponse<any>(res);
+      } else {
+        const errBody = await res.text().catch(() => '');
+        lastErrorMessage = `Multi-scoresheet JSON returned ${res.status}: ${errBody}`;
+        console.warn('Multi JSON error:', lastErrorMessage);
+      }
+    } catch (fetchErr: any) {
+      lastErrorMessage = fetchErr?.message || String(fetchErr);
+      console.warn('Fetch error on multi JSON endpoint:', fetchErr);
+    }
+  }
+
+  // Method 2: Standard FormData fallback (EXACTLY like Mobile)
+  if (!responseData) {
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const fExt = f.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const isImg = f.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp'].includes(fExt);
+        formData.append('files', f, isImg ? `${f.name.replace(/\.[^/.]+$/, '')}.jpg` : f.name);
+      }
+
+      const res = await fetch(multiEndpoint, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
-          'x-gemini-key': DIRECT_GEMINI_KEY,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: formData,
       });
 
       if (res.ok) {
-        return await handleResponse<any>(res);
+        responseData = await handleResponse<any>(res);
       } else {
-        const errTxt = await res.text().catch(() => '');
-        lastError = new Error(`Multi-scoresheet OCR scanner returned status ${res.status}: ${errTxt}`);
+        const errBody = await res.text().catch(() => '');
+        lastErrorMessage = `Multi FormData returned ${res.status}: ${errBody}`;
+        console.warn('Multi FormData error:', lastErrorMessage);
       }
-    } catch (err: any) {
-      lastError = err;
+    } catch (fdErr: any) {
+      lastErrorMessage = fdErr?.message || String(fdErr);
+      console.warn('Multi FormData exception:', fdErr);
     }
   }
 
-  // Fallback: If dedicated multi-scan endpoint returns 404 on deployed backend,
-  // scan each file individually via the active scanScoresheetOCR endpoint and combine
-  try {
-    const subMatches: any[] = [];
-    for (const f of files) {
-      const singleRes = await scanScoresheetOCR(f);
-      if (singleRes) {
-        subMatches.push(singleRes);
-      }
+  // Method 3: Secondary endpoints fallback (/matches/multi/scan-scoresheet, /matches/web/multi/scan-scoresheet)
+  if (!responseData && base64Files.length > 0) {
+    const secondaryEndpoints = [
+      `${BASE_URL}/matches/multi/scan-scoresheet`,
+      `${BASE_URL}/matches/web/multi/scan-scoresheet`,
+    ];
+    for (const ep of secondaryEndpoints) {
+      try {
+        const res = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ files: base64Files }),
+        });
+        if (res.ok) {
+          responseData = await handleResponse<any>(res);
+          break;
+        }
+      } catch {}
     }
-    if (subMatches.length > 0) {
-      return {
-        success: true,
-        matches: subMatches,
-        pages: subMatches,
-        total_scoresheets_processed: subMatches.length,
-      };
-    }
-  } catch (individualErr: any) {
-    lastError = individualErr;
   }
 
-  throw lastError || new Error('Failed to connect to backend multi-scoresheet scanner. Please verify network connectivity.');
+  // Method 4: Scan each file individually via scanScoresheetOCR and combine
+  if (!responseData) {
+    try {
+      const subMatches: any[] = [];
+      for (const f of files) {
+        const singleRes = await scanScoresheetOCR(f);
+        if (singleRes) {
+          subMatches.push(singleRes);
+        }
+      }
+      if (subMatches.length > 0) {
+        responseData = {
+          batch_mode: true,
+          total_matches: subMatches.length,
+          successful_matches: subMatches.length,
+          matches: subMatches,
+          pages: subMatches,
+          total_scoresheets_processed: subMatches.length,
+          match_info: subMatches[0]?.match_info || {},
+          team_scores: subMatches[0]?.team_scores || [],
+          player_summary: subMatches.flatMap((m) => m.player_summary || m.parsed_tables?.player_summary || []),
+        };
+      }
+    } catch (indivErr: any) {
+      lastErrorMessage = indivErr?.message || lastErrorMessage;
+    }
+  }
+
+  if (responseData) {
+    return responseData;
+  }
+
+  throw new Error(lastErrorMessage || 'Failed to process multiple scoresheets. Please try scanning individually or checking image clarity.');
 };
 
 export const uploadScoresheetFile = async (matchId: string, rawFile: File): Promise<any> => {

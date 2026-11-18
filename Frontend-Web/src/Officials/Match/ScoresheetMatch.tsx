@@ -299,17 +299,23 @@ export const ScoresheetMatch: React.FC = () => {
     return s.includes('swim') || s.includes('track') || s.includes('field') || s.includes('athletic') || (raceResults && raceResults.length > 0);
   }, [matchData?.sport_type, raceResults]);
 
+  const isTrack = useMemo(() => {
+    const s = (matchData?.sport_type || '').toLowerCase();
+    return s.includes('track') || s.includes('field') || s.includes('run') || s.includes('athletic');
+  }, [matchData?.sport_type]);
+
   const mvpPlayer = useMemo(() => {
     if (isIndividualSport) {
       if (raceResults && raceResults.length > 0) {
         const top = [...raceResults].sort((a, b) => Number(a.placement_rank || 99) - Number(b.placement_rank || 99))[0];
         if (top) {
+          const topMark = top.time_or_distance || top.finish_time;
           return {
             playerName: top.athlete_name || (top as any).athlete || 'Top Performer',
             jerseyNo: undefined,
             teamName: top.team_name || 'Individual',
             score: 1,
-            metricLabel: `Rank #${top.placement_rank || 1} • ${top.finish_time && top.finish_time !== '00:00.00' ? top.finish_time : 'Winner'}`,
+            metricLabel: `Rank #${top.placement_rank || 1} • ${topMark && topMark !== '00:00.00' ? topMark : 'Winner'}`,
             pts: undefined,
             reb: undefined,
             ast: undefined,
@@ -1531,7 +1537,7 @@ export const ScoresheetMatch: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginTop: '2px' }}>
                     <span>{podium.team_name || 'Individual'}</span>
                     <strong style={{ color: '#0B132B', fontFamily: 'monospace', fontSize: '13px' }}>
-                      {podium.finish_time}
+                      {podium.time_or_distance || podium.finish_time}
                     </strong>
                   </div>
                 </div>
@@ -1544,13 +1550,13 @@ export const ScoresheetMatch: React.FC = () => {
           <table style={styles.statsTable}>
             <thead>
               <tr>
-                <th style={styles.statThRank}>[ RANK ]</th>
-                <th style={styles.statThPlayerName}>[ ATHLETE NAME ]</th>
+                <th style={styles.statThRank}>{isTrack ? '[ PLACE ]' : '[ RANK ]'}</th>
+                <th style={styles.statThPlayerName}>{isTrack ? '[ ATHLETE NAME ]' : '[ ATHLETE NAME ]'}</th>
                 <th style={styles.statTh}>[ TEAM / AFFILIATION ]</th>
-                <th style={styles.statTh}>[ DISTANCE ]</th>
-                <th style={styles.statTh}>[ FINISH TIME ]</th>
-                <th style={styles.statTh}>[ SPLIT TIMES ]</th>
-                <th style={styles.statTh}>[ EFFICIENCY ]</th>
+                <th style={styles.statTh}>{isTrack ? '[ EVENT TYPE ]' : '[ DISTANCE ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ TIME / DISTANCE ]' : '[ FINISH TIME ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ QTS ]' : '[ SPLIT TIMES ]'}</th>
+                <th style={styles.statTh}>{isTrack ? '[ POINTS ]' : '[ EFFICIENCY ]'}</th>
                 <th style={isEditing && !isCertified ? styles.statTh : styles.statThLast}>[ STATUS ]</th>
                 {isEditing && !isCertified && (
                   <th style={styles.statThLast}>[ ACTION ]</th>
@@ -1569,7 +1575,10 @@ export const ScoresheetMatch: React.FC = () => {
                     <tr key={`race-${idx}`} style={{ ...styles.statTr, backgroundColor: rowBg }}>
                       <td style={styles.statTd}>
                         {isEditing && !isCertified ? (
-                          <input type="text" value={row.placement_rank} onChange={(e) => updateRaceStat(idx, 'placement_rank', e.target.value)} style={styles.statInput} />
+                          <input type="text" value={row.placement_rank || row.rank || ''} onChange={(e) => {
+                            updateRaceStat(idx, 'placement_rank', e.target.value);
+                            updateRaceStat(idx, 'rank', e.target.value);
+                          }} style={styles.statInput} />
                         ) : (
                           <span style={{
                             padding: '3px 8px',
@@ -1579,7 +1588,7 @@ export const ScoresheetMatch: React.FC = () => {
                             backgroundColor: isGold ? '#FEF08A' : isSilver ? '#E2E8F0' : isBronze ? '#FFEDD5' : '#F1F5F9',
                             color: isGold ? '#854D0E' : isSilver ? '#334155' : isBronze ? '#9A3412' : '#475569',
                           }}>
-                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || idx + 1}`}
+                            {isGold ? '🥇 #1' : isSilver ? '🥈 #2' : isBronze ? '🥉 #3' : `#${row.placement_rank || row.rank || idx + 1}`}
                           </span>
                         )}
                       </td>
@@ -1615,14 +1624,71 @@ export const ScoresheetMatch: React.FC = () => {
                           <input type="text" value={row.team_name || ''} onChange={(e) => updateRaceStat(idx, 'team_name', e.target.value)} style={styles.statInput} />
                         ) : (row.team_name || 'Individual')}
                       </td>
-                      <td style={styles.statTd}>{row.distance}</td>
+                      <td style={styles.statTd}>
+                        {isEditing && !isCertified ? (
+                          <input
+                            type="text"
+                            value={row.eventType || row.event || row.distance || ''}
+                            onChange={(e) => {
+                              updateRaceStat(idx, 'eventType', e.target.value);
+                              updateRaceStat(idx, 'distance', e.target.value);
+                            }}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          row.eventType || row.event || row.distance || '—'
+                        )}
+                      </td>
                       <td style={styles.statTdBold}>
                         {isEditing && !isCertified ? (
-                          <input type="text" value={row.finish_time} onChange={(e) => updateRaceStat(idx, 'finish_time', e.target.value)} style={styles.statInput} />
-                        ) : row.finish_time}
+                          <input
+                            type="text"
+                            value={row.time_or_distance || row.finish_time || ''}
+                            onChange={(e) => {
+                              updateRaceStat(idx, 'time_or_distance', e.target.value);
+                              updateRaceStat(idx, 'finish_time', e.target.value);
+                            }}
+                            style={styles.statInput}
+                          />
+                        ) : (
+                          row.time_or_distance || row.finish_time || '—'
+                        )}
                       </td>
-                      <td style={styles.statTd}>{Array.isArray(row.split_times) ? row.split_times.join(' / ') : '—'}</td>
-                      <td style={styles.statTd}>{row.efficiency || 0}</td>
+                      <td style={styles.statTd}>
+                        {isTrack ? (
+                          isEditing && !isCertified ? (
+                            <input
+                              type="text"
+                              value={row.qts || ''}
+                              onChange={(e) => updateRaceStat(idx, 'qts', e.target.value)}
+                              style={styles.statInput}
+                            />
+                          ) : (
+                            row.qts || '—'
+                          )
+                        ) : (
+                          Array.isArray(row.split_times) ? row.split_times.join(' / ') : '—'
+                        )}
+                      </td>
+                      <td style={styles.statTd}>
+                        {isTrack ? (
+                          isEditing && !isCertified ? (
+                            <input
+                              type="number"
+                              value={row.pts !== undefined ? row.pts : (row.points !== undefined ? row.points : 0)}
+                              onChange={(e) => {
+                                updateRaceStat(idx, 'pts', Number(e.target.value) || 0);
+                                updateRaceStat(idx, 'points', Number(e.target.value) || 0);
+                              }}
+                              style={styles.statInput}
+                            />
+                          ) : (
+                            row.pts !== undefined ? row.pts : (row.points !== undefined ? row.points : 0)
+                          )
+                        ) : (
+                          row.efficiency || 0
+                        )}
+                      </td>
                       <td style={isEditing && !isCertified ? styles.statTd : styles.statTdLast}>
                         <span style={row.is_disqualified ? styles.statusDq : styles.statusOfficial}>
                           {row.is_disqualified ? 'DQ' : 'OFFICIAL'}

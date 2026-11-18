@@ -67,8 +67,8 @@ export const METRIC_RANGES: Record<string, { min: number; max: number }> = {
 
 export const STAT_ALIAS_MAP: Record<string, string[]> = {
   finish_time_ms: ['finish_time', 'time', 'result_time', 'mark_time_ms', 'mark_time'],
-  finish_time: ['finish_time_ms', 'time', 'result_time', 'mark_time_ms'],
-  time: ['finish_time', 'finish_time_ms', 'result_time'],
+  finish_time: ['finish_time_ms', 'time', 'result_time', 'mark_time_ms', 'time_or_distance'],
+  time: ['time_or_distance', 'finish_time', 'finish_time_ms', 'result_time'],
   split_times_ms: ['split', 'split_time', 'split_1', 'lap_splits', 'split_times'],
   split: ['split_times_ms', 'split_time', 'split_1', 'lap_splits'],
   split_time: ['split', 'split_times_ms', 'split_1', 'lap_splits'],
@@ -117,18 +117,23 @@ export const STAT_ALIAS_MAP: Record<string, string[]> = {
   block_points: ['blocks', 'blk', 'tb'],
   sets_played: ['sp', 'sets'],
   set_scores: ['set_score', 'sets'],
-  // Individual / Timed
+  // Individual / Timed / Track & Field
+  time_or_distance: ['mark', 'time', 'distance', 'finish_time', 'mark_time', 'result', 'time_distance', 'mark_or_time'],
+  qts: ['qualifying_time', 'qts_standard', 'seed_time', 'seed', 'standard', 'qualifying_mark'],
+  seed_time: ['qts', 'seed', 'qualifying_time', 'entry_time'],
+  eventType: ['event', 'event_name', 'discipline', 'event_type'],
+  event: ['eventType', 'event_name', 'discipline', 'event_type'],
   distance_meters: ['distance_m', 'distance', 'mark_distance_m'],
   distance_m: ['distance_meters', 'distance', 'mark_distance_m'],
-  distance: ['distance_m', 'distance_meters'],
+  distance: ['time_or_distance', 'distance_m', 'distance_meters'],
   stroke_rate: ['stroke_count', 'strokes', 'cadence', 'stroke_cadence'],
   stroke_count: ['stroke_rate', 'strokes'],
   heat_number: ['heat'],
   heat: ['heat_number'],
   lane_number: ['lane'],
   lane: ['lane_number'],
-  placement_rank: ['rank', 'place'],
-  rank: ['placement_rank', 'place'],
+  placement_rank: ['rank', 'place', 'pos', 'pl'],
+  rank: ['placement_rank', 'place', 'pos', 'pl'],
   wind: ['wind_gauge'],
   // Badminton / Racket Sports
   smash_winners: ['smashes', 'smash', 'smash_winner'],
@@ -262,11 +267,31 @@ export function resolveSportColumns(
   const cols: DynamicSportColumn[] = [];
   const addedKeys = new Set<string>();
 
+  const LEGACY_INTERNAL_KEYS = new Set([
+    'finish_time_ms', 'split_times_ms', 'distance_meters', 'attempt_number', 'pace_per_km',
+  ]);
+
+  // For Track & Field, prioritize the curated schema aligned with Mobile:
+  // TIME / DISTANCE, PLACE, EVENT TYPE, QTS, POINTS
+  if (isTrack) {
+    [
+      { key: 'time_or_distance', label: 'TIME / DISTANCE', isNumeric: false },
+      { key: 'rank', label: 'PLACE', isNumeric: true },
+      { key: 'eventType', label: 'EVENT TYPE', isNumeric: false },
+      { key: 'qts', label: 'QTS', isNumeric: false },
+      { key: 'pts', label: 'POINTS', isNumeric: true },
+    ].forEach((c) => {
+      addedKeys.add(c.key);
+      cols.push(c);
+    });
+  }
+
   // 1. Dynamic Firestore Admin Sport Schema Configured Stats
   if (activeSportConfig) {
     if (Array.isArray(activeSportConfig.configurable_stats) && activeSportConfig.configurable_stats.length > 0) {
       activeSportConfig.configurable_stats.forEach((cs) => {
         const key = cs.stat_name_key.trim();
+        if (isTrack && LEGACY_INTERNAL_KEYS.has(key)) return;
         if (!addedKeys.has(key)) {
           addedKeys.add(key);
           const cat = cs.measurement_category || 'Count';
@@ -285,6 +310,7 @@ export function resolveSportColumns(
     if (activeSportConfig.stat_schema && typeof activeSportConfig.stat_schema === 'object') {
       Object.entries(activeSportConfig.stat_schema).forEach(([key, val]) => {
         const cleanKey = key.trim();
+        if (isTrack && LEGACY_INTERNAL_KEYS.has(cleanKey)) return;
         if (!addedKeys.has(cleanKey)) {
           addedKeys.add(cleanKey);
           const cat = val.measurement_category || 'Count';
@@ -304,6 +330,7 @@ export function resolveSportColumns(
     if (Array.isArray(genericMetrics) && genericMetrics.length > 0) {
       genericMetrics.forEach((m: any) => {
         const key = (m.metric_key || m.key || m.name || '').trim();
+        if (isTrack && LEGACY_INTERNAL_KEYS.has(key)) return;
         if (key && !addedKeys.has(key)) {
           addedKeys.add(key);
           const isNum = m.data_type === 'number' || m.isNumeric !== false;
@@ -404,12 +431,11 @@ export function resolveSportColumns(
       });
     } else if (isTrack) {
       [
-        { key: 'finish_time', label: 'FINISH TIME', isNumeric: false },
-        { key: 'split', label: 'SPLIT', isNumeric: false },
-        { key: 'distance_m', label: 'DISTANCE (M)', isNumeric: true },
-        { key: 'wind', label: 'WIND', isNumeric: false },
-        { key: 'heat', label: 'HEAT', isNumeric: true },
-        { key: 'lane', label: 'LANE', isNumeric: true },
+        { key: 'time_or_distance', label: 'TIME / DISTANCE', isNumeric: false },
+        { key: 'rank', label: 'PLACE', isNumeric: true },
+        { key: 'eventType', label: 'EVENT TYPE', isNumeric: false },
+        { key: 'qts', label: 'QTS', isNumeric: false },
+        { key: 'pts', label: 'POINTS', isNumeric: true },
       ].forEach((c) => {
         addedKeys.add(c.key);
         cols.push(c);
@@ -615,8 +641,8 @@ export function sortRaceResultsByTime(results: any[]): any[] {
     if (a.is_disqualified && !b.is_disqualified) return 1;
     if (!a.is_disqualified && b.is_disqualified) return -1;
 
-    const timeA = parseTimeToSeconds(a.finish_time || a.time || a.mark_time);
-    const timeB = parseTimeToSeconds(b.finish_time || b.time || b.mark_time);
+    const timeA = parseTimeToSeconds(a.time_or_distance || a.finish_time || a.time || a.mark_time);
+    const timeB = parseTimeToSeconds(b.time_or_distance || b.finish_time || b.time || b.mark_time);
 
     if (timeA !== timeB) return timeA - timeB;
 

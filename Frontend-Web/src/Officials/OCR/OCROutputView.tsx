@@ -163,6 +163,17 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
     return resolveSportColumns(sportType, activeSportConfig, athleteStats);
   }, [sportType, activeSportConfig, athleteStats]);
 
+  // When rendering in the table, individual sports already show explicit leading columns for RANK and EVENT.
+  // Filter them out of dynamicColumns to prevent duplicate headers/cells.
+  const renderedColumns = useMemo<DynamicColumn[]>(() => {
+    return dynamicColumns.filter((col) => {
+      if (isIndividual && (col.key === 'rank' || col.key === 'placement_rank' || col.key === 'event' || col.key === 'eventType' || col.key === 'event_name')) {
+        return false;
+      }
+      return true;
+    });
+  }, [dynamicColumns, isIndividual]);
+
   // Teams list for active match
   const teamList = useMemo(() => {
     const set = new Set<string>();
@@ -191,7 +202,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
   // Dynamic Totals across all numeric columns
   const columnTotals = useMemo(() => {
     const totalsMap: Record<string, number> = {};
-    dynamicColumns.forEach((col) => {
+    renderedColumns.forEach((col) => {
       if (col.isNumeric) {
         totalsMap[col.key] = visibleAthletes.reduce((sum, a) => {
           const val = getAthleteStatValue(a, col.key);
@@ -201,7 +212,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
       }
     });
     return totalsMap;
-  }, [dynamicColumns, visibleAthletes]);
+  }, [renderedColumns, visibleAthletes]);
 
   // Stat Change Handler using row_uid
   const handleStatChange = (
@@ -220,6 +231,9 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         field === 'fg_pct' ||
         field === 'hitting_pct' ||
         field === 'time' ||
+        field === 'time_or_distance' ||
+        field === 'qts' ||
+        field === 'eventType' ||
         field === 'finish_time' ||
         field === 'split' ||
         field === 'event' ||
@@ -227,6 +241,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         field === 'position' ||
         field === 'player_name' ||
         field === 'team_name' ||
+        field === 'wind' ||
         (matchedCol && !matchedCol.isNumeric);
 
       let parsedVal: any = value;
@@ -363,16 +378,23 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
         });
 
         const athleteEvent = a.event || a.discipline || completeStats.event || '';
+        const athleteEventType = a.eventType || athleteEvent || completeStats.eventType || '';
         const athleteEventId = a.event_id || (athleteEvent ? `EVT-${athleteEvent.toLowerCase().replace(/[^a-z0-9]/g, '_').toUpperCase()}` : undefined);
         const athleteFinishTime = a.finish_time || a.time || completeStats.finish_time || completeStats.time || '';
+        const athleteTimeOrDistance = a.time_or_distance || a.time || a.distance || a.finish_time || a.mark || completeStats.time_or_distance || completeStats.time || completeStats.distance || athleteFinishTime;
+        const athleteQts = a.qts || a.seed_time || a.seed || a.qualifying_time || completeStats.qts || completeStats.seed_time || '';
         const athleteSplit = a.split || completeStats.split || '';
         const athleteRank = a.placement_rank || a.rank || completeStats.placement_rank || completeStats.rank || '';
 
         completeStats.event = athleteEvent;
+        completeStats.eventType = athleteEventType;
         completeStats.event_id = athleteEventId;
         completeStats.finish_time = athleteFinishTime;
+        completeStats.time_or_distance = athleteTimeOrDistance;
+        completeStats.qts = athleteQts;
         completeStats.split = athleteSplit;
         completeStats.placement_rank = athleteRank;
+        completeStats.rank = athleteRank;
 
         return {
           athlete_id: a.athlete_id,
@@ -382,11 +404,15 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
           jersey_number: a.jersey_number,
           position: a.position,
           event: athleteEvent,
+          eventType: athleteEventType,
           event_id: athleteEventId,
           heat: a.heat !== undefined ? a.heat : completeStats.heat,
           lane: a.lane !== undefined ? a.lane : completeStats.lane,
           placement_rank: athleteRank,
+          rank: athleteRank,
           finish_time: athleteFinishTime,
+          time_or_distance: athleteTimeOrDistance,
+          qts: athleteQts,
           time: athleteFinishTime,
           split: athleteSplit,
           // Dynamic stats dictionary without truncation
@@ -787,8 +813,8 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                 </th>
                 <th style={styles.th}>Athlete Name</th>
                 <th style={styles.th}>{isIndividual ? 'Team / Affiliation' : 'Team'}</th>
-                {isIndividual && <th style={styles.th}>EVENT</th>}
-                {dynamicColumns.map((col) => (
+                {isIndividual && <th style={styles.th}>EVENT TYPE</th>}
+                {renderedColumns.map((col) => (
                   <th key={col.key} style={styles.thCenter}>
                     {col.label}
                   </th>
@@ -804,9 +830,23 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                 return (
                   <tr key={rowIdentity} style={styles.tbodyRow}>
                     <td style={styles.tdNum}>
-                      {isIndividual
-                        ? a.placement_rank ? `#${a.placement_rank}` : `#${rowIdx + 1}`
-                        : a.jersey_number ? `#${a.jersey_number}` : '-'}
+                      {isIndividual ? (
+                        isEditing ? (
+                          <input
+                            type="text"
+                            value={a.placement_rank || a.rank || (rowIdx + 1)}
+                            onChange={(e) => {
+                              handleStatChange(rowIdentity, 'placement_rank', e.target.value);
+                              handleStatChange(rowIdentity, 'rank', e.target.value);
+                            }}
+                            style={{ ...styles.statInput, width: '42px', textAlign: 'center' }}
+                          />
+                        ) : (
+                          a.placement_rank || a.rank ? `#${a.placement_rank || a.rank}` : `#${rowIdx + 1}`
+                        )
+                      ) : (
+                        a.jersey_number ? `#${a.jersey_number}` : '-'
+                      )}
                     </td>
                     <td style={styles.tdAthleteName}>
                       <span style={{ color: '#0B132B', fontWeight: 800 }}>
@@ -830,17 +870,20 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                         {isEditing ? (
                           <input
                             type="text"
-                            value={a.event || '-'}
-                            onChange={(e) => handleStatChange(rowIdentity, 'event', e.target.value)}
+                            value={a.eventType || a.event || a.event_name || ''}
+                            onChange={(e) => {
+                              handleStatChange(rowIdentity, 'eventType', e.target.value);
+                              handleStatChange(rowIdentity, 'event', e.target.value);
+                            }}
                             style={{ ...styles.statInput, width: '100px' }}
                           />
                         ) : (
-                          a.event || '-'
+                          a.eventType || a.event || a.event_name || '-'
                         )}
                       </td>
                     )}
 
-                    {dynamicColumns.map((col) => {
+                    {renderedColumns.map((col) => {
                       const val = getAthleteStatValue(a, col.key);
                       return (
                         <td key={col.key} style={col.key.includes('pct') ? styles.tdFgPct : styles.tdStat}>
@@ -851,7 +894,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                               onChange={(e) => handleStatChange(rowIdentity, col.key, e.target.value)}
                               style={{
                                 ...styles.statInput,
-                                width: col.isNumeric ? '56px' : '75px',
+                                width: col.isNumeric ? '56px' : (col.key === 'time_or_distance' ? '100px' : '75px'),
                               }}
                             />
                           ) : (
@@ -872,7 +915,7 @@ export const OCROutputView: React.FC<OCROutputViewProps> = ({
                   TOTALS ({visibleAthletes.length} Athletes)
                 </td>
                 {isIndividual && <td style={styles.tfootTdDash}>-</td>}
-                {dynamicColumns.map((col) => {
+                {renderedColumns.map((col) => {
                   if (col.isNumeric) {
                     const sum = columnTotals[col.key] || 0;
                     return (
