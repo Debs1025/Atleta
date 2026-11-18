@@ -51,14 +51,29 @@ const formatFileSize = (bytes: number): string => {
 
 const optimizeScoresheetImage = async (uri: string): Promise<string> => {
     try {
-        if (!uri || !uri.startsWith("file://")) return uri;
+        if (!uri) return uri;
+
+        let sourceUri = uri;
+        // On Android, ensure local file path in cacheDirectory for stable reading & manipulation
+        if (Platform.OS === "android" && uri.startsWith("content://") && FileSystem.cacheDirectory) {
+            try {
+                const tempDest = `${FileSystem.cacheDirectory}ocr_raw_${Date.now()}.jpg`;
+                await FileSystem.copyAsync({ from: uri, to: tempDest });
+                sourceUri = tempDest;
+            } catch (copyErr) {
+                console.warn("[OCR] Local copy of content URI skipped:", copyErr);
+                sourceUri = uri;
+            }
+        }
+
         const result = await ImageManipulator.manipulateAsync(
-            uri,
-            [{ resize: { width: 1200 } }],
-            { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG }
+            sourceUri,
+            [{ resize: { width: 1400 } }],
+            { compress: 0.70, format: ImageManipulator.SaveFormat.JPEG }
         );
         return result.uri;
     } catch (err) {
+        console.warn("[OCR] optimizeScoresheetImage fallback:", err);
         return uri;
     }
 };
@@ -181,9 +196,10 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
         try {
             const token = await getStoredAuthToken();
             let responseData: any = null;
+            let lastErrorMessage = "";
 
             if (uploadedFiles.length === 1) {
-                // Single-file flow (Untouched canonical endpoint)
+                // Single-file flow
                 const file = uploadedFiles[0];
                 const fileExt = file.file_name.split(".").pop()?.toLowerCase() || "jpg";
                 const isImage =
@@ -203,38 +219,18 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
 
                 const canonicalEndpoint = `${API_BASE}/matches/ocr/scan`;
 
-                if (Platform.OS !== "web" && typeof FileSystem.uploadAsync === "function") {
-                    try {
-                        const uploadRes = await FileSystem.uploadAsync(canonicalEndpoint, finalUri, {
-                            httpMethod: "POST",
-                            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-                            fieldName: "file",
-                            mimeType: mimeType,
-                            headers: {
-                                Accept: "application/json",
-                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                            },
-                        });
-
-                        if (uploadRes.status >= 200 && uploadRes.status < 300) {
-                            responseData = JSON.parse(uploadRes.body);
-                        }
-                    } catch (uploadErr) {
-                        console.warn("FileSystem.uploadAsync attempt failed, falling back:", uploadErr);
-                    }
+                // Method 1: JSON with optimized Base64 (Reliable, fast, works across all platforms & serverless)
+                let base64Data: string | null = null;
+                try {
+                    base64Data = await FileSystem.readAsStringAsync(finalUri, {
+                        encoding: FileSystem.EncodingType.Base64,
+                    });
+                } catch (readErr) {
+                    console.warn("Could not read file as Base64:", readErr);
                 }
 
-                if (!responseData) {
-                    let base64Data: string | null = null;
+                if (base64Data) {
                     try {
-                        base64Data = await FileSystem.readAsStringAsync(finalUri, {
-                            encoding: FileSystem.EncodingType.Base64,
-                        });
-                    } catch (readErr) {
-                        console.warn("Could not read file as Base64 directly:", readErr);
-                    }
-
-                    if (base64Data) {
                         const res = await fetch(canonicalEndpoint, {
                             method: "POST",
                             headers: {
@@ -251,33 +247,77 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
 
                         if (res.ok) {
                             responseData = await res.json();
+                        } else {
+                            const errBody = await res.text();
+                            lastErrorMessage = `Server returned ${res.status}: ${errBody}`;
+                            console.warn("OCR JSON fetch failed:", lastErrorMessage);
                         }
+                    } catch (fetchErr: any) {
+                        lastErrorMessage = fetchErr?.message || String(fetchErr);
+                        console.warn("OCR JSON fetch exception:", lastErrorMessage);
+                    }
+                }
+
+                // Method 2: Native FileSystem.uploadAsync multipart fallback
+                if (!responseData && Platform.OS !== "web" && typeof FileSystem.uploadAsync === "function") {
+                    try {
+                        const uploadRes = await FileSystem.uploadAsync(canonicalEndpoint, finalUri, {
+                            httpMethod: "POST",
+                            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+                            fieldName: "file",
+                            mimeType: mimeType,
+                            headers: {
+                                Accept: "application/json",
+                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                            },
+                        });
+
+                        if (uploadRes.status >= 200 && uploadRes.status < 300) {
+                            responseData = JSON.parse(uploadRes.body);
+                        } else {
+                            lastErrorMessage = `UploadAsync status ${uploadRes.status}: ${uploadRes.body}`;
+                        }
+                    } catch (uploadErr: any) {
+                        lastErrorMessage = uploadErr?.message || String(uploadErr);
+                        console.warn("FileSystem.uploadAsync attempt failed, falling back:", uploadErr);
+                    }
+                }
+
+                // Method 3: Standard fetch FormData fallback
+                if (!responseData) {
+                    try {
+                        const formData = new FormData();
+                        const sanitizedUri = Platform.OS === "android" ? finalUri : finalUri.replace("file://", "");
+                        const filePayload = {
+                            uri: sanitizedUri,
+                            name: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
+                            type: mimeType,
+                        };
+
+                        formData.append("file", filePayload as any);
+
+                        const res = await fetch(canonicalEndpoint, {
+                            method: "POST",
+                            headers: {
+                                Accept: "application/json",
+                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                            },
+                            body: formData,
+                        });
+
+                        if (res.ok) {
+                            responseData = await res.json();
+                        } else {
+                            const errBody = await res.text();
+                            lastErrorMessage = `FormData status ${res.status}: ${errBody}`;
+                        }
+                    } catch (fdErr: any) {
+                        lastErrorMessage = fdErr?.message || String(fdErr);
                     }
                 }
 
                 if (!responseData) {
-                    const formData = new FormData();
-                    const sanitizedUri = Platform.OS === "android" ? finalUri : finalUri.replace("file://", "");
-                    const filePayload = {
-                        uri: sanitizedUri,
-                        name: isImage ? `${file.file_name.replace(/\.[^/.]+$/, "")}.jpg` : file.file_name,
-                        type: mimeType,
-                    };
-
-                    formData.append("file", filePayload as any);
-
-                    const res = await fetch(canonicalEndpoint, {
-                        method: "POST",
-                        headers: {
-                            Accept: "application/json",
-                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                        },
-                        body: formData,
-                    });
-
-                    if (res.ok) {
-                        responseData = await res.json();
-                    }
+                    throw new Error(lastErrorMessage || "Unable to extract scoresheet data from the uploaded file. Please check that the scoresheet image is clear and readable.");
                 }
             } else {
                 // Multi-file flow (Dedicated Multi-Scoresheet AI OCR Compression & Stitching Engine)
@@ -905,7 +945,7 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
 
             // Check if backend returned batch_mode with separate matches or multi-part sheets
             let parsedOcrResult: RawOCRDetectedData;
-            if (responseData.batch_mode && Array.isArray(responseData.matches) && responseData.matches.length > 0) {
+            if (responseData?.batch_mode && Array.isArray(responseData?.matches) && responseData.matches.length > 0) {
                 const subMatches = responseData.matches.map((m: any) => mapSingleMatchData(m));
 
                 // Check if all uploaded sheets belong to the same match (same sport & same home team, e.g. 1st half and 2nd half parts)
@@ -919,7 +959,7 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
 
                 if (isSingleMatchMultiPart) {
                     // Consolidate directly into one single match: stats from stat 1 and stat 2 are summed
-                    if (responseData.player_summary?.length > 0) {
+                    if (responseData?.player_summary?.length > 0) {
                         parsedOcrResult = mapSingleMatchData(responseData);
                     } else {
                         // Accumulate stats across each sheet
