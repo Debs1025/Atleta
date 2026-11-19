@@ -15,6 +15,30 @@ export interface AtletaHeaderProps {
   onNotificationPress?: () => void;
   unreadNotificationCount?: number;
   avatarUrl?: string | null;
+  coachName?: string | null;
+}
+
+export function getCoachInitials(name?: string | null): string {
+  if (!name || !name.trim()) return "AR";
+  const trimmed = name.trim();
+  // If the coach name refers to Archie (e.g. "Archie", "Archie Lim", or begins with "Arch")
+  if (/^arch(ie)?\b/i.test(trimmed) || trimmed.toLowerCase() === "archie lim") {
+    return "AR";
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const first = parts[0][0];
+    const last = parts[parts.length - 1][0];
+    return `${first}${last}`.toUpperCase();
+  }
+  if (parts.length === 1) {
+    const single = parts[0];
+    if (single.length >= 2) {
+      return single.slice(0, 2).toUpperCase();
+    }
+    return single.toUpperCase();
+  }
+  return "AR";
 }
 
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
@@ -25,6 +49,7 @@ export function AtletaHeader({
   onNotificationPress,
   unreadNotificationCount = 0,
   avatarUrl,
+  coachName,
 }: AtletaHeaderProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
@@ -82,7 +107,9 @@ export function AtletaHeader({
                 onError={() => setImageError(true)}
               />
             ) : (
-              <Ionicons name="person" size={18} color="#070D19" />
+              <Text style={styles.profileAvatarInitials}>
+                {getCoachInitials(coachName)}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -150,6 +177,15 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     borderRadius: 19,
+  },
+  profileAvatarInitials: {
+    color: "#070D19",
+    fontSize: 14,
+    fontWeight: "900",
+    fontFamily: fontBoldPlatform,
+    letterSpacing: 0.5,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   notificationBadge: {
     position: "absolute",

@@ -22,6 +22,7 @@ import styles from "./styles/CoachEditProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
 import { getSportsOfflineFirst, db } from "../../../../services/firebaseClient";
 import { useAccount } from "../../../../context/AccountContext";
+import { getCoachInitials } from "../Components/AtletaHeader";
 
 function safeBase64Decode(str: string): string {
   if (typeof (globalThis as any).atob === "function") {
@@ -603,7 +604,14 @@ export function CoachEditProfile({
                 resizeMode="cover"
               />
             ) : (
-              <Ionicons name="camera-outline" size={36} color="#00C8FF" />
+              <View style={styles.editAvatarPlaceholder}>
+                <Text style={styles.editAvatarInitials}>
+                  {getCoachInitials(form.full_name || currentProfile.first_name || currentProfile.full_name)}
+                </Text>
+                <View style={styles.editAvatarCameraBadge}>
+                  <Ionicons name="camera" size={13} color="#070D19" />
+                </View>
+              </View>
             )}
           </TouchableOpacity>
           <Text style={styles.avatarCaption}>TAP CIRCLE TO UPLOAD AVATAR</Text>

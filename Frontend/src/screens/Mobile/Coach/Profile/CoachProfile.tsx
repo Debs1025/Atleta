@@ -15,6 +15,7 @@ import { requestAuthenticatedJson } from "../../Authentication/authShared";
 import styles from "./styles/CoachProfile";
 import { CoachProfileState, DEFAULT_COACH_PROFILE, UploadedDocument, CredentialItem } from "../DataTypes";
 import { getCoachProfileOfflineFirst } from "../../../../services/firebaseClient";
+import { getCoachInitials } from "../Components/AtletaHeader";
 
 export interface CoachProfileProps {
   visible: boolean;
@@ -291,7 +292,9 @@ export function CoachProfile({
                     onError={() => setAvatarError(true)}
                   />
                 ) : (
-                  <Ionicons name="person" size={44} color="#00C8FF" />
+                  <Text style={styles.modalAvatarInitials}>
+                    {getCoachInitials(profile.full_name || profile.first_name)}
+                  </Text>
                 )}
               </View>
 

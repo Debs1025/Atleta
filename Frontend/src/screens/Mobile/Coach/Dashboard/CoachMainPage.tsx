@@ -1623,6 +1623,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
               (validProfileRes as any)?.profile_image ||
               validOfflineProfileRes?.avatar_url ||
               validOfflineProfileRes?.profile_image ||
+              coachProfile.avatar_url ||
+              (coachProfile as any)?.profile_image ||
+              coach.avatar_url ||
+              (coach as any)?.profile_image ||
               "";
 
             const updatedCoach: UserCoach = {
@@ -3791,7 +3795,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "dashboard" && (
         <>
           <AtletaHeader
-            avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+            avatarUrl={coachProfile.avatar_url || (coachProfile as any)?.profile_image || coach.avatar_url || (coach as any)?.profile_image}
+            coachName={coach.first_name || coachProfile.first_name || coachProfile.full_name || "Archie"}
             onSettingsPress={() => setActiveView("settings")}
             onProfilePress={() => setShowProfileModal(true)}
             onNotificationPress={() => setShowNotificationsModal(true)}
@@ -3994,8 +3999,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         <MyTeamsPage
           teams={teams}
           athletesPool={athletesPool}
-          coachName={`${coach.first_name || ''} ${coach.last_name || ''}`.trim() || undefined}
-          avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+          coachName={`${coach.first_name || coachProfile.first_name || ''} ${coach.last_name || coachProfile.last_name || ''}`.trim() || coach.first_name || coachProfile.first_name || "Archie"}
+          avatarUrl={coachProfile.avatar_url || (coachProfile as any)?.profile_image || coach.avatar_url || (coach as any)?.profile_image}
           onSelectTeam={(team) => {
             setSelectedTeamId(team.team_id);
             setActiveView("manage_team");
@@ -4055,7 +4060,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {/* DISCOVERY MODULE */}
       {activeView === "discovery" && (
         <DiscoveryMain
-          avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+          avatarUrl={coachProfile.avatar_url || (coachProfile as any)?.profile_image || coach.avatar_url || (coach as any)?.profile_image}
+          coachName={coach.first_name || coachProfile.first_name || coachProfile.full_name || "Archie"}
           onSettingsPress={() => setActiveView("settings")}
           onProfilePress={() => setShowProfileModal(true)}
           onNotificationPress={() => setShowNotificationsModal(true)}
@@ -4068,7 +4074,8 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
       {activeView === "performance" && (
         <PerformancePage
           athletes={perfAthletes}
-          avatarUrl={coachProfile.avatar_url || coach.avatar_url}
+          avatarUrl={coachProfile.avatar_url || (coachProfile as any)?.profile_image || coach.avatar_url || (coach as any)?.profile_image}
+          coachName={coach.first_name || coachProfile.first_name || coachProfile.full_name || "Archie"}
           sportsFocus={coachProfile.sports_focus}
           onSelectAthlete={(ath) => {
             setSelectedPerfAthlete(ath);

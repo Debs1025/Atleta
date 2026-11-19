@@ -87,6 +87,7 @@ export function MyTeamsPage({
       {/* TOP HEADER */}
       <AtletaHeader
         avatarUrl={avatarUrl}
+        coachName={coachName}
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress || onLogout}
         onNotificationPress={onNotificationPress}

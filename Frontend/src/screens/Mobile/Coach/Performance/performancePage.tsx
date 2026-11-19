@@ -35,6 +35,7 @@ interface PerformancePageProps {
   unreadNotificationCount?: number;
   athletes?: AthletePerformanceProfile[];
   avatarUrl?: string | null;
+  coachName?: string | null;
   sportsFocus?: string;
 }
 
@@ -48,6 +49,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
   unreadNotificationCount = 0,
   athletes = [],
   avatarUrl,
+  coachName,
   sportsFocus,
 }) => {
   const insets = useSafeAreaInsets();
@@ -170,6 +172,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
     <View style={styles.container}>
       <AtletaHeader
         avatarUrl={avatarUrl}
+        coachName={coachName}
         onSettingsPress={onSettingsPress}
         onProfilePress={onProfilePress}
         onNotificationPress={onNotificationPress}

@@ -110,6 +110,15 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 48,
   },
+  modalAvatarInitials: {
+    color: "#00C8FF",
+    fontSize: 34,
+    fontWeight: "900",
+    fontFamily: fontBoldPlatform,
+    textAlign: "center",
+    letterSpacing: 1,
+    includeFontPadding: false,
+  },
   fullNameText: {
     color: "#FFFFFF",
     fontSize: 20,
