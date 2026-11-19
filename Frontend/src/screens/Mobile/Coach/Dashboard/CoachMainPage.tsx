@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Alert,
+  BackHandler,
   Modal,
   Platform,
   ScrollView,
@@ -2608,6 +2609,67 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
     }
   }, []);
 
+  const handleBackFromMatchResult = useCallback(() => {
+    let returnView = previousPortfolioView;
+    if (
+      !returnView ||
+      returnView === "perf_trackfield_result" ||
+      returnView === "perf_swimming_result" ||
+      returnView === "perf_basketball_result"
+    ) {
+      returnView = "dashboard";
+    }
+    setActiveView(returnView);
+    if (returnView === "dashboard") {
+      setActiveTab("Home");
+    } else if (returnView === "performance") {
+      setActiveTab("Performance");
+    }
+  }, [previousPortfolioView]);
+
+  useEffect(() => {
+    const onHardwareBack = () => {
+      if (
+        activeView === "perf_trackfield_result" ||
+        activeView === "perf_swimming_result" ||
+        activeView === "perf_basketball_result"
+      ) {
+        handleBackFromMatchResult();
+        return true;
+      }
+      if (activeView === "match_history") {
+        setActiveView(previousPortfolioView || "dashboard");
+        return true;
+      }
+      if (activeView === "athlete_portfolio") {
+        let returnView = previousPortfolioView;
+        if (!returnView || returnView === "athlete_portfolio") {
+          returnView = activeTab === "Performance" ? "performance" : "dashboard";
+        }
+        setActiveView(returnView);
+        if (returnView === "performance") {
+          setActiveTab("Performance");
+        } else if (returnView === "dashboard" || returnView === "view_all_players") {
+          setActiveTab("Home");
+        }
+        return true;
+      }
+      if (activeView === "all_stats") {
+        setActiveView("athlete_portfolio");
+        return true;
+      }
+      if (activeView === "ocr_logging" || activeView === "ocr_output" || activeView === "create_log") {
+        setActiveView("dashboard");
+        setActiveTab("Home");
+        return true;
+      }
+      return false;
+    };
+
+    const backSubscription = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
+    return () => backSubscription.remove();
+  }, [activeView, previousPortfolioView, activeTab, handleBackFromMatchResult]);
+
   const handleClearMatchHistory = useCallback(async () => {
     try {
       const activeCoachId = coach?.coach_id || coach?.user_id || currentUser?.coachId || currentUser?.uid;
@@ -4085,6 +4147,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           onClose={() => setActiveView(previousPortfolioView || "dashboard")}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
+            setPreviousPortfolioView("match_history");
             const matchSport = String(matchItem.sport_category || selectedPerfAthlete?.sport_category || "").toUpperCase();
             if (matchSport.includes("BASKET") || matchSport.includes("VOLLEY")) {
               setActiveView("perf_basketball_result");
@@ -4104,7 +4167,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           coachTeams={teams}
           coachAthletes={athletesPool}
           activeTeam={currentTeam}
-          onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
+          onBack={handleBackFromMatchResult}
         />
       )}
 
@@ -4114,14 +4177,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           coachTeams={teams}
           coachAthletes={athletesPool}
           activeTeam={currentTeam}
-          onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
+          onBack={handleBackFromMatchResult}
         />
       )}
 
       {activeView === "perf_basketball_result" && (
         <BasketballMatchResult
           matchItem={selectedMatchItem}
-          onBack={() => setActiveView(previousPortfolioView === "dashboard" ? "match_history" : (previousPortfolioView || "performance"))}
+          onBack={handleBackFromMatchResult}
         />
       )}
 
