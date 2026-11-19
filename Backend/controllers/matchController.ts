@@ -409,12 +409,204 @@ export async function uploadScoresheet(req: AuthRequest, res: Response): Promise
   }
 }
 
+async function validateCoachScoresheetPermissions(
+  reqUser: any,
+  authHeader: string | undefined,
+  result: any
+): Promise<{ valid: boolean; error?: string; message?: string }> {
+  let uid = reqUser?.uid || reqUser?.user_id;
+  let role = reqUser?.role;
+
+  if (!uid && authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const decoded: any = jwt.decode(token);
+      if (decoded) {
+        uid = decoded.uid || decoded.user_id || decoded.coach_id || decoded.sub;
+        role = decoded.role;
+      }
+    } catch (_) {}
+  }
+
+  if (!uid) {
+    return { valid: true };
+  }
+
+  const cleanUid = String(uid).replace(/^coach_/, '');
+  const possibleCoachIds = Array.from(new Set([uid, `coach_${cleanUid}`, cleanUid].filter(Boolean)));
+
+  // If role isn't explicitly Coach, check if a Coach_Profiles doc exists for this user
+  let coachProfile: any = null;
+  for (const cid of possibleCoachIds) {
+    const snap = await db.collection('Coach_Profiles').doc(cid).get().catch(() => null);
+    if (snap && snap.exists) {
+      coachProfile = snap.data();
+      break;
+    }
+  }
+
+  // If not a coach, skip validation (e.g. system admin or tournament official)
+  if (!coachProfile && String(role || '').toLowerCase() !== 'coach') {
+    return { valid: true };
+  }
+
+  // 1. Fetch coach teams
+  const [teamsSnap1, teamsSnap2] = await Promise.all([
+    db.collection('Teams').where('coach_id', 'in', possibleCoachIds).get().catch(() => null),
+    db.collection('Teams').where('coachId', 'in', possibleCoachIds).get().catch(() => null),
+  ]);
+  const teamDocs = new Map<string, any>();
+  [teamsSnap1, teamsSnap2].forEach(snap => {
+    if (snap && !snap.empty) {
+      snap.forEach(d => teamDocs.set(d.id, d.data()));
+    }
+  });
+  const coachTeams = Array.from(teamDocs.values());
+
+  // 2. Compile coach sports
+  const coachSports = new Set<string>();
+  if (coachProfile?.sport_type) coachSports.add(String(coachProfile.sport_type).toUpperCase().trim());
+  if (coachProfile?.sports_focus) coachSports.add(String(coachProfile.sports_focus).toUpperCase().trim());
+  coachTeams.forEach((t: any) => {
+    if (t.sport_type) coachSports.add(String(t.sport_type).toUpperCase().trim());
+  });
+
+  const normalizeSport = (s: string) => {
+    const up = String(s || '').toUpperCase().trim();
+    if (up.includes('BASKET')) return 'BASKETBALL';
+    if (up.includes('VOLLEY')) return 'VOLLEYBALL';
+    if (up.includes('SWIM') || up.includes('AQUATIC')) return 'SWIMMING';
+    if (up.includes('TRACK') || up.includes('FIELD') || up.includes('ATHLETIC')) return 'TRACK AND FIELD';
+    if (up.includes('SOCCER') || up.includes('FOOTBALL')) return 'SOCCER';
+    if (up.includes('BADMINTON')) return 'BADMINTON';
+    if (up.includes('PICKLE')) return 'PICKLEBALL';
+    if (up.includes('BASE') || up.includes('SOFT')) return 'BASEBALL';
+    return up;
+  };
+
+  const scannedSport = String(result?.sport_type || result?.sport || result?.match_info?.sport_type || '').toUpperCase().trim();
+  const normScanned = normalizeSport(scannedSport);
+  const normCoachSports = Array.from(coachSports).map(normalizeSport);
+
+  // Check 1: Sport Alignment Check
+  if (normCoachSports.length > 0 && normScanned && !normCoachSports.includes(normScanned)) {
+    return {
+      valid: false,
+      error: 'SPORT_MISMATCH',
+      message: `Sport Mismatch: The uploaded scoresheet is for ${normScanned}, which is not aligned with your coached sport (${normCoachSports.join(' / ')}). Please upload a valid scoresheet for your sport.`,
+    };
+  }
+
+  // Check 2: Scouted Players Check
+  const [scoutSnap1, scoutSnap2] = await Promise.all([
+    db.collection('Scouting_Registry').where('coach_scout_id', 'in', possibleCoachIds).get().catch(() => null),
+    db.collection('Scouting_Registry').where('coach_id', 'in', possibleCoachIds).get().catch(() => null),
+  ]);
+
+  const knownPlayerNames: string[] = [];
+  const knownPlayerIds: string[] = [];
+
+  [scoutSnap1, scoutSnap2].forEach(snap => {
+    if (snap && !snap.empty) {
+      snap.forEach(d => {
+        const sData = d.data();
+        if (sData.athlete_id) knownPlayerIds.push(String(sData.athlete_id).toLowerCase().trim());
+        if (sData.athlete_name) knownPlayerNames.push(String(sData.athlete_name).toLowerCase().trim());
+        const dAth = sData.athlete_details || {};
+        const detName = (dAth.first_name || dAth.last_name ? `${dAth.first_name || ''} ${dAth.last_name || ''}`.trim() : '');
+        if (detName) knownPlayerNames.push(detName.toLowerCase().trim());
+      });
+    }
+  });
+
+  coachTeams.forEach((t: any) => {
+    const roster = Array.isArray(t.roster_list) ? t.roster_list : Array.isArray(t.athletes) ? t.athletes : [];
+    roster.forEach((r: any) => {
+      if (r.athlete_id) knownPlayerIds.push(String(r.athlete_id).toLowerCase().trim());
+      if (r.user_id) knownPlayerIds.push(String(r.user_id).toLowerCase().trim());
+      const rName = r.full_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.name;
+      if (rName) knownPlayerNames.push(String(rName).toLowerCase().trim());
+    });
+  });
+
+  if (Array.isArray(coachProfile?.athletes_managed)) {
+    coachProfile.athletes_managed.forEach((am: any) => {
+      if (am.athlete_id || am.id) knownPlayerIds.push(String(am.athlete_id || am.id).toLowerCase().trim());
+      const amName = am.name || am.full_name;
+      if (amName) knownPlayerNames.push(String(amName).toLowerCase().trim());
+    });
+  }
+
+  const normalizePlayerName = (name: string): string => {
+    return String(name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
+  const doesPlayerMatch = (detectedName: string, knownName: string): boolean => {
+    const normDet = normalizePlayerName(detectedName);
+    const normKnown = normalizePlayerName(knownName);
+    if (!normDet || !normKnown) return false;
+    if (normDet === normKnown) return true;
+    if (normDet.includes(normKnown) || normKnown.includes(normDet)) return true;
+
+    const detTokens = normDet.split(' ').filter(t => t.length > 1);
+    const knownTokens = normKnown.split(' ').filter(t => t.length > 1);
+    if (detTokens.length === 0 || knownTokens.length === 0) return false;
+
+    const detLast = detTokens[detTokens.length - 1];
+    const knownLast = knownTokens[knownTokens.length - 1];
+    if (detLast.length >= 3 && detLast === knownLast) {
+      const detFirst = detTokens[0];
+      const knownFirst = knownTokens[0];
+      if (detFirst === knownFirst || detFirst[0] === knownFirst[0]) return true;
+      if (detTokens.some(dt => knownTokens.includes(dt))) return true;
+    }
+
+    const shared = detTokens.filter(dt => knownTokens.includes(dt));
+    if (shared.length >= 2) return true;
+
+    return false;
+  };
+
+  const allResultPlayers: any[] = [];
+  if (Array.isArray(result?.player_summary)) allResultPlayers.push(...result.player_summary);
+  if (Array.isArray(result?.matches)) {
+    result.matches.forEach((m: any) => {
+      if (Array.isArray(m.player_summary)) allResultPlayers.push(...m.player_summary);
+    });
+  }
+
+  const hasScouted = allResultPlayers.some((p: any) => {
+    const pId = String(p.athlete_id || '').toLowerCase().trim();
+    const pName = String(p.player_name || p.name || '').trim();
+    if (pId && knownPlayerIds.some(kId => pId === kId || pId.includes(kId) || kId.includes(pId))) return true;
+    if (pName && knownPlayerNames.some(kName => doesPlayerMatch(pName, kName))) return true;
+    return false;
+  });
+
+  if (knownPlayerNames.length > 0 && !hasScouted) {
+    return {
+      valid: false,
+      error: 'NO_SCOUTED_PLAYERS',
+      message: 'No Scouted Players Found: None of the athletes on this scoresheet are scouted or coached by you. Please upload a scoresheet that includes your scouted or team players.',
+    };
+  }
+
+  return { valid: true };
+}
+
 export async function scanStandaloneScoresheet(req: AuthRequest, res: Response): Promise<void> {
   try {
     const file = extractFile(req);
     const customKey = (req.headers['x-gemini-key'] as string) || (req.headers['x-api-key'] as string) || (req.query.gemini_key as string) || (req.query.apiKey as string) || (req.body?.gemini_key as string) || (req.body?.apiKey as string);
 
     const result = await scanScoresheetStandalone(file, customKey);
+
+    const validation = await validateCoachScoresheetPermissions(req.user, req.headers.authorization, result);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.error, message: validation.message });
+      return;
+    }
+
     res.status(200).json({
       message: 'Scoresheet scanned and parsed successfully.',
       ...result,
@@ -482,6 +674,13 @@ export async function scanMultiScoresheetsHandler(req: AuthRequest, res: Respons
     const customKey = (req.headers['x-gemini-key'] as string) || (req.headers['x-api-key'] as string) || (req.query.gemini_key as string) || (req.query.apiKey as string) || (req.body?.gemini_key as string) || (req.body?.apiKey as string);
 
     const result = await scanMultipleScoresheetsStandalone(files, customKey);
+
+    const validation = await validateCoachScoresheetPermissions(req.user, req.headers.authorization, result);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.error, message: validation.message });
+      return;
+    }
+
     res.status(200).json({
       message: `Successfully processed and parsed ${files.length} scoresheet files.`,
       ...result,

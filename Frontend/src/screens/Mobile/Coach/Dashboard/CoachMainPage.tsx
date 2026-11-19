@@ -234,6 +234,7 @@ export function CoachMainPage({ onLogout }: CoachMainPageProps) {
   });
   const [teams, setTeams] = useState<Team[]>([]);
   const [athletesPool, setAthletesPool] = useState<RosterAthlete[]>([]);
+  const [scoutingProposals, setScoutingProposals] = useState<any[]>([]);
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -1290,6 +1291,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             : Array.isArray(proposalsRes?.proposals)
             ? proposalsRes.proposals
             : [];
+          setScoutingProposals(rawProposals);
 
           rawProposals.forEach((p: any) => {
             const pAthId = p.athlete_id || (p.athlete_details && p.athlete_details.athlete_id);
@@ -3253,6 +3255,10 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           currentTeam={currentTeam}
           selectedTeamId={selectedTeamId}
           teams={teams}
+          coachProfile={coachProfile}
+          coach={coach}
+          athletesPool={athletesPool}
+          scoutedAthletes={scoutingProposals}
           onBack={() => setActiveView("dashboard")}
           onUploadSuccess={(data) => {
             setOcrPayload(data);

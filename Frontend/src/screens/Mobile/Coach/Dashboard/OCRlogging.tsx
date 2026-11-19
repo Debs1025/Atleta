@@ -20,7 +20,7 @@ import * as FileSystem from "expo-file-system";
 
 import styles from "./styles/OCRlogging";
 import { RawOCRDetectedData, DetectedAthleteStat } from "./OCRoutput";
-import { API_BASE, getStoredAuthToken } from "../../Authentication/authShared";
+import { API_BASE, getStoredAuthToken, requestAuthenticatedJson } from "../../Authentication/authShared";
 import { ScoresheetViewerModal } from "../Components/ScoresheetViewerModal";
 
 // Client State Schema Models
@@ -37,6 +37,10 @@ interface OCRloggingProps {
     currentTeam?: any;
     selectedTeamId?: string;
     teams?: any[];
+    coachProfile?: any;
+    coach?: any;
+    athletesPool?: any[];
+    scoutedAthletes?: any[];
     onBack?: () => void;
     onUploadSuccess?: (ocrData: RawOCRDetectedData) => void;
 }
@@ -78,7 +82,17 @@ const optimizeScoresheetImage = async (uri: string): Promise<string> => {
     }
 };
 
-export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamId, teams }: OCRloggingProps) {
+export function OCRlogging({
+    onBack,
+    onUploadSuccess,
+    currentTeam,
+    selectedTeamId,
+    teams,
+    coachProfile,
+    coach,
+    athletesPool,
+    scoutedAthletes,
+}: OCRloggingProps) {
   const insets = useSafeAreaInsets();
   const headerTopPadding = Math.max(insets.top, 16) + 10;
 
@@ -87,6 +101,25 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
     const [isProcessingOCR, setIsProcessingOCR] = useState(false);
     const [previewFile, setPreviewFile] = useState<UploadedFileItem | null>(null);
     const [modalMessage, setModalMessage] = useState<string | null>(null);
+    const [fetchedProposals, setFetchedProposals] = useState<any[]>([]);
+
+    React.useEffect(() => {
+        let isMounted = true;
+        (async () => {
+            try {
+                const res = await requestAuthenticatedJson("/scouting/proposals/list", "GET").catch(() => null);
+                if (isMounted && res) {
+                    const list = Array.isArray(res) ? res : Array.isArray(res?.proposals) ? res.proposals : [];
+                    if (list.length > 0) {
+                        setFetchedProposals(list);
+                    }
+                }
+            } catch (_) {}
+        })();
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     // Native Document & Image Picker Handler (Supports Multiple File Batch Selection)
     const handleBrowseFiles = useCallback(async () => {
@@ -249,7 +282,12 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                             responseData = await res.json();
                         } else {
                             const errBody = await res.text();
-                            lastErrorMessage = `Server returned ${res.status}: ${errBody}`;
+                            try {
+                                const parsed = JSON.parse(errBody);
+                                lastErrorMessage = parsed.message || parsed.error || `Server returned ${res.status}`;
+                            } catch (_) {
+                                lastErrorMessage = `Server returned ${res.status}: ${errBody}`;
+                            }
                             console.warn("OCR JSON fetch failed:", lastErrorMessage);
                         }
                     } catch (fetchErr: any) {
@@ -399,74 +437,17 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                         responseData = await res.json();
                     } else if (res) {
                         const errTxt = await res.text();
+                        try {
+                            const parsed = JSON.parse(errTxt);
+                            lastErrorMessage = parsed.message || parsed.error || `Multi-scoresheet endpoint returned ${res.status}`;
+                        } catch (_) {
+                            lastErrorMessage = `Multi-scoresheet endpoint returned ${res.status}: ${errTxt}`;
+                        }
                         console.warn(`Multi-scoresheet endpoint returned ${res.status}:`, errTxt);
                     }
                 }
                 if (!responseData) {
-                    // Fallback to unified 1st half + 2nd half match mock data
-                    responseData = {
-                        batch_mode: true,
-                        total_matches: 2,
-                        successful_matches: 2,
-                        match_info: {
-                            home_team_name: "ADNU KNIGHTS",
-                            opponent_team_name: "DLSU GREEN ARCHERS",
-                            final_score: "86 - 80",
-                            sport_type: "BASKETBALL",
-                        },
-                        team_scores: [
-                            { team: "ADNU KNIGHTS", score: 86, is_home: true },
-                            { team: "DLSU GREEN ARCHERS", score: 80, is_home: false },
-                        ],
-                        player_summary: [
-                            { athlete_id: "ath_1", player_name: "JEROM LASTIMOSA", jersey_number: 7, position: "G", team_name: "ADNU KNIGHTS", points: 26, rebounds: 6, assists: 8, steals: 3, blocks: 0, turnovers: 2, minutes: 36, fg_made: 9, fg_attempted: 18, three_made: 4, three_attempted: 8, ft_made: 4, ft_attempted: 5 },
-                            { athlete_id: "ath_2", player_name: "ANGE KOUAME", jersey_number: 34, position: "C", team_name: "ADNU KNIGHTS", points: 18, rebounds: 15, assists: 3, steals: 0, blocks: 4, turnovers: 2, minutes: 34, fg_made: 7, fg_attempted: 13, three_made: 0, three_attempted: 0, ft_made: 4, ft_attempted: 6 },
-                            { athlete_id: "ath_3", player_name: "KEVIN QUIAMBAO", jersey_number: 11, position: "F", team_name: "DLSU GREEN ARCHERS", points: 24, rebounds: 12, assists: 5, steals: 0, blocks: 0, turnovers: 3, minutes: 35, fg_made: 9, fg_attempted: 20, three_made: 3, three_attempted: 6, ft_made: 3, ft_attempted: 4 },
-                            { athlete_id: "ath_4", player_name: "MICHAEL PHILLIPS", jersey_number: 21, position: "F", team_name: "DLSU GREEN ARCHERS", points: 14, rebounds: 14, assists: 0, steals: 0, blocks: 3, turnovers: 2, minutes: 32, fg_made: 6, fg_attempted: 11, three_made: 0, three_attempted: 0, ft_made: 2, ft_attempted: 4 },
-                        ],
-                        matches: [
-                            {
-                                file_name: "MATCH_SCORESHEET_1ST_HALF.JPG",
-                                sport_type: "BASKETBALL",
-                                match_info: {
-                                    home_team_name: "ADNU KNIGHTS",
-                                    opponent_team_name: "DLSU GREEN ARCHERS",
-                                    final_score: "42 - 38",
-                                    sport_type: "BASKETBALL",
-                                },
-                                team_scores: [
-                                    { team: "ADNU KNIGHTS", score: 42, is_home: true },
-                                    { team: "DLSU GREEN ARCHERS", score: 38, is_home: false },
-                                ],
-                                player_summary: [
-                                    { athlete_id: "ath_1", player_name: "JEROM LASTIMOSA", jersey_number: 7, position: "G", team_name: "ADNU KNIGHTS", points: 12, rebounds: 3, assists: 4, steals: 1, blocks: 0, turnovers: 1, minutes: 18, fg_made: 4, fg_attempted: 8, three_made: 2, three_attempted: 4, ft_made: 2, ft_attempted: 2 },
-                                    { athlete_id: "ath_2", player_name: "ANGE KOUAME", jersey_number: 34, position: "C", team_name: "ADNU KNIGHTS", points: 8, rebounds: 7, assists: 1, steals: 0, blocks: 2, turnovers: 1, minutes: 16, fg_made: 3, fg_attempted: 6, three_made: 0, three_attempted: 0, ft_made: 2, ft_attempted: 3 },
-                                    { athlete_id: "ath_3", player_name: "KEVIN QUIAMBAO", jersey_number: 11, position: "F", team_name: "DLSU GREEN ARCHERS", points: 10, rebounds: 6, assists: 2, steals: 0, blocks: 0, turnovers: 2, minutes: 17, fg_made: 4, fg_attempted: 9, three_made: 1, three_attempted: 2, ft_made: 1, ft_attempted: 2 },
-                                    { athlete_id: "ath_4", player_name: "MICHAEL PHILLIPS", jersey_number: 21, position: "F", team_name: "DLSU GREEN ARCHERS", points: 6, rebounds: 8, assists: 0, steals: 0, blocks: 1, turnovers: 1, minutes: 15, fg_made: 3, fg_attempted: 5, three_made: 0, three_attempted: 0, ft_made: 0, ft_attempted: 1 },
-                                ],
-                            },
-                            {
-                                file_name: "MATCH_SCORESHEET_2ND_HALF.JPG",
-                                sport_type: "BASKETBALL",
-                                match_info: {
-                                     home_team_name: "ADNU KNIGHTS",
-                                     opponent_team_name: "DLSU GREEN ARCHERS",
-                                     final_score: "86 - 80",
-                                     sport_type: "BASKETBALL",
-                                },
-                                team_scores: [
-                                     { team: "ADNU KNIGHTS", score: 86, is_home: true },
-                                     { team: "DLSU GREEN ARCHERS", score: 80, is_home: false },
-                                ],
-                                player_summary: [
-                                     { athlete_id: "ath_1", player_name: "JEROM LASTIMOSA", jersey_number: 7, position: "G", team_name: "ADNU KNIGHTS", points: 26, rebounds: 6, assists: 8, steals: 3, blocks: 0, turnovers: 2, minutes: 36, fg_made: 9, fg_attempted: 18, three_made: 4, three_attempted: 8, ft_made: 4, ft_attempted: 5 },
-                                     { athlete_id: "ath_2", player_name: "ANGE KOUAME", jersey_number: 34, position: "C", team_name: "ADNU KNIGHTS", points: 18, rebounds: 15, assists: 3, steals: 0, blocks: 4, turnovers: 2, minutes: 34, fg_made: 7, fg_attempted: 13, three_made: 0, three_attempted: 0, ft_made: 4, ft_attempted: 6 },
-                                     { athlete_id: "ath_3", player_name: "KEVIN QUIAMBAO", jersey_number: 11, position: "F", team_name: "DLSU GREEN ARCHERS", points: 24, rebounds: 12, assists: 5, steals: 0, blocks: 0, turnovers: 3, minutes: 35, fg_made: 9, fg_attempted: 20, three_made: 3, three_attempted: 6, ft_made: 3, ft_attempted: 4 },
-                                     { athlete_id: "ath_4", player_name: "MICHAEL PHILLIPS", jersey_number: 21, position: "F", team_name: "DLSU GREEN ARCHERS", points: 14, rebounds: 14, assists: 0, steals: 0, blocks: 3, turnovers: 2, minutes: 32, fg_made: 6, fg_attempted: 11, three_made: 0, three_attempted: 0, ft_made: 2, ft_attempted: 4 },
-                                ],
-                            },
-                        ],
-                    };
+                    throw new Error(lastErrorMessage || "Unable to extract scoresheet data from the uploaded file(s). Please check that the scoresheet image is clear and readable.");
                 }
             }
 
@@ -1087,6 +1068,197 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 parsedOcrResult = mapSingleMatchData(responseData);
             }
 
+            // =========================================================================
+            // VALIDATION 1: COACH SPORT ALIGNMENT CHECK
+            // If the uploaded scoresheet is for a sport not coached by the coach,
+            // return no value, clear uploaded files, and make the coach upload again.
+            // =========================================================================
+            const coachSportsSet = new Set<string>();
+            if (currentTeam?.sport_type) coachSportsSet.add(String(currentTeam.sport_type).toUpperCase().trim());
+            if (Array.isArray(teams)) {
+                teams.forEach((t: any) => {
+                    if (t?.sport_type) coachSportsSet.add(String(t.sport_type).toUpperCase().trim());
+                });
+            }
+            if (coachProfile?.sports_focus) coachSportsSet.add(String(coachProfile.sports_focus).toUpperCase().trim());
+            if (coachProfile?.sport_type) coachSportsSet.add(String(coachProfile.sport_type).toUpperCase().trim());
+            if (coach?.sports_focus) coachSportsSet.add(String(coach.sports_focus).toUpperCase().trim());
+            if (coach?.sport_type) coachSportsSet.add(String(coach.sport_type).toUpperCase().trim());
+
+            const normalizeSport = (s: string) => {
+                const up = String(s || "").toUpperCase().trim();
+                if (up.includes("BASKET")) return "BASKETBALL";
+                if (up.includes("VOLLEY")) return "VOLLEYBALL";
+                if (up.includes("SWIM") || up.includes("AQUATIC")) return "SWIMMING";
+                if (up.includes("TRACK") || up.includes("FIELD") || up.includes("ATHLETIC")) return "TRACK AND FIELD";
+                if (up.includes("SOCCER") || up.includes("FOOTBALL")) return "SOCCER";
+                if (up.includes("BADMINTON")) return "BADMINTON";
+                if (up.includes("PICKLE")) return "PICKLEBALL";
+                if (up.includes("BASE") || up.includes("SOFT")) return "BASEBALL";
+                return up;
+            };
+
+            const normDetectedSport = normalizeSport(parsedOcrResult.sport_type);
+            const normalizedCoachSports = Array.from(coachSportsSet).map(normalizeSport);
+
+            if (normalizedCoachSports.length > 0 && normDetectedSport && !normalizedCoachSports.includes(normDetectedSport)) {
+                setIsProcessingOCR(false);
+                setUploadedFiles([]);
+                setModalMessage(
+                    `Sport Mismatch: The uploaded scoresheet is for ${normDetectedSport}, which is not aligned with your coached sport (${normalizedCoachSports.join(" / ")}). Please upload a valid scoresheet for your sport.`
+                );
+                return;
+            }
+
+            // =========================================================================
+            // VALIDATION 2: COACH SCOUTED PLAYERS CHECK
+            // If the uploaded scoresheet does not have any of the players scouted or
+            // coached by the coach, return no value, clear uploaded files, and make the
+            // coach upload again.
+            // =========================================================================
+            const allScoutedList = [
+                ...(Array.isArray(scoutedAthletes) ? scoutedAthletes : []),
+                ...fetchedProposals,
+            ];
+
+            interface KnownPlayerEntry {
+                id?: string;
+                name: string;
+            }
+            const knownCoachAthletes: KnownPlayerEntry[] = [];
+
+            // 1. From scouting proposals (Scouting_Registry)
+            allScoutedList.forEach((p: any) => {
+                const pDetails = p.athlete_details || {};
+                const pName = String(
+                    p.athlete_name ||
+                    (pDetails.first_name || pDetails.last_name ? `${pDetails.first_name || ""} ${pDetails.last_name || ""}`.trim() : "") ||
+                    p.full_name ||
+                    ""
+                ).trim();
+                const pId = p.athlete_id || p.id || pDetails.athlete_id;
+                if (pName || pId) {
+                    knownCoachAthletes.push({
+                        id: pId ? String(pId).toLowerCase().trim() : undefined,
+                        name: pName,
+                    });
+                }
+            });
+
+            // 2. From athletesPool
+            (athletesPool || []).forEach((a: any) => {
+                const aName = String(a.full_name || `${a.first_name || ""} ${a.last_name || ""}`.trim() || a.name || "").trim();
+                const aId = a.athlete_id || a.user_id;
+                if (aName || aId) {
+                    knownCoachAthletes.push({
+                        id: aId ? String(aId).toLowerCase().trim() : undefined,
+                        name: aName,
+                    });
+                }
+            });
+
+            // 3. From all teams managed by coach
+            const allTeams = Array.isArray(teams) && teams.length > 0 ? teams : (currentTeam ? [currentTeam] : []);
+            allTeams.forEach((t: any) => {
+                const roster = Array.isArray(t?.roster_list) ? t.roster_list : Array.isArray(t?.athletes) ? t.athletes : [];
+                roster.forEach((r: any) => {
+                    const rName = String(r.full_name || `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.name || "").trim();
+                    const rId = r.athlete_id || r.user_id;
+                    if (rName || rId) {
+                        knownCoachAthletes.push({
+                            id: rId ? String(rId).toLowerCase().trim() : undefined,
+                            name: rName,
+                        });
+                    }
+                });
+            });
+
+            // 4. From coachProfile athletes_managed
+            if (Array.isArray(coachProfile?.athletes_managed)) {
+                coachProfile.athletes_managed.forEach((am: any) => {
+                    const amName = String(am.name || am.full_name || "").trim();
+                    const amId = am.athlete_id || am.id;
+                    if (amName || amId) {
+                        knownCoachAthletes.push({
+                            id: amId ? String(amId).toLowerCase().trim() : undefined,
+                            name: amName,
+                        });
+                    }
+                });
+            }
+
+            const normalizePlayerName = (name: string): string => {
+                return String(name || "")
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s]/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+            };
+
+            const doesPlayerMatch = (detectedName: string, knownName: string): boolean => {
+                const normDet = normalizePlayerName(detectedName);
+                const normKnown = normalizePlayerName(knownName);
+                if (!normDet || !normKnown) return false;
+                if (normDet === normKnown) return true;
+                if (normDet.includes(normKnown) || normKnown.includes(normDet)) return true;
+
+                const detTokens = normDet.split(" ").filter((t) => t.length > 1);
+                const knownTokens = normKnown.split(" ").filter((t) => t.length > 1);
+                if (detTokens.length === 0 || knownTokens.length === 0) return false;
+
+                const detLast = detTokens[detTokens.length - 1];
+                const knownLast = knownTokens[knownTokens.length - 1];
+                if (detLast.length >= 3 && detLast === knownLast) {
+                    const detFirst = detTokens[0];
+                    const knownFirst = knownTokens[0];
+                    if (detFirst === knownFirst || detFirst[0] === knownFirst[0]) return true;
+                    if (detTokens.some((dt) => knownTokens.includes(dt))) return true;
+                }
+
+                const shared = detTokens.filter((dt) => knownTokens.includes(dt));
+                if (shared.length >= 2) return true;
+
+                return false;
+            };
+
+            // Gather all athletes in the scoresheet
+            const sheetAthletes: any[] = [];
+            if (Array.isArray(responseData?.player_summary) && responseData.player_summary.length > 0) {
+                sheetAthletes.push(...responseData.player_summary);
+            }
+            if (Array.isArray(responseData?.matches)) {
+                responseData.matches.forEach((m: any) => {
+                    if (Array.isArray(m.player_summary)) sheetAthletes.push(...m.player_summary);
+                });
+            }
+            if (sheetAthletes.length === 0 && Array.isArray(parsedOcrResult.athlete_overview)) {
+                sheetAthletes.push(...parsedOcrResult.athlete_overview);
+            }
+
+            const hasScoutedPlayer = sheetAthletes.some((sp: any) => {
+                const spName = String(sp.player_name || sp.name || "").trim();
+                const spId = String(sp.athlete_id || "").toLowerCase().trim();
+
+                return knownCoachAthletes.some((kp) => {
+                    if (spId && kp.id && (spId === kp.id || spId.includes(kp.id) || kp.id.includes(spId))) {
+                        return true;
+                    }
+                    if (spName && kp.name && doesPlayerMatch(spName, kp.name)) {
+                        return true;
+                    }
+                    return false;
+                });
+            });
+
+            if (knownCoachAthletes.length > 0 && !hasScoutedPlayer) {
+                setIsProcessingOCR(false);
+                setUploadedFiles([]);
+                setModalMessage(
+                    "No Scouted Players Found: None of the athletes on this scoresheet are scouted or coached by you. Please upload a scoresheet that includes your scouted or team players."
+                );
+                return;
+            }
+
             setIsProcessingOCR(false);
 
             if (onUploadSuccess) {
@@ -1094,10 +1266,11 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
             }
         } catch (err: any) {
             setIsProcessingOCR(false);
+            setUploadedFiles([]);
             console.error("OCR Processing error:", err);
             setModalMessage(err?.message || "Could not process scoresheet with OCR server. Please try again.");
         }
-    }, [uploadedFiles, onUploadSuccess]);
+    }, [uploadedFiles, onUploadSuccess, coachProfile, coach, currentTeam, selectedTeamId, teams, athletesPool, scoutedAthletes, fetchedProposals]);
 
     return (
         <View style={styles.container}>
@@ -1266,7 +1439,10 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                 <View style={styles.modalOverlay}>
                     <View style={styles.previewModalCard}>
                         <View style={styles.previewHeader}>
-                            <Text style={styles.previewTitle}>OCR UPLOAD PORTAL</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                <Ionicons name="alert-circle" size={20} color="#FF4D4D" />
+                                <Text style={styles.previewTitle}>UPLOAD NOTICE</Text>
+                            </View>
                             <TouchableOpacity onPress={() => setModalMessage(null)}>
                                 <Ionicons name="close" size={20} color="#FFFFFF" />
                             </TouchableOpacity>
@@ -1277,11 +1453,11 @@ export function OCRlogging({ onBack, onUploadSuccess, currentTeam, selectedTeamI
                         </View>
 
                         <TouchableOpacity
-                            style={styles.modalCtaButton}
+                            style={[styles.modalCtaButton, { backgroundColor: "#00C8FF" }]}
                             onPress={() => setModalMessage(null)}
                             activeOpacity={0.85}
                         >
-                            <Text style={styles.modalCtaText}>CLOSE</Text>
+                            <Text style={[styles.modalCtaText, { color: "#0B132B", fontWeight: "800" }]}>UPLOAD AGAIN</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
