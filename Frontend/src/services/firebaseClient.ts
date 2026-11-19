@@ -1651,7 +1651,7 @@ function isMatchingCoachProfile(profile: any, targetUid: string): boolean {
  * Fetch individual coach profile with Firestore + storage offline fallback.
  * Strictly scoped to the requested or authenticated coach; never leaks another coach's cache.
  */
-export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promise<any | null> {
+export async function getCoachProfileOfflineFirst(coachIdOrUid?: string, forceFresh = false): Promise<any | null> {
   // Resolve UID from argument or active token
   let uid = coachIdOrUid || "";
   let tokenEmail = "";
@@ -1673,9 +1673,9 @@ export async function getCoachProfileOfflineFirst(coachIdOrUid?: string): Promis
   const canonicalCoachId = uid.startsWith("coach_") ? uid : `coach_${uid}`;
 
   // 1. Instant Cache-First Lookup (<5ms render)
-  if (rawUid) {
-    const cached = await CacheManager.get<any>("coach_profile", { userId: rawUid, ignoreExpiry: true });
-    if (cached && isMatchingCoachProfile(cached, rawUid)) {
+  if (rawUid && !forceFresh) {
+    const cached = await CacheManager.get<any>("coach_profile", { userId: rawUid, ignoreExpiry: false });
+    if (cached && isMatchingCoachProfile(cached, rawUid) && (cached.avatar_url || cached.profile_image)) {
       // Trigger background revalidation silently
       (async () => {
         try {

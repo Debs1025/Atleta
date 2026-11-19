@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Team, RosterAthlete } from "../DataTypes";
 import { getSportsOfflineFirst } from "../../../../services/firebaseClient";
+import { AtletaAvatar } from "../../../../components/AtletaAvatar";
 
 const DEFAULT_AVAILABLE_SPORTS = [
   "BASKETBALL",
@@ -458,18 +459,12 @@ export function ManageTeamPage({
                   index < localRoster.length - 1 && styles.rosterRowBorder,
                 ]}
               >
-                {(() => {
-                  const avatarUri = player.avatar_url || (player as any).profile_image || (player as any).profile_picture || (player as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(player.full_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
-                  return (
-                    <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
-                      {avatarUri ? (
-                        <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: 19 }} resizeMode="cover" />
-                      ) : (
-                        <Ionicons name="person-outline" size={18} color="#94A3B8" />
-                      )}
-                    </View>
-                  );
-                })()}
+                <AtletaAvatar
+                  url={player.avatar_url || (player as any).profile_image || (player as any).profile_picture || (player as any).photo_url}
+                  name={player.full_name || `${player.first_name || ''} ${player.last_name || ''}`.trim()}
+                  size={34}
+                  style={styles.avatarCircle}
+                />
 
                 <View style={{ flex: 1, marginRight: 6 }}>
                   <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">

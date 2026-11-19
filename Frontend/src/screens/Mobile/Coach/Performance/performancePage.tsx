@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AtletaHeader } from "../Components/AtletaHeader";
+import { AtletaAvatar } from "../../../../components/AtletaAvatar";
 import { AthletePerformanceProfile } from "../DataTypes";
 import { styles } from "./styles/performancePage";
 import { calculatePlayerRating, detectSport } from "./performanceUtils";
@@ -454,13 +455,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
               onPress={() => onSelectAthlete(athlete)}
               activeOpacity={0.85}
             >
-              <View style={[styles.avatarBox, { overflow: "hidden" }]}>
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={{ width: "100%", height: "100%", borderRadius: 12 }}
-                  resizeMode="cover"
-                />
-              </View>
+              <AtletaAvatar
+                url={avatarUri}
+                name={athlete.full_name}
+                size={48}
+                borderRadius={12}
+              />
 
               <View style={styles.cardCenter}>
                 <Text style={styles.athleteName}>{athlete.full_name}</Text>

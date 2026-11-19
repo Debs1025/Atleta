@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDiscovery } from './DiscoveryContext';
 import { styles } from './styles/ranking';
+import { AtletaAvatar } from '../../../../components/AtletaAvatar';
 import {
   AthleteDiscoveryItem,
   SportCategoryFilter,
@@ -474,22 +475,11 @@ export const RankingPage: React.FC<RankingProps> = ({
                   </View>
 
                   <View style={styles.athleteInfo}>
-                    {(() => {
-                      const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url;
-                      return (
-                        <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
-                          {avatarUri ? (
-                            <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: 19 }} resizeMode="cover" />
-                          ) : (
-                            <Ionicons
-                              name={isTop1 ? 'trophy' : isTop2 ? 'medal' : isTop3 ? 'ribbon' : 'person'}
-                              size={16}
-                              color={isTop1 ? '#FFD700' : isTop2 ? '#E2E8F0' : isTop3 ? '#CD7F32' : '#00C8FF'}
-                            />
-                          )}
-                        </View>
-                      );
-                    })()}
+                    <AtletaAvatar
+                      url={athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url}
+                      name={athlete.full_name || 'Athlete'}
+                      size={38}
+                    />
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <Text style={styles.athleteName} numberOfLines={1}>

@@ -42,6 +42,7 @@ export function getCoachInitials(name?: string | null): string {
 }
 
 import { AtletaAnimatedLogo } from "../../../../components/AtletaAnimatedLogo";
+import { AtletaAvatar } from "../../../../components/AtletaAvatar";
 
 export function AtletaHeader({
   onSettingsPress,
@@ -99,18 +100,13 @@ export function AtletaHeader({
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="Coach Profile"
           >
-            {avatarUrl && !imageError ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                style={styles.profileAvatarImage}
-                resizeMode="cover"
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <Text style={styles.profileAvatarInitials}>
-                {getCoachInitials(coachName)}
-              </Text>
-            )}
+            <AtletaAvatar
+              url={avatarUrl}
+              name={coachName || "Archie"}
+              size={38}
+              defaultBg="#00C8FF"
+              defaultTextColor="#070D19"
+            />
           </TouchableOpacity>
         </View>
       </View>

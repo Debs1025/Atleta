@@ -17,6 +17,7 @@ import { AthleteDiscoveryItem } from './discoveryTypes';
 import { RankingPage } from './ranking';
 import { RecruitsPage } from './recruits';
 import { SkeletonDiscoveryCards } from '../Components/AtletaLoadingIndicator';
+import { AtletaAvatar } from '../../../../components/AtletaAvatar';
 
 import { extractVerticalLeapInches } from './playerBadgeEngine';
 import { getCleanBiometrics } from './biometricsFormatter';
@@ -119,13 +120,11 @@ export const DiscoveryPlayer: React.FC<{
               >
                 <View pointerEvents="none" style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                   <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingRight: 8 }}>
-                    <View pointerEvents="none" style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-                      <Image
-                        source={{ uri: avatarUri }}
-                        style={{ width: '100%', height: '100%', borderRadius: 19 }}
-                        resizeMode="cover"
-                      />
-                    </View>
+                    <AtletaAvatar
+                      url={avatarUri}
+                      name={athleteName}
+                      size={38}
+                    />
                     <View pointerEvents="box-none" style={{ flex: 1 }}>
                       <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>{athleteName}</Text>

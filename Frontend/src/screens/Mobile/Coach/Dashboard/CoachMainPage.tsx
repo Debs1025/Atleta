@@ -847,7 +847,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
           withSyncTimeout(getSportsOfflineFirst(forceFresh).catch(() => []), 6000, []),
           withSyncTimeout(getMatchesOfflineFirst(forceFresh).catch(() => []), 6000, []),
           withSyncTimeout(getAthletesOfflineFirst(undefined, forceFresh).catch(() => []), 1500, []),
-          withSyncTimeout(getCoachProfileOfflineFirst().catch(() => null), 1500, null),
+          withSyncTimeout(getCoachProfileOfflineFirst(undefined, forceFresh).catch(() => null), 3000, null),
           withSyncTimeout(getTeamsOfflineFirst(forceFresh).catch(() => []), 2000, []),
         ]);
 

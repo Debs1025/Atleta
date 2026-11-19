@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AthleteItem, TeamDetailsState } from "../DataTypes";
 import styles from "./styles/SetPlayer";
 import { getPositionsForSport } from "./ManageTeamPage";
+import { AtletaAvatar } from "../../../../components/AtletaAvatar";
 
 export interface SetPlayerProps {
   teamDetails: TeamDetailsState;
@@ -220,18 +221,12 @@ export function SetPlayer({
                 activeOpacity={0.8}
               >
                 <View style={styles.playerInfoLeft}>
-                  {(() => {
-                    const avatarUri = athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(athlete.full_name || 'Athlete')}&background=0284C7&color=FFFFFF&size=160&bold=true`;
-                    return (
-                      <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
-                        {avatarUri ? (
-                          <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: 22 }} resizeMode="cover" />
-                        ) : (
-                          <Ionicons name="person" size={22} color="#64748B" />
-                        )}
-                      </View>
-                    );
-                  })()}
+                  <AtletaAvatar
+                    url={athlete.avatar_url || (athlete as any).profile_image || (athlete as any).profile_picture || (athlete as any).photo_url}
+                    name={athlete.full_name}
+                    size={44}
+                    style={styles.avatarCircle}
+                  />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.playerName}>{athlete.full_name}</Text>
                     {athlete.status_tag ? (

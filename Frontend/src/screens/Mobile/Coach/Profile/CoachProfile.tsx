@@ -93,7 +93,7 @@ export function CoachProfile({
         try {
           // Fetch from Firestore-backed offline first & backend API in parallel
           const [offlineProfileRes, profileRes, teamsRes, matchesRes]: [any, any, any, any] = await Promise.all([
-            getCoachProfileOfflineFirst(profileData?.user_id || profileData?.coach_id).catch(() => null),
+            getCoachProfileOfflineFirst(profileData?.user_id || profileData?.coach_id, forceFresh).catch(() => null),
             requestAuthenticatedJson("/coaches/profile").catch(() => null),
             requestAuthenticatedJson("/teams").catch(() => null),
             requestAuthenticatedJson("/matches").catch(() => null),
