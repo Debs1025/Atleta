@@ -391,6 +391,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   matchHistoryListRef.current = matchHistoryList;
   const [selectedMatchItem, setSelectedMatchItem] = useState<MatchHistoryItem | null>(null);
   const [previousPortfolioView, setPreviousPortfolioView] = useState<ViewState>("performance");
+  const [previousMatchResultView, setPreviousMatchResultView] = useState<ViewState>("dashboard");
   const [coachSettingsData, setCoachSettingsData] = useState<CoachSettingsData>(DEFAULT_COACH_SETTINGS);
 
   // Helper function to dynamically compute performance profile from real metrics
@@ -2598,7 +2599,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
 
   const handleSelectRecentMatch = useCallback((matchItem: MatchHistoryItem) => {
     setSelectedMatchItem(matchItem);
-    setPreviousPortfolioView("dashboard");
+    setPreviousMatchResultView("dashboard");
     const matchSport = String(matchItem.sport_category || "").toUpperCase();
     if (matchSport.includes("BASKET") || matchSport.includes("VOLLEY")) {
       setActiveView("perf_basketball_result");
@@ -2610,22 +2611,12 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
   }, []);
 
   const handleBackFromMatchResult = useCallback(() => {
-    let returnView = previousPortfolioView;
-    if (
-      !returnView ||
-      returnView === "perf_trackfield_result" ||
-      returnView === "perf_swimming_result" ||
-      returnView === "perf_basketball_result"
-    ) {
-      returnView = "dashboard";
-    }
-    setActiveView(returnView);
-    if (returnView === "dashboard") {
+    const target = previousMatchResultView === "match_history" ? "match_history" : "dashboard";
+    setActiveView(target);
+    if (target === "dashboard") {
       setActiveTab("Home");
-    } else if (returnView === "performance") {
-      setActiveTab("Performance");
     }
-  }, [previousPortfolioView]);
+  }, [previousMatchResultView]);
 
   useEffect(() => {
     const onHardwareBack = () => {
@@ -2638,7 +2629,9 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         return true;
       }
       if (activeView === "match_history") {
-        setActiveView(previousPortfolioView || "dashboard");
+        const target = (previousPortfolioView && previousPortfolioView !== "match_history") ? previousPortfolioView : "dashboard";
+        setActiveView(target);
+        if (target === "dashboard") setActiveTab("Home");
         return true;
       }
       if (activeView === "athlete_portfolio") {
@@ -4144,10 +4137,14 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
         <MatchHistory
           sportCategory={previousPortfolioView === "dashboard" ? (activeSportFilter === "ALL" ? undefined : activeSportFilter) : selectedPerfAthlete?.sport_category}
           historyItems={previousPortfolioView === "dashboard" ? allFilteredMatches : athleteFilteredMatches}
-          onClose={() => setActiveView(previousPortfolioView || "dashboard")}
+          onClose={() => {
+            const target = (previousPortfolioView && previousPortfolioView !== "match_history") ? previousPortfolioView : "dashboard";
+            setActiveView(target);
+            if (target === "dashboard") setActiveTab("Home");
+          }}
           onSelectMatchItem={(matchItem) => {
             setSelectedMatchItem(matchItem);
-            setPreviousPortfolioView("match_history");
+            setPreviousMatchResultView("match_history");
             const matchSport = String(matchItem.sport_category || selectedPerfAthlete?.sport_category || "").toUpperCase();
             if (matchSport.includes("BASKET") || matchSport.includes("VOLLEY")) {
               setActiveView("perf_basketball_result");
