@@ -7,8 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   RefreshControl,
-  Modal,
-  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -58,7 +56,6 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEventType, setSelectedEventType] = useState<string>("ALL");
-  const [isEventModalOpen, setIsEventModalOpen] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(5);
 
   const displayAthletes = useMemo(() => {
@@ -235,48 +232,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
               )}
             </View>
 
-            {/* Dropdown Selector Button */}
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#0B1528",
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                borderWidth: 1.5,
-                borderColor: selectedEventType !== "ALL" ? "#00C8FF" : "#1E293B",
-              }}
-              onPress={() => setIsEventModalOpen(true)}
-              activeOpacity={0.8}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Ionicons
-                  name={timedSport === "SWIMMING" ? "water-outline" : "stopwatch-outline"}
-                  size={18}
-                  color="#00C8FF"
-                />
-                <View>
-                  <Text style={{ color: "#64748B", fontSize: 10, fontWeight: "800", textTransform: "uppercase" }}>
-                    DISCIPLINE / EVENT
-                  </Text>
-                  <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "900", marginTop: 2 }}>
-                    {selectedEventType === "ALL" ? "All Events" : selectedEventType}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0, 200, 255, 0.1)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.25)" }}>
-                <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "900" }}>CHOOSE</Text>
-                <Ionicons name="chevron-down" size={14} color="#00C8FF" />
-              </View>
-            </TouchableOpacity>
-
             {/* Horizontal Quick Pills */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={{ marginTop: 10 }}
               contentContainerStyle={{ gap: 8 }}
             >
               <TouchableOpacity
@@ -300,7 +259,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                   ALL
                 </Text>
               </TouchableOpacity>
-              {availableEvents.slice(0, 8).map((evt) => {
+              {availableEvents.map((evt) => {
                 const isSelected = selectedEventType === evt.label || selectedEventType === evt.key;
                 return (
                   <TouchableOpacity
@@ -322,113 +281,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
                         fontWeight: isSelected ? "800" : "600",
                       }}
                     >
-                      {evt.shortLabel}
+                      {evt.shortLabel || evt.label}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-
-            {/* Modal Event Picker */}
-            <Modal
-              visible={isEventModalOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setIsEventModalOpen(false)}
-            >
-              <Pressable
-                style={{ flex: 1, backgroundColor: "rgba(3, 7, 18, 0.8)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20 }}
-                onPress={() => setIsEventModalOpen(false)}
-              >
-                <Pressable
-                  style={{ width: "100%", maxWidth: 360, backgroundColor: "#0B1528", borderRadius: 18, padding: 18, borderWidth: 1, borderColor: "rgba(0, 200, 255, 0.3)" }}
-                  onPress={(e) => e.stopPropagation()}
-                >
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255, 255, 255, 0.08)", marginBottom: 10 }}>
-                    <View>
-                      <Text style={{ fontSize: 16, fontWeight: "900", color: "#FFFFFF" }}>Select Event Type</Text>
-                      <Text style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
-                        Filter athletes by {timedSport || "sport"} event
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setIsEventModalOpen(false)} style={{ padding: 4 }}>
-                      <Ionicons name="close" size={20} color="#94A3B8" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        paddingVertical: 12,
-                        paddingHorizontal: 12,
-                        borderRadius: 10,
-                        marginBottom: 6,
-                        backgroundColor: selectedEventType === "ALL" ? "rgba(0, 200, 255, 0.12)" : "#0F1E36",
-                        borderWidth: 1,
-                        borderColor: selectedEventType === "ALL" ? "#00C8FF" : "transparent",
-                      }}
-                      onPress={() => {
-                        setSelectedEventType("ALL");
-                        setIsEventModalOpen(false);
-                      }}
-                    >
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                        <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: selectedEventType === "ALL" ? "rgba(0, 200, 255, 0.2)" : "rgba(255, 255, 255, 0.05)", alignItems: "center", justifyContent: "center" }}>
-                          <Ionicons name="layers-outline" size={16} color={selectedEventType === "ALL" ? "#00C8FF" : "#64748B"} />
-                        </View>
-                        <Text style={{ fontSize: 13, fontWeight: "800", color: selectedEventType === "ALL" ? "#FFFFFF" : "#CBD5E1" }}>
-                          All Events
-                        </Text>
-                      </View>
-                      {selectedEventType === "ALL" && <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />}
-                    </TouchableOpacity>
-
-                    {availableEvents.map((evt) => {
-                      const isSelected = selectedEventType === evt.label || selectedEventType === evt.key;
-                      return (
-                        <TouchableOpacity
-                          key={evt.key}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            paddingVertical: 12,
-                            paddingHorizontal: 12,
-                            borderRadius: 10,
-                            marginBottom: 6,
-                            backgroundColor: isSelected ? "rgba(0, 200, 255, 0.12)" : "#0F1E36",
-                            borderWidth: 1,
-                            borderColor: isSelected ? "#00C8FF" : "transparent",
-                          }}
-                          onPress={() => {
-                            setSelectedEventType(evt.label);
-                            setIsEventModalOpen(false);
-                          }}
-                        >
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                            <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: isSelected ? "rgba(0, 200, 255, 0.2)" : "rgba(255, 255, 255, 0.05)", alignItems: "center", justifyContent: "center" }}>
-                              <Ionicons name={evt.isDistanceEvent ? "trending-up-outline" : "timer-outline"} size={16} color={isSelected ? "#00C8FF" : "#64748B"} />
-                            </View>
-                            <View>
-                              <Text style={{ fontSize: 13, fontWeight: "800", color: isSelected ? "#FFFFFF" : "#CBD5E1" }}>
-                                {evt.label}
-                              </Text>
-                              <Text style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>
-                                {evt.shortLabel} {evt.isDistanceEvent ? "• Field Event" : "• Timed Event"}
-                              </Text>
-                            </View>
-                          </View>
-                          {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C8FF" />}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </Pressable>
-              </Pressable>
-            </Modal>
           </View>
         )}
 
