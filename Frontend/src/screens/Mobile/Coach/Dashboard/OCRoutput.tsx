@@ -7,6 +7,7 @@ import {
     TextInput,
     Modal,
     Alert,
+    ActivityIndicator,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +23,10 @@ import {
     getEventsForSport,
     SportEventOption,
 } from "../MultiLogging/sportEvents";
+import {
+    getSportsOfflineFirst,
+    getCachedSportsSync,
+} from "../../../../services/firebaseClient";
 
 // Client State Schema Models
 export interface TeamScoreItem {
@@ -29,15 +34,68 @@ export interface TeamScoreItem {
     score: number;
 }
 
-export const AVAILABLE_SPORTS = [
+export interface AdminSportOption {
+    id: string;
+    label: string;
+    icon: string;
+}
+
+export function getSportIcon(sportName: string): string {
+    const s = (sportName || "").toUpperCase();
+    if (s.includes("BASKET")) return "basketball-outline";
+    if (s.includes("VOLLEY")) return "football-outline";
+    if (s.includes("SWIM")) return "water-outline";
+    if (s.includes("TRACK") || s.includes("RUN") || s.includes("FIELD") || s.includes("ATHLETIC")) return "walk-outline";
+    if (s.includes("SOCCER") || s.includes("FOOTBALL")) return "football-outline";
+    if (s.includes("BADMINTON") || s.includes("TENNIS")) return "tennisball-outline";
+    if (s.includes("PICKLE")) return "tennisball-outline";
+    if (s.includes("BASE") || s.includes("SOFT")) return "baseball-outline";
+    return "trophy-outline";
+}
+
+export function formatAdminSportLabel(rawName: string): string {
+    if (!rawName) return "";
+    const upper = rawName.toUpperCase();
+    if (upper.includes("TRACK") && (upper.includes("FIELD") || upper.includes("&"))) {
+        return "Track & Field";
+    }
+    return rawName.charAt(0).toUpperCase() + rawName.slice(1);
+}
+
+export function mapRawSportsToAdminOptions(sportsList: any[]): AdminSportOption[] {
+    if (!Array.isArray(sportsList)) return [];
+    const seen = new Set<string>();
+    const options: AdminSportOption[] = [];
+
+    sportsList.forEach((s: any) => {
+        if (s.is_active === false || s.active === false) return;
+        const rawName = String(s.sport_name || s.name || s.label || "").trim();
+        if (!rawName) return;
+
+        let canonicalId = rawName.toUpperCase();
+        if (canonicalId.includes("TRACK") && (canonicalId.includes("FIELD") || canonicalId.includes("&"))) {
+            canonicalId = "TRACK AND FIELD";
+        }
+
+        if (seen.has(canonicalId)) return;
+        seen.add(canonicalId);
+
+        options.push({
+            id: canonicalId,
+            label: formatAdminSportLabel(rawName),
+            icon: getSportIcon(rawName),
+        });
+    });
+
+    return options;
+}
+
+// Fallback baseline containing only confirmed admin-supported sports
+export const AVAILABLE_SPORTS: AdminSportOption[] = [
     { id: "BASKETBALL", label: "Basketball", icon: "basketball-outline" },
     { id: "VOLLEYBALL", label: "Volleyball", icon: "football-outline" },
     { id: "SWIMMING", label: "Swimming", icon: "water-outline" },
     { id: "TRACK AND FIELD", label: "Track & Field", icon: "walk-outline" },
-    { id: "SOCCER", label: "Soccer", icon: "football-outline" },
-    { id: "BADMINTON", label: "Badminton", icon: "tennisball-outline" },
-    { id: "PICKLEBALL", label: "Pickleball", icon: "tennisball-outline" },
-    { id: "BASEBALL", label: "Baseball", icon: "baseball-outline" },
 ];
 
 export interface DetectedAthleteStat {
@@ -437,9 +495,29 @@ export function OCRoutput({
     }, [activeMatchIndex]);
 
     const [customSchemas, setCustomSchemas] = useState<any[]>([]);
+    const [adminSports, setAdminSports] = useState<AdminSportOption[]>(() => {
+        const cached = getCachedSportsSync();
+        const mapped = mapRawSportsToAdminOptions(cached);
+        return mapped.length > 0 ? mapped : AVAILABLE_SPORTS;
+    });
+    const [loadingSports, setLoadingSports] = useState<boolean>(false);
 
     useEffect(() => {
         let isMounted = true;
+        setLoadingSports(true);
+        getSportsOfflineFirst(true)
+            .then((fetched: any) => {
+                if (!isMounted || !Array.isArray(fetched)) return;
+                const mapped = mapRawSportsToAdminOptions(fetched);
+                if (mapped.length > 0) {
+                    setAdminSports(mapped);
+                }
+            })
+            .catch((err) => console.warn("Failed to fetch system admin sports in OCRoutput:", err))
+            .finally(() => {
+                if (isMounted) setLoadingSports(false);
+            });
+
         loadDynamicSportsSchemas().then((schemas) => {
             if (isMounted) setCustomSchemas(schemas);
         }).catch(() => null);
@@ -2053,38 +2131,51 @@ export function OCRoutput({
                         <Text style={{ color: "#8E9BAE", fontSize: 12, marginBottom: 14 }}>
                             Select the sport for this scoresheet to apply the correct stats schema and scoreboard.
                         </Text>
-                        {AVAILABLE_SPORTS.map((s) => {
-                            const isSelected = detectedEffectiveSport.toUpperCase().includes(s.id);
-                            return (
-                                <TouchableOpacity
-                                    key={s.id}
-                                    style={{
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        justifyContent: "space-between",
-                                        paddingVertical: 11,
-                                        paddingHorizontal: 14,
-                                        borderRadius: 10,
-                                        marginBottom: 8,
-                                        backgroundColor: isSelected ? "rgba(0, 229, 255, 0.15)" : "rgba(255,255,255,0.04)",
-                                        borderColor: isSelected ? "#00E5FF" : "transparent",
-                                        borderWidth: 1,
-                                    }}
-                                    onPress={() => {
-                                        setOverrideSport(s.id);
-                                        setShowSportSelectorModal(false);
-                                    }}
-                                >
-                                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                        <Ionicons name={s.icon as any} size={18} color={isSelected ? "#00E5FF" : "#FFFFFF"} style={{ marginRight: 10 }} />
-                                        <Text style={{ color: isSelected ? "#00E5FF" : "#FFFFFF", fontSize: 14, fontWeight: isSelected ? "700" : "500" }}>
-                                            {s.label}
-                                        </Text>
-                                    </View>
-                                    {isSelected && <Ionicons name="checkmark-circle" size={18} color="#00E5FF" />}
-                                </TouchableOpacity>
-                            );
-                        })}
+                        {loadingSports && adminSports.length === 0 ? (
+                            <View style={{ paddingVertical: 20, alignItems: "center" }}>
+                                <ActivityIndicator size="small" color="#00E5FF" />
+                                <Text style={{ color: "#8E9BAE", fontSize: 13, marginTop: 8 }}>Fetching sports configurations...</Text>
+                            </View>
+                        ) : adminSports.length === 0 ? (
+                            <View style={{ paddingVertical: 20, alignItems: "center" }}>
+                                <Text style={{ color: "#8E9BAE", fontSize: 13 }}>No active sports configured by system admin.</Text>
+                            </View>
+                        ) : (
+                            adminSports.map((s) => {
+                                const cleanEffective = detectedEffectiveSport.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                                const cleanOption = s.id.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                                const isSelected = cleanEffective.includes(cleanOption) || cleanOption.includes(cleanEffective);
+                                return (
+                                    <TouchableOpacity
+                                        key={s.id}
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            paddingVertical: 11,
+                                            paddingHorizontal: 14,
+                                            borderRadius: 10,
+                                            marginBottom: 8,
+                                            backgroundColor: isSelected ? "rgba(0, 229, 255, 0.15)" : "rgba(255,255,255,0.04)",
+                                            borderColor: isSelected ? "#00E5FF" : "transparent",
+                                            borderWidth: 1,
+                                        }}
+                                        onPress={() => {
+                                            setOverrideSport(s.id);
+                                            setShowSportSelectorModal(false);
+                                        }}
+                                    >
+                                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                            <Ionicons name={s.icon as any} size={18} color={isSelected ? "#00E5FF" : "#FFFFFF"} style={{ marginRight: 10 }} />
+                                            <Text style={{ color: isSelected ? "#00E5FF" : "#FFFFFF", fontSize: 14, fontWeight: isSelected ? "700" : "500" }}>
+                                                {s.label}
+                                            </Text>
+                                        </View>
+                                        {isSelected && <Ionicons name="checkmark-circle" size={18} color="#00E5FF" />}
+                                    </TouchableOpacity>
+                                );
+                            })
+                        )}
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Modal>

@@ -1290,6 +1290,13 @@ export async function getSportsOfflineFirst(forceRefresh: boolean = false): Prom
 }
 
 /**
+ * Synchronous accessor for in-memory active sports configurations created by system admin.
+ */
+export function getCachedSportsSync(): any[] {
+  return sportsMemoryCache || [];
+}
+
+/**
  * Fetch distinct sports strictly offered by active, registered coach profiles in Firestore.
  * If no coach is registered or active under a specific sport, that sport is excluded.
  * Cache-first (instant 0-10ms) -> Snappy REST -> AsyncStorage (No unbounded client Firestore scans).
