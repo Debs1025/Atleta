@@ -148,29 +148,6 @@ export function OCRlogging({
                     };
                 });
                 setUploadedFiles((prev) => [...prev, ...newFiles]);
-                return;
-            }
-
-            // Fallback to ImagePicker gallery if document picker canceled or user chooses gallery
-            const imgRes = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsMultipleSelection: true,
-                quality: 0.85,
-            });
-
-            if (!imgRes.canceled && imgRes.assets && imgRes.assets.length > 0) {
-                const newFiles: UploadedFileItem[] = imgRes.assets.map((asset, idx) => {
-                    const fileName = asset.fileName || asset.uri.split("/").pop() || `scoresheet_${idx + 1}.jpg`;
-                    return {
-                        upload_id: `upl_${Date.now()}_${idx}`,
-                        file_name: fileName,
-                        file_size_bytes: asset.fileSize || 25000,
-                        uploaded_at_relative: "Selected just now",
-                        file_type: "IMAGE",
-                        file_url: asset.uri,
-                    };
-                });
-                setUploadedFiles((prev) => [...prev, ...newFiles]);
             }
         } catch (pickerErr) {
             console.warn("Native file browsing error:", pickerErr);
