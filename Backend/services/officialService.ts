@@ -174,11 +174,10 @@ export async function registerOfficialService(data: RegisterOfficialDto) {
   // Ensure no password fields exist on child profile before committing
   sanitizeProfile(profileData);
 
-  // 6. Execute atomic batch write to Users, users, and Official_Profiles
+  // 6. Execute atomic batch write to Users and Official_Profiles
   const batch = db.batch();
   
   batch.set(db.collection('Users').doc(uid), userData, { merge: true });
-  batch.set(db.collection('users').doc(uid), userData, { merge: true });
   batch.set(db.collection('Official_Profiles').doc(officialId), profileData, { merge: true });
   batch.set(db.collection('Official_Profiles').doc(uid), profileData, { merge: true });
 

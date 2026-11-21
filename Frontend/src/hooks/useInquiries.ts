@@ -99,11 +99,6 @@ export function useInquiries(targetId?: string) {
       collection(db, "Scouting_Registry"),
       where("coach_id", "in", possibleCoachIds)
     );
-    // 4. Query inquiries by coachId
-    const q4 = query(
-      collection(db, "inquiries"),
-      where("coachId", "in", possibleCoachIds)
-    );
 
     const unsub1 = onSnapshot(q1, (snap) => {
       snap.forEach((d) => docMap.set(d.id, { id: d.id, inquiry_id: d.id, scout_id: d.id, ...(d.data() as any) }));
@@ -120,18 +115,12 @@ export function useInquiries(targetId?: string) {
       emit();
     }, () => {});
 
-    const unsub4 = onSnapshot(q4, (snap) => {
-      snap.forEach((d) => docMap.set(d.id, { id: d.id, inquiry_id: d.id, scout_id: d.id, ...(d.data() as any) }));
-      emit();
-    }, () => {});
-
     fetchInquiries();
 
     return () => {
       unsub1();
       unsub2();
       unsub3();
-      unsub4();
     };
   }, [resolvedId, accountLoading]);
 

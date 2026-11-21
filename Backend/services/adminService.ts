@@ -836,7 +836,6 @@ export async function approveOfficialService(adminId: string, officialIdParam: s
   };
 
   batch.set(userRef, updates, { merge: true });
-  batch.set(db.collection('users').doc(cleanId), updates, { merge: true });
   batch.set(offProfileRef, updates, { merge: true });
   batch.set(rawProfileRef, updates, { merge: true });
 
@@ -933,7 +932,6 @@ export async function rejectOfficialService(adminId: string, officialIdParam: st
   };
 
   batch.set(userRef, updates, { merge: true });
-  batch.set(db.collection('users').doc(cleanId), updates, { merge: true });
   batch.set(offProfileRef, updates, { merge: true });
   batch.set(rawProfileRef, updates, { merge: true });
 

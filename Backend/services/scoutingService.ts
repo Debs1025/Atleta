@@ -493,10 +493,7 @@ export async function dispatchRecruitmentProposal(
     updated_at: now,
   };
 
-  await Promise.all([
-    db.collection('Scouting_Registry').doc(scoutId).set(proposalData),
-    db.collection('inquiries').doc(scoutId).set(proposalData).catch(() => null),
-  ]);
+  await db.collection('Scouting_Registry').doc(scoutId).set(proposalData);
 
   const userData = userDoc?.exists ? userDoc.data() : {};
   const athleteProfileData = athleteDoc?.exists ? athleteDoc.data() : {};

@@ -359,10 +359,7 @@ export async function submitRecruitmentInquiry(
     updated_at: now,
   };
 
-  await Promise.all([
-    db.collection('Scouting_Registry').doc(scoutId).set(inquiry),
-    db.collection('inquiries').doc(scoutId).set(inquiry).catch(() => null),
-  ]);
+  await db.collection('Scouting_Registry').doc(scoutId).set(inquiry);
 
   // 6. Resolve athlete name and create in-app notification
   let athleteName = 'An athlete';
@@ -473,17 +470,15 @@ export async function getCoachInquiries(coachId: string): Promise<any[]> {
   const canonicalCoachId = coachId.startsWith('coach_') ? coachId : `coach_${rawId}`;
   const possibleCoachIds = Array.from(new Set([coachId, canonicalCoachId, rawId].filter(Boolean)));
 
-  // Query Scouting_Registry, Inquiries, and inquiries across coachId and coach_scout_id
-  const [snapScout, snapCoachId, snapSnakeCoachId, snapInquiries, snapLowerInquiries] = await Promise.all([
+  // Query canonical Scouting_Registry across coachId, coach_scout_id, and coach_id
+  const [snapScout, snapCoachId, snapSnakeCoachId] = await Promise.all([
     db.collection('Scouting_Registry').where('coach_scout_id', 'in', possibleCoachIds).get().catch(() => null),
     db.collection('Scouting_Registry').where('coachId', 'in', possibleCoachIds).get().catch(() => null),
     db.collection('Scouting_Registry').where('coach_id', 'in', possibleCoachIds).get().catch(() => null),
-    db.collection('Inquiries').where('coachId', 'in', possibleCoachIds).get().catch(() => null),
-    db.collection('inquiries').where('coachId', 'in', possibleCoachIds).get().catch(() => null),
   ]);
 
   const docMap = new Map<string, any>();
-  [snapScout, snapCoachId, snapSnakeCoachId, snapInquiries, snapLowerInquiries].forEach((snap) => {
+  [snapScout, snapCoachId, snapSnakeCoachId].forEach((snap) => {
     if (snap && !snap.empty) {
       snap.forEach((d) => {
         if (!docMap.has(d.id)) {
