@@ -69,9 +69,7 @@ export async function getOfficialDashboardMetrics(officialId: string) {
       const resolvedName = String(data.matchName || data.match_name || data.game_name || data.gameName || '').trim();
       matchesMap.set(mDoc.id, {
         match_id: data.match_id || mDoc.id,
-        matchName: resolvedName,
         match_name: resolvedName,
-        gameName: resolvedName,
         game_name: resolvedName,
         home_team_name: data.home_team_name || data.home_team || 'Home Team',
         away_team_name: data.away_team_name || data.away_team || 'Away Team',
@@ -108,9 +106,7 @@ export async function getOfficialDashboardMetrics(officialId: string) {
       audit_id: auditData.audit_id || d.id,
       match_id: auditData.match_id || details.match_id || d.id,
       validation_id: auditData.validation_id || auditData.audit_id || d.id,
-      matchName: customMatchName,
       match_name: customMatchName,
-      gameName: customMatchName,
       game_name: customMatchName,
       requested_by: auditData.requested_by_coach_id || auditData.requested_by || details.logged_by_coach_id || 'Coach',
       requested_by_coach_id: auditData.requested_by_coach_id || auditData.requested_by || details.logged_by_coach_id || 'Coach',

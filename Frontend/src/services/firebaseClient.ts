@@ -1995,16 +1995,19 @@ export interface ScoresheetRequestRecord {
   coachName: string;
   teamId: string;
   matchId: string;
-  matchName: string;
+  matchName?: string;
   customGameTitle?: string;
   custom_game_title?: string;
   match_name?: string;
   gameName?: string;
   game_name?: string;
   sportType?: string;
+  sport_type?: string;
   status: 'pending' | 'fulfilled' | 'rejected';
-  createdAt: any;
+  createdAt?: any;
   updatedAt?: any;
+  created_at?: any;
+  updated_at?: any;
   scoresheetUrl?: string;
   scoresheet_url?: string;
   fulfilledAt?: string;
@@ -2059,12 +2062,8 @@ export async function submitScoresheetRequestOfflineFirst(payload: {
     coachName,
     teamId,
     matchId,
-    matchName,
-    customGameTitle: matchName,
-    custom_game_title: matchName,
-    match_name: matchName,
-    gameName: matchName,
     game_name: matchName,
+    match_name: matchName,
     sportType,
     status: 'pending',
     createdAt: now,

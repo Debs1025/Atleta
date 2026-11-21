@@ -657,7 +657,6 @@ export async function registerUserService(
     userData.account_status = 'Pending';
     userData.status = 'pending';
     userData.is_approved = false;
-    userData.isApproved = false;
     userData.is_active = true;
 
     // Complete research paper data dictionary for Official_Profiles table
@@ -670,7 +669,6 @@ export async function registerUserService(
     profileData.account_status = 'Pending';
     profileData.status = 'pending';
     profileData.is_approved = false;
-    profileData.isApproved = false;
     profileData.is_active = true;
     profileData.avatar_url = userData.avatar_url || null;
     profileData.profile_image = userData.avatar_url || null;
@@ -929,9 +927,7 @@ export async function loginUserService(email: string, password: string) {
             status: 'approved',
             certification_status: 'approved',
             is_approved: true,
-            isApproved: true,
             is_verified: true,
-            isVerified: true,
             updated_at: new Date(),
           };
           await db.collection('Users').doc(canonicalUid).set(syncUpdates, { merge: true }).catch(() => null);
@@ -1296,11 +1292,9 @@ export async function socialLoginService(
         uid,
         provider,
         auth_provider: provider,
-        authProvider: provider,
         avatar_url: resolvedAvatar,
         profile_image: resolvedAvatar,
         updated_at: new Date(),
-        updatedAt: new Date(),
       };
       await db.collection('Users').doc(uid).set(updatePayload, { merge: true });
       if (resolvedAvatar) {
@@ -1481,24 +1475,19 @@ export async function socialLoginService(
       first_name: firstName,
       last_name: lastName,
       full_name: userFullName,
-      fullName: userFullName,
       email: cleanEmail,
       contact_number: socialContact,
-      phoneNumber: socialContact,
+      phone_number: socialContact,
       role: userRole,
       provider,
-      authProvider: provider,
       auth_provider: provider,
       avatar_url: resolvedSocialAvatar,
       profile_image: resolvedSocialAvatar,
       account_status: userRole === 'Coach' ? 'Pending' : 'Pending',
       status: 'pending',
       is_approved: userRole !== 'Coach',
-      isApproved: userRole !== 'Coach',
       is_profile_complete: Boolean(hasProfileDetails),
-      createdAt: now,
       created_at: now,
-      updatedAt: now,
       updated_at: now,
     };
 
@@ -1545,7 +1534,6 @@ export async function socialLoginService(
       profileData.account_status = 'Pending';
       profileData.status = 'pending';
       profileData.is_approved = false;
-      profileData.isApproved = false;
 
       // Maintain strict segregation and synchronization of decoupled fields in Users collection
       userData.sport_type = profileData.sport_type;
@@ -2035,14 +2023,14 @@ export async function updateUserProfileService(uid: string, payload: Record<stri
       const normalizedContact = normalizePhoneNumber(contactStr);
       await assertPhoneNumberUnique(normalizedContact, uid);
       userUpdates.contact_number = normalizedContact;
-      userUpdates.phoneNumber = normalizedContact;
+      userUpdates.phone_number = normalizedContact;
       profileUpdates.contact_number = normalizedContact;
-      profileUpdates.phoneNumber = normalizedContact;
+      profileUpdates.phone_number = normalizedContact;
     } else {
       userUpdates.contact_number = null;
-      userUpdates.phoneNumber = null;
+      userUpdates.phone_number = null;
       profileUpdates.contact_number = null;
-      profileUpdates.phoneNumber = null;
+      profileUpdates.phone_number = null;
     }
   }
   if (payload.organization_name !== undefined || payload.organization !== undefined) {

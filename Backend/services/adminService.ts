@@ -512,12 +512,9 @@ export async function approveCoachService(adminId: string, coachIdParam: string)
     status: 'approved',
     certification_status: 'approved',
     is_approved: true,
-    isApproved: true,
     is_verified: true,
-    isVerified: true,
     rejection_reason: null,
     updated_at: now,
-    updatedAt: now,
   };
 
   // Perform atomic batch update across Coach_Profiles and Users collections
@@ -649,7 +646,6 @@ export async function rejectCoachService(adminId: string, coachIdParam: string, 
     account_status: 'Rejected',
     status: 'REJECTED',
     is_approved: false,
-    isApproved: false,
     rejection_reason: reason,
     updated_at: now,
   };
@@ -829,7 +825,6 @@ export async function approveOfficialService(adminId: string, officialIdParam: s
     account_status: 'Active',
     status: 'approved',
     is_approved: true,
-    isApproved: true,
     certification_status: 'Approved',
     rejection_reason: null,
     updated_at: now,
@@ -925,7 +920,6 @@ export async function rejectOfficialService(adminId: string, officialIdParam: st
     account_status: 'Rejected',
     status: 'rejected',
     is_approved: false,
-    isApproved: false,
     certification_status: 'Rejected',
     rejection_reason: reason,
     updated_at: now,

@@ -1586,11 +1586,8 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
       participating_teams: Array.isArray(payload.participating_teams) && payload.participating_teams.length > 0
         ? payload.participating_teams
         : [home, away],
-      matchName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-      match_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-      gameName: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-      game_name: payload.matchName || (payload as any).gameReferenceId || (payload as any).match_name || payload.game_name || (payload as any).gameName || `${home} vs ${away}`,
-      gameReferenceId: (payload as any).gameReferenceId || payload.matchName || undefined,
+      game_name: payload.game_name || payload.match_name || payload.matchName || (payload as any).gameReferenceId || (payload as any).gameName || `${home} vs ${away}`,
+      match_name: payload.match_name || payload.game_name || payload.matchName || (payload as any).gameReferenceId || (payload as any).gameName || `${home} vs ${away}`,
       coaches: Array.isArray(payload.coaches) && payload.coaches.length > 0
         ? payload.coaches
         : (Array.isArray(rawPayload.assigned_coaches) && rawPayload.assigned_coaches.length > 0 ? rawPayload.assigned_coaches : (rawPayload.coach_name ? [rawPayload.coach_name] : [])),
@@ -1598,9 +1595,7 @@ export const createOfficialMatch = async (payload: CreateMatchPayload): Promise<
         ? payload.coaches
         : (Array.isArray(rawPayload.assigned_coaches) && rawPayload.assigned_coaches.length > 0 ? rawPayload.assigned_coaches : (rawPayload.coach_name ? [rawPayload.coach_name] : [])),
       scoresheet_url: scoresheetUrlVal,
-      scoresheetUrl: scoresheetUrlVal,
       player_stats: playerStatsList,
-      playerStats: playerStatsList,
       race_results: rawPayload.race_results || rawPayload.raceResults,
       sport_specific_details: rawPayload.sport_specific_details || (rawPayload.race_results ? { race_results: rawPayload.race_results } : undefined),
       roster_athletes: rosterAthletesList,

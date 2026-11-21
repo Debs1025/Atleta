@@ -9,16 +9,19 @@ export interface ScoresheetRequestDoc {
   coachName: string;
   teamId: string;
   matchId: string;
-  matchName: string;
+  matchName?: string;
   customGameTitle?: string;
   custom_game_title?: string;
   gameName?: string;
   match_name?: string;
   game_name?: string;
   sportType?: string;
+  sport_type?: string;
   status: 'pending' | 'fulfilled' | 'accepted' | 'rejected';
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
   scoresheetUrl?: string;
   scoresheet_url?: string;
   fulfilledAt?: string;
@@ -108,16 +111,12 @@ export async function createScoresheetRequestService(payload: {
     coachName: coachName || 'Coach',
     teamId: teamId || 'team_default',
     matchId,
-    matchName: resolvedMatchTitle,
-    customGameTitle: resolvedMatchTitle,
-    custom_game_title: resolvedMatchTitle,
-    match_name: resolvedMatchTitle,
-    gameName: resolvedMatchTitle,
     game_name: resolvedMatchTitle,
-    sportType: sportType || 'BASKETBALL',
+    match_name: resolvedMatchTitle,
+    sport_type: sportType || 'BASKETBALL',
     status: 'pending',
-    createdAt: now,
-    updatedAt: now,
+    created_at: now,
+    updated_at: now,
     is_read_by_official: false,
     is_read_by_coach: true,
   };
@@ -138,11 +137,8 @@ export async function createScoresheetRequestService(payload: {
     batch.set(matchRef, {
       match_id: matchId,
       team_id: teamId,
-      matchName: resolvedMatchTitle,
-      customGameTitle: resolvedMatchTitle,
-      match_name: resolvedMatchTitle,
-      gameName: resolvedMatchTitle,
       game_name: resolvedMatchTitle,
+      match_name: resolvedMatchTitle,
       home_team_name: resolvedMatchTitle.split(/\s+vs\.?\s+/i)[0]?.trim() || 'Home Team',
       away_team_name: resolvedMatchTitle.split(/\s+vs\.?\s+/i)[1]?.trim() || 'Away Team',
       sport_type: sportType,
@@ -243,16 +239,12 @@ export async function getScoresheetRequestsService(filters?: {
       ...data,
       id: d.id,
       requestId: d.id,
-      matchName: officialCustomTitle,
-      customGameTitle: officialCustomTitle,
-      custom_game_title: officialCustomTitle,
-      match_name: officialCustomTitle,
-      gameName: officialCustomTitle,
       game_name: officialCustomTitle,
+      match_name: officialCustomTitle,
     });
   });
 
-  return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return list.sort((a, b) => new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime());
 }
 
 /**

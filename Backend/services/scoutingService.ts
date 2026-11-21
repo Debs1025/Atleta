@@ -477,13 +477,11 @@ export async function dispatchRecruitmentProposal(
     scout_id: scoutId,
     inquiry_id: scoutId,
     coach_scout_id: coachId,
-    coachId: canonicalCoachId,
     coach_id: canonicalCoachId,
     raw_coach_id: rawCoachUid,
     coach_name: coachName,
     current_institution: coachInstitution,
     athlete_id: athleteId,
-    athleteId: athleteId,
     initiated_by: coachId, // Coach initiated
     offer_status: 'Sent',
     status: 'Sent',
