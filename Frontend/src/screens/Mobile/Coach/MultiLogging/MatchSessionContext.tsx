@@ -6,7 +6,9 @@ interface MatchSessionContextType {
   setSportCategory: (sport: SportCategory) => void;
   setSessionDetails: (details: Partial<MatchLogSessionState>) => void;
   addAthleteToRoster: (athlete: AthleteRosterItem) => void;
+  addAthleteToBench: (athlete: AthleteRosterItem) => void;
   removeAthleteFromRoster: (athleteId: string) => void;
+  removeAthleteFromBench: (athleteId: string) => void;
   toggleAthleteActiveStatus: (athleteId: string) => void;
   updateBasketballStats: (
     athleteId: string,
@@ -95,6 +97,25 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
         active_roster: [...prev.active_roster, athlete],
       };
     });
+  };
+
+  const addAthleteToBench = (athlete: AthleteRosterItem) => {
+    setSession((prev) => {
+      const existsInActive = prev.active_roster.some((a) => a.athlete_id === athlete.athlete_id);
+      const existsInBench = (prev.bench_roster || []).some((a) => a.athlete_id === athlete.athlete_id);
+      if (existsInActive || existsInBench) return prev;
+      return {
+        ...prev,
+        bench_roster: [...(prev.bench_roster || []), { ...athlete, is_active_on_field: false }],
+      };
+    });
+  };
+
+  const removeAthleteFromBench = (athleteId: string) => {
+    setSession((prev) => ({
+      ...prev,
+      bench_roster: (prev.bench_roster || []).filter((a) => a.athlete_id !== athleteId),
+    }));
   };
 
   const removeAthleteFromRoster = (athleteId: string) => {
@@ -431,7 +452,9 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
         setSportCategory,
         setSessionDetails,
         addAthleteToRoster,
+        addAthleteToBench,
         removeAthleteFromRoster,
+        removeAthleteFromBench,
         toggleAthleteActiveStatus,
         updateBasketballStats,
         updateTimingStats,
