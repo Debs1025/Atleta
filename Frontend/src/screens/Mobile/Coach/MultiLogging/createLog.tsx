@@ -275,6 +275,17 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionDate, setSessionDate] = useState("");
 
+  const isBallSport = useMemo(() => {
+    const s = (session.sport_type || "").toUpperCase();
+    const isTimed =
+      s.includes("SWIM") ||
+      s.includes("TRACK") ||
+      s.includes("FIELD") ||
+      s.includes("RUN") ||
+      s.includes("ATHLETIC");
+    return !isTimed;
+  }, [session.sport_type]);
+
   // Injury Section State
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [injuryTargetAthlete, setInjuryTargetAthlete] = useState<AthleteRosterItem | null>(null);
@@ -1026,26 +1037,28 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
                 </View>
 
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  {/* Bench Move Button */}
-                  <TouchableOpacity
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 6,
-                      borderRadius: 8,
-                      backgroundColor: "rgba(245, 158, 11, 0.12)",
-                      borderWidth: 1,
-                      borderColor: "rgba(245, 158, 11, 0.3)",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      flexDirection: "row",
-                      gap: 4,
-                    }}
-                    onPress={() => toggleAthleteActiveStatus(athlete.athlete_id)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
-                    <Text style={{ color: "#F59E0B", fontSize: 10, fontWeight: "800" }}>BENCH</Text>
-                  </TouchableOpacity>
+                  {/* Bench Move Button (Ball games only) */}
+                  {isBallSport && (
+                    <TouchableOpacity
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(245, 158, 11, 0.12)",
+                        borderWidth: 1,
+                        borderColor: "rgba(245, 158, 11, 0.3)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 4,
+                      }}
+                      onPress={() => toggleAthleteActiveStatus(athlete.athlete_id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
+                      <Text style={{ color: "#F59E0B", fontSize: 10, fontWeight: "800" }}>BENCH</Text>
+                    </TouchableOpacity>
+                  )}
 
                   {/* Medical Button */}
                   <TouchableOpacity
@@ -1079,117 +1092,224 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
           </View>
         )}
 
-        {/* SUBSTITUTION / BENCH PLAYERS SECTION (Available for all sports) */}
+        {/* Available Athletes from DB Section (Inline directly on page) */}
         <View style={{ marginBottom: 18 }}>
-          <View style={styles.benchSectionHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
-                <Text style={[styles.subLabel, { color: "#F59E0B", marginBottom: 0 }]}>
-                  SUBSTITUTION / BENCH PLAYERS ({session.bench_roster?.length || 0})
-                </Text>
-              </View>
-              {Boolean(session.bench_roster && session.bench_roster.length > 0) && (
-                <Text style={{ color: "#64748B", fontSize: 11 }}>Reserve Squad</Text>
-              )}
-            </View>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <Text style={[styles.subLabel, { marginBottom: 0 }]}>
+              AVAILABLE {session.sport_type} ATHLETES ({filteredPool.length})
+            </Text>
+            <Text style={{ color: "#64748B", fontSize: 11 }}>Tap to Add</Text>
           </View>
 
-          {session.bench_roster && session.bench_roster.length > 0 ? (
-            session.bench_roster.map((athlete) => (
-              <View key={athlete.athlete_id} style={styles.benchAthleteCard}>
-                {athlete.avatar_url ? (
-                  <Image source={{ uri: athlete.avatar_url }} style={styles.avatarImage} />
-                ) : (
-                  <View
-                    style={[
-                      styles.avatarPlaceholder,
-                      {
-                        backgroundColor: "rgba(245, 158, 11, 0.15)",
-                        borderWidth: 1,
-                        borderColor: "rgba(245, 158, 11, 0.3)",
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.avatarPlaceholderText, { color: "#F59E0B" }]}>
-                      {athlete.full_name.charAt(0)}
+          {filteredPool.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              {filteredPool.map((item) => (
+                <TouchableOpacity
+                  key={item.athlete_id}
+                  style={styles.poolItem}
+                  onPress={() => addAthleteToRoster(item)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 3 }}>
+                      <Text style={styles.poolItemTitle}>{item.full_name}</Text>
+                      {Boolean(item.team_name && item.team_name !== "Unassigned" && item.team_name !== "Unassigned / No Team") && (
+                        <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>{(item.team_name || "").toUpperCase()}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.poolItemSub}>
+                      {item.position_or_event} • #{item.jersey_number}
+                      {item.team_name && item.team_name !== "Unassigned" && item.team_name !== "Unassigned / No Team" ? ` • Team: ${item.team_name}` : ""}
                     </Text>
                   </View>
-                )}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <TouchableOpacity
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(255, 77, 109, 0.12)",
+                        borderWidth: 1,
+                        borderColor: "rgba(255, 77, 109, 0.3)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openInjuryModalForAthlete(item);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="medkit-outline" size={16} color="#FF4D6D" />
+                    </TouchableOpacity>
 
-                <View style={styles.athleteInfo}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
-                    <Text style={styles.athleteName}>{athlete.full_name}</Text>
-                    <View style={styles.benchBadge}>
-                      <Ionicons name="swap-horizontal" size={10} color="#F59E0B" />
-                      <Text style={styles.benchBadgeText}>BENCH / SUB</Text>
-                    </View>
+                    {/* Bench button (Only for ball games) */}
+                    {isBallSport && (
+                      <TouchableOpacity
+                        style={{
+                          paddingHorizontal: 8,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          backgroundColor: "rgba(245, 158, 11, 0.12)",
+                          borderWidth: 1,
+                          borderColor: "rgba(245, 158, 11, 0.3)",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          flexDirection: "row",
+                          gap: 3,
+                        }}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          addAthleteToBench(item);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
+                        <Text style={{ color: "#F59E0B", fontSize: 11, fontWeight: "800" }}>BENCH</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                      style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0, 210, 255, 0.12)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(0, 210, 255, 0.3)" }}
+                      onPress={() => addAthleteToRoster(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add" size={16} color="#00D2FF" />
+                      <Text style={{ color: "#00D2FF", fontSize: 12, fontWeight: "800" }}>ADD</Text>
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.athleteSubtitle}>
-                    {athlete.position_or_event} • #{athlete.jersey_number}
-                    {athlete.team_name && athlete.team_name !== "Unassigned" && athlete.team_name !== "Unassigned / No Team" ? ` • Team: ${athlete.team_name}` : ""}
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  {/* Promote to active starter */}
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 4,
-                      paddingHorizontal: 8,
-                      paddingVertical: 6,
-                      borderRadius: 8,
-                      backgroundColor: "rgba(0, 200, 255, 0.12)",
-                      borderWidth: 1,
-                      borderColor: "rgba(0, 200, 255, 0.3)",
-                    }}
-                    onPress={() => toggleAthleteActiveStatus(athlete.athlete_id)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="arrow-up" size={14} color="#00C8FF" />
-                    <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>SQUAD</Text>
-                  </TouchableOpacity>
-
-                  {/* Medical button */}
-                  <TouchableOpacity
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 6,
-                      borderRadius: 8,
-                      backgroundColor: "rgba(255, 77, 109, 0.12)",
-                      borderWidth: 1,
-                      borderColor: "rgba(255, 77, 109, 0.3)",
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                    onPress={() => openInjuryModalForAthlete(athlete)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="medkit-outline" size={16} color="#FF4D6D" />
-                  </TouchableOpacity>
-
-                  {/* Remove button */}
-                  <TouchableOpacity
-                    style={styles.removeButton}
-                    onPress={() => removeAthleteFromBench(athlete.athlete_id)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="close" size={22} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyBenchCard}>
-              <Ionicons name="swap-horizontal-outline" size={20} color="#F59E0B" />
-              <Text style={styles.emptyBenchText}>
-                No substitution or bench players added for this session. Use the bench button beside an athlete to add them to the bench.
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : !loadingAthletes ? (
+            <View style={{ paddingVertical: 18, alignItems: "center", backgroundColor: "#111C35", borderRadius: 12, borderWidth: 1, borderColor: "#1E293B", paddingHorizontal: 16 }}>
+              <Ionicons name="people-outline" size={28} color="#64748B" />
+              <Text style={{ color: "#8E9BAE", fontSize: 13, marginTop: 6, textAlign: "center" }}>
+                {searchQuery
+                  ? `No ${session.sport_type} athletes match "${searchQuery}".`
+                  : (session.active_roster.length > 0 || (session.bench_roster && session.bench_roster.length > 0))
+                  ? "All available athletes have been added to this session squad."
+                  : `No registered ${session.sport_type} athletes found in your roster. Please recruit or assign athletes first.`}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
+
+        {/* SUBSTITUTION / BENCH PLAYERS SECTION (Only for ball games) */}
+        {isBallSport && (
+          <View style={{ marginBottom: 18 }}>
+            <View style={styles.benchSectionHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
+                  <Text style={[styles.subLabel, { color: "#F59E0B", marginBottom: 0 }]}>
+                    SUBSTITUTION / BENCH PLAYERS ({session.bench_roster?.length || 0})
+                  </Text>
+                </View>
+                {Boolean(session.bench_roster && session.bench_roster.length > 0) && (
+                  <Text style={{ color: "#64748B", fontSize: 11 }}>Reserve Squad</Text>
+                )}
+              </View>
+            </View>
+
+            {session.bench_roster && session.bench_roster.length > 0 ? (
+              session.bench_roster.map((athlete) => (
+                <View key={athlete.athlete_id} style={styles.benchAthleteCard}>
+                  {athlete.avatar_url ? (
+                    <Image source={{ uri: athlete.avatar_url }} style={styles.avatarImage} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.avatarPlaceholder,
+                        {
+                          backgroundColor: "rgba(245, 158, 11, 0.15)",
+                          borderWidth: 1,
+                          borderColor: "rgba(245, 158, 11, 0.3)",
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.avatarPlaceholderText, { color: "#F59E0B" }]}>
+                        {athlete.full_name.charAt(0)}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.athleteInfo}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                      <Text style={styles.athleteName}>{athlete.full_name}</Text>
+                      <View style={styles.benchBadge}>
+                        <Ionicons name="swap-horizontal" size={10} color="#F59E0B" />
+                        <Text style={styles.benchBadgeText}>BENCH / SUB</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.athleteSubtitle}>
+                      {athlete.position_or_event} • #{athlete.jersey_number}
+                      {athlete.team_name && athlete.team_name !== "Unassigned" && athlete.team_name !== "Unassigned / No Team" ? ` • Team: ${athlete.team_name}` : ""}
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    {/* Promote to active starter */}
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                        paddingHorizontal: 8,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(0, 200, 255, 0.12)",
+                        borderWidth: 1,
+                        borderColor: "rgba(0, 200, 255, 0.3)",
+                      }}
+                      onPress={() => toggleAthleteActiveStatus(athlete.athlete_id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="arrow-up" size={14} color="#00C8FF" />
+                      <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>SQUAD</Text>
+                    </TouchableOpacity>
+
+                    {/* Medical button */}
+                    <TouchableOpacity
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: "rgba(255, 77, 109, 0.12)",
+                        borderWidth: 1,
+                        borderColor: "rgba(255, 77, 109, 0.3)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                      onPress={() => openInjuryModalForAthlete(athlete)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="medkit-outline" size={16} color="#FF4D6D" />
+                    </TouchableOpacity>
+
+                    {/* Remove button */}
+                    <TouchableOpacity
+                      style={styles.removeButton}
+                      onPress={() => removeAthleteFromBench(athlete.athlete_id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="close" size={22} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.emptyBenchCard}>
+                <Ionicons name="swap-horizontal-outline" size={20} color="#F59E0B" />
+                <Text style={styles.emptyBenchText}>
+                  No substitution or bench players added for this session. Use the bench button beside an athlete to add them to the bench.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* INJURED / SIDELINED PLAYERS SECTION (Available for all sports) */}
         <View style={{ marginBottom: 18 }}>
@@ -1254,108 +1374,6 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
               </Text>
             </View>
           )}
-        </View>
-
-        {/* Available Athletes from DB Section (Inline directly on page) */}
-        <View style={{ marginBottom: 18 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <Text style={[styles.subLabel, { marginBottom: 0 }]}>
-              AVAILABLE {session.sport_type} ATHLETES ({filteredPool.length})
-            </Text>
-            <Text style={{ color: "#64748B", fontSize: 11 }}>Tap to Add</Text>
-          </View>
-
-          {filteredPool.length > 0 ? (
-            <View style={{ gap: 8 }}>
-              {filteredPool.map((item) => (
-                <TouchableOpacity
-                  key={item.athlete_id}
-                  style={styles.poolItem}
-                  onPress={() => addAthleteToRoster(item)}
-                  activeOpacity={0.8}
-                >
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 3 }}>
-                      <Text style={styles.poolItemTitle}>{item.full_name}</Text>
-                      {Boolean(item.team_name && item.team_name !== "Unassigned" && item.team_name !== "Unassigned / No Team") && (
-                        <View style={{ backgroundColor: "rgba(0, 200, 255, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                          <Text style={{ color: "#00C8FF", fontSize: 10, fontWeight: "800" }}>{(item.team_name || "").toUpperCase()}</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.poolItemSub}>
-                      {item.position_or_event} • #{item.jersey_number}
-                      {item.team_name && item.team_name !== "Unassigned" && item.team_name !== "Unassigned / No Team" ? ` • Team: ${item.team_name}` : ""}
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <TouchableOpacity
-                      style={{
-                        paddingHorizontal: 8,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: "rgba(255, 77, 109, 0.12)",
-                        borderWidth: 1,
-                        borderColor: "rgba(255, 77, 109, 0.3)",
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        openInjuryModalForAthlete(item);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="medkit-outline" size={16} color="#FF4D6D" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{
-                        paddingHorizontal: 8,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: "rgba(245, 158, 11, 0.12)",
-                        borderWidth: 1,
-                        borderColor: "rgba(245, 158, 11, 0.3)",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        flexDirection: "row",
-                        gap: 3,
-                      }}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        addAthleteToBench(item);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
-                      <Text style={{ color: "#F59E0B", fontSize: 11, fontWeight: "800" }}>BENCH</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0, 210, 255, 0.12)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "rgba(0, 210, 255, 0.3)" }}
-                      onPress={() => addAthleteToRoster(item)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="add" size={16} color="#00D2FF" />
-                      <Text style={{ color: "#00D2FF", fontSize: 12, fontWeight: "800" }}>ADD</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : !loadingAthletes ? (
-            <View style={{ paddingVertical: 18, alignItems: "center", backgroundColor: "#111C35", borderRadius: 12, borderWidth: 1, borderColor: "#1E293B", paddingHorizontal: 16 }}>
-              <Ionicons name="people-outline" size={28} color="#64748B" />
-              <Text style={{ color: "#8E9BAE", fontSize: 13, marginTop: 6, textAlign: "center" }}>
-                {searchQuery
-                  ? `No ${session.sport_type} athletes match "${searchQuery}".`
-                  : (session.active_roster.length > 0 || (session.bench_roster && session.bench_roster.length > 0))
-                  ? "All available athletes have been added to this session squad."
-                  : `No registered ${session.sport_type} athletes found in your roster. Please recruit or assign athletes first.`}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         {showErrors && session.active_roster.length === 0 && (
