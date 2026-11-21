@@ -102,12 +102,9 @@ export const compressImageForOcr = (
   });
 };
 
-const FALLBACK_DIRECT_KEY = atob('QVEuQWI4Uk42S2pkcnhfcElnMFBjb1BWY1VwNVllRnlJak0tbDZQX0owNVhrYU9wNXRKakk=');
-
 export function sanitizeGeminiKey(raw?: string): string {
-  if (!raw) return FALLBACK_DIRECT_KEY;
-  let k = String(raw).trim().replace(/^["']|["']$/g, '');
-  return k || FALLBACK_DIRECT_KEY;
+  if (!raw) return '';
+  return String(raw).trim().replace(/^["']|["']$/g, '');
 }
 
 const DIRECT_GEMINI_KEY = sanitizeGeminiKey(
@@ -334,7 +331,6 @@ Return the extraction in this exact JSON structure:
 }`;
 
   let activeKey = sanitizeGeminiKey(DIRECT_GEMINI_KEY);
-  let triedFallback = false;
   let lastErr = '';
 
   for (let i = 0; i < models.length; i++) {
@@ -368,14 +364,6 @@ Return the extraction in this exact JSON structure:
           }),
         }
       );
-
-      if (resp.status === 401 && !triedFallback && activeKey !== FALLBACK_DIRECT_KEY) {
-        console.warn(`⚠️ [OCR] Direct Gemini key returned 401. Auto-switching to verified fallback key...`);
-        activeKey = FALLBACK_DIRECT_KEY;
-        triedFallback = true;
-        i--;
-        continue;
-      }
 
       if (resp.ok) {
         const json: any = await resp.json();

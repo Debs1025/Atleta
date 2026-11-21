@@ -62,7 +62,6 @@ const runtime = globalThis as typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-const FALLBACK_FIREBASE_API_KEY = "AIzaSyDTueY4OduMENmSef3BH6ZEmSqXLiQG5Ls";
 const FALLBACK_FIREBASE_AUTH_DOMAIN = "atleta-v1.firebaseapp.com";
 const FALLBACK_FIREBASE_PROJECT_ID = "atleta-v1";
 const FALLBACK_FIREBASE_STORAGE_BUCKET = "atleta-v1.appspot.com";
@@ -70,7 +69,7 @@ const FALLBACK_FIREBASE_MESSAGING_SENDER_ID = "1:203586668533:web:30fba3838ff5f7
 const FALLBACK_FIREBASE_APP_ID = "G-6ZF67G2PK2";
 
 const firebaseConfig = {
-  apiKey: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_API_KEY || runtime.process?.env?.FIREBASE_API_KEY || FALLBACK_FIREBASE_API_KEY,
+  apiKey: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_API_KEY || runtime.process?.env?.FIREBASE_API_KEY || "",
   authDomain: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || runtime.process?.env?.FIREBASE_AUTH_DOMAIN || FALLBACK_FIREBASE_AUTH_DOMAIN,
   projectId: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_PROJECT_ID || runtime.process?.env?.FIREBASE_PROJECT_ID || FALLBACK_FIREBASE_PROJECT_ID,
   storageBucket: runtime.process?.env?.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || runtime.process?.env?.FIREBASE_STORAGE_BUCKET || FALLBACK_FIREBASE_STORAGE_BUCKET,

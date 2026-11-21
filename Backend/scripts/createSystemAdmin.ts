@@ -6,8 +6,11 @@ import { hashPassword, verifyPassword } from '../utils/passwordUtils';
 import { generateElevatedAdminToken } from '../services/adminService';
 
 async function main() {
-  const email = 'admin@gmail.com';
-  const rawPassword = 'Admin@123';
+  const email = process.env.SYSTEM_ADMIN_EMAIL || 'admin@gmail.com';
+  const rawPassword = process.env.SYSTEM_ADMIN_PASSWORD || '';
+  if (!rawPassword) {
+    throw new Error('SYSTEM_ADMIN_PASSWORD environment variable is required to provision the admin account.');
+  }
   const fullName = 'System Admin';
   const role = 'SystemAdmin';
   const departmentCode = 'SYS_ADMIN';
