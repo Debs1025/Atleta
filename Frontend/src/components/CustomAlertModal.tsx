@@ -121,10 +121,10 @@ export function CustomAlertModal() {
                   key={idx}
                   style={[
                     styles.button,
+                    rawButtons.length > 2 ? styles.buttonStacked : styles.buttonRow,
                     isCancel && styles.cancelButton,
                     isDanger && styles.dangerButton,
                     isPrimary && styles.primaryButton,
-                    rawButtons.length > 2 && { width: '100%', marginBottom: 8 },
                   ]}
                   onPress={() => handleButtonPress(btn)}
                   activeOpacity={0.85}
@@ -205,17 +205,26 @@ const styles = StyleSheet.create({
   },
   buttonContainerStacked: {
     flexDirection: 'column',
+    gap: 10,
   },
   button: {
-    flex: 1,
     paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    minHeight: 48,
+  },
+  buttonRow: {
+    flex: 1,
+  },
+  buttonStacked: {
+    width: '100%',
   },
   buttonText: {
     fontSize: 14,
     textAlign: 'center',
+    includeFontPadding: false,
   },
   primaryButton: {
     backgroundColor: '#00D2FF',
