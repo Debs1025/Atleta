@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Modal,
   Platform,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   View,
   RefreshControl,
+  Keyboard,
+  BackHandler,
 } from "react-native";
 import styles from "./styles/MyTeamsPage";
 import { Ionicons } from "@expo/vector-icons";
@@ -211,7 +213,13 @@ export function MyTeamsPage({
       <Modal
         visible={showCreateTeam}
         animationType="slide"
-        onRequestClose={() => setShowCreateTeam(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowCreateTeam(false);
+        }}
       >
         <CreateTeamDetailsFlow
           athletesPool={athletesPool}
@@ -244,6 +252,24 @@ function CreateTeamDetailsFlow({
   }) => void;
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (Keyboard.isVisible()) {
+        Keyboard.dismiss();
+        return true;
+      }
+      if (step > 1) {
+        setStep((prev) => (prev - 1) as any);
+        return true;
+      }
+      onClose();
+      return true;
+    };
+
+    const sub = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => sub.remove();
+  }, [step, onClose]);
   const [teamDetails, setTeamDetails] = useState<TeamDetailsState>({
     team_name: "",
     sport_type: "BASKETBALL",

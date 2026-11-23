@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -141,9 +142,9 @@ export function SetPlayer({
   // Basketball position picker state
   const [posPickerAthlete, setPosPickerAthlete] = useState<AthleteItem | null>(null);
 
-  // Validation check: all players in roster must have both required inputs filled
+  // Validation check: all players in roster must have both required inputs filled (empty roster allows shell creation)
   const isRosterValid = useMemo(() => {
-    if (teamDetails.selected_roster.length === 0) return false;
+    if (teamDetails.selected_roster.length === 0) return true;
 
     return teamDetails.selected_roster.every((athlete) => {
       if (teamDetails.sport_type === "TRACK AND FIELD") {
@@ -407,7 +408,9 @@ export function SetPlayer({
           onPress={onNext}
           activeOpacity={0.8}
         >
-          <Text style={styles.primaryCtaText}>SEE FULL DETAILS</Text>
+          <Text style={styles.primaryCtaText}>
+            {teamDetails.selected_roster.length === 0 ? "CONTINUE TO FULL DETAILS" : "SEE FULL DETAILS"}
+          </Text>
           <Ionicons name="arrow-forward" size={18} color="#FFFFFF" opacity={isRosterValid ? 1 : 0.5} />
         </TouchableOpacity>
       </View>
@@ -417,7 +420,13 @@ export function SetPlayer({
         visible={playerToRemove !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setPlayerToRemove(null)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setPlayerToRemove(null);
+        }}
       >
         <TouchableOpacity
           style={styles.confirmOverlayBackdrop}
@@ -468,7 +477,13 @@ export function SetPlayer({
         visible={strokePickerAthlete !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setStrokePickerAthlete(null)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setStrokePickerAthlete(null);
+        }}
       >
         <TouchableOpacity
           style={styles.confirmOverlayBackdrop}
@@ -507,7 +522,13 @@ export function SetPlayer({
         visible={posPickerAthlete !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setPosPickerAthlete(null)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setPosPickerAthlete(null);
+        }}
       >
         <TouchableOpacity
           style={styles.confirmOverlayBackdrop}

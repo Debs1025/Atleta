@@ -4202,6 +4202,7 @@ const DEFAULT_EMPTY_PERF_ATHLETE: AthletePerformanceProfile = {
             {activeView === "create_log" && (
               <CreateLogScreen
                 initialAthletes={athletesPool}
+                defaultSport={activeSportFilter !== "ALL" ? activeSportFilter : (coachProfile?.sports_focus || (coach as any)?.sports_focus || "BASKETBALL")}
                 onBack={() => setActiveView("dashboard")}
                 onStartLogging={(session) => {
                   const s = (session.sport_type || "").toUpperCase();

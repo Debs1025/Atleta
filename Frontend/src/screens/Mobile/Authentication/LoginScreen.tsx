@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Platform, ScrollView, Text, View } from "react-native";
+import { Alert, Platform, ScrollView, Text, View, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import styles from "./styles/LoginScreen";
 import { useForm } from "react-hook-form";
@@ -478,9 +478,16 @@ export function LoginScreen({ onGoSignup, onGoReset, onAuthenticated }: LoginScr
           onPress={handleFacebookSignInPress}
         />
 
-        <Text style={authScreenStyles.footer}>
-          Don&apos;t have an account? <Text style={authScreenStyles.footerLink} onPress={() => onGoSignup?.()}>Sign Up</Text>
-        </Text>
+        <TouchableOpacity
+          onPress={() => onGoSignup?.()}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+          style={{ alignSelf: "center" }}
+        >
+          <Text style={authScreenStyles.footer}>
+            Don&apos;t have an account? <Text style={authScreenStyles.footerLink}>Sign Up</Text>
+          </Text>
+        </TouchableOpacity>
 
         <InAppGoogleAuthModal
           visible={socialModal.visible}

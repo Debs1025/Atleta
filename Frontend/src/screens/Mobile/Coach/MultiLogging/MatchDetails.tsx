@@ -14,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { styles } from "./styles/MatchDetails";
-import { useMatchSession } from "./MatchSessionContext";
+import { useMatchSession, generateMatchId } from "./MatchSessionContext";
 import { requestAuthenticatedJson, getStoredAuthToken } from "../../Authentication/authShared";
 import { saveMatchOfflineFirst, parseSafeDate } from "../../../../services/firebaseClient";
 import { getSportStatSchema, loadDynamicSportsSchemas } from "./sportStatSchemas";
@@ -345,7 +345,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
 
     // Construct backend-ready match payload with restored Firestore schema attributes
     const payload = {
-      match_id: session.match_id || `match_${Date.now()}`,
+      match_id: session.match_id || generateMatchId(),
       team_id: resolvedTeamId || resolvedTeamName,
       coach_id: effectiveCoachId || null,
       logged_by_coach_id: effectiveCoachId || null,
@@ -418,8 +418,7 @@ export function MatchDetailsScreen({ onBack, onDone, onSaveComplete }: MatchDeta
   };
 
   const formatNumber = (num?: number) => {
-    const val = num || 0;
-    return val < 10 ? `0${val}` : `${val}`;
+    return num !== undefined && num !== null ? String(num) : "0";
   };
 
   return (

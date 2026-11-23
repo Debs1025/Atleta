@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +27,7 @@ declare const process: any;
 
 interface CreateLogProps {
   initialAthletes?: any[];
+  defaultSport?: SportCategory | string;
   onBack?: () => void;
   onStartLogging?: (session: MatchLogSessionState) => void;
 }
@@ -251,7 +253,7 @@ const COMMON_INJURIES = [
 
 const INJURY_STATUSES = ["Out / Sidelined", "DNP-Injury", "Day-to-Day", "Questionable"];
 
-export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: CreateLogProps) {
+export function CreateLogScreen({ initialAthletes, defaultSport, onBack, onStartLogging }: CreateLogProps) {
   const insets = useSafeAreaInsets();
   const {
     session,
@@ -274,6 +276,21 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
   const [loadingSports, setLoadingSports] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sessionDate, setSessionDate] = useState("");
+
+  // Sync initial sport category from prop if passed
+  useEffect(() => {
+    if (defaultSport) {
+      const norm = String(defaultSport).toUpperCase().trim();
+      let target: SportCategory = "BASKETBALL";
+      if (norm.includes("SWIM")) target = "SWIMMING";
+      else if (norm.includes("TRACK") || norm.includes("FIELD") || norm.includes("RUN")) target = "TRACK AND FIELD";
+      else if (norm.includes("VOLLEY")) target = "VOLLEYBALL";
+      else target = norm as SportCategory;
+      if (session.sport_type !== target) {
+        setSportCategory(target);
+      }
+    }
+  }, [defaultSport]);
 
   const isBallSport = useMemo(() => {
     const s = (session.sport_type || "").toUpperCase();
@@ -1531,7 +1548,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={showInterruptionModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowInterruptionModal(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowInterruptionModal(false);
+        }}
       >
         <View style={styles.interruptionOverlay}>
           <View style={styles.interruptionCard}>
@@ -1569,7 +1592,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={showSuccessModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowSuccessModal(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowSuccessModal(false);
+        }}
       >
         <View style={styles.interruptionOverlay}>
           <View style={styles.successCard}>
@@ -1650,7 +1679,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={showDatePicker}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowDatePicker(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowDatePicker(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.pickerModalSheet}>
@@ -1763,7 +1798,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={showTimePicker}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowTimePicker(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowTimePicker(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.pickerModalSheet}>
@@ -1915,7 +1956,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={showLocationModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowLocationModal(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowLocationModal(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.pickerModalSheet}>
@@ -2009,7 +2056,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={showInjuryModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowInjuryModal(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowInjuryModal(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.pickerModalSheet, { maxHeight: "90%" }]}>
@@ -2151,7 +2204,13 @@ export function CreateLogScreen({ initialAthletes, onBack, onStartLogging }: Cre
         visible={eventPickerAthlete !== null}
         transparent
         animationType="slide"
-        onRequestClose={() => setEventPickerAthlete(null)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setEventPickerAthlete(null);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.pickerModalSheet, { maxHeight: "80%" }]}>

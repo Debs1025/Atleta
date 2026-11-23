@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +19,7 @@ import {
   RosterAthlete,
 } from "../DataTypes";
 import { requestAuthenticatedJson } from "../../Authentication/authShared";
+import { getAthletesOfflineFirst } from "../../../../services/firebaseClient";
 import styles from "./styles/AddAthlete";
 import { AtletaAvatar } from "../../../../components/AtletaAvatar";
 
@@ -48,7 +50,7 @@ export function AddAthlete({
   const [liveAthletes, setLiveAthletes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch only recruited / owned athletes belonging to this coach
+  // Fetch recruited / owned athletes belonging to this coach, with offline-first all-athletes fallback
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -56,10 +58,15 @@ export function AddAthlete({
         setIsLoading(true);
         let rawList: any[] = [];
         const coachAthletesRes = await requestAuthenticatedJson("/coaches/athletes", "GET", undefined, true).catch(() => null);
-        if (coachAthletesRes && Array.isArray(coachAthletesRes.athletes)) {
+        if (coachAthletesRes && Array.isArray(coachAthletesRes.athletes) && coachAthletesRes.athletes.length > 0) {
           rawList = coachAthletesRes.athletes;
         } else if (athletesPool && athletesPool.length > 0) {
           rawList = athletesPool;
+        } else {
+          const fallbackAthletes = await getAthletesOfflineFirst(teamDetails.sport_type).catch(() => []);
+          if (Array.isArray(fallbackAthletes) && fallbackAthletes.length > 0) {
+            rawList = fallbackAthletes;
+          }
         }
         if (isMounted) {
           setLiveAthletes(rawList);
@@ -75,7 +82,7 @@ export function AddAthlete({
     return () => {
       isMounted = false;
     };
-  }, [athletesPool]);
+  }, [athletesPool, teamDetails.sport_type]);
 
   // Base pool filtered strictly by team sport_type from both live athletes and coach's athletesPool
   const baseSportPool: AthleteItem[] = useMemo(() => {
@@ -134,7 +141,7 @@ export function AddAthlete({
     // 1. Process coach's handled pool
     if (athletesPool && athletesPool.length > 0) {
       athletesPool.forEach((a) => {
-        const aSport = normalizeSport(a.sport_type || "");
+        const aSport = normalizeSport((a as any).sport || (a as any).primary_sport || (a as any).sports_type || a.sport_type || (a as any).sport_category || (a as any).category || "");
         if (aSport === targetSport) {
           const aId = a.athlete_id || a.user_id;
           const cKey = getCanonicalKey(a);
@@ -160,7 +167,7 @@ export function AddAthlete({
     // 2. Process live Firestore athletes
     if (liveAthletes && liveAthletes.length > 0) {
       liveAthletes.forEach((a) => {
-        const aSport = normalizeSport(a.sport_type || a.sport_category || a.category || "");
+        const aSport = normalizeSport((a as any).sport || (a as any).primary_sport || (a as any).sports_type || a.sport_type || (a as any).sport_category || (a as any).category || "");
         if (aSport === targetSport) {
           const aId = a.athlete_id || a.user_id;
           const cKey = getCanonicalKey(a);
@@ -474,14 +481,15 @@ export function AddAthlete({
         <TouchableOpacity
           style={[
             styles.primaryCtaButton,
-            teamDetails.selected_roster.length === 0 && styles.primaryCtaDisabled,
+            teamDetails.selected_roster.length === 0 && { backgroundColor: "#1A2639", borderColor: "#2A3A52", borderWidth: 1 },
           ]}
-          disabled={teamDetails.selected_roster.length === 0}
           onPress={onNext}
           activeOpacity={0.8}
         >
-          <Text style={styles.primaryCtaText}>SET POSITIONS</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          <Text style={[styles.primaryCtaText, teamDetails.selected_roster.length === 0 && { color: "#94A3B8" }]}>
+            {teamDetails.selected_roster.length === 0 ? "CREATE TEAM WITHOUT ROSTER" : "SET POSITIONS"}
+          </Text>
+          <Ionicons name="arrow-forward" size={18} color={teamDetails.selected_roster.length === 0 ? "#94A3B8" : "#FFFFFF"} />
         </TouchableOpacity>
       </View>
 
@@ -490,7 +498,13 @@ export function AddAthlete({
         visible={showSuccessNotifyModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowSuccessNotifyModal(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowSuccessNotifyModal(false);
+        }}
       >
         <TouchableOpacity
           style={styles.modalOverlay}

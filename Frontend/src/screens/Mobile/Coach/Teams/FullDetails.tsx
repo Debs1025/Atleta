@@ -5,6 +5,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -127,7 +128,16 @@ export function FullDetails({
         </View>
 
         {/* ROSTER CARDS LIST */}
-        {teamDetails.selected_roster.map((athlete, idx) => {
+        {teamDetails.selected_roster.length === 0 ? (
+          <View style={{ padding: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.03)", borderRadius: 12, marginTop: 8 }}>
+            <Ionicons name="people-outline" size={36} color="#64748B" />
+            <Text style={{ color: "#94A3B8", marginTop: 8, fontSize: 14, fontWeight: "600" }}>No athletes added yet</Text>
+            <Text style={{ color: "#64748B", fontSize: 12, marginTop: 4, textAlign: "center" }}>
+              You can invite and assign athletes to this team later from the Manage Team screen.
+            </Text>
+          </View>
+        ) : (
+          teamDetails.selected_roster.map((athlete, idx) => {
           let posMeta = "";
           if (teamDetails.sport_type === "SWIMMING") {
             const parts = [];
@@ -161,7 +171,7 @@ export function FullDetails({
               </View>
             </View>
           );
-        })}
+        }))}
       </ScrollView>
 
       {/* FIXED BOTTOM ACTION BUTTON */}
@@ -180,7 +190,13 @@ export function FullDetails({
         visible={showSuccessModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowSuccessModal(false)}
+        onRequestClose={() => {
+          if (Keyboard.isVisible()) {
+            Keyboard.dismiss();
+            return;
+          }
+          setShowSuccessModal(false);
+        }}
       >
         <TouchableOpacity
           style={styles.confirmOverlayBackdrop}

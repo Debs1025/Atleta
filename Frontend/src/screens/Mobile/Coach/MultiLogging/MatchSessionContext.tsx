@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MatchLogSessionState, SportCategory, AthleteRosterItem, MatchInjury } from "./types";
 
-interface MatchSessionContextType {
+const ACTIVE_MATCH_STORAGE_KEY = "@atleta_active_match_session";
+
+export interface MatchSessionContextType {
   session: MatchLogSessionState;
   setSportCategory: (sport: SportCategory) => void;
   setSessionDetails: (details: Partial<MatchLogSessionState>) => void;
@@ -44,11 +47,13 @@ interface MatchSessionContextType {
   resetSession: (wipeRoster?: boolean) => void;
 }
 
-const INITIAL_ROSTER: AthleteRosterItem[] = [];
+export const generateMatchId = (): string => {
+  return `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+};
 
-const DEFAULT_SESSION: MatchLogSessionState = {
-  match_id: `match_${Date.now()}`,
-  sport_type: "BASKETBALL",
+export const createDefaultSession = (sport: SportCategory = "BASKETBALL"): MatchLogSessionState => ({
+  match_id: generateMatchId(),
+  sport_type: sport,
   team_name: "",
   opponent_team_name: "",
   game_name: "",
@@ -61,7 +66,7 @@ const DEFAULT_SESSION: MatchLogSessionState = {
   bench_roster: [],
   injured_roster: [],
   injuries: [],
-};
+});
 
 const MatchSessionContext = createContext<MatchSessionContextType | undefined>(undefined);
 
@@ -78,7 +83,51 @@ function normalizeBasketballKey(rawKey: string): { standardKey?: 'pts' | 'ast' |
 }
 
 export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<MatchLogSessionState>(DEFAULT_SESSION);
+  const [session, setSession] = useState<MatchLogSessionState>(() => createDefaultSession());
+
+  // Restore active match session from AsyncStorage if available
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(ACTIVE_MATCH_STORAGE_KEY);
+        if (saved && isMounted) {
+          const parsed = JSON.parse(saved);
+          if (
+            parsed &&
+            parsed.match_id &&
+            ((parsed.active_roster && parsed.active_roster.length > 0) ||
+              (parsed.bench_roster && parsed.bench_roster.length > 0) ||
+              parsed.team_name ||
+              parsed.game_name)
+          ) {
+            setSession(parsed);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to restore active match session:", err);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Save active session to AsyncStorage on changes
+  useEffect(() => {
+    if (!session || !session.match_id) return;
+    const hasActiveContent =
+      (session.active_roster && session.active_roster.length > 0) ||
+      (session.bench_roster && session.bench_roster.length > 0) ||
+      Boolean(session.team_name) ||
+      Boolean(session.game_name);
+
+    if (hasActiveContent) {
+      AsyncStorage.setItem(ACTIVE_MATCH_STORAGE_KEY, JSON.stringify(session)).catch((err) =>
+        console.warn("Failed to persist active match session:", err)
+      );
+    }
+  }, [session]);
 
   const setSportCategory = (sport_type: SportCategory) => {
     setSession((prev) => ({ ...prev, sport_type }));
@@ -401,11 +450,9 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const resetSession = (wipeRoster: boolean = false) => {
+    AsyncStorage.removeItem(ACTIVE_MATCH_STORAGE_KEY).catch(() => {});
     if (wipeRoster) {
-      setSession({
-        ...DEFAULT_SESSION,
-        match_id: `match_${Date.now()}`,
-      });
+      setSession(createDefaultSession());
       return;
     }
 
@@ -433,7 +480,7 @@ export const MatchSessionProvider: React.FC<{ children: ReactNode }> = ({ childr
 
       return {
         ...prev,
-        match_id: `match_${Date.now()}`,
+        match_id: generateMatchId(),
         game_name: "",
         opponent_team_name: "",
         notes: "",
