@@ -5,6 +5,7 @@ export interface AthleteDiscoveryItem {
   recruitment_status: 'Available' | 'Recruited' | string;
   position_tag: string; // e.g. "PG", "SWIMMING", "TRACK AND FIELD"
   sport_category: 'BASKETBALL' | 'SWIMMING' | 'TRACK AND FIELD' | string;
+  rating_score?: number;
   biometrics: {
     height_ft: string; // "6'2""
     weight_lbs: string; // "185 lbs"

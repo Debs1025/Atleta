@@ -73,6 +73,18 @@ export function calculatePlayerRating(athlete: any): number {
   const sport = detectSport(athlete);
   const explicitRating = Number(athlete.rating_score || athlete.rating || athlete.overall_rating || 0);
 
+  const gp = Number(
+    averages.games_played ??
+    stats.games_played ??
+    athlete.games_played ??
+    averages.matches_played ??
+    stats.matches_played ??
+    athlete.matches_count ??
+    averages.meets_count ??
+    stats.meets_count ??
+    0
+  );
+
   let dynamicRating = 0;
 
   if (sport === "BASKETBALL") {
@@ -85,17 +97,48 @@ export function calculatePlayerRating(athlete: any): number {
     const fgPct = Number(averages.fg_percentage ?? stats.fg_percentage ?? stats.fg_pct ?? 0);
     const storedPer = Number(averages.per_score ?? stats.per_score ?? stats.per ?? athlete.per ?? 0);
 
-    if (ppg > 0 || rpg > 0 || apg > 0 || storedPer > 0) {
-      let per = storedPer;
-      if (per <= 0) {
-        const rawEff = (ppg * 1.0) + (rpg * 1.1) + (apg * 1.3) + (spg * 1.5) + (bpg * 1.5) - (tpg * 1.2);
-        const fgBonus = fgPct > 0 ? (fgPct - 45) * 0.15 : 0;
-        per = Math.max(5, rawEff + fgBonus);
+    const hasStats = ppg > 0 || rpg > 0 || apg > 0 || storedPer > 0 || gp > 0;
+
+    if (hasStats) {
+      // Production formula calibrated to strict collegiate/pro benchmarks:
+      // High MVP (28 PPG, 10 RPG, 8 APG) -> ~38-40 prod -> ~97-99 raw rating
+      // All-Star (20 PPG, 7 RPG, 5 APG) -> ~25-27 prod -> ~83-85 raw rating
+      // Solid Starter (14 PPG, 5 RPG, 3 APG) -> ~17-19 prod -> ~74-76 raw rating
+      // Role Player (8 PPG, 3.5 RPG, 2 APG) -> ~10-12 prod -> ~66-68 raw rating
+      // Bench (3 PPG, 1.5 RPG, 1 APG) -> ~4-6 prod -> ~58-61 raw rating
+      const fgBonus = fgPct > 0 ? Math.min(3, Math.max(-3, (fgPct - 45) * 0.25)) : 0;
+      const production = (ppg * 0.85) + (rpg * 0.55) + (apg * 0.75) + (spg * 1.1) + (bpg * 1.1) - (tpg * 0.8) + fgBonus;
+      const rawRating = Math.round(54 + production * 1.15);
+
+      // Sample size confidence scaling & caps:
+      // Prevents 1-2 game hot streaks from claiming 90+ or 99 MVP ratings
+      if (gp > 0) {
+        let cap = 99;
+        let conf = 1.0;
+        if (gp <= 1) {
+          cap = 76;
+          conf = 0.72;
+        } else if (gp === 2) {
+          cap = 80;
+          conf = 0.78;
+        } else if (gp === 3) {
+          cap = 84;
+          conf = 0.84;
+        } else if (gp === 4) {
+          cap = 88;
+          conf = 0.89;
+        } else if (gp === 5) {
+          cap = 92;
+          conf = 0.94;
+        } else if (gp === 6) {
+          cap = 95;
+          conf = 0.97;
+        }
+        dynamicRating = Math.min(cap, Math.max(50, Math.round(50 + (rawRating - 50) * conf)));
+      } else {
+        // If gp is unknown or 0, cap at 82 for unverified sample size
+        dynamicRating = Math.min(82, Math.max(50, rawRating));
       }
-      const ratingFromPer = 54 + (per * 1.45);
-      const statEfficiency = (ppg * 0.85) + (rpg * 0.7) + (apg * 0.9) + (spg * 1.3) + (bpg * 1.3);
-      const ratingFromStats = 58 + (statEfficiency * 0.8);
-      dynamicRating = Math.min(99, Math.max(50, Math.round(ratingFromPer * 0.6 + ratingFromStats * 0.4)));
     }
   } else if (sport === "VOLLEYBALL") {
     const kills = Number(averages.spike_kills ?? stats.spike_kills ?? averages.kills ?? stats.kills ?? 0);
@@ -104,9 +147,24 @@ export function calculatePlayerRating(athlete: any): number {
     const digs = Number(averages.digs ?? stats.digs ?? 0);
     const hitPct = Number(averages.hitting_pct ?? stats.hitting_pct ?? 0);
 
-    if (kills > 0 || blocks > 0 || aces > 0 || digs > 0) {
-      const vScore = (kills * 1.5) + (blocks * 2.5) + (aces * 2.0) + (digs * 0.8) + (hitPct > 0 ? (hitPct - 30) * 0.2 : 0);
-      dynamicRating = Math.min(99, Math.max(50, Math.round(62 + vScore * 0.85)));
+    if (kills > 0 || blocks > 0 || aces > 0 || digs > 0 || gp > 0) {
+      const hitBonus = hitPct > 0 ? Math.min(3, Math.max(-3, (hitPct - 35) * 0.2)) : 0;
+      const vScore = (kills * 1.4) + (blocks * 2.2) + (aces * 1.8) + (digs * 0.7) + hitBonus;
+      const rawRating = Math.round(55 + vScore * 0.95);
+
+      if (gp > 0) {
+        let cap = 99;
+        let conf = 1.0;
+        if (gp <= 1) { cap = 76; conf = 0.72; }
+        else if (gp === 2) { cap = 80; conf = 0.78; }
+        else if (gp === 3) { cap = 84; conf = 0.84; }
+        else if (gp === 4) { cap = 88; conf = 0.89; }
+        else if (gp === 5) { cap = 92; conf = 0.94; }
+        else if (gp === 6) { cap = 95; conf = 0.97; }
+        dynamicRating = Math.min(cap, Math.max(50, Math.round(50 + (rawRating - 50) * conf)));
+      } else {
+        dynamicRating = Math.min(82, Math.max(50, rawRating));
+      }
     }
   } else if (sport === "SWIMMING") {
     const pb50 = parseTimeToSeconds(averages.pb_50m_free || stats.pb_50m_free || averages.pb_50m || athlete.pb_50m_free || averages.times_50m_free || stats.times_50m_free);
@@ -118,33 +176,41 @@ export function calculatePlayerRating(athlete: any): number {
     const swimIndex = Number(averages.swim_index_score ?? stats.swim_index_score ?? 0);
     const podiums = Number(averages.podiums_count ?? averages.podiums ?? stats.podiums_count ?? stats.podiums ?? 0);
 
+    let rawRating = 0;
     if (pb50 > 0) {
-      if (pb50 <= 25.5) dynamicRating = 99;
-      else if (pb50 <= 26.5) dynamicRating = 95;
-      else if (pb50 <= 28.0) dynamicRating = 91;
-      else if (pb50 <= 30.0) dynamicRating = 86;
-      else if (pb50 <= 33.0) dynamicRating = 81;
-      else dynamicRating = Math.min(99, Math.max(60, Math.round(99 - (pb50 - 24.5) * 3)));
+      if (pb50 <= 22.8) rawRating = 99;
+      else if (pb50 <= 23.5) rawRating = 95;
+      else if (pb50 <= 24.5) rawRating = 90;
+      else if (pb50 <= 25.5) rawRating = 85;
+      else if (pb50 <= 27.0) rawRating = 80;
+      else if (pb50 <= 29.0) rawRating = 74;
+      else rawRating = Math.min(99, Math.max(55, Math.round(74 - (pb50 - 29.0) * 2.5)));
     } else if (pb100 > 0) {
-      if (pb100 <= 54.5) dynamicRating = 99;
-      else if (pb100 <= 56.5) dynamicRating = 95;
-      else if (pb100 <= 59.0) dynamicRating = 91;
-      else if (pb100 <= 63.0) dynamicRating = 86;
-      else if (pb100 <= 68.0) dynamicRating = 81;
-      else dynamicRating = Math.min(99, Math.max(60, Math.round(99 - (pb100 - 52.0) * 1.5)));
+      if (pb100 <= 49.5) rawRating = 99;
+      else if (pb100 <= 51.5) rawRating = 95;
+      else if (pb100 <= 53.5) rawRating = 90;
+      else if (pb100 <= 56.0) rawRating = 85;
+      else if (pb100 <= 59.0) rawRating = 80;
+      else if (pb100 <= 63.0) rawRating = 74;
+      else rawRating = Math.min(99, Math.max(55, Math.round(74 - (pb100 - 63.0) * 1.5)));
     } else if (pb100Fly > 0) {
-      dynamicRating = pb100Fly <= 60.0 ? 95 : (pb100Fly <= 63.0 ? 91 : 86);
+      rawRating = pb100Fly <= 54.0 ? 95 : (pb100Fly <= 57.0 ? 90 : 84);
     } else if (pb200Fly > 0) {
-      dynamicRating = pb200Fly <= 130.0 ? 95 : (pb200Fly <= 140.0 ? 91 : 86);
+      rawRating = pb200Fly <= 122.0 ? 95 : (pb200Fly <= 130.0 ? 90 : 84);
     } else if (pb200Back > 0) {
-      dynamicRating = pb200Back <= 135.0 ? 96 : (pb200Back <= 145.0 ? 91 : 86);
+      rawRating = pb200Back <= 125.0 ? 95 : (pb200Back <= 135.0 ? 90 : 84);
     } else if (finishTimeMs > 0) {
       const s = finishTimeMs / 1000;
-      dynamicRating = Math.min(99, Math.max(50, Math.round(99 - Math.max(0, (s - 22.0) * 2.5))));
+      rawRating = Math.min(99, Math.max(50, Math.round(95 - Math.max(0, (s - 23.0) * 3.0))));
     } else if (swimIndex > 0) {
-      dynamicRating = Math.min(99, Math.max(50, Math.round(swimIndex / 10)));
+      rawRating = Math.min(95, Math.max(50, Math.round(swimIndex / 10.5)));
     } else if (podiums > 0) {
-      dynamicRating = Math.min(99, Math.max(75, 84 + podiums * 2));
+      rawRating = Math.min(92, Math.max(70, 76 + podiums * 2));
+    }
+
+    if (rawRating > 0) {
+      const sampleCap = gp === 1 ? 80 : 99;
+      dynamicRating = Math.min(sampleCap, rawRating);
     }
   } else if (sport === "TRACK AND FIELD") {
     const pb100 = parseTimeToSeconds(averages.pb_100m || stats.pb_100m || athlete.pb_100m || averages.times_100m || stats.times_100m);
@@ -154,32 +220,44 @@ export function calculatePlayerRating(athlete: any): number {
     const shotPutStr = String(averages.pb_shot_put || stats.pb_shot_put || averages.shot_put || stats.shot_put || "").trim();
     const spMeters = parseFloat(shotPutStr.replace(/[^\d.]/g, "")) || 0;
 
+    let rawRating = 0;
     if (pvMeters > 0) {
-      if (pvMeters >= 5.90) dynamicRating = 99;
-      else if (pvMeters >= 5.70) dynamicRating = 95;
-      else if (pvMeters >= 5.40) dynamicRating = 90;
-      else if (pvMeters >= 5.00) dynamicRating = 85;
-      else dynamicRating = Math.min(99, Math.max(60, Math.round(75 + (pvMeters - 4.5) * 16)));
+      if (pvMeters >= 5.85) rawRating = 99;
+      else if (pvMeters >= 5.55) rawRating = 95;
+      else if (pvMeters >= 5.25) rawRating = 90;
+      else if (pvMeters >= 4.85) rawRating = 85;
+      else if (pvMeters >= 4.45) rawRating = 80;
+      else rawRating = Math.min(99, Math.max(55, Math.round(65 + (pvMeters - 3.8) * 18)));
     } else if (spMeters > 0) {
-      if (spMeters >= 20.0) dynamicRating = 99;
-      else if (spMeters >= 18.5) dynamicRating = 95;
-      else if (spMeters >= 16.5) dynamicRating = 90;
-      else dynamicRating = Math.min(99, Math.max(60, Math.round(75 + (spMeters - 14.0) * 3.5)));
+      if (spMeters >= 20.0) rawRating = 99;
+      else if (spMeters >= 18.5) rawRating = 95;
+      else if (spMeters >= 16.5) rawRating = 90;
+      else if (spMeters >= 14.5) rawRating = 85;
+      else if (spMeters >= 12.5) rawRating = 80;
+      else rawRating = Math.min(99, Math.max(55, Math.round(65 + (spMeters - 10.0) * 4)));
     } else if (pb100 > 0) {
-      if (pb100 <= 10.3) dynamicRating = 99;
-      else if (pb100 <= 10.8) dynamicRating = 95;
-      else if (pb100 <= 11.4) dynamicRating = 90;
-      else if (pb100 <= 12.0) dynamicRating = 85;
-      else dynamicRating = Math.min(99, Math.max(60, Math.round(99 - (pb100 - 10.0) * 8)));
+      if (pb100 <= 10.2) rawRating = 99;
+      else if (pb100 <= 10.5) rawRating = 95;
+      else if (pb100 <= 10.8) rawRating = 90;
+      else if (pb100 <= 11.2) rawRating = 85;
+      else if (pb100 <= 11.8) rawRating = 80;
+      else if (pb100 <= 12.5) rawRating = 74;
+      else rawRating = Math.min(99, Math.max(55, Math.round(74 - (pb100 - 12.5) * 4)));
     } else if (pb200 > 0) {
-      if (pb200 <= 20.8) dynamicRating = 99;
-      else if (pb200 <= 21.6) dynamicRating = 95;
-      else if (pb200 <= 22.8) dynamicRating = 90;
-      else dynamicRating = 85;
+      if (pb200 <= 20.5) rawRating = 99;
+      else if (pb200 <= 21.2) rawRating = 95;
+      else if (pb200 <= 22.0) rawRating = 90;
+      else if (pb200 <= 23.0) rawRating = 85;
+      else rawRating = 80;
+    }
+
+    if (rawRating > 0) {
+      const sampleCap = gp === 1 ? 80 : 99;
+      dynamicRating = Math.min(sampleCap, rawRating);
     }
   }
 
-  // Radar competencies fallback
+  // Radar competencies fallback (only if no match stats generated a rating)
   if (dynamicRating <= 0) {
     const radar = athlete.radar_competencies || athlete.physical_profile || athlete.radar || {};
     const radarVals = [
@@ -193,19 +271,19 @@ export function calculatePlayerRating(athlete: any): number {
     }
   }
 
-  // Combine dynamic rating with explicit profile rating:
+  // PRECEDENCE:
+  // If dynamicRating was derived from actual match/season production, dynamicRating takes full precedence!
+  // We do NOT use explicitRating to artificially inflate a low-sample or lower-producing player.
+  if (dynamicRating > 0) {
+    return Math.min(99, Math.max(50, dynamicRating));
+  }
+
+  // If no dynamic rating could be derived from stats, use explicit profile rating:
   if (explicitRating > 0) {
-    if (dynamicRating > 0) {
-      // If explicit rating was 60 or 65 (buggy default artifact) but dynamic rating is much higher, use dynamic
-      if ((explicitRating === 60 || explicitRating === 65) && dynamicRating > 70) {
-        return Math.min(99, Math.max(50, dynamicRating));
-      }
-      return Math.min(99, Math.max(50, Math.max(explicitRating, dynamicRating)));
-    }
     return Math.min(99, Math.max(50, Math.round(explicitRating)));
   }
 
-  return dynamicRating > 0 ? Math.min(99, Math.max(50, dynamicRating)) : 0;
+  return 0;
 }
 
 export interface RadarCompetencies {

@@ -627,6 +627,12 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
     const stats = profileData.stats || profileData.averages || {};
     const per = Number(stats.efficiency_rating ?? stats.per ?? stats.calculated_per ?? stats.per_score ?? 0);
     const ppg = Number(stats.ppg ?? stats.points_per_game ?? 0);
+    const rpg = Number(stats.rpg ?? stats.rebounds ?? 0);
+    const apg = Number(stats.apg ?? stats.assists ?? 0);
+    const spg = Number(stats.spg ?? stats.steals ?? 0);
+    const bpg = Number(stats.bpg ?? stats.blocks ?? 0);
+    const tpg = Number(stats.tpg ?? stats.turnovers ?? 0);
+    const fgPct = Number(stats.fg_percentage ?? stats.fg_pct ?? 0);
     const gp = Number(stats.games_played ?? stats.meets_count ?? 0);
     const pb50 = stats.pb_50m_free || stats.pb_50m || stats.times_50m_free;
     const pb100 = stats.pb_100m_free || stats.pb_100m || stats.times_100m_free;
@@ -638,36 +644,81 @@ export async function getCoachManagedAthletes(coachId: string): Promise<any[]> {
     const sportTypeUpper = String(resolvedSport).toUpperCase();
 
     let dynamicRating = 0;
-    if (explicitProfileRating > 0) {
-      dynamicRating = Math.min(99, Math.max(50, Math.round(explicitProfileRating)));
-    } else if (sportTypeUpper.includes('BASKET')) {
-      if (per > 0) {
-        dynamicRating = Math.min(99, Math.max(50, Math.round(54 + per * 1.45)));
-      } else if (ppg > 0) {
-        dynamicRating = Math.min(99, Math.max(50, Math.round(58 + ppg * 2.2)));
+    if (sportTypeUpper.includes('BASKET')) {
+      const hasBasketStats = ppg > 0 || rpg > 0 || apg > 0 || per > 0 || gp > 0;
+      if (hasBasketStats) {
+        const fgBonus = fgPct > 0 ? Math.min(3, Math.max(-3, (fgPct - 45) * 0.25)) : 0;
+        const prod = (ppg * 0.85) + (rpg * 0.55) + (apg * 0.75) + (spg * 1.1) + (bpg * 1.1) - (tpg * 0.8) + fgBonus;
+        const rawRating = Math.round(54 + prod * 1.15);
+        if (gp > 0) {
+          let cap = 99; let conf = 1.0;
+          if (gp <= 1) { cap = 76; conf = 0.72; }
+          else if (gp === 2) { cap = 80; conf = 0.78; }
+          else if (gp === 3) { cap = 84; conf = 0.84; }
+          else if (gp === 4) { cap = 88; conf = 0.89; }
+          else if (gp === 5) { cap = 92; conf = 0.94; }
+          else if (gp === 6) { cap = 95; conf = 0.97; }
+          dynamicRating = Math.min(cap, Math.max(50, Math.round(50 + (rawRating - 50) * conf)));
+        } else {
+          dynamicRating = Math.min(82, Math.max(50, rawRating));
+        }
       }
     } else if (sportTypeUpper.includes('VOLLEY')) {
       const vKills = Number(stats.spike_kills ?? stats.kills ?? 0);
       const vBlocks = Number(stats.block_points ?? stats.blocks ?? 0);
       const vAces = Number(stats.service_aces ?? stats.aces ?? 0);
       const vDigs = Number(stats.digs ?? 0);
-      if (vKills > 0 || vBlocks > 0 || vAces > 0 || vDigs > 0) {
-        const vEff = (vKills * 1.5) + (vBlocks * 2.5) + (vAces * 2.0) + (vDigs * 0.8);
-        dynamicRating = Math.min(99, Math.max(50, Math.round(62 + vEff * 0.85)));
+      const vHitPct = Number(stats.hitting_pct ?? 0);
+      if (vKills > 0 || vBlocks > 0 || vAces > 0 || vDigs > 0 || gp > 0) {
+        const hitBonus = vHitPct > 0 ? Math.min(3, Math.max(-3, (vHitPct - 35) * 0.2)) : 0;
+        const vEff = (vKills * 1.4) + (vBlocks * 2.2) + (vAces * 1.8) + (vDigs * 0.7) + hitBonus;
+        const rawRating = Math.round(55 + vEff * 0.95);
+        if (gp > 0) {
+          let cap = 99; let conf = 1.0;
+          if (gp <= 1) { cap = 76; conf = 0.72; }
+          else if (gp === 2) { cap = 80; conf = 0.78; }
+          else if (gp === 3) { cap = 84; conf = 0.84; }
+          else if (gp === 4) { cap = 88; conf = 0.89; }
+          else if (gp === 5) { cap = 92; conf = 0.94; }
+          else if (gp === 6) { cap = 95; conf = 0.97; }
+          dynamicRating = Math.min(cap, Math.max(50, Math.round(50 + (rawRating - 50) * conf)));
+        } else {
+          dynamicRating = Math.min(82, Math.max(50, rawRating));
+        }
       }
     } else if (sportTypeUpper.includes('SWIM')) {
+      let rawSwim = 0;
       if (pb50Sec > 0) {
-        dynamicRating = pb50Sec <= 25.5 ? 99 : (pb50Sec <= 26.5 ? 95 : (pb50Sec <= 28.0 ? 91 : (pb50Sec <= 30.0 ? 86 : 81)));
+        rawSwim = pb50Sec <= 22.8 ? 99 : (pb50Sec <= 23.5 ? 95 : (pb50Sec <= 24.5 ? 90 : (pb50Sec <= 25.5 ? 85 : (pb50Sec <= 27.0 ? 80 : (pb50Sec <= 29.0 ? 74 : 68)))));
       } else if (pb100Sec > 0) {
-        dynamicRating = pb100Sec <= 54.5 ? 99 : (pb100Sec <= 56.5 ? 95 : (pb100Sec <= 59.0 ? 91 : (pb100Sec <= 63.0 ? 86 : 81)));
+        rawSwim = pb100Sec <= 49.5 ? 99 : (pb100Sec <= 51.5 ? 95 : (pb100Sec <= 53.5 ? 90 : (pb100Sec <= 56.0 ? 85 : (pb100Sec <= 59.0 ? 80 : 74))));
+      }
+      if (rawSwim > 0) {
+        const sampleCap = gp === 1 ? 80 : 99;
+        dynamicRating = Math.min(sampleCap, rawSwim);
       }
     } else if (sportTypeUpper.includes('TRACK') || sportTypeUpper.includes('FIELD')) {
       const pv = Number(parseFloat(String(stats.pole_vault || stats.pole_vault_pb || stats.personal_best || '').replace(/[^\d.]/g, '')) || 0);
-      if (pv >= 5.80) {
-        dynamicRating = 99;
+      let rawTrack = 0;
+      if (pv >= 5.85) {
+        rawTrack = 99;
+      } else if (pv >= 5.55) {
+        rawTrack = 95;
+      } else if (pv >= 5.25) {
+        rawTrack = 90;
+      } else if (pv >= 4.85) {
+        rawTrack = 85;
       } else if (pb100Sec > 0) {
-        dynamicRating = pb100Sec <= 10.3 ? 99 : (pb100Sec <= 10.8 ? 95 : (pb100Sec <= 11.4 ? 90 : 85));
+        rawTrack = pb100Sec <= 10.2 ? 99 : (pb100Sec <= 10.5 ? 95 : (pb100Sec <= 10.8 ? 90 : (pb100Sec <= 11.2 ? 85 : (pb100Sec <= 11.8 ? 80 : 74))));
       }
+      if (rawTrack > 0) {
+        const sampleCap = gp === 1 ? 80 : 99;
+        dynamicRating = Math.min(sampleCap, rawTrack);
+      }
+    }
+
+    if (dynamicRating <= 0 && explicitProfileRating > 0) {
+      dynamicRating = Math.min(99, Math.max(50, Math.round(explicitProfileRating)));
     }
 
     const scoutInfo = scoutedAthleteMap.get(aId) || scoutedAthleteMap.get(canonicalAthleteId) || scoutedAthleteMap.get(rawUid);

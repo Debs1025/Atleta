@@ -21,6 +21,7 @@ import { AtletaAvatar } from '../../../../components/AtletaAvatar';
 
 import { extractVerticalLeapInches } from './playerBadgeEngine';
 import { getCleanBiometrics } from './biometricsFormatter';
+import { calculatePlayerRating } from '../Performance/performanceUtils';
 
 export const DiscoveryPlayer: React.FC<{
   mode: 'feed' | 'rankings' | 'recruits';
@@ -147,29 +148,52 @@ export const DiscoveryPlayer: React.FC<{
                     </View>
                   </View>
 
-                  <View
-                    pointerEvents="none"
-                    style={[
-                      styles.tagChip,
-                      isAccepted
-                        ? { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981' }
-                        : isScouted
-                          ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
-                          : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
-                    ]}
-                  >
-                    <Text
+                  <View pointerEvents="none" style={{ alignItems: 'flex-end', gap: 6 }}>
+                    {(() => {
+                      const cardRating = athlete.rating_score && athlete.rating_score > 0
+                        ? athlete.rating_score
+                        : calculatePlayerRating(athlete);
+                      if (cardRating > 0) {
+                        return (
+                          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
+                            <Text style={{ color: '#00D2FF', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 }}>
+                              {cardRating}
+                            </Text>
+                            <Text style={{ color: '#38BDF8', fontSize: 10, fontWeight: '800' }}>
+                              OVR
+                            </Text>
+                          </View>
+                        );
+                      }
+                      return (
+                        <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '700' }}>
+                          UNRATED
+                        </Text>
+                      );
+                    })()}
+                    <View
                       style={[
-                        styles.tagChipText,
+                        styles.tagChip,
                         isAccepted
-                          ? { color: '#10B981' }
+                          ? { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981' }
                           : isScouted
-                            ? { color: '#00C8FF' }
-                            : { color: '#94A3B8' },
+                            ? { backgroundColor: 'rgba(0, 200, 255, 0.15)', borderColor: '#00C8FF' }
+                            : { backgroundColor: 'rgba(148, 163, 184, 0.12)', borderColor: 'rgba(148, 163, 184, 0.3)' },
                       ]}
                     >
-                      {statusLabel}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.tagChipText,
+                          isAccepted
+                            ? { color: '#10B981' }
+                            : isScouted
+                              ? { color: '#00C8FF' }
+                              : { color: '#94A3B8' },
+                        ]}
+                      >
+                        {statusLabel}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 

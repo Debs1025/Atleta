@@ -13,6 +13,7 @@ import {
   getDefaultMetricForSport,
 } from './discoveryTypes';
 import { extractVerticalLeapInches } from './playerBadgeEngine';
+import { calculatePlayerRating } from '../Performance/performanceUtils';
 import { requestAuthenticatedJson, clearAuthMicroCache } from '../../Authentication/authShared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMatchesOfflineFirst } from '../../../../services/firebaseClient';
@@ -201,6 +202,8 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 athleteTeamCoachMap.set(rNormId, { team_id: tId, team_name: tName, head_coach: hCoach });
               }
 
+              const rRating = calculatePlayerRating(r) || Number(r.rating_score || r.rating || 0);
+
               return {
                 athlete_id: rRawId,
                 full_name: r.full_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Athlete',
@@ -208,6 +211,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 recruitment_status: r.recruitment_status || 'Rostered',
                 position_tag: r.position || 'PG',
                 sport_category: sportCategory,
+                rating_score: rRating,
                 biometrics: {
                   height_ft: r.height_ft || "-",
                   weight_lbs: r.weight_lbs || "-",
@@ -418,10 +422,28 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             (ppg > 0 ? Math.min(99, Math.round(ppg * 3.5 + 20)) : 75)
           );
 
+          const rawSport = (a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
+          const sportCategory: SportCategoryFilter =
+            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
+
+          const athRating = calculatePlayerRating({
+            ...a,
+            sport_category: sportCategory,
+            averages: {
+              ...(a.averages || {}),
+              ppg, rpg, apg: ast, fg_percentage: fgPct, games_played: a.stats?.games_played ?? a.averages?.games_played ?? 0
+            },
+            stats: {
+              ...(a.stats || {}),
+              ppg, rpg, ast, fg_pct: fgPct, games_played: a.stats?.games_played ?? a.averages?.games_played ?? 0
+            }
+          }) || calculatePlayerRating(a) || Number(a.rating_score || a.rating || 0);
+
           // Check if this player is already registered or used again
           const existing = (nameKey && athleteByName.get(nameKey)) || (normalizedId && athleteById.get(normalizedId));
 
           if (existing) {
+            if (athRating > 0) existing.rating_score = athRating;
             // Player is used again: update stats, efficiency, and affiliation
             if (ppg > 0 || rpg > 0 || ast > 0 || fgPct > 0) {
               existing.stats = {
@@ -467,10 +489,6 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           seenIds.add(normalizedId);
 
-          const rawSport = (a.sport_type || a.sport_category || a.category || 'BASKETBALL').toUpperCase().trim();
-          const sportCategory: SportCategoryFilter =
-            rawSport.includes('SWIM') ? 'SWIMMING' : (rawSport.includes('TRACK') || rawSport.includes('FIELD')) ? 'TRACK AND FIELD' : rawSport;
-
           const heightCm = a.physical_attributes?.height_cm || a.physical_profile?.height_cm || a.height_cm;
           const weightKg = a.physical_attributes?.weight_kg || a.physical_profile?.weight_kg || a.weight_kg;
           const wingspanCm = a.physical_attributes?.wingspan_cm || a.physical_profile?.wingspan_cm || a.wingspan_cm;
@@ -490,6 +508,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             recruitment_status: hasCoach ? (a.recruitment_status || 'Rostered') : (a.recruitment_status || 'Available'),
             position_tag: positionTag,
             sport_category: sportCategory,
+            rating_score: athRating,
             biometrics: {
               height_ft: a.biometrics?.height_ft || (heightCm ? `${Math.floor(heightCm / 30.48)}'${Math.round((heightCm % 30.48) / 2.54)}"` : '-'),
               weight_lbs: a.biometrics?.weight_lbs || (weightKg ? `${Math.round(weightKg * 2.20462)} lbs` : '-'),

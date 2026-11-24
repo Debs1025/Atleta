@@ -77,7 +77,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({
           return {
             ...ath,
             sport_category: resolvedSport,
-            rating_score: resolvedRating || ath.rating_score,
+            rating_score: resolvedRating > 0 ? resolvedRating : 0,
           };
         });
     }
