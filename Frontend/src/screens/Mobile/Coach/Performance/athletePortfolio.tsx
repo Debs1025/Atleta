@@ -20,6 +20,7 @@ import Svg, {
   Polygon,
   Circle,
   Line,
+  G,
   Text as SvgText,
   Defs,
   LinearGradient,
@@ -124,6 +125,7 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
   };
 
   // Helper to construct smooth SVG Path for last 10 scoring trends
+  // Helper to construct smooth SVG Path for last 10 scoring trends with comprehensive labels
   const renderScoringTrendsChart = () => {
     const rawData = athlete.scoring_trends_last_10;
     const hasData = Array.isArray(rawData) && rawData.length > 0 && rawData.some((v) => Number(v) > 0);
@@ -145,9 +147,16 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
       data = [data[0], data[0]];
     }
 
-    const width = 280;
-    const height = 100;
-    const padding = 10;
+    const width = 310;
+    const height = 135;
+    const paddingLeft = 28;
+    const paddingRight = 16;
+    const paddingTop = 20;
+    const paddingBottom = 22;
+
+    const chartWidth = width - paddingLeft - paddingRight;
+    const chartHeight = height - paddingTop - paddingBottom;
+    const baselineY = paddingTop + chartHeight;
 
     let minVal = Math.min(...data);
     let maxVal = Math.max(...data);
@@ -170,53 +179,113 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
     const divisor = Math.max(1, count - 1);
 
     const points = data.map((val, index) => {
-      const calcX = padding + (index / divisor) * (width - 2 * padding);
+      const calcX = paddingLeft + (index / divisor) * chartWidth;
       const calcY =
-        height -
-        padding -
-        ((val - minVal) / valRange) * (height - 2 * padding);
+        paddingTop +
+        chartHeight -
+        ((val - minVal) / valRange) * chartHeight;
 
-      const x = Number.isFinite(calcX) ? Math.round(calcX * 10) / 10 : padding;
-      const y = Number.isFinite(calcY) ? Math.round(calcY * 10) / 10 : height / 2;
-      return { x, y };
+      const x = Number.isFinite(calcX) ? Math.round(calcX * 10) / 10 : paddingLeft;
+      const y = Number.isFinite(calcY) ? Math.round(calcY * 10) / 10 : paddingTop + chartHeight / 2;
+      return { x, y, val };
     });
 
-    const safePoints = points.length > 0 ? points : [{ x: padding, y: height / 2 }, { x: width - padding, y: height / 2 }];
+    const safePoints = points.length > 0 ? points : [
+      { x: paddingLeft, y: paddingTop + chartHeight / 2, val: 0 },
+      { x: width - paddingRight, y: paddingTop + chartHeight / 2, val: 0 },
+    ];
 
     let pathD = `M ${safePoints[0].x} ${safePoints[0].y}`;
     for (let i = 1; i < safePoints.length; i++) {
       pathD += ` L ${safePoints[i].x} ${safePoints[i].y}`;
     }
 
-    const fillD = `${pathD} L ${safePoints[safePoints.length - 1].x} ${height} L ${
+    const fillD = `${pathD} L ${safePoints[safePoints.length - 1].x} ${baselineY} L ${
       safePoints[0].x
-    } ${height} Z`;
+    } ${baselineY} Z`;
+
+    const midVal = Math.round((maxVal + minVal) / 2);
+    const topGridY = paddingTop;
+    const midGridY = paddingTop + chartHeight / 2;
 
     return (
       <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
         <Defs>
           <LinearGradient id="cyanGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#00C8FF" stopOpacity="0.4" />
+            <Stop offset="0%" stopColor="#00C8FF" stopOpacity="0.45" />
             <Stop offset="100%" stopColor="#00C8FF" stopOpacity="0.0" />
           </LinearGradient>
         </Defs>
 
+        {/* Y-axis Reference Labels */}
+        <SvgText
+          x={paddingLeft - 6}
+          y={topGridY + 3}
+          fill="#64748B"
+          fontSize="8"
+          fontWeight="700"
+          textAnchor="end"
+        >
+          {Math.round(maxVal)}
+        </SvgText>
+        <SvgText
+          x={paddingLeft - 6}
+          y={midGridY + 3}
+          fill="#475569"
+          fontSize="8"
+          fontWeight="600"
+          textAnchor="end"
+        >
+          {midVal}
+        </SvgText>
+        <SvgText
+          x={paddingLeft - 6}
+          y={baselineY + 3}
+          fill="#64748B"
+          fontSize="8"
+          fontWeight="700"
+          textAnchor="end"
+        >
+          {Math.round(minVal)}
+        </SvgText>
+
         {/* Grid lines */}
         <Line
-          x1={0}
-          y1={height / 2}
-          x2={width}
-          y2={height / 2}
+          x1={paddingLeft}
+          y1={topGridY}
+          x2={width - paddingRight}
+          y2={topGridY}
           stroke="rgba(255,255,255,0.06)"
           strokeDasharray="4 4"
         />
         <Line
-          x1={0}
-          y1={height - padding}
-          x2={width}
-          y2={height - padding}
-          stroke="rgba(255,255,255,0.1)"
+          x1={paddingLeft}
+          y1={midGridY}
+          x2={width - paddingRight}
+          y2={midGridY}
+          stroke="rgba(255,255,255,0.06)"
+          strokeDasharray="4 4"
         />
+        <Line
+          x1={paddingLeft}
+          y1={baselineY}
+          x2={width - paddingRight}
+          y2={baselineY}
+          stroke="rgba(255,255,255,0.14)"
+        />
+
+        {/* Vertical guide lines under data points */}
+        {safePoints.map((pt, idx) => (
+          <Line
+            key={`guide-${idx}`}
+            x1={pt.x}
+            y1={pt.y}
+            x2={pt.x}
+            y2={baselineY}
+            stroke="rgba(0, 200, 255, 0.12)"
+            strokeDasharray="2 3"
+          />
+        ))}
 
         {/* Fill Under Line */}
         <Path d={fillD} fill="url(#cyanGrad)" />
@@ -231,10 +300,45 @@ export const AthletePortfolio: React.FC<AthletePortfolioProps> = ({
           strokeLinejoin="round"
         />
 
-        {/* Data points */}
-        {safePoints.map((pt, idx) => (
-          <Circle key={idx} cx={pt.x} cy={pt.y} r={3} fill="#00C8FF" />
-        ))}
+        {/* Data points & labels */}
+        {safePoints.map((pt, idx) => {
+          const valDisplay = Number.isInteger(pt.val) ? `${pt.val}` : pt.val.toFixed(1);
+          return (
+            <G key={`point-${idx}`}>
+              {/* Outer halo */}
+              <Circle
+                cx={pt.x}
+                cy={pt.y}
+                r={4}
+                fill="#00C8FF"
+                stroke="#0A1628"
+                strokeWidth={1.5}
+              />
+              {/* Point value label above dot */}
+              <SvgText
+                x={pt.x}
+                y={Math.max(12, pt.y - 7)}
+                fill="#38BDF8"
+                fontSize="9"
+                fontWeight="800"
+                textAnchor="middle"
+              >
+                {valDisplay}
+              </SvgText>
+              {/* Game axis label below baseline */}
+              <SvgText
+                x={pt.x}
+                y={height - 5}
+                fill="#94A3B8"
+                fontSize="8"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                {`G${idx + 1}`}
+              </SvgText>
+            </G>
+          );
+        })}
       </Svg>
     );
   };
